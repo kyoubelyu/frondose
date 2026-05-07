@@ -1,0 +1,50 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.15/schema.json",
+  "files": {
+    "ignore": ["dist", "node_modules", "coverage", "test-results"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "overrides": [
+    {
+      "_comment": "P-A2 deliverable: enforce no-bash boundary at lint time. Reject all process-spawning libraries under src/tools/**.",
+      "includes": ["**/src/tools/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "child_process": "Process spawning forbidden in tools (mai-agent boundary).",
+                  "node:child_process": "Process spawning forbidden in tools (mai-agent boundary).",
+                  "execa": "Process spawning forbidden in tools (mai-agent boundary).",
+                  "cross-spawn": "Process spawning forbidden in tools (mai-agent boundary).",
+                  "shelljs": "Process spawning forbidden in tools (mai-agent boundary).",
+                  "zx": "Process spawning forbidden in tools (mai-agent boundary)."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

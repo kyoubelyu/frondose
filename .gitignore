@@ -1,0 +1,37 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.local
+*.tgz
+coverage/
+.vscode/
+.idea/
+test-results/
+playwright-report/
+
+# Pi session + audit + memory artifacts
+audit.jsonl
+session.jsonl
+sessions/
+*.sqlite
+*.sqlite3
+*.db
+
+# Operator working files (matching mai-linkedin convention — kept local, force-add to commit when needed)
+docs/
+scripts/
+.planning/
+.zed/
+.omx/
+.claude/
+.gitignore
+AGENTS.md
+CLAUDE.md
+ROADMAP.md
+
+# Build / cache
+.tsbuildinfo
+*.tsbuildinfo
+.cache/
