@@ -1,7 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.15/schema.json",
   "files": {
-    "ignore": ["dist", "node_modules", "coverage", "test-results"]
+    "includes": ["**", "!dist", "!node_modules", "!coverage", "!test-results"]
   },
   "formatter": {
     "enabled": true,
@@ -24,7 +24,6 @@
   },
   "overrides": [
     {
-      "_comment": "P-A2 deliverable: enforce no-bash boundary at lint time. Reject all process-spawning libraries under src/tools/**.",
       "includes": ["**/src/tools/**"],
       "linter": {
         "rules": {

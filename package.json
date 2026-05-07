@@ -1,36 +1,45 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.1.0-pre",
-  "description": "Bounded Pi-SDK agent runtime for macOS workers — target-agnostic platform. Provides Pi AgentSession with no-bash tool boundary, generic Chrome CDP capability, persistent long-lived session, and tmux stdin prompt receiver. Domain-specific agents (e.g. mai-linkedin v0.4) are CONSUMER packages on top.",
+  "version": "0.3.0-pre",
+  "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",
   "bin": {
-    "mai-agent": "./dist/cli.js"
+    "mai": "./dist/cli/main.js"
   },
   "exports": {
     ".": "./dist/index.js"
   },
   "files": [
     "dist",
+    "references",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js",
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test": "echo 'no tests yet — first lands at P-A1 (Pi harness mock)' && exit 0"
+    "test": "tsx --test 'tests/**/*.test.ts'",
+    "test:live": "tsx --test 'tests/live/**/*.smoke.ts'"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.52.7",
-    "@mariozechner/pi-ai": "^0.52.7",
-    "chrome-remote-interface": "^0.34.0"
+    "ai": "^4.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "chrome-remote-interface": "0.34.0",
+    "chrome-launcher": "^1.1.2",
+    "better-sqlite3": "^12.4.1",
+    "zod": "^3.23.8",
+    "commander": "^12.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.15",
+    "@biomejs/biome": "2.3.15",
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.20.6"
   },
   "engines": {
     "node": ">=20"
