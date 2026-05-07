@@ -19,19 +19,7 @@ sessions/
 *.sqlite3
 *.db
 
-# Operator working files (matching mai-linkedin convention — kept local, force-add to commit when needed)
-docs/
-scripts/
-.planning/
-.zed/
-.omx/
-.claude/
-.gitignore
-AGENTS.md
-CLAUDE.md
-ROADMAP.md
-
-# Build / cache
-.tsbuildinfo
-*.tsbuildinfo
-.cache/
+# Personal/per-machine overrides only — agents/, settings.json (team-shared) stay tracked.
+.claude/settings.local.json
+.claude/cache/
+.claude/projects/
