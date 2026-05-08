@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import os from "node:os";
+import path from "node:path";
 import type { CoreMessage } from "ai";
 import { Command } from "commander";
 import { resolveModel } from "../agent/modelResolver.js";
@@ -6,8 +8,12 @@ import { BOUNDARY_PLACEHOLDER } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT_PLACEHOLDER } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { SOUL_PLACEHOLDER } from "../agent/systemPrompt/soul.js";
+import { CdpClient } from "../cdp/client.js";
+import { ensureChrome, injectStealth } from "../cdp/index.js";
+import { createLinkedinSession } from "../linkedin/index.js";
+import type { LinkedinSession } from "../linkedin/types.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
-import { tools } from "../tools/index.js";
+import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
 import { runOneShot, runRepl } from "./repl.js";
 
@@ -21,6 +27,11 @@ interface CliOpts {
 async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
+
+  // P-3 env reads (CDP layer): port + profile dir + Chrome-skip opt-out.
+  const cdpPort = process.env["MAI_CDP_PORT"] ? parseInt(process.env["MAI_CDP_PORT"], 10) : 9222;
+  const profileDir = process.env["MAI_PROFILE_DIR"] ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
+  const skipChrome = process.env["MAI_NO_CHROME"] === "1";
 
   const program = new Command();
   program
@@ -42,6 +53,17 @@ async function main(): Promise<void> {
   });
   const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
   const messages: CoreMessage[] = loadMessages(sessionFile);
+
+  // P-3: eager LinkedIn session boot (Chrome ensured + stealth injected) unless MAI_NO_CHROME=1.
+  // The persistent profile is the operator's; Chrome stays alive across REPL exits.
+  let linkedinSession: LinkedinSession | undefined;
+  if (!skipChrome) {
+    const handle = await ensureChrome({ port: cdpPort, profileDir });
+    const client = await CdpClient.connect(handle.port);
+    await injectStealth(client.handle);
+    linkedinSession = createLinkedinSession({ client });
+  }
+  const tools = makeAllTools(linkedinSession);
 
   if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
     await runOneShot({ model, system, messages, tools, sessionFile, prompt: opts.prompt });

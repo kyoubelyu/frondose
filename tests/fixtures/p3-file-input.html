@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>P-3 File Input Smoke Fixture</title>
+  </head>
+  <body>
+    <h1>File Input Test</h1>
+    <input id="file-input" type="file" aria-label="Upload file" />
+    <output id="out" aria-label="Upload result"></output>
+    <script>
+      document.getElementById("file-input").addEventListener("change", (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) {
+          document.getElementById("out").textContent = JSON.stringify({ error: "no files" });
+          return;
+        }
+        const f = files[0];
+        document.getElementById("out").textContent = JSON.stringify({
+          name: f.name,
+          size: f.size,
+          type: f.type || "application/octet-stream",
+        });
+      });
+    </script>
+  </body>
+</html>

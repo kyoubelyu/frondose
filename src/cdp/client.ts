@@ -157,6 +157,68 @@ export class CdpClient {
     }
   }
 
+  /** Smooth scroll the page in a given direction. Window center is the gesture origin. */
+  async scroll(direction: "up" | "down" | "left" | "right", amount: number): Promise<void> {
+    const xDistance = direction === "left" ? -amount : direction === "right" ? amount : 0;
+    const yDistance = direction === "up" ? -amount : direction === "down" ? amount : 0;
+    const metrics = await this.client.Page.getLayoutMetrics();
+    // visualViewport.{clientWidth,clientHeight} per Page.getLayoutMetrics shape (CDP v1).
+    const w = metrics?.visualViewport?.clientWidth ?? metrics?.layoutViewport?.clientWidth ?? 1280;
+    const h = metrics?.visualViewport?.clientHeight ?? metrics?.layoutViewport?.clientHeight ?? 800;
+    await this.client.Input.synthesizeScrollGesture({
+      x: Math.round(w / 2),
+      y: Math.round(h / 2),
+      xDistance,
+      yDistance,
+    });
+  }
+
+  /** Get the current page URL via Runtime.evaluate. */
+  async getCurrentUrl(): Promise<string> {
+    return this.evaluate<string>("window.location.href");
+  }
+
+  /** Run document-rooted querySelectorAll; return matching nodeIds. */
+  async querySelectorAll(selector: string): Promise<number[]> {
+    const doc = await this.client.DOM.getDocument({ depth: 0 });
+    const r = await this.client.DOM.querySelectorAll({
+      nodeId: doc.root.nodeId,
+      selector,
+    });
+    return r.nodeIds ?? [];
+  }
+
+  /** Set files on a file input. Resolves backendNodeId → nodeId internally. */
+  async setFileInputFiles(backendNodeId: number, files: string[]): Promise<void> {
+    const nodeId = await this.resolveBackendToNodeId(backendNodeId);
+    await this.client.DOM.setFileInputFiles({ nodeId, files });
+  }
+
+  /**
+   * Internal: convert backendNodeId (from AX tree) to nodeId (for DOM commands).
+   * Per validator FAIL-1 (`docs/phase-3-test.md` §6): the prior `DOM.resolveNode → DOM.requestNode`
+   * chain produced `nodeId: 0` against real Chrome, breaking `setFileInputFiles`.
+   * `DOM.describeNode({ backendNodeId })` returns the nodeId directly.
+   */
+  private async resolveBackendToNodeId(backendNodeId: number): Promise<number> {
+    const desc = await this.client.DOM.describeNode({ backendNodeId });
+    const nodeId = desc?.node?.nodeId;
+    if (typeof nodeId !== "number") {
+      throw new Error(`resolveBackendToNodeId: describeNode returned no nodeId for backendNodeId=${backendNodeId}`);
+    }
+    return nodeId;
+  }
+
+  /**
+   * Read-only view of the most-recent snapshot's RefMap. Empty until snapshot() runs.
+   * Per guardian critic CONCERN-MR-2 path (a): named `currentRefMap` (NOT `refMap`) so
+   * the existing private field `refMap` doesn't need renaming — preserves P-2 invariant
+   * "no existing line touched" in B-1.
+   */
+  get currentRefMap(): Readonly<RefMap> {
+    return this.refMap;
+  }
+
   /** Close the underlying CDP WebSocket (does NOT kill Chrome). */
   async close(): Promise<void> {
     await this.client.close();

@@ -1,0 +1,144 @@
+/**
+ * P-3 mock tests — T-M62..T-M64: click tool.
+ *
+ * Tests makeClickTool() schema, ref-based dispatch, and label-based dispatch.
+ * NOTE: execute() calls applyPacing() (400-800ms real wait per test).
+ * No Chrome or LLM required.
+ */
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { CdpClient } from "../../../src/cdp/client.js";
+import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
+import { makeClickTool } from "../../../src/tools/linkedin/click.js";
+
+const abortSignal = new AbortController().signal;
+
+const FAKE_BORDER = [10, 20, 30, 20, 30, 40, 10, 40]; // center: x=20, y=30
+
+function makeFakeSession(opts: { withLastCtx?: boolean } = {}) {
+  const fakeHandle = {
+    Accessibility: {
+      enable: async () => {},
+      getFullAXTree: async () => ({
+        nodes: [
+          {
+            nodeId: "ax1",
+            role: { type: "role", value: "button" },
+            name: { type: "string", value: "Start a post" },
+            backendDOMNodeId: 99,
+          },
+          {
+            nodeId: "ax2",
+            role: { type: "role", value: "link" },
+            name: { type: "string", value: "Home" },
+            backendDOMNodeId: 100,
+          },
+        ],
+      }),
+    },
+    DOM: {
+      getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
+      querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+      getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
+    },
+    Input: {
+      dispatchMouseEvent: async (_args: unknown) => {},
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+
+  const lastCtx: CurrentSurfaceContext | undefined = opts.withLastCtx
+    ? {
+        pageUrl: "https://www.linkedin.com/feed/",
+        surface: "feed",
+        activeLayer: "page",
+        entries: [
+          { ref: "@e1", role: "button", name: "Start a post" },
+          { ref: "@e2", role: "link", name: "Home" },
+        ],
+      }
+    : undefined;
+
+  return {
+    getClient: () => client,
+    setLastContext: (_ctx: CurrentSurfaceContext) => {},
+    getLastContext: () => lastCtx,
+  };
+}
+
+// ─── T-M62 ─────────────────────────────────────────────────────────────────────
+
+test("T-M62: makeClickTool has description and requires ref OR label schema", () => {
+  const session = makeFakeSession();
+  const tool = makeClickTool(session);
+
+  assert.ok(typeof tool.description === "string", "tool must have a description");
+  assert.ok(tool.description.toLowerCase().includes("click"), "description must mention click");
+
+  // Both ref and label present → valid
+  const withRef = tool.parameters.safeParse({ ref: "@e1" });
+  assert.equal(withRef.success, true, "ref alone is valid");
+
+  const withLabel = tool.parameters.safeParse({ label: "Submit" });
+  assert.equal(withLabel.success, true, "label alone is valid");
+
+  // Neither ref nor label → invalid (refine rejects)
+  const neither = tool.parameters.safeParse({});
+  assert.equal(neither.success, false, "neither ref nor label must fail schema validation");
+});
+
+// ─── T-M63 ─────────────────────────────────────────────────────────────────────
+
+test(
+  "T-M63: click tool execute via ref=@e1 returns withHint(ok) envelope (state-changing)",
+  { timeout: 5000 },
+  async () => {
+    const session = makeFakeSession({ withLastCtx: true });
+    // Populate refMap so @e1 is resolvable
+    await session.getClient().snapshot();
+
+    const tool = makeClickTool(session);
+
+    const result = await tool.execute({ ref: "@e1" }, { toolCallId: "t1", messages: [], abortSignal });
+
+    assert.equal(result.ok, true, "result.ok must be true");
+    assert.equal(result.command, "click");
+
+    // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+    const data = (result as any).data;
+    assert.ok(typeof data.target === "string", "data.target must be a string");
+    assert.ok(data.target.startsWith("@"), "data.target must start with @");
+
+    // click is state-changing — must include hint
+    assert.ok(
+      typeof data.hint === "string" && data.hint.length > 0,
+      "data.hint must be present (click is state-changing)",
+    );
+  },
+);
+
+// ─── T-M64 ─────────────────────────────────────────────────────────────────────
+
+test(
+  "T-M64: click tool execute via label resolves from session.getLastContext(); fails without prior inspect",
+  { timeout: 10000 },
+  async () => {
+    const session = makeFakeSession({ withLastCtx: true });
+    await session.getClient().snapshot(); // populate refMap
+
+    const tool = makeClickTool(session);
+
+    const result = await tool.execute({ label: "Start a post" }, { toolCallId: "t2", messages: [], abortSignal });
+
+    assert.equal(result.ok, true, "label-resolved click must succeed");
+
+    // When no ctx is available, click fails
+    const sessionNoCtx = makeFakeSession({ withLastCtx: false });
+    const toolNoCtx = makeClickTool(sessionNoCtx);
+
+    const result2 = await toolNoCtx.execute({ label: "nonexistent" }, { toolCallId: "t3", messages: [], abortSignal });
+    assert.equal(result2.ok, false, "label click without prior inspect must fail");
+  },
+);
