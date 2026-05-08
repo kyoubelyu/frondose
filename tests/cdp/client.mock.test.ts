@@ -239,3 +239,165 @@ test("T-M22: pressKey('Enter') issues keyDown then keyUp", async () => {
   assert.equal(keyEvents[1]?.type, "keyUp", "second event must be keyUp");
   assert.equal(keyEvents[1]?.key, "Enter", "second event key must be Enter");
 });
+
+// ─── T-M23..T-M27: P-3 CdpClient extensions ──────────────────────────────────
+
+// T-M23: scroll calls Page.getLayoutMetrics then Input.synthesizeScrollGesture
+test("T-M23: scroll('down', 300) calls Page.getLayoutMetrics then Input.synthesizeScrollGesture with yDistance:300", async () => {
+  let getLayoutMetricsCalls = 0;
+  let scrollGestureArgs: Record<string, unknown> | null = null;
+
+  const fakeHandle = {
+    Page: {
+      getLayoutMetrics: async () => {
+        getLayoutMetricsCalls++;
+        return {
+          visualViewport: { clientWidth: 1280, clientHeight: 800 },
+          layoutViewport: { clientWidth: 1280, clientHeight: 800 },
+        };
+      },
+    },
+    Input: {
+      synthesizeScrollGesture: async (args: Record<string, unknown>) => {
+        scrollGestureArgs = args;
+      },
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+  await client.scroll("down", 300);
+
+  assert.equal(getLayoutMetricsCalls, 1, "Page.getLayoutMetrics must be called once");
+  assert.ok(scrollGestureArgs !== null, "Input.synthesizeScrollGesture must be called");
+  assert.equal(scrollGestureArgs?.yDistance, 300, "yDistance must be 300 for 'down'");
+  assert.equal(scrollGestureArgs?.xDistance, 0, "xDistance must be 0 for 'down'");
+  // Center of 1280x800 = (640, 400)
+  assert.equal(scrollGestureArgs?.x, 640, "scroll origin x must be viewport center");
+  assert.equal(scrollGestureArgs?.y, 400, "scroll origin y must be viewport center");
+});
+
+// T-M24: getCurrentUrl delegates to Runtime.evaluate('window.location.href')
+test("T-M24: getCurrentUrl() returns the evaluated window.location.href", async () => {
+  const evaluateCalls: Array<{ expression: string; returnByValue: boolean; awaitPromise: boolean }> = [];
+
+  const fakeHandle = {
+    Runtime: {
+      evaluate: async (args: { expression: string; returnByValue: boolean; awaitPromise: boolean }) => {
+        evaluateCalls.push(args);
+        return { result: { value: "https://www.linkedin.com/feed/" } };
+      },
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+  const url = await client.getCurrentUrl();
+
+  assert.equal(url, "https://www.linkedin.com/feed/", "getCurrentUrl must return the evaluated href");
+  assert.equal(evaluateCalls.length, 1, "Runtime.evaluate must be called once");
+  assert.equal(
+    evaluateCalls[0]?.expression,
+    "window.location.href",
+    "evaluate expression must be window.location.href",
+  );
+  assert.equal(evaluateCalls[0]?.returnByValue, true, "returnByValue must be true");
+});
+
+// T-M25: querySelectorAll calls DOM.getDocument then DOM.querySelectorAll
+test("T-M25: querySelectorAll('.foo') calls DOM.getDocument({depth:0}) then DOM.querySelectorAll and returns nodeIds[]", async () => {
+  let getDocArgs: { depth: number } | null = null;
+  let qsaArgs: { nodeId: number; selector: string } | null = null;
+
+  const fakeHandle = {
+    DOM: {
+      getDocument: async (args: { depth: number }) => {
+        getDocArgs = args;
+        return { root: { nodeId: 7 } };
+      },
+      querySelectorAll: async (args: { nodeId: number; selector: string }) => {
+        qsaArgs = args;
+        return { nodeIds: [11, 22, 33] };
+      },
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+  const nodeIds = await client.querySelectorAll(".foo");
+
+  assert.deepEqual(nodeIds, [11, 22, 33], "querySelectorAll must return the nodeIds array");
+  assert.ok(getDocArgs !== null, "DOM.getDocument must be called");
+  assert.equal(getDocArgs?.depth, 0, "DOM.getDocument must be called with depth:0");
+  assert.ok(qsaArgs !== null, "DOM.querySelectorAll must be called");
+  assert.equal(qsaArgs?.nodeId, 7, "DOM.querySelectorAll nodeId must come from getDocument root");
+  assert.equal(qsaArgs?.selector, ".foo", "DOM.querySelectorAll selector must be '.foo'");
+});
+
+// T-M26: setFileInputFiles resolves backendNodeId via DOM.describeNode then calls DOM.setFileInputFiles
+// (Updated from resolveNode→requestNode chain per validator FAIL-1 / builder Step 5a fix)
+test("T-M26: setFileInputFiles(42, ['/tmp/a.png']) resolves backendNodeId to nodeId then calls DOM.setFileInputFiles", async () => {
+  let describeNodeArgs: { backendNodeId: number } | null = null;
+  let setFileInputArgs: { nodeId: number; files: string[] } | null = null;
+
+  const fakeHandle = {
+    DOM: {
+      describeNode: async (args: { backendNodeId?: number; nodeId?: number }) => {
+        if (args.backendNodeId !== undefined) {
+          describeNodeArgs = { backendNodeId: args.backendNodeId };
+          return { node: { nodeId: 77 } };
+        }
+        return { node: { backendNodeId: 42 } };
+      },
+      setFileInputFiles: async (args: { nodeId: number; files: string[] }) => {
+        setFileInputArgs = args;
+      },
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+  await client.setFileInputFiles(42, ["/tmp/a.png"]);
+
+  assert.ok(describeNodeArgs !== null, "DOM.describeNode must be called");
+  assert.equal(describeNodeArgs?.backendNodeId, 42, "describeNode must receive backendNodeId=42");
+  assert.ok(setFileInputArgs !== null, "DOM.setFileInputFiles must be called");
+  assert.equal(setFileInputArgs?.nodeId, 77, "setFileInputFiles nodeId must come from describeNode");
+  assert.deepEqual(setFileInputArgs?.files, ["/tmp/a.png"], "setFileInputFiles files must match input");
+});
+
+// T-M27: currentRefMap getter exposes the snapshot's RefMap after snapshot() is called
+test("T-M27: client.currentRefMap after snapshot() equals the captured RefMap", async () => {
+  const fakeHandle = {
+    Accessibility: {
+      enable: async () => {},
+      getFullAXTree: async () => ({
+        nodes: [
+          {
+            nodeId: "ax1",
+            role: { type: "role", value: "button" },
+            name: { type: "string", value: "Click me" },
+            backendDOMNodeId: 55,
+          },
+          {
+            nodeId: "ax2",
+            role: { type: "role", value: "textbox" },
+            name: { type: "string", value: "Search" },
+            backendDOMNodeId: 66,
+          },
+        ],
+      }),
+    },
+  };
+
+  const client = CdpClient.fromHandle(fakeHandle);
+
+  // Before snapshot, refMap is empty
+  assert.deepEqual(Object.keys(client.currentRefMap), [], "currentRefMap must be empty before snapshot()");
+
+  await client.snapshot();
+
+  const refMap = client.currentRefMap;
+  const keys = Object.keys(refMap);
+  assert.equal(keys.length, 2, "currentRefMap must have 2 entries after snapshot");
+  assert.ok(keys.includes("e1"), "must have key 'e1'");
+  assert.ok(keys.includes("e2"), "must have key 'e2'");
+  assert.equal(refMap.e1?.role, "button", "e1 must have role 'button'");
+  assert.equal(refMap.e2?.role, "textbox", "e2 must have role 'textbox'");
+});
