@@ -1,5 +1,5 @@
 /**
- * P-2 mock tests — T-M1..T-M3: ensureChrome() reuse-vs-launch behavior.
+ * P-2 / v0.3-fix1 mock tests — T-M1..T-M3 + T-V031.1..T-V031.4
  *
  * T-M1: If Chrome is already live on the port (probe succeeds via an in-process
  *        HTTP server), ensureChrome returns launched:false with kill:undefined.
@@ -7,6 +7,11 @@
  *        returns launched:true with a kill function. Uses __setLaunchFn DI hook
  *        (per guardian CONCERN-MR-4) to mock chrome-launcher without mock.module().
  * T-M3: Composite — kill is undefined on reuse, function on launch.
+ *
+ * T-V031.1: waitForPageTarget returns first page target when list immediately has one.
+ * T-V031.2: waitForPageTarget retries until target appears (2 empty → 3rd has page).
+ * T-V031.3: waitForPageTarget falls back to CDP.New after max attempts exhausted.
+ * T-V031.4: waitForPageTarget throws when CDP.New returns no webSocketDebuggerUrl.
  *
  * No real Chrome spawned.
  */
@@ -19,7 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { launch as chromeLaunch } from "chrome-launcher";
-import { __setLaunchFn, ensureChrome } from "../../src/cdp/launcher.js";
+import { __setLaunchFn, __setListFn, __setNewFn, ensureChrome, waitForPageTarget } from "../../src/cdp/launcher.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -175,3 +180,154 @@ test("T-M3: ChromeHandle.kill is undefined on reuse, function on launch", async 
     rmSync(launchDir, { recursive: true, force: true });
   }
 });
+
+// ─── v0.3-fix1: waitForPageTarget DI mock tests ───────────────────────────────
+
+/**
+ * Default no-op fns to restore after each waitForPageTarget test.
+ * These parallel the defaults in launcher.ts — they never succeed against real
+ * Chrome since there's no server running, but they're never called after restore.
+ */
+function restoreListNewFns(): void {
+  // Restore to no-op stubs (avoids importing CDP in test code).
+  // Real launcher.ts defaults call CDP.List / CDP.New, but tests always set their
+  // own hooks before calling waitForPageTarget.
+  __setListFn(async () => []);
+  __setNewFn(async () => ({}));
+}
+
+// ─── T-V031.1 ─────────────────────────────────────────────────────────────────
+
+test("T-V031.1: waitForPageTarget returns first page target when list immediately has one", async () => {
+  const fakePage = {
+    id: "page-abc",
+    type: "page" as const,
+    webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/page/page-abc",
+    title: "New Tab",
+  };
+
+  let listCallCount = 0;
+  let newCallCount = 0;
+
+  __setListFn(async () => {
+    listCallCount++;
+    return [fakePage];
+  });
+  __setNewFn(async () => {
+    newCallCount++;
+    return {};
+  });
+
+  try {
+    const result = await waitForPageTarget(9222);
+
+    assert.equal(result.id, "page-abc", "must return the page target id");
+    assert.equal(result.webSocketDebuggerUrl, fakePage.webSocketDebuggerUrl, "must return the webSocketDebuggerUrl");
+    assert.equal(result.type, "page", "must have type=page");
+    assert.equal(listCallCount, 1, "list must be called exactly once (target found immediately)");
+    assert.equal(newCallCount, 0, "CDP.New must NOT be called when list succeeds");
+  } finally {
+    restoreListNewFns();
+  }
+});
+
+// ─── T-V031.2 ─────────────────────────────────────────────────────────────────
+
+test(
+  "T-V031.2: waitForPageTarget retries until target appears (2 empty then 1 with page)",
+  { timeout: 10_000 },
+  async () => {
+    const fakePage = {
+      id: "page-retry",
+      type: "page" as const,
+      webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/page/page-retry",
+      title: "",
+    };
+
+    let listCallCount = 0;
+
+    __setListFn(async () => {
+      listCallCount++;
+      if (listCallCount <= 2) return []; // First two calls: no page targets
+      return [fakePage]; // Third call: page target appears
+    });
+    __setNewFn(async () => {
+      throw new Error("CDP.New must not be called in T-V031.2");
+    });
+
+    try {
+      const start = Date.now();
+      const result = await waitForPageTarget(9222);
+      const elapsed = Date.now() - start;
+
+      assert.equal(result.id, "page-retry", "must return the page target id");
+      assert.equal(listCallCount, 3, "must have polled list exactly 3 times (2 empty + 1 success)");
+      // 2 retries × 300ms interval = ~600ms minimum
+      assert.ok(elapsed >= 550, `elapsed must be ≥550ms (got ${elapsed}ms) to confirm real retries occurred`);
+    } finally {
+      restoreListNewFns();
+    }
+  },
+);
+
+// ─── T-V031.3 ─────────────────────────────────────────────────────────────────
+
+test(
+  "T-V031.3: waitForPageTarget falls back to CDP.New after max attempts exhausted",
+  { timeout: 40_000 },
+  async () => {
+    const fakeNewPage = {
+      id: "new-page",
+      type: "page" as const,
+      webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/page/new-page",
+      title: "",
+    };
+
+    let listCallCount = 0;
+    let newCallCount = 0;
+
+    // Always return empty or non-page targets to exhaust all 10 attempts
+    __setListFn(async () => {
+      listCallCount++;
+      // Return a background_page (non-"page" type) to also exercise the type filter
+      return [{ id: "bg", type: "background_page", webSocketDebuggerUrl: "ws://bg", title: "" }];
+    });
+    __setNewFn(async () => {
+      newCallCount++;
+      return fakeNewPage;
+    });
+
+    try {
+      const result = await waitForPageTarget(9222);
+
+      assert.equal(result.id, "new-page", "must return the CDP.New result");
+      assert.equal(result.webSocketDebuggerUrl, fakeNewPage.webSocketDebuggerUrl);
+      assert.equal(listCallCount, 10, "list must be called exactly TARGET_POLL_MAX_ATTEMPTS (10) times");
+      assert.equal(newCallCount, 1, "CDP.New must be called exactly once after max attempts");
+    } finally {
+      restoreListNewFns();
+    }
+  },
+);
+
+// ─── T-V031.4 ─────────────────────────────────────────────────────────────────
+
+test(
+  "T-V031.4: waitForPageTarget throws when CDP.New returns no webSocketDebuggerUrl",
+  { timeout: 40_000 },
+  async () => {
+    __setListFn(async () => []);
+    // CDP.New returns a target without webSocketDebuggerUrl
+    __setNewFn(async () => ({ id: "bad-target", type: "page", title: "" }));
+
+    try {
+      await assert.rejects(
+        () => waitForPageTarget(9222),
+        /CDP\.New.*webSocketDebuggerUrl/,
+        "must throw with an error mentioning CDP.New and webSocketDebuggerUrl",
+      );
+    } finally {
+      restoreListNewFns();
+    }
+  },
+);

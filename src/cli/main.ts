@@ -9,10 +9,7 @@ import { BOUNDARY_PLACEHOLDER } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT_PLACEHOLDER } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { SOUL_PLACEHOLDER } from "../agent/systemPrompt/soul.js";
-import { CdpClient } from "../cdp/client.js";
-import { ensureChrome, injectStealth } from "../cdp/index.js";
 import { createLinkedinSession } from "../linkedin/index.js";
-import type { LinkedinSession } from "../linkedin/types.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
 import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
@@ -31,10 +28,12 @@ async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
 
-  // P-3 env reads (CDP layer): port + profile dir + Chrome-skip opt-out.
+  // P-3 env reads (CDP layer): port + profile dir.
+  // (v0.3-fix1: the prior eager-Chrome-skip env-var is no longer read here — Chrome
+  // now boots lazily on first LinkedIn-tool invocation, so the opt-out is meaningless.
+  // The env var stays documented as DEPRECATED in CLAUDE.md until v0.4 removes it.)
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
   const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
-  const skipChrome = process.env.MAI_NO_CHROME === "1";
 
   // P-4 env reads (persistence layer): memory DB + identity JSON paths.
   const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
@@ -69,15 +68,10 @@ async function main(): Promise<void> {
   const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
   const messages: CoreMessage[] = loadMessages(sessionFile);
 
-  // P-3: eager LinkedIn session boot (Chrome ensured + stealth injected) unless MAI_NO_CHROME=1.
-  // The persistent profile is the operator's; Chrome stays alive across REPL exits.
-  let linkedinSession: LinkedinSession | undefined;
-  if (!skipChrome) {
-    const handle = await ensureChrome({ port: cdpPort, profileDir });
-    const client = await CdpClient.connect(handle.port);
-    await injectStealth(client.handle);
-    linkedinSession = createLinkedinSession({ client });
-  }
+  // v0.3-fix1: lazy LinkedinSession factory — captures launch options only; Chrome
+  // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
+  // Memory + identity tools work without Chrome.
+  const linkedinSession = createLinkedinSession({ port: cdpPort, profileDir });
   const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath });
 
   if (typeof opts.prompt === "string" && opts.prompt.length > 0) {

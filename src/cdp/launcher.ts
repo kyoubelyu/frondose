@@ -8,6 +8,16 @@ import type { ChromeHandle, ChromeLaunchOptions } from "./types.js";
 const DEFAULT_PORT = 9222;
 const DEFAULT_PROFILE_DIR = (): string => join(homedir(), ".mai", "agent", "chrome-profile");
 
+const TARGET_POLL_INTERVAL_MS = 300;
+const TARGET_POLL_MAX_ATTEMPTS = 10;
+
+/** Page target descriptor returned by CDP.List / CDP.New. */
+export interface PageTarget {
+  id: string;
+  webSocketDebuggerUrl: string;
+  type: "page";
+}
+
 /**
  * Test-only DI seam (per guardian critic CONCERN-MR-4): mirrors P-1's
  * `__resolveModelSpec` private-export pattern so validator T-M2 can inject a
@@ -18,6 +28,55 @@ let launchFn: typeof chromeLaunch = chromeLaunch;
 /** @internal — test-only DI hook; consumers should not call. */
 export function __setLaunchFn(fn: typeof chromeLaunch): void {
   launchFn = fn;
+}
+
+/** DI hook for tests — defaults to chrome-remote-interface's CDP.List. */
+// biome-ignore lint/suspicious/noExplicitAny: chrome-remote-interface has no types
+let __listFn: (opts: { port: number; host: string }) => Promise<any[]> = async (opts) =>
+  // biome-ignore lint/suspicious/noExplicitAny: same
+  (await (CDP as any).List(opts)) as any[];
+
+/** DI hook for tests — defaults to chrome-remote-interface's CDP.New. */
+let __newFn: (
+  opts: { port: number; host: string; url: string },
+  // biome-ignore lint/suspicious/noExplicitAny: same
+) => Promise<any> = async (opts) => (await (CDP as any).New(opts)) as any;
+
+/** @internal — exposed for validator tests only; do not call from production code. */
+export function __setListFn(fn: typeof __listFn): void {
+  __listFn = fn;
+}
+
+/** @internal — exposed for validator tests only; do not call from production code. */
+export function __setNewFn(fn: typeof __newFn): void {
+  __newFn = fn;
+}
+
+/**
+ * Wait until Chrome exposes at least one inspectable page target on /json/list.
+ * Polls up to TARGET_POLL_MAX_ATTEMPTS × TARGET_POLL_INTERVAL_MS (3s).
+ * If still no page target, calls CDP.New() to force-create about:blank.
+ *
+ * Resolves the "No inspectable targets" race: chrome-launcher.launch() returns
+ * as soon as /json/version responds, but the new-tab page may not yet be listed.
+ */
+export async function waitForPageTarget(port: number): Promise<PageTarget> {
+  for (let attempt = 0; attempt < TARGET_POLL_MAX_ATTEMPTS; attempt++) {
+    const targets = await __listFn({ port, host: "127.0.0.1" });
+    const page = targets.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string") as
+      | PageTarget
+      | undefined;
+    if (page) return page;
+    if (attempt < TARGET_POLL_MAX_ATTEMPTS - 1) {
+      await new Promise<void>((r) => setTimeout(r, TARGET_POLL_INTERVAL_MS));
+    }
+  }
+  // Fallback: explicitly create a new tab.
+  const newTab = await __newFn({ port, host: "127.0.0.1", url: "about:blank" });
+  if (typeof newTab?.webSocketDebuggerUrl !== "string") {
+    throw new Error(`waitForPageTarget: CDP.New({port:${port}}) returned no webSocketDebuggerUrl; cannot connect.`);
+  }
+  return newTab as PageTarget;
 }
 
 /**
