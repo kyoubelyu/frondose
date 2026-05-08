@@ -76,3 +76,6 @@ export function createMaiAgent(opts: CreateMaiAgentOpts): MaiAgentController {
 }
 
 export type { CoreMessage, LanguageModel, ToolSet } from "ai";
+// P-6: re-export ControlSignals + audit writer surface for downstream consumers.
+export { type AuditEntry, makeAuditWriter } from "./persistence/audit.js";
+export type { ControlSignals } from "./tools/index.js";

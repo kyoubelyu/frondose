@@ -11,6 +11,7 @@ import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { composeSoulBand } from "../agent/systemPrompt/soul.js";
 import { createLinkedinSession } from "../linkedin/index.js";
 import type { FreeAxesRecord } from "../methodology/types.js";
+import { makeAuditWriter } from "../persistence/audit.js";
 import {
   applyIdentityPatch,
   type IdentityRecord,
@@ -19,6 +20,7 @@ import {
   writeIdentity,
 } from "../persistence/identity.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
+import type { ControlSignals } from "../tools/index.js";
 import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
 import { runIdentityBootstrap } from "./identity-init.js";
@@ -78,6 +80,9 @@ async function main(): Promise<void> {
   const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
   const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
 
+  // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
+  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(os.homedir(), ".mai", "agent", "audit.jsonl");
+
   const program = new Command();
   program
     .name("mai")
@@ -131,14 +136,47 @@ async function main(): Promise<void> {
       // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
       // Memory + identity tools work without Chrome.
       const linkedinSession = createLinkedinSession({ port: cdpPort, profileDir });
-      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath });
+
+      // P-6: single AbortController for the binary lifetime (sticky once aborted —
+      // a turn-N stop should prevent turn N+1 from starting). Wired into makeAllTools
+      // via control.requestStop, and into runAgentLoop via abortSignal.
+      const abortController = new AbortController();
+      const control: ControlSignals = {
+        requestStop: () => abortController.abort(),
+        // P-6 Step 5a r3: stop tool writes its own audit row directly because
+        // Vercel SDK v4 skips onStepFinish on abort-triggered step exits.
+        auditPath,
+      };
+      const auditWriter = makeAuditWriter(auditPath);
+
+      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control);
 
       if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
-        await runOneShot({ model, system, messages, tools, sessionFile, prompt: opts.prompt });
+        await runOneShot({
+          model,
+          system,
+          messages,
+          tools,
+          sessionFile,
+          prompt: opts.prompt,
+          abortSignal: abortController.signal,
+          onStepFinish: auditWriter,
+        });
         process.exit(0);
       }
 
-      await runRepl({ model, system, messages, tools, sessionFile });
+      await runRepl({
+        model,
+        system,
+        messages,
+        tools,
+        sessionFile,
+        abortController,
+        abortSignal: abortController.signal,
+        onStepFinish: auditWriter,
+      });
+      // REPL fall-through (Ctrl-C or stop-triggered break): exit cleanly.
+      process.exit(0);
     });
 
   // P-5: `mai soul <action>` subcommand. Short-circuits via process.exit(0) — never

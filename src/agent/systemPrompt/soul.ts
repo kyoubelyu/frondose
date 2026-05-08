@@ -73,14 +73,16 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     意思是：${storyMeaning}
 `.trim();
 
-  // ── Section 5: memory-trigger directive (OQ-3 Option C, locked) ──
+  // ── Section 5: trigger habits (memory + escalate; OQ-3 + F-8 line 372 verbatim) ──
   // CJK typographic quotes (U+201C/U+201D) around 记住 are preserved verbatim per
-  // CONCERN-MR / NIT-r2-2 instruction in team-lead's dispatch.
-  const memoryTrigger =
-    "你的习惯是：operator 让你“记住”某件事或某个人，你立刻调用 `remember` 工具记下来。想着说不算，工具存下来才算。";
+  // P-5 NIT-r2-2 / P-6 dispatch carryover. Same preservation applies to the
+  // escalate-habit directive below.
+  const triggerHabits =
+    "你的习惯是：operator 让你“记住”某件事或某个人，你立刻调用 `remember` 工具记下来。想着说不算，工具存下来才算。\n\n" +
+    "你的习惯是 — 遇到工具能力之外的请求，先用 `telegram_notify` 报告 operator，再用 `gh_issue` 留下可追踪的票，然后 `escalate_for_capability` 干净退出。任务完成时，`stop` 就是你说再见的方式。需要等一下，`sleep` 代替你站在那里等。";
 
   // ── Compose: 1 → 2 → 3 → 4 → 5, separated by blank lines ────
-  return [identitySentence, "", METHODOLOGY_DISTILLATION, "", styleSentence, "", axesSection, "", memoryTrigger].join(
+  return [identitySentence, "", METHODOLOGY_DISTILLATION, "", styleSentence, "", axesSection, "", triggerHabits].join(
     "\n",
   );
 }
