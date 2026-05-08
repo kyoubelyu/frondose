@@ -1,5 +1,5 @@
 import readline from "node:readline";
-import type { CoreMessage, LanguageModel, ToolSet } from "ai";
+import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import { appendMessages } from "../persistence/session.js";
 
@@ -15,6 +15,12 @@ export interface ReplOpts {
   out?: NodeJS.WritableStream;
   /** Test injection. Defaults to process.stdin. */
   in_?: NodeJS.ReadableStream;
+  /** P-6: REPL between-turn abort check; main.ts owns the controller. */
+  abortController?: AbortController;
+  /** P-6: passed through to runAgentLoop. */
+  abortSignal?: AbortSignal;
+  /** P-6: Vercel onStepFinish hook (e.g. audit writer). */
+  onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
 }
 
 export async function runRepl(opts: ReplOpts): Promise<void> {
@@ -26,6 +32,8 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   const rl = readline.createInterface({ input: inputStream, output: out, terminal: isTty });
   out.write("mai-agent ready. type a prompt; Ctrl-C exits.\n> ");
   for await (const line of rl) {
+    // P-6: between-turn stop check — if a prior turn's stop tool aborted, exit the loop.
+    if (opts.abortController?.signal.aborted) break;
     const text = line.trim();
     if (!text) {
       out.write("> ");
@@ -39,9 +47,12 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
       messages: opts.messages,
       tools: opts.tools,
       onText: (delta) => out.write(delta),
+      abortSignal: opts.abortSignal,
+      onStepFinish: opts.onStepFinish,
     });
     out.write("\n");
     appendMessages(opts.sessionFile, opts.messages.slice(turnStart));
+    if (opts.abortController?.signal.aborted) break;
     out.write("> ");
   }
 }
@@ -57,6 +68,8 @@ export async function runOneShot(opts: ReplOpts & { prompt: string }): Promise<v
     messages: opts.messages,
     tools: opts.tools,
     onText: (delta) => out.write(delta),
+    abortSignal: opts.abortSignal,
+    onStepFinish: opts.onStepFinish,
   });
   out.write("\n");
   appendMessages(opts.sessionFile, opts.messages.slice(turnStart));

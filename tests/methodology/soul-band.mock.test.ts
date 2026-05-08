@@ -1,5 +1,5 @@
 /**
- * P-5 mock tests — T-M_p5.1..T-M_p5.8 + NIT-r2-2: Soul band composer.
+ * P-5/P-6 mock tests — T-M_p5.1..T-M_p5.8 + NIT-r2-2 + T-M_p6.24..T-M_p6.25: Soul band composer.
  *
  * Tests:
  *   T-M_p5.1  — METHODOLOGY_DISTILLATION token budget ≤ 800 tok (G-P5.6)
@@ -11,6 +11,8 @@
  *   T-M_p5.7  — composeSoulBand(null) returns non-empty fallback (G-P5.1)
  *   T-M_p5.8  — composeSoulBand output has NO F-5 banned tokens (G-P5.1 negative; NIT-r2-1 scope)
  *   T-M_p5.8b — CJK typographic quotes U+201C/U+201D around '记住' are preserved in output (NIT-r2-2)
+ *   T-M_p6.24 — escalate-habit directive present in Section 5 (F-8 line-372 verbatim fragments)
+ *   T-M_p6.25 — extended Section 5 contains NO F-5 banned tokens (no regression from P-6 extension)
  *
  * No Chrome, no LLM, no SQLite required.
  */
@@ -251,5 +253,92 @@ test("T-M_p5.8b (NIT-r2-2): CJK typographic quotes U+201C/U+201D around '记住'
     `T-M_p5.8b: '“记住”' must appear in the memory-trigger section of Soul output`,
   );
 
-  console.log(`T-M_p5.8b: CJK quotes '“记住”' preserved in Soul output ✓`);
+  console.log(`T-M_p5.8b: CJK quotes '”记住”' preserved in Soul output ✓`);
+});
+
+// ─── T-M_p6.24 — escalate-habit directive present (F-8 line-372) ─────────────
+
+test("T-M_p6.24: composeSoulBand Section 5 includes escalate-habit directive (F-8 line-372 verbatim fragments)", () => {
+  const identity: IdentityRecord = {
+    fullName: "TestUser",
+    company: "TestCo",
+    updatedAt: new Date().toISOString(),
+  };
+  const out = composeSoulBand(identity);
+
+  // F-8 line-372 escalate-habit directive verbatim fragments (from soul.ts §5).
+  const requiredFragments = ["telegram_notify", "gh_issue", "escalate_for_capability", "stop", "sleep", "工具能力之外"];
+
+  for (const fragment of requiredFragments) {
+    assert.ok(
+      out.includes(fragment),
+      `T-M_p6.24: escalate-habit directive fragment "${fragment}" must be in Soul output`,
+    );
+  }
+
+  // Also verify the directive follows the memory-trigger in Section 5 (same paragraph block)
+  const memTriggerIdx = out.indexOf("工具存下来才算");
+  const escalateIdx = out.indexOf("escalate_for_capability");
+  assert.ok(memTriggerIdx >= 0, "T-M_p6.24: memory-trigger sentence must be present");
+  assert.ok(escalateIdx >= 0, "T-M_p6.24: escalate directive must be present");
+  assert.ok(
+    escalateIdx > memTriggerIdx,
+    "T-M_p6.24: escalate directive must appear AFTER the memory-trigger sentence in Section 5",
+  );
+
+  // Total Soul output token budget check: Section 5 extension added ~100 tok;
+  // full Soul with default identity should remain within 1200-tok gate (~4800 chars).
+  const charCount = out.length;
+  const estimatedTok = charCount / 4;
+  assert.ok(
+    estimatedTok <= 1200,
+    `T-M_p6.24: full Soul output must be ≤ 1200 tok (G-P6.5); got ~${Math.round(estimatedTok)} tok (${charCount} chars)`,
+  );
+
+  console.log(
+    `T-M_p6.24: escalate-habit directive present in Soul Section 5 (~${Math.round(estimatedTok)} tok total) ✓`,
+  );
+});
+
+// ─── T-M_p6.25 — extended Section 5 has NO F-5 banned tokens ─────────
+
+test("T-M_p6.25: composeSoulBand extended Section 5 (escalate directive) contains NO F-5 banned tokens", () => {
+  const identity: IdentityRecord = {
+    fullName: "TestUser",
+    company: "TestCo",
+    updatedAt: new Date().toISOString(),
+  };
+  const out = composeSoulBand(identity);
+
+  // Extract only the Section 5 portion (from the trigger line to end of output).
+  const section5Start = out.indexOf("你的习惯是：operator");
+  assert.ok(section5Start >= 0, "T-M_p6.25: must find Section 5 start");
+  const section5 = out.slice(section5Start);
+
+  // Full F-5 ban list (same as T-M_p5.8) — must hold for extended Section 5 too.
+  const bannedTokens = [
+    "必须",
+    "MUST",
+    "SHALL",
+    "禁止",
+    "forbidden",
+    "do not",
+    "don't",
+    "never",
+    "应该",
+    "should always",
+  ];
+
+  for (const token of bannedTokens) {
+    const found = section5.includes(token);
+    if (found) {
+      const idx = section5.indexOf(token);
+      const context = section5.slice(Math.max(0, idx - 40), Math.min(section5.length, idx + 60));
+      assert.fail(
+        `T-M_p6.25: F-5 banned token "${token}" found in Soul Section 5 (escalate directive).\nContext: "...${context}..."`,
+      );
+    }
+  }
+
+  console.log("T-M_p6.25: zero F-5 banned tokens in extended Section 5 ✓");
 });
