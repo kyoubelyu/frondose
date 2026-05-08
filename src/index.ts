@@ -19,7 +19,8 @@ import { resolveModel } from "./agent/modelResolver.js";
 import { BOUNDARY_PLACEHOLDER } from "./agent/systemPrompt/boundary.js";
 import { CHECKPOINT_PLACEHOLDER } from "./agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "./agent/systemPrompt/compose.js";
-import { SOUL_PLACEHOLDER } from "./agent/systemPrompt/soul.js";
+import { composeSoulBand } from "./agent/systemPrompt/soul.js";
+import { readIdentity } from "./persistence/identity.js";
 import { appendMessages, continueRecent, loadMessages } from "./persistence/session.js";
 import { tools as defaultTools } from "./tools/index.js";
 
@@ -49,9 +50,13 @@ export interface MaiAgentController {
  */
 export function createMaiAgent(opts: CreateMaiAgentOpts): MaiAgentController {
   const model = resolveModel({ factory: opts.model });
+  // P-5: Soul band composed from identity.json (or null fallback if absent).
+  // The programmatic factory does not invoke runIdentityBootstrap; consumers can
+  // call `mai` directly to bootstrap the record before using createMaiAgent.
+  const soul = composeSoulBand(readIdentity());
   const system = composeSystemPrompt({
     boundary: BOUNDARY_PLACEHOLDER,
-    soul: SOUL_PLACEHOLDER,
+    soul,
     checkpoint: CHECKPOINT_PLACEHOLDER,
   });
   const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
