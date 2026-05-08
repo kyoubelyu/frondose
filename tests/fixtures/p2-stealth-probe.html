@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>P-2 Stealth Probe</title>
+  </head>
+  <body>
+    <div id="results"></div>
+    <script>
+      (() => {
+        var data = {
+          webdriver: typeof navigator.webdriver,
+          webdriverValue: String(navigator.webdriver),
+          cdc: typeof window.cdc_adoQpoasnfa76pfcZLmcfl_Array,
+          runtime: typeof window.chrome?.runtime,
+          pluginsLen: navigator.plugins.length,
+          pluginName: navigator.plugins[0] ? navigator.plugins[0].name : null,
+        };
+        document.getElementById("results").textContent = JSON.stringify(data);
+      })();
+    </script>
+  </body>
+</html>

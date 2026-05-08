@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>P-2 Interactive Page</title>
+  </head>
+  <body>
+    <button id="b1" aria-label="Submit">Click me</button>
+    <input id="i1" aria-label="Username" />
+    <div id="result"></div>
+    <div id="status">loading</div>
+    <script>
+      document.getElementById("b1").onclick = () => {
+        document.getElementById("result").textContent = "clicked";
+      };
+      setTimeout(() => {
+        window.ready = true;
+        document.getElementById("status").textContent = "done";
+      }, 800);
+    </script>
+  </body>
+</html>
