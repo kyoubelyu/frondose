@@ -62,6 +62,7 @@ function makeFakeSession(opts: { withLastCtx?: boolean } = {}) {
     : undefined;
 
   return {
+    getOrInitClient: () => Promise.resolve(client),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () => lastCtx,

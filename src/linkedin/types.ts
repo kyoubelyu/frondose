@@ -57,7 +57,19 @@ export interface PacingResult {
 
 /** Session-scoped LinkedIn state; shared across all LinkedIn tools in one binary. */
 export interface LinkedinSession {
-  getClient(): CdpClient;
+  /**
+   * Lazy-boot accessor. Returns the cached CdpClient if already booted; otherwise
+   * boots Chrome (ensureChrome + CdpClient.connect + injectStealth) and caches.
+   * Concurrent calls dedupe via promise sharing. Failed boots reset internal
+   * pending state so subsequent calls retry.
+   */
+  getOrInitClient(): Promise<CdpClient>;
+  /**
+   * Returns the cached CdpClient if Chrome has been booted (via a prior
+   * getOrInitClient() call); otherwise undefined. Useful for diagnostic /
+   * introspection paths that should NOT force-boot Chrome.
+   */
+  getClient(): CdpClient | undefined;
   setLastContext(ctx: CurrentSurfaceContext): void;
   getLastContext(): CurrentSurfaceContext | undefined;
 }

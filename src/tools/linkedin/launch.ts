@@ -22,7 +22,7 @@ export function makeLaunchTool(session: LinkedinSession) {
     execute: async ({ destination, args }) => {
       try {
         const url = normalizeDestination(destination, args);
-        const client = session.getClient();
+        const client = await session.getOrInitClient();
         await client.navigate(url, "load");
         const pacing = await applyPacing();
         const finalUrl = await client.getCurrentUrl();

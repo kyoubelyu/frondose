@@ -31,10 +31,14 @@ export interface PersistencePaths {
  */
 export function makeAllTools(session?: LinkedinSession, persistence?: PersistencePaths): ToolSet {
   const out: ToolSet = { echo: echoTool };
-  if (session) Object.assign(out, makeLinkedinTools(session));
+  // Memory + identity register from persistence regardless of session presence.
+  // They're 100% Chrome-free (scout F-13) and useful even without LinkedIn.
   if (persistence) {
     Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
     Object.assign(out, makeIdentityTools(persistence.identityPath));
   }
+  // LinkedIn tools register when a session factory is given; they lazy-boot
+  // Chrome on first call to session.getOrInitClient() inside execute.
+  if (session) Object.assign(out, makeLinkedinTools(session));
   return out;
 }
