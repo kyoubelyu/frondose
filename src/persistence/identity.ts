@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { freeAxesSchema } from "../methodology/freeAxes.js";
 
 export const DEFAULT_IDENTITY_PATH = (): string => join(homedir(), ".mai", "agent", "identity.json");
 
@@ -27,6 +28,8 @@ export const identityRecordSchema = z.object({
   contact: z.string().trim().min(1).optional(),
   style: z.string().trim().min(1).optional(),
   icp: icpSchema.optional(),
+  // P-5: 4 methodology habit axes — operator-locked at first identity init; re-rolled via `mai soul reset`.
+  freeAxes: freeAxesSchema.optional(),
   updatedAt: z.string().min(1),
 });
 export type IdentityRecord = z.infer<typeof identityRecordSchema>;

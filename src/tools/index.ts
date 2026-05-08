@@ -4,6 +4,7 @@ import { echoTool } from "./control/echo.js";
 import { makeIdentityTools } from "./identity/index.js";
 import { makeLinkedinTools } from "./linkedin/index.js";
 import { makeMemoryTools } from "./memory/index.js";
+import { makeMethodologyTools } from "./methodology/index.js";
 
 /**
  * P-1 tool inventory: just `echo`. Vercel `ToolSet` consumes this directly.
@@ -36,6 +37,8 @@ export function makeAllTools(session?: LinkedinSession, persistence?: Persistenc
   if (persistence) {
     Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
     Object.assign(out, makeIdentityTools(persistence.identityPath));
+    // P-5: methodology layer — qualify_profile reads identity.json ICP lazily.
+    Object.assign(out, makeMethodologyTools({ identityPath: persistence.identityPath }));
   }
   // LinkedIn tools register when a session factory is given; they lazy-boot
   // Chrome on first call to session.getOrInitClient() inside execute.

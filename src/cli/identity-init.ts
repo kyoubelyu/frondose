@@ -5,6 +5,7 @@ import {
   identityRecordSchema,
   writeIdentity,
 } from "../persistence/identity.js";
+import { promptFreeAxes } from "./subcommands/soul.js";
 
 interface FieldSpec {
   name: IdentityFieldName;
@@ -80,8 +81,14 @@ export async function runIdentityBootstrap(identityPath: string): Promise<Identi
       }
     }
   } finally {
+    // P-5: close THIS rl before promptFreeAxes opens its own; Node readline does
+    // not allow two simultaneous interfaces on process.stdin.
     rl.close();
   }
+
+  // P-5: 4 free axes (CONCERN-MR-3 rev-2). promptFreeAxes manages its own readline.
+  process.stdout.write("\n=== Pick your 4 methodology habit axes (re-rollable via `mai soul reset`) ===\n");
+  collected.freeAxes = await promptFreeAxes();
 
   const record = identityRecordSchema.parse({
     ...collected,
