@@ -1,0 +1,203 @@
+/**
+ * P-4 mock tests — T-M91..T-M97: identity persistence layer.
+ *
+ * Tests readIdentity, writeIdentity, applyIdentityPatch, missingIdentityFields,
+ * and Zod schema validation. Uses OS tmpdir for file I/O tests; cleans up after itself.
+ * No Chrome, no LLM, no SQLite required.
+ */
+
+import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import {
+  applyIdentityPatch,
+  icpSchema,
+  identityFieldNames,
+  identityRecordSchema,
+  missingIdentityFields,
+  readIdentity,
+  writeIdentity,
+} from "../../src/persistence/identity.js";
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function makeTempPath(suffix: string): string {
+  const dir = join(tmpdir(), `mai-p4-id-${process.pid}-${suffix}`);
+  mkdirSync(dir, { recursive: true });
+  return join(dir, "identity.json");
+}
+
+function cleanup(path: string): void {
+  try {
+    rmSync(join(path, ".."), { recursive: true, force: true });
+  } catch {
+    // best-effort
+  }
+}
+
+// ─── T-M91 ───────────────────────────────────────────────────────────────────
+
+test("T-M91: readIdentity returns null when file does not exist", () => {
+  const path = join(tmpdir(), `mai-p4-no-such-${Date.now()}.json`);
+  const result = readIdentity(path);
+  assert.equal(result, null, "readIdentity on missing file must return null");
+});
+
+// ─── T-M92 ───────────────────────────────────────────────────────────────────
+
+test("T-M92: readIdentity returns null and writes to stderr when JSON is corrupt", () => {
+  const path = makeTempPath("corrupt");
+  try {
+    writeFileSync(path, "{ not valid json }", "utf-8");
+
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // biome-ignore lint/suspicious/noExplicitAny: mock override
+    (process.stderr as any).write = (chunk: string) => {
+      stderrChunks.push(chunk);
+      return true;
+    };
+    let result: unknown;
+    try {
+      result = readIdentity(path);
+    } finally {
+      // biome-ignore lint/suspicious/noExplicitAny: restore
+      (process.stderr as any).write = origWrite;
+    }
+
+    assert.equal(result, null, "corrupt JSON must return null");
+    assert.ok(
+      stderrChunks.some((c) => c.includes("[mai]")),
+      "corrupt JSON must log a [mai] warning to stderr",
+    );
+  } finally {
+    cleanup(path);
+  }
+});
+
+// ─── T-M93 ───────────────────────────────────────────────────────────────────
+
+test("T-M93: readIdentity parses a valid identity.json with Zod and returns typed record", () => {
+  const path = makeTempPath("valid");
+  try {
+    const record = {
+      fullName: "Alice Smith",
+      company: "Acme Corp",
+      role: "Founder",
+      updatedAt: new Date().toISOString(),
+    };
+    writeFileSync(path, JSON.stringify(record), "utf-8");
+
+    const result = readIdentity(path);
+    assert.ok(result !== null, "valid JSON must return a record (non-null)");
+    assert.equal(result.fullName, "Alice Smith");
+    assert.equal(result.company, "Acme Corp");
+    assert.equal(result.role, "Founder");
+    assert.ok(typeof result.updatedAt === "string", "updatedAt must be a string");
+  } finally {
+    cleanup(path);
+  }
+});
+
+// ─── T-M94 ───────────────────────────────────────────────────────────────────
+
+test("T-M94: writeIdentity creates parent directories and writes pretty JSON", () => {
+  // Use a nested path that doesn't yet exist
+  const dir = join(tmpdir(), `mai-p4-write-${process.pid}-${Date.now()}`, "nested", "dir");
+  const path = join(dir, "identity.json");
+  try {
+    const record = identityRecordSchema.parse({
+      fullName: "Bob Jones",
+      company: "TestCo",
+      updatedAt: new Date().toISOString(),
+    });
+    writeIdentity(record, path);
+
+    // File must now exist and be parse-able
+    const readBack = readIdentity(path);
+    assert.ok(readBack !== null, "readIdentity must succeed after writeIdentity");
+    assert.equal(readBack.fullName, "Bob Jones");
+    assert.equal(readBack.company, "TestCo");
+  } finally {
+    try {
+      rmSync(join(tmpdir(), `mai-p4-write-${process.pid}-${Date.now()}`), { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+    // Clean up the actual dir we created
+    try {
+      rmSync(join(dir, "../../.."), { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  }
+});
+
+// ─── T-M95 ───────────────────────────────────────────────────────────────────
+
+test("T-M95: applyIdentityPatch merges fields and removes undefined/empty-string values", () => {
+  const existing = {
+    fullName: "Alice Smith",
+    company: "Acme Corp",
+    role: "Founder",
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Patch: update company, blank out role (empty string), add persona
+  const patch = {
+    company: "NewCo",
+    role: "",
+    persona: "Technical founder",
+  };
+
+  const merged = applyIdentityPatch(existing, patch);
+
+  assert.equal(merged.company, "NewCo", "company must be updated");
+  assert.equal(merged.fullName, "Alice Smith", "fullName must be preserved");
+  assert.equal(merged.persona, "Technical founder", "new field must be added");
+  // Empty string must be deleted
+  assert.ok(!("role" in merged) || merged.role === undefined, "empty string role must be removed");
+});
+
+// ─── T-M96 ───────────────────────────────────────────────────────────────────
+
+test("T-M96: missingIdentityFields lists all 7 field names when identity is empty object", () => {
+  const missing = missingIdentityFields({});
+  assert.equal(missing.length, 7, "all 7 fields must be reported missing for empty identity");
+  // All identityFieldNames must appear
+  for (const name of identityFieldNames) {
+    assert.ok(missing.includes(name), `missingIdentityFields must include '${name}'`);
+  }
+});
+
+test("T-M96b: missingIdentityFields returns empty array when all 7 fields present", () => {
+  const full = {
+    fullName: "Alice",
+    profileUrl: "https://www.linkedin.com/in/alice/",
+    persona: "Founder",
+    company: "Acme",
+    role: "CEO",
+    contact: "alice@acme.com",
+    style: "Direct",
+    updatedAt: new Date().toISOString(),
+  };
+  const missing = missingIdentityFields(full);
+  assert.equal(missing.length, 0, "no fields must be missing when all 7 are present");
+});
+
+// ─── T-M97 ───────────────────────────────────────────────────────────────────
+
+test("T-M97: icpSchema rejects empty targetRole array", () => {
+  assert.throws(
+    () => icpSchema.parse({ targetRole: [] }),
+    /too_small|array/i,
+    "icpSchema must reject empty targetRole array",
+  );
+});
+
+test("T-M97b: icpSchema accepts targetRole with at least one entry", () => {
+  const icp = icpSchema.parse({ targetRole: ["VP Engineering"] });
+  assert.deepEqual(icp.targetRole, ["VP Engineering"]);
+});

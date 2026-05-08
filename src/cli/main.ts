@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync, unlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { CoreMessage } from "ai";
@@ -15,6 +16,7 @@ import type { LinkedinSession } from "../linkedin/types.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
 import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
+import { runIdentityBootstrap } from "./identity-init.js";
 import { runOneShot, runRepl } from "./repl.js";
 
 interface CliOpts {
@@ -22,6 +24,7 @@ interface CliOpts {
   prompt?: string;
   newSession: boolean;
   cwd: string;
+  resetIdentity: boolean;
 }
 
 async function main(): Promise<void> {
@@ -29,9 +32,13 @@ async function main(): Promise<void> {
   loadDotenv(process.cwd());
 
   // P-3 env reads (CDP layer): port + profile dir + Chrome-skip opt-out.
-  const cdpPort = process.env["MAI_CDP_PORT"] ? parseInt(process.env["MAI_CDP_PORT"], 10) : 9222;
-  const profileDir = process.env["MAI_PROFILE_DIR"] ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
-  const skipChrome = process.env["MAI_NO_CHROME"] === "1";
+  const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
+  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
+  const skipChrome = process.env.MAI_NO_CHROME === "1";
+
+  // P-4 env reads (persistence layer): memory DB + identity JSON paths.
+  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
+  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
 
   const program = new Command();
   program
@@ -42,9 +49,17 @@ async function main(): Promise<void> {
     .option("--prompt <text>", "one-shot prompt; exits after response")
     .option("--new-session", "start a fresh session (discard prior context)", false)
     .option("--cwd <dir>", "working directory for session storage", process.cwd())
+    .option("--reset-identity", "delete identity.json and re-run first-run bootstrap", false)
     .parse(process.argv);
 
   const opts = program.opts<CliOpts>();
+
+  // P-4: identity-init bootstrap (must run BEFORE Chrome boot — readline owns stdin).
+  if (opts.resetIdentity && existsSync(identityPath)) unlinkSync(identityPath);
+  if (!existsSync(identityPath)) {
+    await runIdentityBootstrap(identityPath);
+  }
+
   const model = resolveModel({ cli: opts.model });
   const system = composeSystemPrompt({
     boundary: BOUNDARY_PLACEHOLDER,
@@ -63,7 +78,7 @@ async function main(): Promise<void> {
     await injectStealth(client.handle);
     linkedinSession = createLinkedinSession({ client });
   }
-  const tools = makeAllTools(linkedinSession);
+  const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath });
 
   if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
     await runOneShot({ model, system, messages, tools, sessionFile, prompt: opts.prompt });
