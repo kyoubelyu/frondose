@@ -1,9 +1,11 @@
 /**
- * P-3 mock tests — T-M81: makeAllTools factory.
+ * P-3/P-4 mock tests — T-M81, T-M120..T-M122: makeAllTools factory.
  *
- * Tests that makeAllTools() without session returns only {echo},
- * and makeAllTools(session) returns 11 keys (echo + 10 LinkedIn tools).
- * Also verifies the static `tools` export still only contains {echo}.
+ * T-M81:  makeAllTools() → 1 key (echo only); makeAllTools(session) → 11 keys.
+ * T-M120: makeAllTools() → 1 key (echo only) — P-4 invariant.
+ * T-M121: makeAllTools(undefined, persistence) → 5 keys (echo + 4 helpers).
+ * T-M122: makeAllTools(session, persistence) → 15 keys (G-P4.5).
+ *
  * No Chrome or LLM required.
  */
 
@@ -57,4 +59,67 @@ test("T-M81: makeAllTools with no session returns {echo} only; with session retu
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in echo-only set");
   assert.ok("echo" in allTools, "echo must be in full set");
+});
+
+// ─── T-M120 ─────────────────────────────────────────────────────────────────
+
+test("T-M120: makeAllTools() with no args returns exactly {echo} — P-4 regression guard", () => {
+  const t = makeAllTools();
+  const keys = Object.keys(t);
+  assert.deepEqual(keys, ["echo"], "makeAllTools() must return only 'echo' (1 key)");
+});
+
+// ─── T-M121 ─────────────────────────────────────────────────────────────────
+
+test("T-M121: makeAllTools(undefined, persistence) returns 5 keys (echo + 4 memory/identity helpers)", () => {
+  const persistence = {
+    memoryDbPath: "/tmp/p4-t121-memory.sqlite",
+    identityPath: "/tmp/p4-t121-identity.json",
+  };
+  const t = makeAllTools(undefined, persistence);
+  const keys = Object.keys(t).sort();
+
+  const expected = ["echo", "getIdentity", "getMemory", "identity", "remember"].sort();
+  assert.deepEqual(keys, expected, "persistence-only must yield 5 tools (echo + 4 helpers)");
+  assert.equal(keys.length, 5, "must have exactly 5 tools with persistence-only");
+});
+
+// ─── T-M122 ─────────────────────────────────────────────────────────────────
+
+test("T-M122: makeAllTools(session, persistence) returns 15 keys — G-P4.5", () => {
+  const fakeHandle = {};
+  const client = CdpClient.fromHandle(fakeHandle);
+  const session = {
+    getClient: () => client,
+    setLastContext: (_ctx: CurrentSurfaceContext) => {},
+    getLastContext: () => undefined as CurrentSurfaceContext | undefined,
+  };
+  const persistence = {
+    memoryDbPath: "/tmp/p4-t122-memory.sqlite",
+    identityPath: "/tmp/p4-t122-identity.json",
+  };
+
+  const t = makeAllTools(session, persistence);
+  const keys = Object.keys(t).sort();
+
+  const expected = [
+    "click",
+    "close",
+    "echo",
+    "getIdentity",
+    "getMemory",
+    "identity",
+    "inspect",
+    "launch",
+    "press",
+    "reload",
+    "remember",
+    "screenshot",
+    "scroll",
+    "type",
+    "upload",
+  ].sort();
+
+  assert.deepEqual(keys, expected, "makeAllTools(session, persistence) must yield 15 keys (G-P4.5)");
+  assert.equal(keys.length, 15, "must have exactly 15 tools with session + persistence");
 });

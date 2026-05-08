@@ -1,7 +1,9 @@
 import type { ToolSet } from "ai";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { echoTool } from "./control/echo.js";
+import { makeIdentityTools } from "./identity/index.js";
 import { makeLinkedinTools } from "./linkedin/index.js";
+import { makeMemoryTools } from "./memory/index.js";
 
 /**
  * P-1 tool inventory: just `echo`. Vercel `ToolSet` consumes this directly.
@@ -15,11 +17,24 @@ export const tools = {
 
 export type ToolKey = keyof typeof tools;
 
+export interface PersistencePaths {
+  memoryDbPath: string;
+  identityPath: string;
+}
+
 /**
- * Build the full tool inventory. If `session` is provided, includes the 10 LinkedIn tools
- * (P-3). If omitted (e.g. `MAI_NO_CHROME=1` echo-only smoke), returns just `{ echo }`.
+ * Build the full tool inventory:
+ *   - { echo }              when neither session nor persistence given (P-1 invariant)
+ *   - + 10 LinkedIn         when session given (P-3)
+ *   - + 4 memory/identity   when persistence given (P-4)
+ * With both → 15 tools total (G-P4.5).
  */
-export function makeAllTools(session?: LinkedinSession): ToolSet {
-  if (!session) return { echo: echoTool };
-  return { echo: echoTool, ...makeLinkedinTools(session) };
+export function makeAllTools(session?: LinkedinSession, persistence?: PersistencePaths): ToolSet {
+  const out: ToolSet = { echo: echoTool };
+  if (session) Object.assign(out, makeLinkedinTools(session));
+  if (persistence) {
+    Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
+    Object.assign(out, makeIdentityTools(persistence.identityPath));
+  }
+  return out;
 }
