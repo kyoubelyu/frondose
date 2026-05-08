@@ -19,7 +19,7 @@ export function makeInspectTool(session: LinkedinSession) {
     parameters: inspectParams,
     execute: async ({ scope }) => {
       try {
-        const ctx = await captureCurrentSurfaceContext(session.getClient());
+        const ctx = await captureCurrentSurfaceContext(await session.getOrInitClient());
         session.setLastContext(ctx);
         const summary = buildInspectSummary(ctx, scope);
         // inspect's data is the InspectSummary shape directly (LLM consumes structured fields).

@@ -96,6 +96,7 @@ function makeFakeSession(opts: {
   };
 
   return {
+    getOrInitClient: () => Promise.resolve(client),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () => lastCtx,

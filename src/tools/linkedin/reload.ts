@@ -9,7 +9,7 @@ export function makeReloadTool(session: LinkedinSession) {
     parameters: z.object({}),
     execute: async () => {
       try {
-        const client = session.getClient();
+        const client = await session.getOrInitClient();
         await client.reload();
         // Reload doesn't auto-wait; do it explicitly.
         await client.waitFor({ kind: "load", state: "load" });

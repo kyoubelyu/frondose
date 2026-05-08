@@ -13,7 +13,8 @@
  */
 
 export { CdpClient } from "./client.js";
-export { ensureChrome } from "./launcher.js";
+export type { PageTarget } from "./launcher.js";
+export { ensureChrome, waitForPageTarget } from "./launcher.js";
 export { getSnapshot } from "./snapshot.js";
 export { injectStealth, STEALTH_INIT_SCRIPT } from "./stealth.js";
 export type {

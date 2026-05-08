@@ -40,7 +40,7 @@ export function makeUploadTool(session: LinkedinSession) {
         if (!existsSync(absolute) || !statSync(absolute).isFile()) {
           throw new Error(`upload: '${absolute}' does not exist or is not a regular file.`);
         }
-        const client = session.getClient();
+        const client = await session.getOrInitClient();
         const ctx = session.getLastContext() ?? (await captureCurrentSurfaceContext(client));
         session.setLastContext(ctx);
 

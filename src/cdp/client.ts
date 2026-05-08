@@ -1,5 +1,6 @@
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
+import { waitForPageTarget } from "./launcher.js";
 import { getSnapshot } from "./snapshot.js";
 import type {
   CdpHandle,
@@ -33,7 +34,10 @@ export class CdpClient {
 
   /** Connect to a Chrome on the given port (default page target). */
   static async connect(port: number): Promise<CdpClient> {
-    const client = await CDP({ port });
+    // v0.3-fix1 B1: wait for an inspectable page target before connecting (resolves
+    // the "No inspectable targets" race when Chrome's first tab is not yet listed).
+    const target = await waitForPageTarget(port);
+    const client = await CDP({ port, target });
     return new CdpClient(client);
   }
 
