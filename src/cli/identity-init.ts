@@ -1,100 +1,42 @@
-import { createInterface } from "node:readline";
-import {
-  type IdentityFieldName,
-  type IdentityRecord,
-  identityRecordSchema,
-  writeIdentity,
-} from "../persistence/identity.js";
-import { promptFreeAxes } from "./subcommands/soul.js";
+import { dirname, join } from "node:path";
+import { detectAnyModelKey, resolveModel } from "../agent/modelResolver.js";
+import { type IdentityRecord, readIdentity } from "../persistence/identity.js";
+import { runBootstrapAgent } from "./bootstrap-agent.js";
 
-interface FieldSpec {
-  name: IdentityFieldName;
-  prompt: string;
-  required: boolean;
-}
+const NO_KEY_ERROR = `[mai] No LLM API key found. The identity bootstrap requires an LLM to guide
+      the conversation.
 
-const FIELD_SPECS: FieldSpec[] = [
-  { name: "fullName", prompt: "Your full name", required: true },
-  { name: "profileUrl", prompt: "Your LinkedIn profile URL", required: false },
-  { name: "persona", prompt: "Your persona (a short self-description, e.g. 'Founder & engineer')", required: false },
-  { name: "company", prompt: "Your company name", required: true },
-  { name: "role", prompt: "Your role/title", required: false },
-  { name: "contact", prompt: "Your contact info (email, phone, etc.)", required: false },
-  { name: "style", prompt: "Your communication style (e.g. 'Direct, technical, kind')", required: false },
-];
+To set up a key, run ONE of the following first:
+
+  mai auth set anthropic:claude-sonnet-4-5 --key YOUR_ANTHROPIC_KEY
+  mai auth set openai:gpt-4o --key YOUR_OPENAI_KEY
+  mai auth set openai:deepseek-chat --key YOUR_DEEPSEEK_KEY \\
+      --base-url https://api.deepseek.com
+
+Then re-run \`mai identity init\` (or just \`mai\` for the first-time flow).
+`;
 
 /**
- * Run the first-run identity bootstrap. Prompts the operator via stdin, saves to identityPath,
- * returns the saved record. Throws on EOF/abort. Pure readline; no LLM dependency.
+ * Run the LLM-led identity bootstrap. Backward-compat with P-4's signature so
+ * src/cli/main.ts's existing first-run call site is unchanged.
+ *
+ * Internally:
+ *   1. Chicken-and-egg guard via detectAnyModelKey — fails loudly + exit 1 if no key.
+ *   2. Resolves a LanguageModel via the precedence chain (factory > CLI > env > auth.json default > anthropic:claude-sonnet-4-5).
+ *   3. Calls runBootstrapAgent with the resolved model + identity/wip paths.
+ *   4. Re-reads identity.json to return the fresh IdentityRecord (or throws if bootstrap aborted without finalize).
  */
 export async function runIdentityBootstrap(identityPath: string): Promise<IdentityRecord> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  // Per guardian critic NIT-2: remove the close-listener on each successful answer to prevent
-  // listener-accumulation across the 8 prompts (default EventEmitter cap is 10).
-  const ask = (q: string): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const onClose = () => reject(new Error("identity bootstrap aborted (EOF)"));
-      rl.once("close", onClose);
-      rl.question(q, (answer) => {
-        rl.removeListener("close", onClose);
-        resolve(answer);
-      });
-    });
-
-  process.stdout.write("\n=== mai-agent first-run identity bootstrap ===\n");
-  process.stdout.write("Press Enter to skip optional fields.\n\n");
-
-  const collected: Partial<IdentityRecord> = {};
-  try {
-    for (const spec of FIELD_SPECS) {
-      while (true) {
-        const answer = (await ask(`${spec.prompt}: `)).trim();
-        if (!answer) {
-          if (spec.required) {
-            process.stdout.write(`  → ${spec.name} is required. Please enter a value.\n`);
-            continue;
-          }
-          break; // skip optional
-        }
-        // For profileUrl, validate URL shape; for others, accept any non-empty trimmed value.
-        if (spec.name === "profileUrl") {
-          try {
-            new URL(answer);
-          } catch {
-            process.stdout.write("  → invalid URL. Please enter a full URL or press Enter to skip.\n");
-            continue;
-          }
-        }
-        (collected as Record<string, unknown>)[spec.name] = answer;
-        break;
-      }
-    }
-    // Optional ICP target roles.
-    const icpAnswer = (await ask("ICP target roles (comma-separated, or press Enter to skip): ")).trim();
-    if (icpAnswer) {
-      const targetRole = icpAnswer
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (targetRole.length > 0) {
-        collected.icp = { targetRole };
-      }
-    }
-  } finally {
-    // P-5: close THIS rl before promptFreeAxes opens its own; Node readline does
-    // not allow two simultaneous interfaces on process.stdin.
-    rl.close();
+  if (!detectAnyModelKey()) {
+    process.stderr.write(NO_KEY_ERROR);
+    process.exit(1);
   }
-
-  // P-5: 4 free axes (CONCERN-MR-3 rev-2). promptFreeAxes manages its own readline.
-  process.stdout.write("\n=== Pick your 4 methodology habit axes (re-rollable via `mai soul reset`) ===\n");
-  collected.freeAxes = await promptFreeAxes();
-
-  const record = identityRecordSchema.parse({
-    ...collected,
-    updatedAt: new Date().toISOString(),
-  });
-  writeIdentity(record, identityPath);
-  process.stdout.write(`\nIdentity saved to ${identityPath}.\n\n`);
+  const wipPath = join(dirname(identityPath), ".identity-wip.json");
+  const model = resolveModel({});
+  await runBootstrapAgent({ identityPath, wipPath, model });
+  const record = readIdentity(identityPath);
+  if (!record) {
+    throw new Error("Identity bootstrap completed but identity.json is missing or invalid. Check stderr for details.");
+  }
   return record;
 }

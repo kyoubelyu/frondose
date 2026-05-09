@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
+import { readAuthJsonKey as readAuthJsonKeyFromAuthJs } from "../persistence/auth.js";
+
+// P-7: re-export for callers (e.g. bootstrap-agent) that already import from modelResolver.
+export const readAuthJsonKey = readAuthJsonKeyFromAuthJs;
 
 export const DEFAULT_MODEL_SPEC = "anthropic:claude-sonnet-4-5";
 
@@ -41,6 +45,20 @@ export function resolveModel(opts: ResolveModelOpts = {}): LanguageModel {
   return buildModel(resolveModelSpec(opts));
 }
 
+/**
+ * P-7: returns true if any LLM key is detected — env vars OR auth.json.
+ * Used by runIdentityBootstrap before runBootstrapAgent (chicken-and-egg guard per F-3r.4).
+ */
+export function detectAnyModelKey(): boolean {
+  if (process.env.ANTHROPIC_API_KEY) return true;
+  if (process.env.OPENAI_API_KEY) return true;
+  if (process.env.DEEPSEEK_API_KEY) return true;
+  if (readAuthJsonKey("anthropic")) return true;
+  if (readAuthJsonKey("openai")) return true;
+  if (readAuthJsonKey("deepseek")) return true;
+  return false;
+}
+
 export function parseModelSpec(spec: string): { provider: string; modelId: string } {
   const idx = spec.indexOf(":");
   if (idx === -1) {
@@ -59,10 +77,13 @@ export function parseModelSpec(spec: string): { provider: string; modelId: strin
 function buildModel(spec: string): LanguageModel {
   const { provider, modelId } = parseModelSpec(spec);
   if (provider === "anthropic") {
-    return createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })(modelId);
+    // P-7 (F-10): env wins; auth.json fallback.
+    const key = process.env.ANTHROPIC_API_KEY ?? readAuthJsonKey("anthropic");
+    return createAnthropic({ apiKey: key })(modelId);
   }
   if (provider === "openai") {
     if (modelId.startsWith("deepseek")) {
+      const key = process.env.DEEPSEEK_API_KEY ?? readAuthJsonKey("deepseek");
       const rawBase = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
       // Normalize: strip trailing /v1 (with optional trailing slash) so we don't
       // produce https://api.deepseek.com/v1/v1/chat/completions when operator
@@ -70,12 +91,13 @@ function buildModel(spec: string): LanguageModel {
       const baseURL = `${rawBase.replace(/\/v1\/?$/, "")}/v1`;
       return createOpenAI({
         baseURL,
-        apiKey: process.env.DEEPSEEK_API_KEY,
+        apiKey: key,
         compatibility: "compatible",
         name: "deepseek",
       })(modelId);
     }
-    return createOpenAI({ apiKey: process.env.OPENAI_API_KEY })(modelId);
+    const key = process.env.OPENAI_API_KEY ?? readAuthJsonKey("openai");
+    return createOpenAI({ apiKey: key })(modelId);
   }
   throw new Error(`Unknown provider '${provider}' in model spec '${spec}'. Supported: 'anthropic', 'openai'.`);
 }
