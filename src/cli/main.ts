@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, unlinkSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import type { CoreMessage } from "ai";
@@ -25,7 +26,11 @@ import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
 import { runIdentityBootstrap } from "./identity-init.js";
 import { runOneShot, runRepl } from "./repl.js";
+import { runAuthSubcommand } from "./subcommands/auth.js";
+import { runIdentitySubcommand } from "./subcommands/identity.js";
+import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
+import { runVersionSubcommand } from "./subcommands/version.js";
 
 interface CliOpts {
   model?: string;
@@ -83,11 +88,15 @@ async function main(): Promise<void> {
   // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
   const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(os.homedir(), ".mai", "agent", "audit.jsonl");
 
+  // P-7: dynamic version read so commander's --version + the `version` subcommand stay in sync with package.json.
+  const requireFromHere = createRequire(import.meta.url);
+  const pkg = requireFromHere("../../package.json") as { version: string };
+
   const program = new Command();
   program
     .name("mai")
     .description("LinkedIn autonomous agent")
-    .version("0.3.1")
+    .version(pkg.version)
     .option("--model <spec>", "LLM model spec (provider:modelId); overrides MAI_MODEL")
     .option("--prompt <text>", "one-shot prompt; exits after response")
     .option("--new-session", "start a fresh session (discard prior context)", false)
@@ -195,8 +204,69 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
+  // P-7: `mai auth` — provider key management (~/.mai/auth.json).
+  const auth = program.command("auth").description("Provider key management (~/.mai/auth.json)");
+  auth
+    .command("set <spec>")
+    .option("--key <value>", "API key")
+    .option("--base-url <url>", "Custom base URL (e.g. for DeepSeek's OpenAI-compat endpoint)")
+    .action(async (spec: string, cliOpts: { key?: string; baseUrl?: string }) => {
+      await runAuthSubcommand("set", { spec, key: cliOpts.key, baseUrl: cliOpts.baseUrl });
+      process.exit(0);
+    });
+  auth.command("list").action(async () => {
+    await runAuthSubcommand("list", {});
+    process.exit(0);
+  });
+  auth.command("remove <provider>").action(async (provider: string) => {
+    await runAuthSubcommand("remove", { provider });
+    process.exit(0);
+  });
+  auth.command("default <spec>").action(async (spec: string) => {
+    await runAuthSubcommand("default", { spec });
+    process.exit(0);
+  });
+
+  // P-7: `mai identity` — operator identity management.
+  const identity = program.command("identity").description("Operator identity management");
+  identity
+    .command("init")
+    .option("--reset", "Re-run from scratch (with confirmation)", false)
+    .action(async (cliOpts: { reset?: boolean }) => {
+      await runIdentitySubcommand("init", { identityPath, reset: cliOpts.reset });
+      process.exit(0);
+    });
+  identity.command("show").action(async () => {
+    await runIdentitySubcommand("show", { identityPath });
+    process.exit(0);
+  });
+
+  // P-7: `mai sessions` — session management.
+  const sessions = program.command("sessions").description("Session management");
+  sessions
+    .command("list")
+    .option("--json", "Output NDJSON instead of table", false)
+    .action(async (cliOpts: { json?: boolean }) => {
+      await runSessionsSubcommand("list", { json: cliOpts.json });
+      process.exit(0);
+    });
+  sessions.command("continue <id>").action(async (id: string) => {
+    await runSessionsSubcommand("continue", { sessionId: id });
+    process.exit(0);
+  });
+  sessions.command("new").action(async () => {
+    await runSessionsSubcommand("new", {});
+    process.exit(0);
+  });
+
+  // P-7: `mai version` — companion to --version flag; same dynamic source.
+  program.command("version").action(() => {
+    runVersionSubcommand();
+    process.exit(0);
+  });
+
   await program.parseAsync(process.argv);
-  // No code after parseAsync — root + soul actions run themselves.
+  // No code after parseAsync — root + sub actions run themselves.
 }
 
 main().catch((err: unknown) => {

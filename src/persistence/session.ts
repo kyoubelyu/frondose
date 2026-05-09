@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { CoreMessage } from "ai";
@@ -19,7 +19,12 @@ export function cwdHash(cwd: string): string {
 /** Directory for sessions associated with this cwd. Auto-created. */
 export function sessionDir(cwd: string): string {
   const dir = join(SESSIONS_ROOT(), cwdHash(cwd));
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    // P-7 (F-9): write cwd.txt companion for `mai sessions list` cwd recovery.
+    // Pre-P-7 hash dirs lack this file — `listAllSessions` falls back to hash.
+    writeFileSync(join(dir, "cwd.txt"), cwd, "utf-8");
+  }
   return dir;
 }
 
@@ -76,4 +81,97 @@ export function loadMessages(file: string): CoreMessage[] {
     .map((l) => l.trim())
     .filter(Boolean)
     .map((l) => JSON.parse(l) as CoreMessage);
+}
+
+/** P-7 (F-9): a single session's metadata for `mai sessions list`. */
+export interface SessionEntry {
+  sessionId: string; // basename without .jsonl
+  path: string; // absolute path
+  cwdHash: string; // sub-directory name
+  cwdLabel: string | null; // contents of cwd.txt if present
+  mtimeMs: number;
+  messageCount: number;
+  firstPrompt: string | null;
+}
+
+/** P-7 (F-9): enumerate all session JSONL files across all cwdHash directories under SESSIONS_ROOT. */
+export function listAllSessions(): SessionEntry[] {
+  const root = SESSIONS_ROOT();
+  if (!existsSync(root)) return [];
+  const out: SessionEntry[] = [];
+  for (const hashDir of readdirSync(root)) {
+    const dirPath = join(root, hashDir);
+    let dirStat: ReturnType<typeof statSync>;
+    try {
+      dirStat = statSync(dirPath);
+    } catch {
+      continue;
+    }
+    if (!dirStat.isDirectory()) continue;
+    // cwd.txt label (post-P-7 sessions only).
+    let cwdLabel: string | null = null;
+    const cwdTxtPath = join(dirPath, "cwd.txt");
+    if (existsSync(cwdTxtPath)) {
+      try {
+        cwdLabel = readFileSync(cwdTxtPath, "utf-8").trim();
+      } catch {
+        cwdLabel = null;
+      }
+    }
+    // List .jsonl files in this hash dir.
+    let entries: string[];
+    try {
+      entries = readdirSync(dirPath);
+    } catch {
+      continue;
+    }
+    for (const file of entries) {
+      if (!file.endsWith(".jsonl")) continue;
+      const filePath = join(dirPath, file);
+      let stat: ReturnType<typeof statSync>;
+      try {
+        stat = statSync(filePath);
+      } catch {
+        continue;
+      }
+      const sessionId = file.slice(0, -".jsonl".length);
+      // Read first JSONL line for prompt preview + message count.
+      let messageCount = 0;
+      let firstPrompt: string | null = null;
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        messageCount = lines.length;
+        const firstLine = lines[0];
+        if (firstLine) {
+          try {
+            const msg = JSON.parse(firstLine) as { role: string; content: unknown };
+            if (msg.role === "user") {
+              if (typeof msg.content === "string") firstPrompt = msg.content;
+              else if (Array.isArray(msg.content)) {
+                const firstText = (msg.content as Array<{ type: string; text?: string }>).find(
+                  (c) => c.type === "text" && typeof c.text === "string",
+                );
+                firstPrompt = firstText?.text ?? null;
+              }
+            }
+          } catch {
+            // Malformed JSONL line — skip preview.
+          }
+        }
+      } catch {
+        // unreadable — keep stat, skip preview.
+      }
+      out.push({
+        sessionId,
+        path: filePath,
+        cwdHash: hashDir,
+        cwdLabel,
+        mtimeMs: stat.mtimeMs,
+        messageCount,
+        firstPrompt,
+      });
+    }
+  }
+  return out;
 }

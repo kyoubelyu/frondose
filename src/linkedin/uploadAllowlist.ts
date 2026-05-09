@@ -12,7 +12,7 @@ const DEFAULTS = (): string[] => [path.join(os.homedir(), ".mai", "agent", "uplo
 
 /** Resolve the upload allowlist from env (colon-separated) or defaults. */
 export function resolveUploadAllowlist(): string[] {
-  const env = process.env["MAI_UPLOAD_ALLOWLIST"];
+  const env = process.env.MAI_UPLOAD_ALLOWLIST;
   if (env && env.length > 0) {
     return env
       .split(":")
