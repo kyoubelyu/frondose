@@ -74,6 +74,53 @@ export function parseModelSpec(spec: string): { provider: string; modelId: strin
   return { provider, modelId };
 }
 
+/**
+ * v0.4-fix1: DeepSeek models that default to thinking mode.
+ *
+ * For these models, DeepSeek emits `reasoning_content` alongside `content`.
+ * Vercel AI SDK v4.3.19's `@ai-sdk/openai` adapter does not echo
+ * `reasoning_content` back on subsequent turns, which causes DeepSeek to 400
+ * on turn 2 of any multi-turn tool-call sequence. We force non-thinking mode
+ * via `thinking: { type: "disabled" }` (DeepSeek API docs).
+ *
+ * Extend by adding model IDs as DeepSeek introduces new thinking-default models.
+ * `deepseek-chat` and `deepseek-reasoner` (deprecated 2026-07-24) are NOT in
+ * this set — `deepseek-chat` is non-thinking by default; `deepseek-reasoner`
+ * is intentionally thinking-mode for back-compat callers.
+ */
+export const DEEPSEEK_THINKING_DEFAULT_MODELS: ReadonlySet<string> = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
+
+/**
+ * v0.4-fix1: returns a `fetch` implementation that injects
+ * `thinking: { type: "disabled" }` into chat-completions request bodies for
+ * DeepSeek models in DEEPSEEK_THINKING_DEFAULT_MODELS. For all other model
+ * IDs, returns `globalThis.fetch` unmodified (reference-identical, no closure
+ * overhead).
+ *
+ * Idempotent: if the body already has a `thinking` field, leaves it untouched.
+ * Defensive: any non-string body, missing init, or JSON parse failure falls
+ * through to `globalThis.fetch` verbatim.
+ */
+export function makeNoThinkingFetch(modelId: string): typeof globalThis.fetch {
+  if (!DEEPSEEK_THINKING_DEFAULT_MODELS.has(modelId)) {
+    return globalThis.fetch;
+  }
+  return async (url, init) => {
+    if (init && typeof init.body === "string") {
+      try {
+        const parsed = JSON.parse(init.body) as Record<string, unknown>;
+        if (!("thinking" in parsed)) {
+          parsed.thinking = { type: "disabled" };
+          init = { ...init, body: JSON.stringify(parsed) };
+        }
+      } catch {
+        // Non-JSON body — pass through unmodified.
+      }
+    }
+    return globalThis.fetch(url, init);
+  };
+}
+
 function buildModel(spec: string): LanguageModel {
   const { provider, modelId } = parseModelSpec(spec);
   if (provider === "anthropic") {
@@ -94,6 +141,7 @@ function buildModel(spec: string): LanguageModel {
         apiKey: key,
         compatibility: "compatible",
         name: "deepseek",
+        fetch: makeNoThinkingFetch(modelId), // v0.4-fix1: force non-thinking on v4-flash / v4-pro
       })(modelId);
     }
     const key = process.env.OPENAI_API_KEY ?? readAuthJsonKey("openai");
