@@ -20,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -145,15 +145,35 @@ test("T-M125: ICP targetRole comma-split parses to Zod-valid icpSchema with corr
 });
 
 // ─── T-M126 ──────────────────────────────────────────────────────────────────
-// Subprocess test: runIdentityBootstrap throws/exits-non-zero on immediate EOF.
-// This DOES work with piped stdin because EOF is the expected failure trigger.
+// Subprocess test (P-7 rewrite): runIdentityBootstrap now has a chicken-and-egg
+// guard (detectAnyModelKey) at the top. When no LLM key is configured, it exits
+// 1 with a "No LLM API key found" error before reaching readline.
+//
+// The old assertion checked for BOOTSTRAP_ERROR/abort/EOF; with P-7's
+// detectAnyModelKey guard that error path is unreachable when no key is present.
+// New assertion: exit 1 + stderr includes "No LLM API key found" + no identity.json.
 
-test("T-M126: runIdentityBootstrap exits non-zero and emits BOOTSTRAP_ERROR on EOF before required fields", async () => {
+test("T-M126: runIdentityBootstrap exits 1 with chicken-and-egg error when no LLM key configured", async () => {
   const idPath = uniqueIdPath();
+  // Create a temp HOME dir so DEFAULT_AUTH_PATH (~/.mai/auth.json) points to an
+  // empty directory. Without this, detectAnyModelKey may read keys from the
+  // operator's real auth.json and skip the chicken-and-egg guard.
+  const fakeHome = mkdtempSync(join(tmpdir(), "mai-t126-home-"));
 
   const result = await new Promise<{ status: number | null; stderr: string }>((resolve, reject) => {
     const child = spawn(TSX_BIN, [RUNNER], {
-      env: { ...process.env, MAI_IDENTITY_PATH: idPath },
+      // Explicitly clear all provider env vars so detectAnyModelKey returns false.
+      // Also clear MAI_DOTENV=skip so the inline .env reader is skipped.
+      // HOME → fakeHome: DEFAULT_AUTH_PATH becomes fakeHome/.mai/auth.json (doesn't exist).
+      env: {
+        ...process.env,
+        ANTHROPIC_API_KEY: "",
+        OPENAI_API_KEY: "",
+        DEEPSEEK_API_KEY: "",
+        MAI_DOTENV: "skip",
+        HOME: fakeHome,
+        MAI_IDENTITY_PATH: idPath,
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -162,13 +182,14 @@ test("T-M126: runIdentityBootstrap exits non-zero and emits BOOTSTRAP_ERROR on E
       stderr += d.toString();
     });
 
-    // EOF immediately — no lines written
+    // EOF immediately — runIdentityBootstrap will never reach readline because
+    // detectAnyModelKey() fires first.
     child.stdin.end();
 
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error("T-M126 timed out"));
-    }, 10_000);
+    }, 15_000);
 
     child.on("close", (status) => {
       clearTimeout(timer);
@@ -177,13 +198,18 @@ test("T-M126: runIdentityBootstrap exits non-zero and emits BOOTSTRAP_ERROR on E
   });
 
   try {
-    assert.notEqual(result.status, 0, "bootstrap must exit non-zero on EOF/abort");
+    assert.equal(result.status, 1, `T-M126: bootstrap must exit 1 on no-key; got status ${result.status}`);
     assert.ok(
-      result.stderr.includes("BOOTSTRAP_ERROR") || result.stderr.includes("abort") || result.stderr.includes("EOF"),
-      `stderr must mention BOOTSTRAP_ERROR/abort/EOF; got: "${result.stderr}"`,
+      result.stderr.includes("No LLM API key found") || result.stderr.includes("mai auth set"),
+      `T-M126: stderr must include no-key guidance; got: "${result.stderr.slice(0, 300)}"`,
     );
-    assert.ok(!existsSync(idPath), "identity.json must not be written when bootstrap aborts");
+    assert.ok(
+      !existsSync(idPath),
+      "T-M126: identity.json must not be written when bootstrap fails chicken-and-egg check",
+    );
+    console.log("T-M126: chicken-and-egg exit 1 + no-key guidance ✓");
   } finally {
     cleanupDir(idPath);
+    rmSync(fakeHome, { recursive: true, force: true });
   }
 });
