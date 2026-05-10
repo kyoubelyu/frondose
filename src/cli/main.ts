@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import type { CoreMessage } from "ai";
 import { Command } from "commander";
+import { HookRunner } from "../agent/hooks.js";
 import { resolveModel } from "../agent/modelResolver.js";
-import { BOUNDARY_PLACEHOLDER } from "../agent/systemPrompt/boundary.js";
+import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT_PLACEHOLDER } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { composeSoulBand } from "../agent/systemPrompt/soul.js";
@@ -134,7 +135,7 @@ async function main(): Promise<void> {
       // P-5: Soul band composed from final identity record (re-read after potential axes prompt).
       const finalIdentity: IdentityRecord | null = readIdentity(identityPath);
       const system = composeSystemPrompt({
-        boundary: BOUNDARY_PLACEHOLDER,
+        boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER
         soul: composeSoulBand(finalIdentity),
         checkpoint: CHECKPOINT_PLACEHOLDER,
       });
@@ -158,7 +159,9 @@ async function main(): Promise<void> {
       };
       const auditWriter = makeAuditWriter(auditPath);
 
-      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control);
+      // P-9 D-10: lazy-loads ~/.mai/agent/hooks.json; missing-file = no-op runner.
+      const hookRunner = new HookRunner();
+      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control, hookRunner);
 
       if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
         await runOneShot({

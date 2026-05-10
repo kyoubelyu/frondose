@@ -16,7 +16,7 @@
 import type { CoreMessage, ToolSet } from "ai";
 import { runAgentLoop } from "./agent/loop.js";
 import { resolveModel } from "./agent/modelResolver.js";
-import { BOUNDARY_PLACEHOLDER } from "./agent/systemPrompt/boundary.js";
+import { BOUNDARY } from "./agent/systemPrompt/boundary.js";
 import { CHECKPOINT_PLACEHOLDER } from "./agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "./agent/systemPrompt/compose.js";
 import { composeSoulBand } from "./agent/systemPrompt/soul.js";
@@ -55,7 +55,7 @@ export function createMaiAgent(opts: CreateMaiAgentOpts): MaiAgentController {
   // call `mai` directly to bootstrap the record before using createMaiAgent.
   const soul = composeSoulBand(readIdentity());
   const system = composeSystemPrompt({
-    boundary: BOUNDARY_PLACEHOLDER,
+    boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER (constant renamed in boundary.ts)
     soul,
     checkpoint: CHECKPOINT_PLACEHOLDER,
   });
