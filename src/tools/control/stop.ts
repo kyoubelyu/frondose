@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { tool } from "ai";
 import { z } from "zod";
+// Type-only import — no child_process import in this file (lint scope).
+import type { HookRunner } from "../../agent/hooks.js";
 import { ok } from "../../linkedin/envelope.js";
 import { writeAuditRow } from "../../persistence/audit.js";
 
@@ -32,8 +34,12 @@ const stopParams = z.object({
  *
  * If `control` is undefined (e.g. mock-test environments), the tool installs a
  * no-op stub with a stderr warning so factory construction never fails.
+ *
+ * P-9 D-12: optional `hookRunner` fires the Stop event hook AFTER the audit row
+ * is written and BEFORE `requestStop()` propagates the abort, so operator's
+ * Stop hook sees a deterministic "agent halting" signal before the abort cascade.
  */
-export function makeStopTool(control: ControlSignals | undefined) {
+export function makeStopTool(control: ControlSignals | undefined, hookRunner?: HookRunner) {
   const requestStop =
     control?.requestStop ??
     (() => {
@@ -63,6 +69,11 @@ export function makeStopTool(control: ControlSignals | undefined) {
           error: null,
           stepFinishReason: "stop-tool",
         });
+      }
+      // P-9 D-12: fire Stop event hooks BEFORE the abort cascade begins,
+      // so operator's Stop hook sees a deterministic "agent halting" signal.
+      if (hookRunner) {
+        await hookRunner.runStop({ reason });
       }
       requestStop();
       return output;

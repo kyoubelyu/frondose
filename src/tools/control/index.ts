@@ -1,4 +1,5 @@
 import type { Tool, ToolSet } from "ai";
+import type { HookRunner } from "../../agent/hooks.js";
 import { echoTool } from "./echo.js";
 import { makeEscalateTool } from "./escalate.js";
 import { sleepTool } from "./sleep.js";
@@ -19,11 +20,18 @@ export interface ControlToolDeps {
  *
  * If `deps` is omitted, escalate_for_capability is NOT registered (it has no
  * tools to compose). stop + sleep + echo still register.
+ *
+ * P-9 (D-12): optional `hookRunner` is forwarded to `makeStopTool` so the Stop
+ * event hook fires inside the stop tool's execute, before the abort cascade.
  */
-export function makeControlTools(control: ControlSignals | undefined, deps?: ControlToolDeps): ToolSet {
+export function makeControlTools(
+  control: ControlSignals | undefined,
+  deps?: ControlToolDeps,
+  hookRunner?: HookRunner,
+): ToolSet {
   const out: ToolSet = {
     echo: echoTool,
-    stop: makeStopTool(control),
+    stop: makeStopTool(control, hookRunner),
     sleep: sleepTool,
   };
   if (deps) {
