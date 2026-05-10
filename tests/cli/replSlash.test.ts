@@ -17,6 +17,9 @@
  *
  * Uses MockLanguageModelV1 with doGenerate for compaction call.
  * Requires filesystem for session file paths; uses mkdtempSync + cleanup.
+ *
+ * P-10 update: added required `schedulePath` field to all SlashCtx objects
+ * (SlashCtx.schedulePath became required when /cron was added to replSlash.ts).
  */
 
 import assert from "node:assert/strict";
@@ -101,6 +104,7 @@ test("T-Slash.1: /help emits HELP_TEXT with 3 commands; no /cost; no /sessions; 
     model,
     out: stream,
     cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
   });
 
   assert.equal(result.handled, true, "/help must return handled:true");
@@ -131,6 +135,7 @@ test("T-Slash.6: HELP_TEXT mentions the always-on status line (rev-3 D-18 docume
     model,
     out: stream,
     cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
   });
 
   const output = lines.join("");
@@ -161,6 +166,7 @@ test("T-Slash.2: /new clears messages, rotates session file, resets tokenBudget;
       model,
       out: stream,
       cwd: tmpHome,
+      schedulePath: join(tmpHome, "schedule.jsonl"),
     });
 
     assert.equal(result.handled, true, "/new must return handled:true");
@@ -199,6 +205,7 @@ test("T-Slash.7: /new rotates path but leaves original session JSONL on disk unt
         model,
         out: stream,
         cwd: tmpHome,
+        schedulePath: join(tmpHome, "schedule.jsonl"),
       });
 
       // Original file must still exist (not deleted)
@@ -235,6 +242,7 @@ test("T-Slash.3: /compact with 15 messages → compaction fires; messages replac
       model,
       out: stream,
       cwd: dir,
+      schedulePath: join(dir, "schedule.jsonl"),
     };
 
     const result = await dispatchSlash("/compact", ctx);
@@ -301,6 +309,7 @@ test("T-Slash.3b: /compact with ≤ 10 messages emits '(already short)' notice; 
       model,
       out: stream,
       cwd: dir,
+      schedulePath: join(dir, "schedule.jsonl"),
     };
 
     const result = await dispatchSlash("/compact", ctx);
@@ -357,6 +366,7 @@ test("T-Slash.3c: /compact API failure → error message printed; messages uncha
       model: errorModel,
       out: stream,
       cwd: dir,
+      schedulePath: join(dir, "schedule.jsonl"),
     });
 
     // Must still return handled:true (slash was intercepted)
@@ -405,6 +415,7 @@ test("T-Slash.4: unknown slash command emits 'unknown slash command' message; ha
     model,
     out: stream,
     cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
   });
 
   assert.equal(result.handled, true, "unknown slash must return handled:true");
@@ -431,6 +442,7 @@ test("T-Slash.5: non-slash line returns handled:false; no side effects", async (
     model,
     out: stream,
     cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
   });
 
   assert.equal(result.handled, false, "non-slash must return handled:false");
@@ -452,6 +464,7 @@ test("T-Slash.8: /cost is not a slash command in rev-3; returns 'unknown' notice
     model,
     out: stream,
     cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
   });
 
   // /cost was removed in rev-3; it should fall through to the unknown-command branch

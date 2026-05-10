@@ -17,7 +17,7 @@ import type { CoreMessage, ToolSet } from "ai";
 import { runAgentLoop } from "./agent/loop.js";
 import { resolveModel } from "./agent/modelResolver.js";
 import { BOUNDARY } from "./agent/systemPrompt/boundary.js";
-import { CHECKPOINT_PLACEHOLDER } from "./agent/systemPrompt/checkpoint.js";
+import { CHECKPOINT } from "./agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "./agent/systemPrompt/compose.js";
 import { composeSoulBand } from "./agent/systemPrompt/soul.js";
 import { readIdentity } from "./persistence/identity.js";
@@ -57,7 +57,7 @@ export function createMaiAgent(opts: CreateMaiAgentOpts): MaiAgentController {
   const system = composeSystemPrompt({
     boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER (constant renamed in boundary.ts)
     soul,
-    checkpoint: CHECKPOINT_PLACEHOLDER,
+    checkpoint: CHECKPOINT, // P-10 D-10
   });
   const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
   const messages: CoreMessage[] = loadMessages(sessionFile);

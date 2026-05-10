@@ -8,7 +8,7 @@ import { Command } from "commander";
 import { HookRunner } from "../agent/hooks.js";
 import { resolveModel } from "../agent/modelResolver.js";
 import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
-import { CHECKPOINT_PLACEHOLDER } from "../agent/systemPrompt/checkpoint.js";
+import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { composeSoulBand } from "../agent/systemPrompt/soul.js";
 import { createLinkedinSession } from "../linkedin/index.js";
@@ -89,6 +89,9 @@ async function main(): Promise<void> {
   // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
   const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(os.homedir(), ".mai", "agent", "audit.jsonl");
 
+  // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
+  const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+
   // P-7: dynamic version read so commander's --version + the `version` subcommand stay in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
   const pkg = requireFromHere("../../package.json") as { version: string };
@@ -137,7 +140,7 @@ async function main(): Promise<void> {
       const system = composeSystemPrompt({
         boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER
         soul: composeSoulBand(finalIdentity),
-        checkpoint: CHECKPOINT_PLACEHOLDER,
+        checkpoint: CHECKPOINT, // P-10 D-10
       });
       const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
       const messages: CoreMessage[] = loadMessages(sessionFile);
@@ -188,6 +191,7 @@ async function main(): Promise<void> {
         abortController,
         abortSignal: abortController.signal,
         onStepFinish: auditWriter,
+        schedulePath, // P-10 D-9
       });
       // REPL fall-through (Ctrl-C or stop-triggered break): exit cleanly.
       process.exit(0);

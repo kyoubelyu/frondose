@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import os from "node:os";
+import path, { basename } from "node:path";
 import readline from "node:readline";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { compactMessages } from "../agent/compaction.js";
@@ -6,6 +7,7 @@ import { runAgentLoop } from "../agent/loop.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { appendMessages, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
 import { renderMarkdown } from "./markdown.js";
+import { drainDueJobs } from "./replCron.js";
 import { dispatchSlash } from "./replSlash.js";
 import { StatusLine } from "./statusLine.js";
 
@@ -31,6 +33,8 @@ export interface ReplOpts {
   abortSignal?: AbortSignal;
   /** P-6: Vercel onStepFinish hook (e.g. audit writer). */
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
+  /** P-10 (D-9): schedule.jsonl path; default ~/.mai/agent/schedule.jsonl. */
+  schedulePath?: string;
 }
 
 const AUTO_COMPACT_THRESHOLD = 0.75;
@@ -68,6 +72,28 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   // multi-line accumulator
   let pending: string[] | null = null;
 
+  // P-10 (D-9): schedule path for /cron persistence + drain/poll.
+  const effectiveSchedulePath = opts.schedulePath ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+  // cronDeps mutates `sessionFile` after /new rotates the session file mid-loop.
+  const cronDeps = {
+    model: opts.model,
+    system: opts.system,
+    messages: opts.messages,
+    tools: opts.tools,
+    sessionFile: sessionFileRef.path,
+    abortSignal: opts.abortSignal,
+    onStepFinish: composedStepFinish,
+    out,
+  };
+
+  // P-10 (D-3 + D-16): boot-time drain of overdue jobs before first prompt.
+  await drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps);
+  if (opts.abortController?.signal.aborted) {
+    process.stdout.off?.("resize", onResize);
+    statusLine.dispose();
+    return;
+  }
+
   out.write("mai-agent ready. type a prompt; Ctrl-C exits.\n> ");
   for await (const rawLine of rl) {
     // P-6: between-turn stop check — if a prior turn's stop tool aborted, exit the loop.
@@ -104,6 +130,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
       out,
       cwd,
       abortSignal: opts.abortSignal,
+      schedulePath: effectiveSchedulePath,
     });
     if (slash.handled) {
       // rev-3 D-18: /compact and /new reset the budget; redraw status.
@@ -161,6 +188,13 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
         }
       }
     }
+
+    // P-10 (D-3): after-turn poll for newly-due cron jobs.
+    // Runs AFTER appendMessages + auto-compaction, BEFORE refreshStatus.
+    // Refresh sessionFile in cronDeps in case /new rotated mid-turn.
+    cronDeps.sessionFile = sessionFileRef.path;
+    await drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps);
+    if (opts.abortController?.signal.aborted) break;
 
     // rev-3 D-18: redraw status after every turn (budget changed).
     refreshStatus();
