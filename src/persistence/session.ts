@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { CoreMessage } from "ai";
@@ -70,6 +79,25 @@ export function appendMessages(file: string, messages: CoreMessage[]): void {
   if (messages.length === 0) return;
   const lines = `${messages.map((m) => JSON.stringify(m)).join("\n")}\n`;
   appendFileSync(file, lines, "utf-8");
+}
+
+/**
+ * P-8 (D-10): atomically rewrite the session file with a new messages array.
+ * Writes to `${file}.tmp` then renames over `file`. POSIX rename is atomic.
+ */
+export function rewriteSession(file: string, messages: CoreMessage[]): void {
+  const tmp = `${file}.tmp`;
+  const lines = messages.length === 0 ? "" : `${messages.map((m) => JSON.stringify(m)).join("\n")}\n`;
+  writeFileSync(tmp, lines, "utf-8");
+  renameSync(tmp, file);
+}
+
+/**
+ * P-8 (D-4): write a compaction sidecar at `${sessionFile}.compact.json`.
+ * Sidecar exists purely as informational metadata; loadMessages does NOT read it.
+ */
+export function writeCompactionMarker(sessionFile: string, marker: unknown): void {
+  writeFileSync(`${sessionFile}.compact.json`, JSON.stringify(marker, null, 2), "utf-8");
 }
 
 /** Load all CoreMessages from a JSONL file; tolerate empty lines. */
