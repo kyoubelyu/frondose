@@ -29,7 +29,7 @@ Every plan must contain, in order:
 3. **Files to create / change** — exact paths under `src/` and `tests/`. Mark each as "builder" (production code) or "validator" (test code). Builder must NOT touch validator-marked files.
 4. **Stepwise sequence** — numbered. Each step has: action, expected diff shape, verification command. Order constraints explicit.
 5. **External dependencies** — Vercel AI SDK / CDP / mai-linkedin source API surface used; pin versions; link `node_modules/**` or sibling-repo files cited from scout.
-6. **Verification plan** — mock test list + live smoke commands. Specify what passes vs fails the gate.
+6. **Verification plan / testable behaviors** — for **outside-in TDD adopted P-10+**: list concrete pre/post-condition test cases (not abstract gate names). Each item: behavior name + given/when/then specification + which gate it covers. Validator at Step 4a writes scaffolds against THIS list; if the list is fuzzy ("validator confirms G-P5.7"), validator can't write scaffolds. Bad: "G-P5.7: agent calls remember on natural-language memory request". Good: "T-Memory.1: when the operator's prompt contains a `remember X about Y` instruction AND the agent's Soul band has the memory-trigger directive, the LLM's first tool call MUST be `remember` with `key=Y`, `summary` containing `X`, `kind` defaulting to `note`". Plus live smoke commands per existing convention.
 7. **Risks and tradeoffs** — surface what could go wrong, what alternatives were rejected and why.
 8. **Out of plan** — anything tempting that you ruled out. Helps critic confirm scope discipline.
 
