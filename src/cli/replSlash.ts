@@ -2,6 +2,7 @@ import type { CoreMessage, LanguageModel } from "ai";
 import { compactMessages } from "../agent/compaction.js";
 import type { TokenBudget } from "../agent/tokenBudget.js";
 import { newSessionFile, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
+import { handleCronSlash } from "./replCron.js";
 
 export interface SlashCtx {
   messages: CoreMessage[]; // mutated in place by /new + /compact
@@ -11,6 +12,8 @@ export interface SlashCtx {
   out: NodeJS.WritableStream;
   cwd: string;
   abortSignal?: AbortSignal;
+  /** P-10 / D-9: schedule.jsonl path used by /cron subcommands. */
+  schedulePath: string;
 }
 
 export interface SlashResult {
@@ -22,6 +25,11 @@ export interface SlashResult {
 const HELP_TEXT = `mai REPL slash commands:
   /compact   summarize this session, keep last 10 messages
   /new       start a fresh session in this REPL
+  /cron      schedule recurring or one-shot prompts:
+               /cron schedule "<task>" --cron "<5-field cron>"
+               /cron schedule "<task>" --at "<HH:MM | ISO>"
+               /cron list
+               /cron remove <id>
   /help      show this list
 status line at top of terminal shows current context %, tokens, model, session id.
 multi-line input: end a line with \\ to continue on the next line.\n`;
@@ -39,6 +47,10 @@ export async function dispatchSlash(line: string, ctx: SlashCtx): Promise<SlashR
       ctx.sessionFile.path = newSessionFile(ctx.cwd);
       ctx.tokenBudget.reset();
       ctx.out.write(`(new session: ${ctx.sessionFile.path.split("/").pop()})\n`);
+      return { handled: true };
+    }
+    case "/cron": {
+      await handleCronSlash(line, ctx.schedulePath, ctx.out);
       return { handled: true };
     }
     case "/compact": {
