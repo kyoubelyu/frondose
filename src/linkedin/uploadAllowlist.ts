@@ -35,3 +35,31 @@ export function assertUploadPathAllowed(filePath: string): void {
     );
   }
 }
+
+/**
+ * P-9 D-7: read-side file sandbox. Allowed sources:
+ *   (a) MAI_UPLOAD_ALLOWLIST dirs (operator-controlled)
+ *   (b) os.tmpdir() subtree (where screenshot tool writes)
+ *   (c) ~/.mai/agent/** subtree (own state files)
+ *   (d) <cwd>/tests/fixtures/** subtree (validator's mock fixtures; only when
+ *       cwd is the repo root — best-effort, fails closed if not)
+ *
+ * Called by analyze_screenshot before readFileSync. Other tools either don't
+ * read operator-supplied paths or have their own gate (upload uses
+ * assertUploadPathAllowed for writes).
+ */
+export function assertFileReadable(filePath: string): void {
+  const canonical = path.resolve(filePath);
+  const allowed = [
+    ...resolveUploadAllowlist(),
+    path.resolve(os.tmpdir()),
+    path.join(os.homedir(), ".mai", "agent"),
+    path.join(process.cwd(), "tests", "fixtures"),
+  ];
+  const ok = allowed.some((dir) => canonical === dir || canonical.startsWith(dir + path.sep));
+  if (!ok) {
+    throw new Error(
+      `File read denied: '${canonical}' is outside the allowed directories. ` + `Allowed: ${allowed.join(", ")}.`,
+    );
+  }
+}
