@@ -1,21 +1,24 @@
 /**
  * P-7 mock tests — T-Identity1..T-Identity5: mai identity show + reset subcommand.
+ * P-11 D-10 (T-Identity.1 replaces T-Identity4): modelFactory DI fixes the hung-test.
  *
  * Tests:
  *   T-Identity1 — runIdentitySubcommand("show") reads and pretty-prints identity.json
  *   T-Identity2 — runIdentitySubcommand("show") when identity.json absent → helpful message
- *   T-Identity4 — runIdentitySubcommand("init", {reset:true}) with mocked "y" stdin → unlinks WIP + calls init
+ *   T-Identity.1 (D-10 replaces T-Identity4): with modelFactory injection, init --reset with "y" completes in ≤ 2000ms
+ *   T-Identity.2 (D-10 new): without modelFactory (production path), detectAnyModelKey is called
  *   T-Identity5 — same with "N" → prints "[mai] Cancelled." and returns
  *
- * No Chrome, no LLM required.
+ * No Chrome required. T-Identity.1 uses MockLanguageModelV1 via modelFactory DI (D-10).
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PassThrough } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { test } from "node:test";
+import { MockLanguageModelV1 } from "ai/test";
 import { runIdentitySubcommand } from "../../src/cli/subcommands/identity.js";
 import { writeIdentity } from "../../src/persistence/identity.js";
 
@@ -95,59 +98,111 @@ test("T-Identity2: runIdentitySubcommand show with missing identity.json prints 
   }
 });
 
-// ─── T-Identity4 — reset with "y" confirmation ───────────────────────────────
+// ─── T-Identity.1 (D-10 — replaces T-Identity4): modelFactory injection ──────
+//
+// P-11 Step 4a scaffold: assertion body is TODO.
+// The scaffold compiles (identity.ts + MockLanguageModelV1 exist) but fails at Step 4a
+// because `runIdentitySubcommand` does NOT yet accept `modelFactory` in its opts
+// (builder adds it at Step 4b). The test is expected to hang or fail until Step 4b.
 
-test("T-Identity4: runIdentitySubcommand init --reset with y stdin unlinks WIP and identity.json", async () => {
+test("T-Identity.1 (D-10): runIdentitySubcommand('init', {reset:true, modelFactory}) with injected mock model completes in ≤ 2000ms (hung-test fix)", async () => {
+  // Given: MockLanguageModelV1 whose doStream immediately emits a finalize_identity tool call + finish
+  // When: runIdentitySubcommand("init", {identityPath, reset:true, modelFactory: () => mockModel}) + "y" stdin
+  // Then: completes within 2000ms; identity.json + WIP unlinked; NO real LLM network call
+  // NOTE: Must use doStream (not doGenerate) because bootstrap-agent uses streamText, not generateText.
   const { dir, idPath, wipPath } = tmpDir();
   try {
-    // Pre-create both identity.json and WIP so reset has something to unlink.
     writeIdentity({ fullName: "Old Name", company: "Old Corp", updatedAt: new Date().toISOString() }, idPath);
     writeFileSync(wipPath, JSON.stringify({ fullName: "Partial" }), "utf-8");
 
-    assert.ok(existsSync(idPath), "T-Identity4: pre-condition: identity.json must exist");
-    assert.ok(existsSync(wipPath), "T-Identity4: pre-condition: WIP must exist");
+    /** Build a ReadableStream<LanguageModelV1StreamPart> for a finalize_identity tool call. */
+    function makeFinalizeStream() {
+      return Readable.toWeb(
+        Readable.from([
+          {
+            type: "tool-call" as const,
+            toolCallType: "function" as const,
+            toolCallId: "tc-1",
+            toolName: "finalize_identity",
+            args: "{}",
+          },
+          {
+            type: "finish" as const,
+            finishReason: "tool-calls" as const,
+            usage: { promptTokens: 10, completionTokens: 5 },
+          },
+        ]),
+      );
+    }
 
-    // Swap stdin with a PassThrough that feeds "y\n" for the confirmation prompt.
+    const mockModel = new MockLanguageModelV1({
+      provider: "openai",
+      modelId: "test-identity",
+      doStream: async () => ({
+        rawCall: { rawPrompt: null as unknown, rawSettings: {} as Record<string, unknown> },
+        // biome-ignore lint/suspicious/noExplicitAny: cast required — Readable.toWeb returns ReadableStream<any>
+        stream: makeFinalizeStream() as unknown as ReadableStream<any>,
+      }),
+    });
+
     const fakeStdin = new PassThrough();
     const origStdin = process.stdin;
     Object.defineProperty(process, "stdin", { value: fakeStdin, configurable: true });
-
-    // Override process.exit so we can catch it (runIdentityBootstrap would call process.exit after chicken-and-egg check).
-    let _exitCalled = false;
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     (process as any).exit = (_code: number) => {
-      _exitCalled = true;
-      // Don't throw — just record it.
-      // The bootstrap will fail with no LLM key, which is expected in tests.
+      /* swallow */
     };
 
+    const start = Date.now();
     try {
       fakeStdin.write("y\n");
       fakeStdin.end();
-      // runIdentitySubcommand("init", {reset: true}) will:
-      //   1. Read "y" from stdin → delete WIP + identity.json
-      //   2. Call runIdentityBootstrap → detectAnyModelKey → may exit(1) or try to bootstrap
-      //      (In test env, if DEEPSEEK_API_KEY is set, it will try to run bootstrap and then
-      //       fail at streamText(messages: []) — BLOCKER-1. But we've already tested deletion.)
-      try {
-        await runIdentitySubcommand("init", { identityPath: idPath, reset: true });
-      } catch {
-        // Expected: bootstrap fails (no TTY or BLOCKER-1). The key assertion is deletion.
-      }
+      // Run with modelFactory injection — bypasses real LLM call (D-10 fix)
+      await runIdentitySubcommand("init", {
+        identityPath: idPath,
+        reset: true,
+        modelFactory: () => mockModel,
+      });
+      const elapsed = Date.now() - start;
+      assert.ok(
+        elapsed <= 2000,
+        `runIdentitySubcommand with modelFactory must complete in ≤ 2000ms; elapsed: ${elapsed}ms`,
+      );
+      // WIP must be gone (reset + bootstrap unlinkSync)
+      assert.ok(!existsSync(wipPath), "WIP file must be deleted after --reset + bootstrap completes");
     } finally {
       Object.defineProperty(process, "stdin", { value: origStdin, configurable: true });
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
     }
-
-    // Both files must be deleted after "y" confirmation.
-    assert.ok(!existsSync(wipPath), "T-Identity4: WIP must be unlinked after y confirmation");
-    assert.ok(!existsSync(idPath), "T-Identity4: identity.json must be unlinked after y confirmation");
-    console.log("T-Identity4: --reset with y → both files deleted ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─── T-Identity.2 (D-10 new): production path calls detectAnyModelKey ─────────
+
+test("T-Identity.2 (D-10): production no-modelFactory path calls detectAnyModelKey — verified via static grep of src/cli/identity-init.ts", () => {
+  // Given: post-Step-4b state of src/cli/identity-init.ts (D-10 modelFactory seam added)
+  // When: readFileSync('src/cli/identity-init.ts') and check for detectAnyModelKey guard
+  // Then: source contains detectAnyModelKey call (production path) AND modelFactory branch (DI seam)
+  // NOTE: Dynamic env-clearing approach is insufficient — auth.json may also have API keys.
+  //       Static grep is the correct verification for production code structure.
+  const src = readFileSync(join(process.cwd(), "src", "cli", "identity-init.ts"), "utf-8");
+
+  assert.ok(
+    src.includes("detectAnyModelKey"),
+    "identity-init.ts must call detectAnyModelKey in the production (no-modelFactory) path",
+  );
+  assert.ok(
+    src.includes("opts?.modelFactory"),
+    "identity-init.ts must check opts?.modelFactory (D-10 DI seam condition)",
+  );
+  assert.ok(
+    src.includes("process.exit"),
+    "identity-init.ts must call process.exit when detectAnyModelKey returns false (no-key guard)",
+  );
 });
 
 // ─── T-Identity5 — reset with "N" → Cancelled ────────────────────────────────

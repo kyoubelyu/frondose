@@ -11,9 +11,11 @@ import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { composeSoulBand } from "../agent/systemPrompt/soul.js";
+import { TurnLock } from "../agent/turnSemaphore.js";
 import { createLinkedinSession } from "../linkedin/index.js";
 import type { FreeAxesRecord } from "../methodology/types.js";
 import { makeAuditWriter } from "../persistence/audit.js";
+import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
 import {
   applyIdentityPatch,
   type IdentityRecord,
@@ -27,10 +29,13 @@ import { makeAllTools } from "../tools/index.js";
 import { loadDotenv } from "./env.js";
 import { runIdentityBootstrap } from "./identity-init.js";
 import { runOneShot, runRepl } from "./repl.js";
+import { handleCronSlash } from "./replCron.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
+import { runStatusSubcommand } from "./subcommands/status.js";
+import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
 
 interface CliOpts {
@@ -76,9 +81,6 @@ async function main(): Promise<void> {
   loadDotenv(process.cwd());
 
   // P-3 env reads (CDP layer): port + profile dir.
-  // (v0.3-fix1: the prior eager-Chrome-skip env-var is no longer read here — Chrome
-  // now boots lazily on first LinkedIn-tool invocation, so the opt-out is meaningless.
-  // The env var stays documented as DEPRECATED in CLAUDE.md until v0.4 removes it.)
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
   const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
 
@@ -91,6 +93,14 @@ async function main(): Promise<void> {
 
   // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
   const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+
+  // P-11 (D-9 / D-13) env read: telegram.json path for /telegram persistence.
+  const telegramConfigPath =
+    process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
+
+  // P-11 (D-3 / D-19): single TurnLock for the binary lifetime. Threaded into runRepl
+  // so operator + cron + telegram turns serialize on a single mutex chain.
+  const turnLock = new TurnLock();
 
   // P-7: dynamic version read so commander's --version + the `version` subcommand stay in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
@@ -177,6 +187,8 @@ async function main(): Promise<void> {
           prompt: opts.prompt,
           abortSignal: abortController.signal,
           onStepFinish: auditWriter,
+          turnLock, // P-11 D-19 — unused in oneShot but keeps signature uniform
+          telegramConfigPath, // P-11 D-9
         });
         process.exit(0);
       }
@@ -192,6 +204,8 @@ async function main(): Promise<void> {
         abortSignal: abortController.signal,
         onStepFinish: auditWriter,
         schedulePath, // P-10 D-9
+        turnLock, // P-11 D-19
+        telegramConfigPath, // P-11 D-9
       });
       // REPL fall-through (Ctrl-C or stop-triggered break): exit cleanly.
       process.exit(0);
@@ -271,6 +285,57 @@ async function main(): Promise<void> {
   // P-7: `mai version` — companion to --version flag; same dynamic source.
   program.command("version").action(() => {
     runVersionSubcommand();
+    process.exit(0);
+  });
+
+  // P-11 D-9: `mai telegram` — bidirectional Telegram channel management.
+  const tg = program.command("telegram").description("Bidirectional Telegram channel management");
+  tg.command("on").action(async () => {
+    await runTelegramSubcommand("on", { tcPath: telegramConfigPath });
+    process.exit(0);
+  });
+  tg.command("off").action(async () => {
+    await runTelegramSubcommand("off", { tcPath: telegramConfigPath });
+    process.exit(0);
+  });
+  tg.command("status").action(async () => {
+    await runTelegramSubcommand("status", { tcPath: telegramConfigPath });
+    process.exit(0);
+  });
+  tg.command("test").action(async () => {
+    await runTelegramSubcommand("test", { tcPath: telegramConfigPath });
+    process.exit(0);
+  });
+  tg.command("bind <chat_id>").action(async (id: string) => {
+    await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, chatId: Number(id) });
+    process.exit(0);
+  });
+
+  // P-11 D-9: `mai status` — aggregator (auth + chrome + identity + telegram + cron + memory).
+  program
+    .command("status")
+    .description("Show agent status (auth + chrome + identity + telegram + cron + memory)")
+    .action(async () => {
+      await runStatusSubcommand({
+        authPath: DEFAULT_AUTH_PATH(),
+        identityPath,
+        schedulePath,
+        tcPath: telegramConfigPath,
+        memoryDbPath,
+        cdpPort,
+      });
+      process.exit(0);
+    });
+
+  // P-11 D-9: `mai cron list | remove <id>` — delegates to existing handleCronSlash for shape parity.
+  // `mai cron schedule` is intentionally REPL-only (interactive prompt body too awkward as CLI argv).
+  const cron = program.command("cron").description("Cron schedule management (create via REPL `/cron schedule`)");
+  cron.command("list").action(async () => {
+    await handleCronSlash("/cron list", schedulePath, process.stdout);
+    process.exit(0);
+  });
+  cron.command("remove <id>").action(async (id: string) => {
+    await handleCronSlash(`/cron remove ${id}`, schedulePath, process.stdout);
     process.exit(0);
   });
 

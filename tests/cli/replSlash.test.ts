@@ -30,6 +30,7 @@ import { test } from "node:test";
 import type { CoreMessage } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { TokenBudget } from "../../src/agent/tokenBudget.js";
+import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import { dispatchSlash, type SlashCtx } from "../../src/cli/replSlash.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -90,6 +91,36 @@ async function withTmpHomeAsync<T>(fn: (tmpHome: string) => Promise<T>): Promise
   }
 }
 
+/**
+ * P-11 hygiene: stub values for the 6 new required SlashCtx fields.
+ * These fields are not exercised by the existing T-Slash tests; stubs keep them satisfied.
+ */
+function p11SlashStubs(
+  model: MockLanguageModelV1,
+  out: NodeJS.WritableStream,
+): Pick<
+  SlashCtx,
+  "telegramConfigPath" | "telegramAbort" | "pollerHandle" | "onPollerStart" | "turnLock" | "telegramDeps"
+> {
+  return {
+    telegramConfigPath: "/tmp/test-mai-telegram.json",
+    telegramAbort: null,
+    pollerHandle: null,
+    onPollerStart: () => {},
+    turnLock: new TurnLock(),
+    telegramDeps: {
+      model,
+      system: "test",
+      messages: [],
+      tools: {},
+      sessionFile: "/tmp/test-session.jsonl",
+      out,
+      configPath: "/tmp/test-mai-telegram.json",
+      uploadAllowlistRoot: "/tmp",
+    },
+  };
+}
+
 // ─── T-Slash.1: /help ────────────────────────────────────────────────────────
 
 test("T-Slash.1: /help emits HELP_TEXT with 3 commands; no /cost; no /sessions; handled:true", async () => {
@@ -105,6 +136,7 @@ test("T-Slash.1: /help emits HELP_TEXT with 3 commands; no /cost; no /sessions; 
     out: stream,
     cwd: "/fake/cwd",
     schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
   });
 
   assert.equal(result.handled, true, "/help must return handled:true");
@@ -136,6 +168,7 @@ test("T-Slash.6: HELP_TEXT mentions the always-on status line (rev-3 D-18 docume
     out: stream,
     cwd: "/fake/cwd",
     schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
   });
 
   const output = lines.join("");
@@ -167,6 +200,7 @@ test("T-Slash.2: /new clears messages, rotates session file, resets tokenBudget;
       out: stream,
       cwd: tmpHome,
       schedulePath: join(tmpHome, "schedule.jsonl"),
+      ...p11SlashStubs(model, stream),
     });
 
     assert.equal(result.handled, true, "/new must return handled:true");
@@ -206,6 +240,7 @@ test("T-Slash.7: /new rotates path but leaves original session JSONL on disk unt
         out: stream,
         cwd: tmpHome,
         schedulePath: join(tmpHome, "schedule.jsonl"),
+        ...p11SlashStubs(model, stream),
       });
 
       // Original file must still exist (not deleted)
@@ -243,6 +278,7 @@ test("T-Slash.3: /compact with 15 messages → compaction fires; messages replac
       out: stream,
       cwd: dir,
       schedulePath: join(dir, "schedule.jsonl"),
+      ...p11SlashStubs(model, stream),
     };
 
     const result = await dispatchSlash("/compact", ctx);
@@ -310,6 +346,7 @@ test("T-Slash.3b: /compact with ≤ 10 messages emits '(already short)' notice; 
       out: stream,
       cwd: dir,
       schedulePath: join(dir, "schedule.jsonl"),
+      ...p11SlashStubs(model, stream),
     };
 
     const result = await dispatchSlash("/compact", ctx);
@@ -367,6 +404,7 @@ test("T-Slash.3c: /compact API failure → error message printed; messages uncha
       out: stream,
       cwd: dir,
       schedulePath: join(dir, "schedule.jsonl"),
+      ...p11SlashStubs(errorModel, stream),
     });
 
     // Must still return handled:true (slash was intercepted)
@@ -416,6 +454,7 @@ test("T-Slash.4: unknown slash command emits 'unknown slash command' message; ha
     out: stream,
     cwd: "/fake/cwd",
     schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
   });
 
   assert.equal(result.handled, true, "unknown slash must return handled:true");
@@ -443,6 +482,7 @@ test("T-Slash.5: non-slash line returns handled:false; no side effects", async (
     out: stream,
     cwd: "/fake/cwd",
     schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
   });
 
   assert.equal(result.handled, false, "non-slash must return handled:false");
@@ -465,6 +505,7 @@ test("T-Slash.8: /cost is not a slash command in rev-3; returns 'unknown' notice
     out: stream,
     cwd: "/fake/cwd",
     schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
   });
 
   // /cost was removed in rev-3; it should fall through to the unknown-command branch

@@ -1,8 +1,10 @@
 /**
- * P-3/P-4 mock tests — T-M82..T-M83, T-M127..T-M128: CLI env-var wiring.
+ * P-3/P-4 mock tests — T-M82, T-M127..T-M128: CLI env-var wiring.
+ * P-11 D-12 (T-M83 rewrite): T-M83 now verifies the 4-tool no-session set (post-P-9).
  *
  * T-M82: MAI_CDP_PORT defaults to 9222 when unset; custom value is parsed as integer.
- * T-M83: makeAllTools(undefined) returns echo-only (simulates MAI_NO_CHROME=1 path).
+ * T-M83 (D-12 refresh): makeAllTools(undefined, undefined, undefined, undefined) returns
+ *        4-tool set: ["analyze_screenshot","echo","web_fetch","web_search"] (post-P-9).
  * T-M127: MAI_MEMORY_DB_PATH defaults to ~/.mai/agent/memory.sqlite when unset; custom value used verbatim.
  * T-M128: MAI_IDENTITY_PATH defaults to ~/.mai/agent/identity.json when unset; custom value used verbatim.
  *
@@ -48,21 +50,26 @@ test("T-M82: MAI_CDP_PORT env var: default is 9222; custom value parses to integ
   }
 });
 
-// ─── T-M83 ─────────────────────────────────────────────────────────────────────
+// ─── T-M83 (D-12 refresh — P-11 Step 4a) ──────────────────────────────────────
 
-test("T-M83: makeAllTools(undefined) returns echo-only set, simulating MAI_NO_CHROME=1 path from main.ts", () => {
-  // main.ts: if (skipChrome) → makeAllTools() (no session)
-  // This simulates the MAI_NO_CHROME=1 branch without spawning Chrome.
+test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns 4-tool set: analyze_screenshot, echo, web_fetch, web_search (post-P-9 no-session set)", () => {
+  // Given: no CDP session (no LinkedIn tools), no memory, no identity, no control tools
+  // When: makeAllTools(undefined, undefined, undefined, undefined) called
+  // Then: sorted keys === ["analyze_screenshot","echo","web_fetch","web_search"] (4 tools, post-P-9)
 
-  const toolsNoChrome = makeAllTools(undefined);
-  const keys = Object.keys(toolsNoChrome);
+  const toolsNoSession = makeAllTools(undefined);
+  const keys = Object.keys(toolsNoSession).sort();
 
-  assert.deepEqual(keys, ["echo"], "MAI_NO_CHROME=1 path must produce only the echo tool");
-  assert.equal(keys.length, 1, "exactly 1 tool when no session (MAI_NO_CHROME=1)");
+  assert.deepEqual(
+    keys,
+    ["analyze_screenshot", "echo", "web_fetch", "web_search"],
+    `T-M83: makeAllTools(undefined) must return 4-tool no-session set; got: [${keys.join(", ")}]`,
+  );
+  assert.equal(keys.length, 4, "exactly 4 tools when no session (post-P-9)");
 
-  // Verify the echo tool is functional
-  assert.ok(typeof toolsNoChrome.echo?.execute === "function", "echo tool execute must be a function");
-  assert.ok(typeof toolsNoChrome.echo?.description === "string", "echo tool must have a description");
+  // Spot-check that echo tool is still functional
+  assert.ok(typeof toolsNoSession.echo?.execute === "function", "echo tool execute must be a function");
+  assert.ok(typeof toolsNoSession.echo?.description === "string", "echo tool must have a description");
 });
 
 // ─── T-M127 ─────────────────────────────────────────────────────────────────

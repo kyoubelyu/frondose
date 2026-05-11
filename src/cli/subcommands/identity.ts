@@ -1,12 +1,15 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
+import type { LanguageModel } from "ai";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { runIdentityBootstrap } from "../identity-init.js";
 
 export interface IdentitySubcommandOpts {
   identityPath?: string;
   reset?: boolean;
+  /** P-11 D-10: test-injection seam for hung-test fix. Production paths leave undefined. */
+  modelFactory?: () => LanguageModel;
 }
 
 export async function runIdentitySubcommand(action: "init" | "show", opts: IdentitySubcommandOpts): Promise<void> {
@@ -45,5 +48,5 @@ export async function runIdentitySubcommand(action: "init" | "show", opts: Ident
 
   // Resume-by-default OR after --reset (cleared above): runIdentityBootstrap
   // delegates to runBootstrapAgent after detectAnyModelKey guard.
-  await runIdentityBootstrap(identityPath);
+  await runIdentityBootstrap(identityPath, { modelFactory: opts.modelFactory });
 }
