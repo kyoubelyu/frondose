@@ -124,7 +124,10 @@ export async function runCronTurn(
   const records = readSchedule(schedulePath);
   const idx = records.findIndex((r) => r.id === record.id);
   if (idx >= 0) {
-    const updated = markRan(records[idx]!, fireDate);
+    // D-13 biome fix: explicit narrowing instead of non-null assertion.
+    const target = records[idx];
+    if (target === undefined) throw new Error(`internal: record at idx ${idx} unexpectedly undefined`);
+    const updated = markRan(target, fireDate);
     if (updated === null) {
       records.splice(idx, 1);
     } else {
@@ -146,7 +149,9 @@ export async function drainDueJobs(
     const due = findDueJobs(records, new Date());
     if (due.length === 0) return;
     due.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    const next = due[0]!;
+    // D-13 biome fix: explicit narrowing instead of non-null assertion.
+    const next = due[0];
+    if (next === undefined) throw new Error("internal: due[0] unexpectedly undefined after length check");
     // BLOCKER-1 fix + D-6: fireDate is record.nextRunAt, NOT wall-clock Date.now().
     // On crash recovery, this preserves the original cron_run_id so the LLM's
     // checkpoint_key getMemory lookups still hit prior in-flight progress.
@@ -177,7 +182,9 @@ export async function handleCronSlash(line: string, schedulePath: string, out: N
       const id8 = r.id.replace(/-/g, "").slice(0, 8);
       const taskTrim = r.task.length > 40 ? `${r.task.slice(0, 40)}…` : r.task;
       const last = r.lastRunAt ?? "(never)";
-      out.write(`${id8}  ${taskTrim.padEnd(41)}  ${r.cronExpr.padEnd(20)}  ${r.enabled ? "yes" : "no "}  ${last}\n`);
+      // P-11 5a DEFECT-1 fix: one-shot records may carry cronExpr=null on disk; render as "(oneshot)".
+      const expr = r.cronExpr ?? "(oneshot)";
+      out.write(`${id8}  ${taskTrim.padEnd(41)}  ${expr.padEnd(20)}  ${r.enabled ? "yes" : "no "}  ${last}\n`);
     }
     return;
   }
@@ -188,7 +195,9 @@ export async function handleCronSlash(line: string, schedulePath: string, out: N
       out.write(`/cron remove: no schedule with id "${parsed.id}"\n`);
       return;
     }
-    const removed = records.splice(idx, 1)[0]!;
+    // D-13 biome fix: explicit narrowing instead of non-null assertion.
+    const removed = records.splice(idx, 1)[0];
+    if (removed === undefined) throw new Error("internal: splice(idx,1)[0] undefined after idx>=0 check");
     writeSchedule(schedulePath, records);
     out.write(`removed: ${removed.id.replace(/-/g, "").slice(0, 8)} — ${removed.task.slice(0, 40)}\n`);
     return;

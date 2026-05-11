@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import type { LanguageModel } from "ai";
 import { detectAnyModelKey, resolveModel } from "../agent/modelResolver.js";
 import { type IdentityRecord, readIdentity } from "../persistence/identity.js";
 import { runBootstrapAgent } from "./bootstrap-agent.js";
@@ -22,17 +23,31 @@ Then re-run \`mai identity init\` (or just \`mai\` for the first-time flow).
  *
  * Internally:
  *   1. Chicken-and-egg guard via detectAnyModelKey — fails loudly + exit 1 if no key.
+ *      SKIPPED when opts.modelFactory provided (P-11 D-10 test-injection seam).
  *   2. Resolves a LanguageModel via the precedence chain (factory > CLI > env > auth.json default > anthropic:claude-sonnet-4-5).
+ *      SKIPPED when opts.modelFactory provided — its return value is used directly.
  *   3. Calls runBootstrapAgent with the resolved model + identity/wip paths.
  *   4. Re-reads identity.json to return the fresh IdentityRecord (or throws if bootstrap aborted without finalize).
+ *
+ * P-11 D-10: `opts.modelFactory` is the test-injection seam that fixes T-Identity4
+ * hanging on real DeepSeek calls under Tailscale+Clash networks. Production code
+ * paths (no opts) are byte-identical to pre-P-11 behavior.
  */
-export async function runIdentityBootstrap(identityPath: string): Promise<IdentityRecord> {
-  if (!detectAnyModelKey()) {
-    process.stderr.write(NO_KEY_ERROR);
-    process.exit(1);
-  }
+export async function runIdentityBootstrap(
+  identityPath: string,
+  opts?: { modelFactory?: () => LanguageModel },
+): Promise<IdentityRecord> {
   const wipPath = join(dirname(identityPath), ".identity-wip.json");
-  const model = resolveModel({});
+  let model: LanguageModel;
+  if (opts?.modelFactory) {
+    model = opts.modelFactory();
+  } else {
+    if (!detectAnyModelKey()) {
+      process.stderr.write(NO_KEY_ERROR);
+      process.exit(1);
+    }
+    model = resolveModel({});
+  }
   await runBootstrapAgent({ identityPath, wipPath, model });
   const record = readIdentity(identityPath);
   if (!record) {
