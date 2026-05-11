@@ -1,12 +1,12 @@
-/** P-11 D-9: `mai telegram on|off|status|test|bind <chat_id>` CLI subcommand handler. */
+/** P-11 D-9 (v0.4.6 rename): `mai telegram on|off|status|test|bind <user_id>` CLI subcommand handler. */
 import { readTelegramConfig, writeTelegramConfig } from "../../persistence/telegramConfig.js";
 import { telegramFetch } from "../../tools/telegram/transport.js";
 
 export interface TelegramSubcommandOpts {
   /** Path to telegram.json. */
   tcPath: string;
-  /** chat_id for bind action; ignored otherwise. */
-  chatId?: number;
+  /** Telegram user_id for bind action; ignored otherwise. In a DM context this also serves as the chat_id for outbound sendMessage. */
+  userId?: number;
 }
 
 export async function runTelegramSubcommand(
@@ -21,8 +21,8 @@ export async function runTelegramSubcommand(
     if (!process.env.TELEGRAM_TOKEN) {
       process.stdout.write("⚠ TELEGRAM_TOKEN env var is unset — set it before launching the REPL\n");
     }
-    if (cfg.boundChatId === null) {
-      process.stdout.write("⚠ no boundChatId — run `mai telegram bind <chat_id>` first\n");
+    if (cfg.boundUserId === null) {
+      process.stdout.write("⚠ no boundUserId — run `mai telegram bind <user_id>` first\n");
     }
     return;
   }
@@ -34,7 +34,7 @@ export async function runTelegramSubcommand(
   }
   if (action === "status") {
     process.stdout.write(`[telegram] enabled: ${cfg.enabled}\n`);
-    process.stdout.write(`[telegram] boundChatId: ${cfg.boundChatId ?? "(unset)"}\n`);
+    process.stdout.write(`[telegram] boundUserId: ${cfg.boundUserId ?? "(unset)"}\n`);
     process.stdout.write(`[telegram] lastUpdateOffset: ${cfg.lastUpdateOffset}\n`);
     process.stdout.write(`[telegram] stickyFallbackIp: ${cfg.stickyFallbackIp ?? "(none)"}\n`);
     process.stdout.write(
@@ -46,18 +46,18 @@ export async function runTelegramSubcommand(
     return;
   }
   if (action === "bind") {
-    if (opts.chatId === undefined || Number.isNaN(opts.chatId)) {
-      process.stderr.write("[telegram] bind: chat_id required (integer)\n");
+    if (opts.userId === undefined || Number.isNaN(opts.userId)) {
+      process.stderr.write("[telegram] bind: user_id required (integer)\n");
       process.exit(1);
     }
-    cfg.boundChatId = opts.chatId;
+    cfg.boundUserId = opts.userId;
     writeTelegramConfig(cfg, opts.tcPath);
-    process.stdout.write(`[telegram] boundChatId set to ${opts.chatId}\n`);
+    process.stdout.write(`[telegram] boundUserId set to ${opts.userId}\n`);
     return;
   }
   if (action === "test") {
-    if (!process.env.TELEGRAM_TOKEN || cfg.boundChatId === null) {
-      process.stderr.write("[telegram] test: TELEGRAM_TOKEN unset OR boundChatId null\n");
+    if (!process.env.TELEGRAM_TOKEN || cfg.boundUserId === null) {
+      process.stderr.write("[telegram] test: TELEGRAM_TOKEN unset OR boundUserId null\n");
       process.exit(1);
     }
     try {
@@ -66,7 +66,8 @@ export async function runTelegramSubcommand(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: cfg.boundChatId, text: "✓ mai telegram test OK" }),
+          // In a DM context chat_id == user_id (same numeric value per Telegram Bot API).
+          body: JSON.stringify({ chat_id: cfg.boundUserId, text: "✓ mai telegram test OK" }),
         },
         {
           fallbackIp: cfg.stickyFallbackIp ?? undefined,

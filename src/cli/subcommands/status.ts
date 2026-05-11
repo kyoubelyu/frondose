@@ -51,7 +51,7 @@ export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
   // telegram
   const tg = readTelegramConfig(opts.tcPath);
   process.stdout.write(
-    `telegram: enabled=${tg.enabled}, boundChatId=${tg.boundChatId ?? "(unset)"}, offset=${tg.lastUpdateOffset}\n`,
+    `telegram: enabled=${tg.enabled}, boundUserId=${tg.boundUserId ?? "(unset)"}, offset=${tg.lastUpdateOffset}\n`,
   );
 
   // cron

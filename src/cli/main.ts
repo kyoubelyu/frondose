@@ -306,8 +306,8 @@ async function main(): Promise<void> {
     await runTelegramSubcommand("test", { tcPath: telegramConfigPath });
     process.exit(0);
   });
-  tg.command("bind <chat_id>").action(async (id: string) => {
-    await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, chatId: Number(id) });
+  tg.command("bind <user_id>").action(async (id: string) => {
+    await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId: Number(id) });
     process.exit(0);
   });
 

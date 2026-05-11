@@ -147,15 +147,15 @@ function makeSlashCtx(opts: {
 // ─── T-Slash.tg: /telegram REPL slash commands ────────────────────────────────
 
 describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
-  it("T-Slash.tg.1: when /telegram on called AND token+boundChatId configured, result is handled:true AND telegram.json.enabled=true AND poller starts", async () => {
-    // Given: TELEGRAM_TOKEN set; telegram.json has boundChatId:12345; pollerHandle spy
+  it("T-Slash.tg.1: when /telegram on called AND token+boundUserId configured, result is handled:true AND telegram.json.enabled=true AND poller starts", async () => {
+    // Given: TELEGRAM_TOKEN set; telegram.json has boundUserId:12345; pollerHandle spy
     // When: handleTelegramSlash("/telegram on", ctx) called
     // Then: telegram.json updated with enabled:true; startTelegramPoller called once (pollerHandle set)
     const { dir, cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: false,
-        boundChatId: 12345,
+        boundUserId: 12345,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 1,
@@ -225,7 +225,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: false,
-        boundChatId: null,
+        boundUserId: null,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -249,15 +249,15 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     }
   });
 
-  it("T-Slash.tg.3: when /telegram on called AND boundChatId is null, out hints 'bind' AND poller NOT started", async () => {
-    // Given: TELEGRAM_TOKEN set; telegram.json.boundChatId = null
+  it("T-Slash.tg.3: when /telegram on called AND boundUserId is null, out hints 'bind' AND poller NOT started", async () => {
+    // Given: TELEGRAM_TOKEN set; telegram.json.boundUserId = null
     // When: handleTelegramSlash("/telegram on", ctx)
     // Then: out contains 'bind'; startTelegramPoller NOT called
     const { cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: false,
-        boundChatId: null,
+        boundUserId: null,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -278,10 +278,10 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
 
         const output = lines.join("");
         assert.ok(
-          output.includes("bind") || output.includes("boundChatId"),
-          `output must hint about bind when boundChatId is null; got: "${output}"`,
+          output.includes("bind") || output.includes("boundUserId"),
+          `output must hint about bind when boundUserId is null; got: "${output}"`,
         );
-        assert.equal(pollerStartCalled, 0, "onPollerStart must NOT be called when boundChatId is null");
+        assert.equal(pollerStartCalled, 0, "onPollerStart must NOT be called when boundUserId is null");
       } finally {
         delete process.env.TELEGRAM_TOKEN;
       }
@@ -298,7 +298,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 12345,
+        boundUserId: 12345,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -334,16 +334,16 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     }
   });
 
-  it("T-Slash.tg.5: when /telegram status called, out receives multi-line summary with enabled, boundChatId, lastUpdateOffset, stickyFallbackIp, running", async () => {
+  it("T-Slash.tg.5: when /telegram status called, out receives multi-line summary with enabled, boundUserId, lastUpdateOffset, stickyFallbackIp, running", async () => {
     // Given: telegram.json with known values; pollerHandle.running=false
     // When: handleTelegramSlash("/telegram status", ctx)
-    // Then: output includes "enabled:", "boundChatId:", "lastUpdateOffset:", "stickyFallbackIp:", "running:"
+    // Then: output includes "enabled:", "boundUserId:", "lastUpdateOffset:", "stickyFallbackIp:", "running:"
     const { cfgPath, cleanup } = makeTmpCfgDir();
     const { stream, lines } = makeOut();
     try {
       writeCfg(cfgPath, {
         enabled: false,
-        boundChatId: null,
+        boundUserId: null,
         lastUpdateOffset: 7,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -354,7 +354,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
 
       const output = lines.join("");
       assert.ok(output.includes("enabled"), `output must include "enabled"; got: "${output}"`);
-      assert.ok(output.includes("boundChatId"), `output must include "boundChatId"; got: "${output}"`);
+      assert.ok(output.includes("boundUserId"), `output must include "boundUserId"; got: "${output}"`);
       assert.ok(output.includes("lastUpdateOffset"), `output must include "lastUpdateOffset"; got: "${output}"`);
       assert.ok(
         output.includes("stickyFallbackIp") || output.includes("stickyFallback"),
@@ -448,7 +448,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -463,7 +463,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
           async () => makeOkTgResponse(),
           async () => {
             await handleTelegramTurn(
-              { update_id: 1, message: { text: "Hello", from: { username: "alice", id: 1 } } },
+              { update_id: 1, message: { text: "Hello", from: { username: "alice", id: 999 } } },
               deps,
             );
           },
@@ -491,7 +491,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -527,7 +527,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
                 update_id: 2,
                 message: {
                   caption: "look",
-                  from: { username: "alice", id: 1 },
+                  from: { username: "alice", id: 999 },
                   photo: [
                     { file_id: "sm", file_unique_id: "su1" },
                     { file_id: "lg", file_unique_id: "lu1" },
@@ -565,7 +565,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -583,7 +583,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
           },
           async () => {
             await handleTelegramTurn(
-              { update_id: 3, message: { text: "Hey", from: { username: "bob", id: 2 } } },
+              { update_id: 3, message: { text: "Hey", from: { username: "bob", id: 999 } } },
               deps,
             );
           },
@@ -594,7 +594,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         assert.ok(sendMsgCall !== undefined, "must have a /sendMessage call (auto-reply)");
         const bodyStr = sendMsgCall.body as string;
         const bodyObj = JSON.parse(bodyStr) as { chat_id: number; text: string };
-        assert.equal(bodyObj.chat_id, 999, "auto-reply chat_id must be boundChatId=999");
+        assert.equal(bodyObj.chat_id, 999, "auto-reply chat_id must be boundUserId=999");
         assert.ok(bodyObj.text.includes("Hi back"), `auto-reply text must include "Hi back"; got: "${bodyObj.text}"`);
       } finally {
         delete process.env.TELEGRAM_TOKEN;
@@ -613,7 +613,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -632,7 +632,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
           },
           async () => {
             await handleTelegramTurn(
-              { update_id: 4, message: { text: "Long request", from: { username: "carol", id: 3 } } },
+              { update_id: 4, message: { text: "Long request", from: { username: "carol", id: 999 } } },
               deps,
             );
           },
@@ -672,7 +672,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -686,7 +686,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         await withFetchSpy(
           async () => makeOkTgResponse(),
           async () => {
-            await handleTelegramTurn({ update_id: 5, message: { from: { username: "dave", id: 4 } } }, deps);
+            await handleTelegramTurn({ update_id: 5, message: { from: { username: "dave", id: 999 } } }, deps);
           },
         );
 
@@ -713,7 +713,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -748,7 +748,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
               {
                 update_id: 6,
                 message: {
-                  from: { username: "eve", id: 5 },
+                  from: { username: "eve", id: 999 },
                   // biome-ignore lint/suspicious/noExplicitAny: test shape
                   voice: { file_id: "v1", file_unique_id: "vu1" } as any,
                 },
@@ -774,6 +774,44 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
       cleanup();
     }
   });
+
+  it("T-Turn.7 (v0.4.6 DM filter): when message.from.id !== boundUserId, handleTelegramTurn drops the update — no message pushed, no agent loop, drop logged", async () => {
+    // Given: boundUserId=999, message from a different user (id=42 — stranger).
+    // When: handleTelegramTurn called.
+    // Then: deps.messages unchanged; deps.out received a "dropped update" line citing the stranger's id and the bound id.
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 999,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok";
+      try {
+        const { stream, lines } = makeOut();
+        const deps = makeDeps({ cfgPath, dir, out: stream });
+        const beforeLen = deps.messages.length;
+        await handleTelegramTurn(
+          { update_id: 99, message: { text: "Hi stranger here", from: { username: "stranger", id: 42 } } },
+          deps,
+        );
+        assert.equal(deps.messages.length, beforeLen, "deps.messages must not gain any entry for a non-bound sender");
+        const out = lines.join("");
+        assert.ok(out.includes("dropped"), `out must mention 'dropped'; got: "${out}"`);
+        assert.ok(
+          out.includes("42") && out.includes("999"),
+          `out must cite stranger id 42 and bound id 999; got: "${out}"`,
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── T-Poller: long-poll loop ─────────────────────────────────────────────────
@@ -787,7 +825,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 1,
@@ -823,7 +861,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
               await startTelegramPoller(
                 {
                   enabled: true,
-                  boundChatId: 999,
+                  boundUserId: 999,
                   lastUpdateOffset: 0,
                   stickyFallbackIp: null,
                   pollTimeoutSec: 1,
@@ -865,7 +903,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 1,
@@ -893,7 +931,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
           async () => {
             const cfg = {
               enabled: true,
-              boundChatId: 999,
+              boundUserId: 999,
               lastUpdateOffset: 0,
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
@@ -930,7 +968,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 1,
@@ -954,7 +992,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
           async () => {
             const cfg = {
               enabled: true,
-              boundChatId: 999,
+              boundUserId: 999,
               lastUpdateOffset: 0,
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
@@ -991,7 +1029,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -1027,7 +1065,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
           async () => {
             const cfg = {
               enabled: true,
-              boundChatId: 999,
+              boundUserId: 999,
               lastUpdateOffset: 0,
               stickyFallbackIp: null,
               pollTimeoutSec: 30,
@@ -1060,7 +1098,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 5, // pre-existing offset
         stickyFallbackIp: null,
         pollTimeoutSec: 1,
@@ -1096,7 +1134,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
             const deps = makeDeps({ cfgPath, dir, out: stream, responseText: "ack" });
             const cfg = {
               enabled: true,
-              boundChatId: 999,
+              boundUserId: 999,
               lastUpdateOffset: 5,
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
@@ -1135,7 +1173,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
 
 describe("sendTelegramMessage helper (D-20, G-P11.19)", () => {
   it("sendTelegramMessage: sends POST to /sendMessage with {chat_id, text} via provided transport", async () => {
-    // Given: transport spy; chatId=999; text="hello"
+    // Given: transport spy; userId=999; text="hello"
     // When: sendTelegramMessage("token", 999, "hello", transport) called
     // Then: transport called with URL ending in /sendMessage; body JSON has chat_id:999 + text:"hello"
     const calls: CapturedCall[] = [];
