@@ -47,10 +47,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass via env (NOT ${{}} substitution in run-script body) to avoid
+          # bash parser breakage when tag body contains parens/quotes/backticks.
+          # GH Actions textually substitutes ${{}} BEFORE bash sees the script;
+          # env vars are set safely and read at runtime.
+          TAG: ${{ steps.notes.outputs.tag }}
+          NOTES: ${{ steps.notes.outputs.body }}
         run: |
-          TAG="${{ steps.notes.outputs.tag }}"
-          NOTES="${{ steps.notes.outputs.body }}"
-          # --notes-file via /dev/stdin keeps multi-line content intact
           printf '%s' "$NOTES" | gh release create "$TAG" \
             --title "$TAG" \
             --notes-file - \
