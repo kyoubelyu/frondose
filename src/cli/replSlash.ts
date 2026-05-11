@@ -45,7 +45,7 @@ const HELP_TEXT = `mai REPL slash commands:
                /cron list
                /cron remove <id>
   /telegram  bidirectional Telegram channel:
-               /telegram on        enable + start poller (requires TELEGRAM_TOKEN + bound chat_id)
+               /telegram on        enable + start poller (requires TELEGRAM_TOKEN + bound user_id)
                /telegram off       disable + stop poller
                /telegram status    show config + poller state
   /help      show this list
