@@ -1,8 +1,10 @@
 import type { CoreMessage, LanguageModel } from "ai";
 import { compactMessages } from "../agent/compaction.js";
 import type { TokenBudget } from "../agent/tokenBudget.js";
+import type { TurnLock } from "../agent/turnSemaphore.js";
 import { newSessionFile, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
 import { handleCronSlash } from "./replCron.js";
+import { handleTelegramSlash, type PollerHandle, type TelegramTurnDeps } from "./replTelegram.js";
 
 export interface SlashCtx {
   messages: CoreMessage[]; // mutated in place by /new + /compact
@@ -14,6 +16,18 @@ export interface SlashCtx {
   abortSignal?: AbortSignal;
   /** P-10 / D-9: schedule.jsonl path used by /cron subcommands. */
   schedulePath: string;
+  /** P-11 / D-8: telegram.json path used by /telegram subcommands. */
+  telegramConfigPath: string;
+  /** P-11 / D-8: poller-scoped abort controller; null when poller not running. */
+  telegramAbort: AbortController | null;
+  /** P-11 / D-8: live poller-handle ref; null when not running. */
+  pollerHandle: PollerHandle | null;
+  /** P-11 / D-8: setter so /telegram on can attach a freshly-started poller back into ctx. */
+  onPollerStart: (handle: PollerHandle | null) => void;
+  /** P-11 / D-19: shared mutex (operator + cron + telegram). */
+  turnLock: TurnLock;
+  /** P-11 / D-7: deps the /telegram on path needs to boot a poller in-place. */
+  telegramDeps: TelegramTurnDeps;
 }
 
 export interface SlashResult {
@@ -30,6 +44,10 @@ const HELP_TEXT = `mai REPL slash commands:
                /cron schedule "<task>" --at "<HH:MM | ISO>"
                /cron list
                /cron remove <id>
+  /telegram  bidirectional Telegram channel:
+               /telegram on        enable + start poller (requires TELEGRAM_TOKEN + bound chat_id)
+               /telegram off       disable + stop poller
+               /telegram status    show config + poller state
   /help      show this list
 status line at top of terminal shows current context %, tokens, model, session id.
 multi-line input: end a line with \\ to continue on the next line.\n`;
@@ -51,6 +69,20 @@ export async function dispatchSlash(line: string, ctx: SlashCtx): Promise<SlashR
     }
     case "/cron": {
       await handleCronSlash(line, ctx.schedulePath, ctx.out);
+      return { handled: true };
+    }
+    case "/telegram": {
+      await handleTelegramSlash(line, {
+        out: ctx.out,
+        configPath: ctx.telegramConfigPath,
+        pollerHandle: ctx.pollerHandle,
+        onPollerStart: (handle) => {
+          ctx.telegramAbort = handle?.abort ?? null;
+          ctx.onPollerStart(handle);
+        },
+        turnLock: ctx.turnLock,
+        deps: ctx.telegramDeps,
+      });
       return { handled: true };
     }
     case "/compact": {

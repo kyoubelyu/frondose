@@ -34,7 +34,7 @@ test("T-Checkpoint.1: CHECKPOINT is exported as a non-empty string; CHECKPOINT_P
   // Dynamic import returns the same cached module; check that CHECKPOINT_PLACEHOLDER is absent
   const mod = await import("../../../src/agent/systemPrompt/checkpoint.js");
   assert.ok(
-    !Object.prototype.hasOwnProperty.call(mod, "CHECKPOINT_PLACEHOLDER"),
+    !Object.hasOwn(mod, "CHECKPOINT_PLACEHOLDER"),
     "CHECKPOINT_PLACEHOLDER must NOT be exported from checkpoint.ts (export-name swap must be complete)",
   );
 });

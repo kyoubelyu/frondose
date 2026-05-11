@@ -50,7 +50,10 @@ export function parseCronExpr(expr: string): ParsedCronExpr {
     [0, 6, "dayOfWeek"],
   ] as const;
   const parsed: CronField[] = fields.map((f, i) => {
-    const [lo, hi, name] = ranges[i]!;
+    // D-13 biome fix: explicit narrowing instead of non-null assertion.
+    const range = ranges[i];
+    if (range === undefined) throw new Error(`internal: ranges[${i}] undefined despite length-5 guard`);
+    const [lo, hi, name] = range;
     if (f === "*") return { kind: "any" };
     if (f.startsWith("*/")) {
       const step = Number(f.slice(2));
@@ -68,14 +71,18 @@ export function parseCronExpr(expr: string): ParsedCronExpr {
     }
     throw new Error(`cron field ${name}: unsupported token "${f}" (supported: *, */N, integer)`);
   });
-  return {
-    minute: parsed[0]!,
-    hour: parsed[1]!,
-    dayOfMonth: parsed[2]!,
-    month: parsed[3]!,
-    dayOfWeek: parsed[4]!,
-    expr,
-  };
+  // D-13 biome fix: explicit narrowing instead of non-null assertions.
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parsed;
+  if (
+    minute === undefined ||
+    hour === undefined ||
+    dayOfMonth === undefined ||
+    month === undefined ||
+    dayOfWeek === undefined
+  ) {
+    throw new Error(`internal: parsed cron fields incomplete (got ${parsed.length}/5)`);
+  }
+  return { minute, hour, dayOfMonth, month, dayOfWeek, expr };
 }
 
 /** Compute the next firing moment STRICTLY AFTER `from`. Iterates minute-by-minute up to 1y. */

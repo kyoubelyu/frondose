@@ -45,6 +45,7 @@ import type { CoreMessage } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { TokenBudget } from "../../src/agent/tokenBudget.js";
+import { TurnLock } from "../../src/agent/turnSemaphore.js";
 
 // ── IMPORT GATE ────────────────────────────────────────────────────────────────
 import {
@@ -108,6 +109,36 @@ function makeRecord(overrides: Partial<ScheduleRecord> = {}): ScheduleRecord {
     lastRunAt: null,
     nextRunAt: "2026-05-10T09:00:00.000Z",
     ...overrides,
+  };
+}
+
+/**
+ * P-11 hygiene: stub values for the 6 new required SlashCtx fields.
+ * These fields are not exercised by replCron tests; stubs keep TypeScript happy.
+ */
+function p11SlashStubs(
+  model: MockLanguageModelV1,
+  out: NodeJS.WritableStream,
+): Pick<
+  SlashCtx,
+  "telegramConfigPath" | "telegramAbort" | "pollerHandle" | "onPollerStart" | "turnLock" | "telegramDeps"
+> {
+  return {
+    telegramConfigPath: "/tmp/test-mai-telegram.json",
+    telegramAbort: null,
+    pollerHandle: null,
+    onPollerStart: () => {},
+    turnLock: new TurnLock(),
+    telegramDeps: {
+      model,
+      system: "test",
+      messages: [],
+      tools: {},
+      sessionFile: "/tmp/test-session.jsonl",
+      out,
+      configPath: "/tmp/test-mai-telegram.json",
+      uploadAllowlistRoot: "/tmp",
+    },
   };
 }
 
@@ -253,7 +284,8 @@ describe("handleCronSlash — /cron schedule | list | remove dispatcher", () => 
       const records = readSchedule(schedulePath);
       assert.equal(records.length, 1, "schedule must contain exactly 1 record");
 
-      const r = records[0]!;
+      assert.ok(records[0] !== undefined, "first record must exist");
+      const r = records[0];
       assert.equal(r.task, "Check feed");
       assert.equal(r.cronExpr, "0 9 * * *");
       assert.equal(r.type, "recurring");
@@ -389,6 +421,7 @@ describe("dispatchSlash /cron wiring — replSlash.ts integration", () => {
         out: stream,
         cwd: dir,
         schedulePath,
+        ...p11SlashStubs(model, stream),
       };
 
       const result = await dispatchSlash("/cron list", ctx);
@@ -423,6 +456,7 @@ describe("dispatchSlash /cron wiring — replSlash.ts integration", () => {
         out: stream,
         cwd: dir,
         schedulePath,
+        ...p11SlashStubs(model, stream),
       };
 
       const result = await dispatchSlash("/cron", ctx);
@@ -645,7 +679,8 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       const updated = readSchedule(schedulePath);
       assert.equal(updated.length, 1, "recurring record must remain in schedule (updated, not removed)");
-      const r = updated[0]!;
+      assert.ok(updated[0] !== undefined, "updated record must exist");
+      const r = updated[0];
       assert.equal(r.id, record.id);
       assert.equal(r.lastRunAt, fireDate.toISOString(), "lastRunAt must be set to fireDate");
       assert.ok(
