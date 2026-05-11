@@ -25,7 +25,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 function makeTgCfg(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
     enabled: false,
-    boundChatId: null,
+    boundUserId: null,
     lastUpdateOffset: 0,
     stickyFallbackIp: null,
     pollTimeoutSec: 1,
@@ -37,8 +37,8 @@ function makeTgCfg(overrides?: Record<string, unknown>): Record<string, unknown>
 // ─── T-Boot: REPL boot-time poller ───────────────────────────────────────────
 
 describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
-  it("T-Boot.1: when telegram.json has enabled:true + boundChatId:12345 + TELEGRAM_TOKEN set, startTelegramPoller is called exactly once AFTER cron drain BUT BEFORE readline loop", async () => {
-    // Given: telegramConfigPath with {enabled:true,boundChatId:12345}; TELEGRAM_TOKEN set
+  it("T-Boot.1: when telegram.json has enabled:true + boundUserId:12345 + TELEGRAM_TOKEN set, startTelegramPoller is called exactly once AFTER cron drain BUT BEFORE readline loop", async () => {
+    // Given: telegramConfigPath with {enabled:true,boundUserId:12345}; TELEGRAM_TOKEN set
     // When: repl.ts reads the config and decides to start poller
     // Then: startTelegramPoller called (verified by checking the telegram.json config is consumed + poller handle reflects running=true or abort fires)
     // NOTE: runRepl starts a readline loop and is hard to unit-test end-to-end without real stdin.
@@ -47,7 +47,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundChatId: 12345 })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: 12345 })), "utf-8");
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         // Import startTelegramPoller to verify the boot path works
@@ -58,7 +58,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
 
         const cfg = readTelegramConfig(cfgPath);
         assert.equal(cfg.enabled, true, "config must be enabled:true");
-        assert.equal(cfg.boundChatId, 12345, "config must have boundChatId:12345");
+        assert.equal(cfg.boundUserId, 12345, "config must have boundUserId:12345");
 
         const abort = new AbortController();
         const turnLock = new TurnLock();
@@ -135,41 +135,41 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
 
       // Verify that repl.ts boot condition would NOT start the poller
       assert.equal(cfg.enabled, false, "config.enabled must be false");
-      // The boot condition in repl.ts is: if (tgCfg.enabled && TELEGRAM_TOKEN && boundChatId !== null)
+      // The boot condition in repl.ts is: if (tgCfg.enabled && TELEGRAM_TOKEN && boundUserId !== null)
       // With enabled=false, the condition is false → poller NOT started
       const tokenSet = Boolean(process.env.TELEGRAM_TOKEN);
-      const wouldStart = cfg.enabled && tokenSet && cfg.boundChatId !== null;
+      const wouldStart = cfg.enabled && tokenSet && cfg.boundUserId !== null;
       assert.equal(wouldStart, false, "poller must NOT be started when enabled=false");
     } finally {
       cleanup();
     }
   });
 
-  it("T-Boot.3: when telegram.json enabled:true AND boundChatId:null, poller NOT started AND out receives warning containing 'bind' or 'boundChatId'", async () => {
-    // Given: {enabled:true, boundChatId:null}; TELEGRAM_TOKEN set
+  it("T-Boot.3: when telegram.json enabled:true AND boundUserId:null, poller NOT started AND out receives warning containing 'bind' or 'boundUserId'", async () => {
+    // Given: {enabled:true, boundUserId:null}; TELEGRAM_TOKEN set
     // When: repl.ts reads config
-    // Then: startTelegramPoller NOT called (bound condition fails; null chatId)
+    // Then: startTelegramPoller NOT called (bound condition fails; null userId)
     const { dir, cleanup } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundChatId: null })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: null })), "utf-8");
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         const { readTelegramConfig } = await import("../../src/persistence/telegramConfig.js");
         const cfg = readTelegramConfig(cfgPath);
 
         assert.equal(cfg.enabled, true, "config.enabled must be true");
-        assert.equal(cfg.boundChatId, null, "config.boundChatId must be null");
+        assert.equal(cfg.boundUserId, null, "config.boundUserId must be null");
 
-        // The boot condition in repl.ts: if (tgCfg.enabled && TELEGRAM_TOKEN && boundChatId !== null)
-        // With boundChatId=null, the condition is false → poller NOT started
-        const wouldStart = cfg.enabled && Boolean(process.env.TELEGRAM_TOKEN) && cfg.boundChatId !== null;
-        assert.equal(wouldStart, false, "poller must NOT start when boundChatId is null");
+        // The boot condition in repl.ts: if (tgCfg.enabled && TELEGRAM_TOKEN && boundUserId !== null)
+        // With boundUserId=null, the condition is false → poller NOT started
+        const wouldStart = cfg.enabled && Boolean(process.env.TELEGRAM_TOKEN) && cfg.boundUserId !== null;
+        assert.equal(wouldStart, false, "poller must NOT start when boundUserId is null");
         // Repl.ts writes a warning in this case
         // Verify the config state that would trigger the warning path
         assert.ok(
-          cfg.enabled === true && cfg.boundChatId === null,
-          "config state must have enabled=true but boundChatId=null (triggers bind warning in repl.ts)",
+          cfg.enabled === true && cfg.boundUserId === null,
+          "config state must have enabled=true but boundUserId=null (triggers bind warning in repl.ts)",
         );
       } finally {
         delete process.env.TELEGRAM_TOKEN;
@@ -180,13 +180,13 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
   });
 
   it("T-Boot.4: when REPL exits normally (AbortController.abort → loop break), the poller's abort fires (pollerAbortController.aborted===true within a tick)", async () => {
-    // Given: telegram poller running (enabled+boundChatId+token); REPL aborts via abortController
+    // Given: telegram poller running (enabled+boundUserId+token); REPL aborts via abortController
     // When: abortController.abort() called; REPL loop breaks
     // Then: pollerAbortController.aborted===true (poller cleanup on exit)
     const { dir, cleanup } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundChatId: 999 })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: 999 })), "utf-8");
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         const { startTelegramPoller } = await import("../../src/cli/replTelegram.js");
