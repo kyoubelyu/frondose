@@ -154,9 +154,18 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
     deps.out.write(`[telegram] (unsupported update kind ${update.update_id})\n`);
     return;
   }
+  const cfg = readTelegramConfig(deps.configPath);
+  // v0.4.6: DM-only authorization — drop messages from any sender other than the bound user.
+  // Prevents bot from processing strangers' messages (LLM waste + auth surface).
+  const fromId = msg.from?.id;
+  if (cfg.boundUserId !== null && fromId !== cfg.boundUserId) {
+    deps.out.write(
+      `[telegram] dropped update ${update.update_id} from user ${fromId ?? "?"} (not bound user ${cfg.boundUserId})\n`,
+    );
+    return;
+  }
   const username = msg.from?.username ?? `id${msg.from?.id ?? "?"}`;
   const lines: string[] = [`[TG_FROM=${username}]`];
-  const cfg = readTelegramConfig(deps.configPath);
   const token = process.env.TELEGRAM_TOKEN;
   // Handle media → download + tag
   if (token) {
@@ -209,7 +218,7 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
   if (finalText && token) {
     const truncated =
       finalText.length > MAX_REPLY_BODY ? `${finalText.slice(0, MAX_REPLY_BODY)}${TRUNCATION_SUFFIX}` : finalText;
-    const chatId = cfg.boundChatId;
+    const chatId = cfg.boundUserId;
     if (chatId !== null) {
       try {
         await sendTelegramMessage(token, chatId, truncated, (u, init) =>
@@ -252,7 +261,7 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
   }
   if (verb === "status") {
     ctx.out.write(`[telegram] enabled: ${cfg.enabled}\n`);
-    ctx.out.write(`[telegram] boundChatId: ${cfg.boundChatId ?? "(unset)"}\n`);
+    ctx.out.write(`[telegram] boundUserId: ${cfg.boundUserId ?? "(unset)"}\n`);
     ctx.out.write(`[telegram] lastUpdateOffset: ${cfg.lastUpdateOffset}\n`);
     ctx.out.write(`[telegram] stickyFallbackIp: ${cfg.stickyFallbackIp ?? "(none)"}\n`);
     ctx.out.write(`[telegram] running: ${ctx.pollerHandle?.running === true}\n`);
@@ -263,9 +272,9 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
       ctx.out.write("/telegram on: set TELEGRAM_TOKEN env var first; poller not started.\n");
       return;
     }
-    if (cfg.boundChatId === null) {
+    if (cfg.boundUserId === null) {
       ctx.out.write(
-        "/telegram on: no boundChatId — run `/telegram bind <chat_id>` (or `mai telegram bind <id>`) first.\n",
+        "/telegram on: no boundUserId — run `/telegram bind <user_id>` (or `mai telegram bind <user_id>`) first.\n",
       );
       return;
     }

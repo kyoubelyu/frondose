@@ -106,20 +106,20 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     }
   });
 
-  it("T-CLI.tg.3: runTelegramSubcommand('bind', {tcPath, chatId:12345}) writes boundChatId:12345 to telegram.json", async () => {
-    // Given: telegram.json with boundChatId:null
-    // When: runTelegramSubcommand("bind", {tcPath, chatId:12345}) called
-    // Then: telegram.json.boundChatId===12345; stdout confirms the binding
+  it("T-CLI.tg.3: runTelegramSubcommand('bind', {tcPath, userId:12345}) writes boundUserId:12345 to telegram.json", async () => {
+    // Given: telegram.json with boundUserId:null
+    // When: runTelegramSubcommand("bind", {tcPath, userId:12345}) called
+    // Then: telegram.json.boundUserId===12345; stdout confirms the binding
     const { cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
       const stdout = await captureStdout(async () => {
-        await runTelegramSubcommand("bind", { tcPath: cfgPath, chatId: 12345 });
+        await runTelegramSubcommand("bind", { tcPath: cfgPath, userId: 12345 });
       });
-      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { boundChatId: number | null };
-      assert.equal(onDisk.boundChatId, 12345, "telegram.json.boundChatId must be 12345 after bind");
+      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { boundUserId: number | null };
+      assert.equal(onDisk.boundUserId, 12345, "telegram.json.boundUserId must be 12345 after bind");
       assert.ok(
-        stdout.includes("12345") || stdout.includes("boundChatId"),
+        stdout.includes("12345") || stdout.includes("boundUserId"),
         `stdout must confirm binding of chat_id 12345; got: "${stdout}"`,
       );
     } finally {
@@ -127,15 +127,15 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     }
   });
 
-  it("T-CLI.tg.4: runTelegramSubcommand('status', {tcPath}) prints enabled, boundChatId, lastUpdateOffset, stickyFallbackIp, env var presence", async () => {
+  it("T-CLI.tg.4: runTelegramSubcommand('status', {tcPath}) prints enabled, boundUserId, lastUpdateOffset, stickyFallbackIp, env var presence", async () => {
     // Given: known telegram.json values; TELEGRAM_TOKEN env set
     // When: runTelegramSubcommand("status", {tcPath}) called; stdout captured
-    // Then: output includes 'enabled:', 'boundChatId:', 'lastUpdateOffset:', 'TOKEN', 'CHAT_ID'
+    // Then: output includes 'enabled:', 'boundUserId:', 'lastUpdateOffset:', 'TOKEN', 'CHAT_ID'
     const { cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 9876,
+        boundUserId: 9876,
         lastUpdateOffset: 42,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
@@ -147,7 +147,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
           await runTelegramSubcommand("status", { tcPath: cfgPath });
         });
         assert.ok(stdout.includes("enabled"), `stdout must contain "enabled"; got: "${stdout}"`);
-        assert.ok(stdout.includes("boundChatId"), `stdout must contain "boundChatId"; got: "${stdout}"`);
+        assert.ok(stdout.includes("boundUserId"), `stdout must contain "boundUserId"; got: "${stdout}"`);
         assert.ok(stdout.includes("lastUpdateOffset"), `stdout must contain "lastUpdateOffset"; got: "${stdout}"`);
         assert.ok(
           stdout.includes("TOKEN") || stdout.includes("token"),
@@ -161,15 +161,15 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     }
   });
 
-  it("T-CLI.tg.5: runTelegramSubcommand('test', {tcPath}) AND env+boundChatId present sends sendMessage via telegramFetch AND prints HTTP status", async () => {
-    // Given: TELEGRAM_TOKEN set; telegram.json has boundChatId:999; fetch mock returns 200
+  it("T-CLI.tg.5: runTelegramSubcommand('test', {tcPath}) AND env+boundUserId present sends sendMessage via telegramFetch AND prints HTTP status", async () => {
+    // Given: TELEGRAM_TOKEN set; telegram.json has boundUserId:999; fetch mock returns 200
     // When: runTelegramSubcommand("test", {tcPath}) called (injectable transport for unit test)
     // Then: POST to /sendMessage attempted; stdout contains HTTP 200 (or test OK message)
     const { cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
-        boundChatId: 999,
+        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,

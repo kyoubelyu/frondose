@@ -84,7 +84,7 @@ test("runStatusSubcommand (G-P11.17)", { concurrency: 1 }, async (t) => {
           tcPath,
           JSON.stringify({
             enabled: false,
-            boundChatId: null,
+            boundUserId: null,
             lastUpdateOffset: 0,
             stickyFallbackIp: null,
             pollTimeoutSec: 30,

@@ -50,14 +50,14 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
   it("T-Config.1: when the config file does NOT exist, readTelegramConfig returns DEFAULT_TELEGRAM_CONFIG deep-equal", () => {
     // Given: a path that does not exist on disk
     // When: readTelegramConfig(nonExistentPath) is called
-    // Then: returns { enabled:false, boundChatId:null, lastUpdateOffset:0, stickyFallbackIp:null, pollTimeoutSec:30, pollBackoffSec:5 }
+    // Then: returns { enabled:false, boundUserId:null, lastUpdateOffset:0, stickyFallbackIp:null, pollTimeoutSec:30, pollBackoffSec:5 }
     const { cfgPath, cleanup } = makeTmpDir();
     try {
       const nonExistent = `${cfgPath}.nonexistent`;
       const result = readTelegramConfig(nonExistent);
       assert.deepEqual(result, DEFAULT_TELEGRAM_CONFIG, "missing file must return DEFAULT_TELEGRAM_CONFIG");
       assert.equal(result.enabled, false);
-      assert.equal(result.boundChatId, null);
+      assert.equal(result.boundUserId, null);
       assert.equal(result.lastUpdateOffset, 0);
       assert.equal(result.stickyFallbackIp, null);
       assert.equal(result.pollTimeoutSec, 30);
@@ -68,14 +68,14 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
   });
 
   it("T-Config.2: when the file exists with valid JSON, readTelegramConfig returns the parsed object exact-equal to the written values", () => {
-    // Given: file written with { enabled:true, boundChatId:12345, lastUpdateOffset:99, stickyFallbackIp:"149.154.166.110", pollTimeoutSec:30, pollBackoffSec:5 }
+    // Given: file written with { enabled:true, boundUserId:12345, lastUpdateOffset:99, stickyFallbackIp:"149.154.166.110", pollTimeoutSec:30, pollBackoffSec:5 }
     // When: readTelegramConfig reads it
     // Then: parsed object deep-equals the written object
     const { cfgPath, cleanup } = makeTmpDir();
     try {
       const cfg = {
         enabled: true,
-        boundChatId: 12345,
+        boundUserId: 12345,
         lastUpdateOffset: 99,
         stickyFallbackIp: "149.154.166.110",
         pollTimeoutSec: 30,
@@ -110,8 +110,8 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
     }
   });
 
-  it("T-Config.4: when the file contains valid JSON missing a required field (e.g. no boundChatId), readTelegramConfig returns DEFAULT_TELEGRAM_CONFIG AND emits a Zod-validation stderr warning", () => {
-    // Given: file with { "enabled": true } (missing boundChatId and other required fields)
+  it("T-Config.4: when the file contains valid JSON missing a required field (e.g. no boundUserId), readTelegramConfig returns DEFAULT_TELEGRAM_CONFIG AND emits a Zod-validation stderr warning", () => {
+    // Given: file with { "enabled": true } (missing boundUserId and other required fields)
     // When: readTelegramConfig called; stderr captured
     // Then: returns DEFAULT_TELEGRAM_CONFIG; stderr contains Zod/validation error message; no throw
     const { cfgPath, cleanup } = makeTmpDir();
@@ -134,7 +134,7 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
     // Then: no .tmp artifact; readTelegramConfig returns same values; atomic write (existsSync(path.tmp) === false after return)
     const { cfgPath, cleanup } = makeTmpDir();
     try {
-      const cfg = { ...DEFAULT_TELEGRAM_CONFIG, enabled: true, boundChatId: 42, lastUpdateOffset: 7 };
+      const cfg = { ...DEFAULT_TELEGRAM_CONFIG, enabled: true, boundUserId: 42, lastUpdateOffset: 7 };
       writeTelegramConfig(cfg, cfgPath);
 
       // No .tmp artifact

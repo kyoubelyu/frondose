@@ -127,8 +127,8 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   if (tgCfg.enabled) {
     if (!process.env.TELEGRAM_TOKEN) {
       out.write("[telegram] config enabled but TELEGRAM_TOKEN unset — poller not started\n");
-    } else if (tgCfg.boundChatId === null) {
-      out.write("[telegram] config enabled but boundChatId null — run `mai telegram bind <chat_id>` first\n");
+    } else if (tgCfg.boundUserId === null) {
+      out.write("[telegram] config enabled but boundUserId null — run `mai telegram bind <user_id>` first\n");
     } else {
       pollerAbort = new AbortController();
       pollerHandle = await startTelegramPoller(tgCfg, telegramDeps, turnLock, pollerAbort);
