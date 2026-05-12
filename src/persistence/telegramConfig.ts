@@ -13,6 +13,8 @@ export const telegramConfigSchema = z.object({
   stickyFallbackIp: z.string().nullable(),
   pollTimeoutSec: z.number().int().min(1).max(60),
   pollBackoffSec: z.number().int().min(1).max(60),
+  // P-12 D-5: optional + default(null) preserves forward-compat with pre-P-12 telegram.json.
+  lastReceivedAt: z.string().nullable().optional().default(null),
 });
 export type TelegramConfig = z.infer<typeof telegramConfigSchema>;
 
@@ -23,6 +25,7 @@ export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   stickyFallbackIp: null,
   pollTimeoutSec: 30,
   pollBackoffSec: 5,
+  lastReceivedAt: null,
 };
 
 export function readTelegramConfig(path: string): TelegramConfig {

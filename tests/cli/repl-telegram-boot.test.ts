@@ -91,12 +91,13 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
         };
 
         try {
+          // P-12 D-1: sessionFile is now { path: string } (mutable object ref) — not a bare string.
           const deps = {
             model,
             system: "test",
             messages: [] as import("ai").CoreMessage[],
             tools: {},
-            sessionFile: join(dir, "session.jsonl"),
+            sessionFile: { path: join(dir, "session.jsonl") },
             out: { write: () => true } as unknown as NodeJS.WritableStream,
             configPath: cfgPath,
             uploadAllowlistRoot: dir,
@@ -210,12 +211,13 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
+        // P-12 D-1: sessionFile is now { path: string } (mutable object ref) — not a bare string.
         const deps = {
           model,
           system: "test",
           messages: [] as import("ai").CoreMessage[],
           tools: {},
-          sessionFile: join(dir, "session.jsonl"),
+          sessionFile: { path: join(dir, "session.jsonl") },
           out: { write: () => true } as unknown as NodeJS.WritableStream,
           configPath: cfgPath,
           uploadAllowlistRoot: dir,

@@ -291,6 +291,7 @@ test("T-StatusLine.8: TokenBudget has no cumulativePrompt field (rev-3 guardian 
 });
 
 // ─── T-StatusLine.9: dispose() clears row 0 on TTY ───────────────────────────
+// (Added in P-11; kept as T-StatusLine.9 — P-12 new [TG] tests numbered .10/.11)
 
 test("T-StatusLine.9: TTY stdout → dispose() clears the status row (writes ANSI)", async () => {
   const writes = await withFakeTtyStdout(() => {
@@ -304,4 +305,59 @@ test("T-StatusLine.9: TTY stdout → dispose() clears the status row (writes ANS
   assert.ok(combined.includes("\x1b[H"), "dispose: cursor home");
   assert.ok(combined.includes("\x1b[2K"), "dispose: clear line");
   assert.ok(combined.includes("\x1b[u"), "dispose: cursor restore");
+});
+
+// ─── T-StatusLine.10: [TG] indicator present when tgActive=true (P-12 D-6) ───
+// (Plan §5 names this "T-StatusLine.9"; renamed .10 because .9 is taken by dispose test above)
+
+test("T-StatusLine.10: TTY stdout → update(budget, model, sessionId, tgActive=true) emits '[TG]' substring AND it appears before 'session:' in the line (P-12 D-6 NIT-2)", async () => {
+  // Given: StatusLine constructed on fake TTY stdout; tgActive=true passed as 4th arg
+  // When: update(budget, model, "sess1234", true) called
+  // Then: captured output contains "[TG]" AND "session: sess1234" AND "[TG]" precedes "session:"
+  const model = makeModel("openai", "gpt-4o");
+  const budget = new TokenBudget(model);
+  budget.add({ promptTokens: 10_000, completionTokens: 100, totalTokens: 10_100 });
+
+  const writes = await withFakeTtyStdout(() => {
+    const sl = new StatusLine(process.stdout);
+    sl.update(budget, model, "sess1234", true);
+  });
+
+  const content = stripAllAnsi(writes.join(""));
+  assert.ok(content.includes("[TG]"), `output must contain "[TG]" when tgActive=true; got: "${content}"`);
+  assert.ok(
+    content.includes("session: sess1234"),
+    `output must still contain "session: sess1234" when tgActive=true; got: "${content}"`,
+  );
+  // [TG] must be emitted before "session:" (formatLine inserts [TG] before session in parts array)
+  const tgIdx = content.indexOf("[TG]");
+  const sessIdx = content.indexOf("session:");
+  assert.ok(
+    tgIdx < sessIdx,
+    `"[TG]" must appear before "session:" in the status line; tgIdx=${tgIdx}, sessIdx=${sessIdx}`,
+  );
+});
+
+// ─── T-StatusLine.11: [TG] indicator absent when tgActive=false (P-12 D-6) ───
+// (Plan §5 names this "T-StatusLine.10"; renamed .11 for same reason)
+
+test("T-StatusLine.11: TTY stdout → update(budget, model, sessionId, tgActive=false) does NOT emit '[TG]' AND still shows 'session: sess1234' (P-12 D-6 NIT-2)", async () => {
+  // Given: StatusLine constructed on fake TTY stdout; tgActive=false (or omitted)
+  // When: update(budget, model, "sess1234", false) called
+  // Then: captured output does NOT contain "[TG]" AND does contain "session: sess1234"
+  const model = makeModel("openai", "gpt-4o");
+  const budget = new TokenBudget(model);
+  budget.add({ promptTokens: 10_000, completionTokens: 100, totalTokens: 10_100 });
+
+  const writes = await withFakeTtyStdout(() => {
+    const sl = new StatusLine(process.stdout);
+    sl.update(budget, model, "sess1234", false);
+  });
+
+  const content = stripAllAnsi(writes.join(""));
+  assert.ok(!content.includes("[TG]"), `output must NOT contain "[TG]" when tgActive=false; got: "${content}"`);
+  assert.ok(
+    content.includes("session: sess1234"),
+    `output must contain "session: sess1234" when tgActive=false; got: "${content}"`,
+  );
 });
