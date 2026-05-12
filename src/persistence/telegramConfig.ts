@@ -8,7 +8,9 @@ import { z } from "zod";
 
 export const telegramConfigSchema = z.object({
   enabled: z.boolean(),
-  boundUserId: z.number().int().nullable(),
+  // P-12 v0.4.6 rename from boundChatId: .default(null) for backward compat
+  // with P-11 / v0.4.5-era telegram.json files that still have boundChatId instead.
+  boundUserId: z.number().int().nullable().default(null),
   lastUpdateOffset: z.number().int().min(0),
   stickyFallbackIp: z.string().nullable(),
   pollTimeoutSec: z.number().int().min(1).max(60),

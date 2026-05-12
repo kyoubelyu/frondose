@@ -36,7 +36,10 @@ export async function runAuthSubcommand(
           }
         }
         if (!key) {
-          const { provider } = parseModelSpec(spec);
+          // C-3 fix: operator may select a bare provider family key (e.g. "anthropic")
+          // from providerSelect, OR a full spec (e.g. "openai:gpt-4o") via __NEW__ +
+          // prompter.input(). Handle both without crashing parseModelSpec.
+          const provider = spec.includes(":") ? parseModelSpec(spec).provider : spec;
           key = await prompter.apiKeyInput(provider);
         }
       }
