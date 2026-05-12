@@ -1,14 +1,20 @@
 /**
  * P-11 Step 5 — T-Slash.tg.1..7 + T-Turn.1..6 + T-Poller.1..5 (filled assertions)
+ * P-12 Step 4a — T-Session.1, T-Visibility.1..3, T-Poller.6 (scaffolds — TODO bodies)
  *
  * handleTelegramSlash, handleTelegramTurn, startTelegramPoller, sendTelegramMessage
  * (src/cli/replTelegram.ts — NEW at builder Step 4b).
  *
- * Gate coverage: G-P11.15, G-P11.19, D-20, D-24
+ * Gate coverage: G-P11.15, G-P11.19, D-20, D-24 (P-11); G-P12.1, G-P12.3, G-P12.4 (P-12)
+ *
+ * P-12 D-1 NOTE: makeDeps() and makeSlashCtx() now pass sessionFile: { path: string } (object ref,
+ * not bare string). At Step 4a, T-Turn.1/2/3/4/6 FAIL at runtime (appendMessages receives object)
+ * — expected; builder Step 4b changes production type TelegramTurnDeps.sessionFile to { path: string }
+ * which restores those tests. See docs/phase-12-test.md § Test Contract for details.
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -96,7 +102,12 @@ function makeGetUpdatesResponse(
   } as unknown as Response;
 }
 
-/** Build a minimal TelegramTurnDeps for tests. */
+/** Build a minimal TelegramTurnDeps for tests.
+ *  P-12 D-1: sessionFile is now { path: string } (mutable object ref), not a bare string.
+ *  This matches the production TelegramTurnDeps interface after builder Step 4b.
+ *  At Step 4a, the production type is still `string` → existing T-Turn.* tests WILL fail
+ *  at runtime (appendMessages receives object). Builder Step 4b fixes production type.
+ */
 function makeDeps(opts: {
   cfgPath: string;
   dir: string;
@@ -108,7 +119,7 @@ function makeDeps(opts: {
     system: "test system prompt",
     messages: [],
     tools: {},
-    sessionFile: join(opts.dir, "session.jsonl"),
+    sessionFile: { path: join(opts.dir, "session.jsonl") }, // P-12 D-1: object ref
     out: opts.out,
     configPath: opts.cfgPath,
     uploadAllowlistRoot: opts.dir,
@@ -136,7 +147,7 @@ function makeSlashCtx(opts: {
       system: "test",
       messages: [],
       tools: {},
-      sessionFile: join(opts.dir ?? tmpdir(), "session.jsonl"),
+      sessionFile: { path: join(opts.dir ?? tmpdir(), "session.jsonl") }, // P-12 D-1: object ref
       out: opts.out,
       configPath: opts.cfgPath,
       uploadAllowlistRoot: opts.dir ?? tmpdir(),
@@ -309,6 +320,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
         running: true,
         offset: 0,
         lastPollAt: null,
+        lastReceivedAt: null,
         abort: pollerAbort,
       };
       let nulled = false;
@@ -419,7 +431,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
           system: "test",
           messages: [],
           tools: {},
-          sessionFile: join(dir, "session.jsonl"),
+          sessionFile: { path: join(dir, "session.jsonl") }, // P-12 D-1: object ref
           out: stream,
           configPath: cfgPath,
           uploadAllowlistRoot: dir,
@@ -866,6 +878,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
                   stickyFallbackIp: null,
                   pollTimeoutSec: 1,
                   pollBackoffSec: 1,
+                  lastReceivedAt: null,
                 },
                 deps,
                 turnLock,
@@ -936,6 +949,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
               pollBackoffSec: 0,
+              lastReceivedAt: null,
             };
             const deps = makeDeps({ cfgPath, dir, out: stream });
             await startTelegramPoller(cfg, deps, turnLock, abort);
@@ -997,6 +1011,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
               pollBackoffSec: 1,
+              lastReceivedAt: null,
             };
             const deps = makeDeps({ cfgPath, dir, out: stream });
             await startTelegramPoller(cfg, deps, turnLock, abort);
@@ -1070,6 +1085,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
               stickyFallbackIp: null,
               pollTimeoutSec: 30,
               pollBackoffSec: 1,
+              lastReceivedAt: null,
             };
             const deps = makeDeps({ cfgPath, dir, out: stream });
             const handle = await startTelegramPoller(cfg, deps, turnLock, abort);
@@ -1139,6 +1155,7 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
               stickyFallbackIp: null,
               pollTimeoutSec: 1,
               pollBackoffSec: 1,
+              lastReceivedAt: null,
             };
             await startTelegramPoller(cfg, deps, turnLock, abort);
             // Allow loop to process
@@ -1159,6 +1176,320 @@ describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
         assert.ok(
           onDisk.lastUpdateOffset === 5 || onDisk.lastUpdateOffset === 11,
           `offset must be either pre-existing (5) or correctly advanced (11); got: ${onDisk.lastUpdateOffset}`,
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Poller.6: when startTelegramPoller processes one update, PollerHandle.lastReceivedAt advances from null to an ISO timestamp AND the value is mirrored in telegram.json on disk (P-12 D-5 NIT-1)", async () => {
+    // Given: startTelegramPoller called with 1-update mock; handle.lastReceivedAt initially null
+    // When: poller processes the update (BEFORE turnLock.run resolves per D-5 Option-C ordering)
+    // Then: handle.lastReceivedAt is a valid ISO timestamp /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/ AND telegram.json.lastReceivedAt matches
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 999,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 1,
+        pollBackoffSec: 1,
+        lastReceivedAt: null,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok";
+      try {
+        const abort = new AbortController();
+        const turnLock = new TurnLock();
+        const { stream } = makeOut();
+        const deps = makeDeps({ cfgPath, dir, out: stream });
+        let pollCount = 0;
+        let capturedHandle: PollerHandle | null = null;
+
+        await withFetchSpy(
+          async (url) => {
+            if (url.includes("/getUpdates")) {
+              pollCount++;
+              if (pollCount === 1) {
+                return makeGetUpdatesResponse([
+                  { update_id: 20, message: { text: "hello", from: { username: "u", id: 999 } } },
+                ]);
+              }
+              // Second poll: abort and return empty
+              abort.abort();
+              return makeGetUpdatesResponse([]);
+            }
+            return makeOkTgResponse();
+          },
+          async () => {
+            capturedHandle = await startTelegramPoller(
+              {
+                enabled: true,
+                boundUserId: 999,
+                lastUpdateOffset: 0,
+                stickyFallbackIp: null,
+                pollTimeoutSec: 1,
+                pollBackoffSec: 1,
+                lastReceivedAt: null,
+              },
+              deps,
+              turnLock,
+              abort,
+            );
+            // Wait for the loop to process the update, write cfg, and abort
+            await new Promise<void>((r) => setTimeout(r, 600));
+          },
+        );
+
+        assert.ok(capturedHandle !== null, "startTelegramPoller must return a PollerHandle");
+        const handle = capturedHandle as PollerHandle;
+        assert.notEqual(
+          handle.lastReceivedAt,
+          null,
+          "handle.lastReceivedAt must advance from null after processing update",
+        );
+        assert.ok(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(handle.lastReceivedAt ?? ""),
+          `handle.lastReceivedAt must be a valid ISO timestamp; got: "${handle.lastReceivedAt}"`,
+        );
+        // Disk mirror: telegram.json must reflect the same lastReceivedAt value
+        const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as {
+          lastReceivedAt: string | null;
+          lastUpdateOffset: number;
+        };
+        assert.notEqual(
+          onDisk.lastReceivedAt,
+          null,
+          "telegram.json.lastReceivedAt must be non-null after poller processes an update",
+        );
+        assert.equal(
+          onDisk.lastReceivedAt,
+          handle.lastReceivedAt,
+          "telegram.json.lastReceivedAt must exactly match PollerHandle.lastReceivedAt (D-5 cfg mirror)",
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── T-Session: BUG-1 — sessionFile object-ref rotation (P-12 G-P12.1) ──────
+
+describe("T-Session: sessionFile object-ref survives /new rotation (P-12 G-P12.1)", () => {
+  it("T-Session.1: when sessionFileRef.path is mutated AFTER telegramDeps is built, handleTelegramTurn appendMessages call receives the NEW path (object-ref share, not string snapshot)", async () => {
+    // Given: sessionFileRef = { path: dir1/session.jsonl } passed by reference to telegramDeps.sessionFile
+    // When: sessionFileRef.path mutated to dir2/session.jsonl (simulates /new rotation); then handleTelegramTurn called
+    // Then: the file at dir2/session.jsonl is created (appendMessages used NEW path); dir1/session.jsonl does NOT exist
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const dir2 = mkdtempSync(join(tmpdir(), "mai-p12-sess2-"));
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 12345,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+        lastReceivedAt: null,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok-session";
+      try {
+        const { stream } = makeOut();
+        // Step 1: build sessionFileRef pointing to dir (original path, "old" path)
+        const sessionFileRef: { path: string } = { path: join(dir, "session.jsonl") };
+        const deps: TelegramTurnDeps = {
+          model: makeMockModel("Session object-ref response"),
+          system: "test",
+          messages: [],
+          tools: {},
+          sessionFile: sessionFileRef, // shared by reference
+          out: stream,
+          configPath: cfgPath,
+          uploadAllowlistRoot: dir,
+        };
+        // Step 2: mutate path BEFORE calling handleTelegramTurn (simulates /new rotation)
+        sessionFileRef.path = join(dir2, "session.jsonl");
+
+        // Step 3: call handleTelegramTurn
+        await withFetchSpy(
+          async () => makeOkTgResponse(),
+          async () => {
+            await handleTelegramTurn(
+              { update_id: 77, message: { text: "Session test", from: { username: "alice", id: 12345 } } },
+              deps,
+            );
+          },
+        );
+
+        // Step 4: new path must be written (messages appended to dir2's session.jsonl)
+        assert.ok(
+          existsSync(join(dir2, "session.jsonl")),
+          `appendMessages must write to NEW session path "${join(dir2, "session.jsonl")}" (object-ref mutation seen)`,
+        );
+        // Step 5: old path must NOT have been written
+        assert.ok(
+          !existsSync(join(dir, "session.jsonl")),
+          `OLD session path "${join(dir, "session.jsonl")}" must NOT be written when sessionFile.path was mutated`,
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      rmSync(dir2, { recursive: true, force: true });
+      cleanup();
+    }
+  });
+});
+
+// ─── T-Visibility: BUG-3 — handleTelegramTurn out.write visibility (P-12 G-P12.3) ──
+
+describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility lines (P-12 G-P12.3)", () => {
+  it("T-Visibility.1: when text-only inbound update from alice (boundUserId=12345), deps.out captures '[telegram] ↓ @alice: Hi mai' BEFORE agent loop result", async () => {
+    // Given: update { text:"Hi mai", from:{ id:12345, username:"alice" } } + telegram.json { boundUserId:12345, lastReceivedAt:null, ... } + TELEGRAM_TOKEN set
+    // When: handleTelegramTurn(update, deps) called; deps.out capture stream inspected
+    // Then: capture stream contains "[telegram] ↓ @alice: Hi mai" written before any agent loop output
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 12345,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+        lastReceivedAt: null,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok";
+      try {
+        const { stream, lines } = makeOut();
+        const deps = makeDeps({ cfgPath, dir, out: stream });
+        await withFetchSpy(
+          async () => makeOkTgResponse(),
+          async () => {
+            await handleTelegramTurn(
+              { update_id: 100, message: { text: "Hi mai", from: { username: "alice", id: 12345 } } },
+              deps,
+            );
+          },
+        );
+        const output = lines.join("");
+        assert.ok(
+          output.includes("[telegram] ↓ @alice: Hi mai"),
+          `deps.out must contain "[telegram] ↓ @alice: Hi mai"; got: "${output}"`,
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Visibility.2: when agent returns 'Sure thing' AND sendTelegramMessage resolves, deps.out captures '[telegram] ↑ @alice: Sure thing' AFTER reply", async () => {
+    // Given: telegram.json with boundUserId:12345; TELEGRAM_TOKEN set; model returns "Sure thing"
+    // When: handleTelegramTurn completes (agent loop + sendTelegramMessage done)
+    // Then: deps.out contains "[telegram] ↑ @alice: Sure thing" after sendTelegramMessage resolves
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 12345,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+        lastReceivedAt: null,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok";
+      try {
+        const { stream, lines } = makeOut();
+        const deps = makeDeps({ cfgPath, dir, out: stream, responseText: "Sure thing" });
+        await withFetchSpy(
+          async () => makeOkTgResponse(),
+          async () => {
+            await handleTelegramTurn(
+              { update_id: 101, message: { text: "Hello", from: { username: "alice", id: 12345 } } },
+              deps,
+            );
+          },
+        );
+        const output = lines.join("");
+        assert.ok(
+          output.includes("[telegram] ↑ @alice: Sure thing"),
+          `deps.out must contain "[telegram] ↑ @alice: Sure thing" after auto-reply; got: "${output}"`,
+        );
+      } finally {
+        delete process.env.TELEGRAM_TOKEN;
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Visibility.3: when message is media-only (photo, textBody empty) AND download succeeds, the ↓ preview starts with '[TG_PHOTO=<localPath>]' (not empty string; OQ-6 media-preview)", async () => {
+    // Given: update { photo:[{file_id:'x',file_unique_id:'u'}], from:{id:12345,username:'alice'} } (no text) + download mock + bound config + TELEGRAM_TOKEN set
+    // When: handleTelegramTurn called; capture stream inspected for ↓ line
+    // Then: ↓ line contains "[TG_PHOTO=" (media tag used as preview source, not empty string)
+    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, {
+        enabled: true,
+        boundUserId: 12345,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+        lastReceivedAt: null,
+      });
+      process.env.TELEGRAM_TOKEN = "test-tok";
+      try {
+        const { stream, lines } = makeOut();
+        const deps = makeDeps({ cfgPath, dir, out: stream });
+        const fakeJpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+        await withFetchSpy(
+          async (url) => {
+            if (url.includes("/getFile")) {
+              return {
+                ok: true,
+                json: async () => ({ ok: true, result: { file_path: "photos/img.jpg", file_size: 100 } }),
+              } as unknown as Response;
+            }
+            if (url.includes("/file/")) {
+              return {
+                ok: true,
+                status: 200,
+                arrayBuffer: async () => fakeJpegBytes.buffer,
+                headers: { get: (h: string) => (h === "content-type" ? "image/jpeg" : null) },
+              } as unknown as Response;
+            }
+            return makeOkTgResponse();
+          },
+          async () => {
+            await handleTelegramTurn(
+              {
+                update_id: 102,
+                message: {
+                  from: { username: "alice", id: 12345 },
+                  // biome-ignore lint/suspicious/noExplicitAny: test shape cast
+                  photo: [{ file_id: "x", file_unique_id: "u" }] as any,
+                  // NO text/caption — media-only
+                },
+              },
+              deps,
+            );
+          },
+        );
+        const output = lines.join("");
+        // ↓ line must be present AND preview must contain the photo tag, not be empty
+        assert.ok(
+          output.includes("[telegram] ↓ @alice:") && output.includes("[TG_PHOTO="),
+          `↓ visibility line for media-only must show [TG_PHOTO= in preview (OQ-6); got: "${output}"`,
         );
       } finally {
         delete process.env.TELEGRAM_TOKEN;

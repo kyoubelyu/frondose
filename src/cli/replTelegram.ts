@@ -24,6 +24,8 @@ export interface PollerHandle {
   running: boolean;
   offset: number;
   lastPollAt: string | null;
+  /** P-12 D-5: wire-level last-received timestamp; null until first update arrives. */
+  lastReceivedAt: string | null;
   abort: AbortController;
 }
 
@@ -32,7 +34,8 @@ export interface TelegramTurnDeps {
   system: string;
   messages: CoreMessage[];
   tools: ToolSet;
-  sessionFile: string;
+  /** P-12 D-1: object reference (was: string) — survives `/new` mid-poller rotation. */
+  sessionFile: { path: string };
   abortSignal?: AbortSignal;
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
   out: NodeJS.WritableStream;
@@ -88,6 +91,8 @@ export async function startTelegramPoller(
     running: true,
     offset: cfg.lastUpdateOffset,
     lastPollAt: null,
+    // P-12 D-5: restore lastReceivedAt from cfg on poller restart (forward-compat: null).
+    lastReceivedAt: cfg.lastReceivedAt ?? null,
     abort,
   };
   // Fire-and-forget loop
@@ -127,6 +132,10 @@ export async function startTelegramPoller(
         handle.lastPollAt = new Date().toISOString();
         for (const upd of j.result ?? []) {
           if (abort.signal.aborted) break;
+          // P-12 D-5 (Option C): record wire-level receive timestamp BEFORE turnLock.run
+          // so it advances even if handleTelegramTurn drops the update (wrong sender /
+          // empty message). The wire DID receive the update — that is what advances.
+          handle.lastReceivedAt = new Date().toISOString();
           await turnLock.run(() => handleTelegramTurn(upd, deps));
           // BLOCKER-1 fix: abort guard BEFORE the offset write. Without this, /telegram off
           // acquired between handleTelegramTurn release and writeTelegramConfig would have
@@ -134,6 +143,8 @@ export async function startTelegramPoller(
           if (abort.signal.aborted) break;
           handle.offset = upd.update_id + 1;
           cfg.lastUpdateOffset = handle.offset;
+          // P-12 D-5: mirror handle → cfg before existing write; lands in telegram.json atomically.
+          cfg.lastReceivedAt = handle.lastReceivedAt;
           writeTelegramConfig(cfg, deps.configPath);
         }
       } catch (e) {
@@ -200,6 +211,12 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
     deps.out.write(`[telegram] (empty message ${update.update_id})\n`);
     return;
   }
+  // P-12 D-4: visibility — operator sees inbound message before agent loop runs.
+  // OQ-6: media-only messages (textBody === "") use lines[1] (first media tag) as preview source.
+  const previewSource = textBody !== "" ? textBody : (lines[1] ?? "");
+  const inPreview = previewSource.length > 80 ? `${previewSource.slice(0, 80)}…` : previewSource;
+  deps.out.write(`[telegram] ↓ @${username}: ${inPreview}\n`);
+
   const turnStart = deps.messages.length;
   deps.messages.push({ role: "user", content: lines.join("\n") });
   await runAgentLoop({
@@ -212,7 +229,8 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
   });
   if (deps.abortSignal?.aborted) return;
   const tail = deps.messages.slice(turnStart);
-  appendMessages(deps.sessionFile, tail);
+  // P-12 D-1: dereference at use site; deps.sessionFile is now { path: string } (mutable ref).
+  appendMessages(deps.sessionFile.path, tail);
   // D-20 + D-24: auto-push reply (bypass telegram_notify tool); truncate at 4000 chars.
   const finalText = extractAssistantText(tail);
   if (finalText && token) {
@@ -227,6 +245,9 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
             proxyUrl: process.env.TELEGRAM_PROXY,
           }),
         );
+        // P-12 D-4: visibility — operator sees the outbound reply after sendTelegramMessage succeeds.
+        const outPreview = truncated.length > 80 ? `${truncated.slice(0, 80)}…` : truncated;
+        deps.out.write(`[telegram] ↑ @${username}: ${outPreview}\n`);
       } catch (e) {
         deps.out.write(`[telegram] auto-reply send failed: ${e instanceof Error ? e.message : String(e)}\n`);
       }
@@ -263,6 +284,8 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
     ctx.out.write(`[telegram] enabled: ${cfg.enabled}\n`);
     ctx.out.write(`[telegram] boundUserId: ${cfg.boundUserId ?? "(unset)"}\n`);
     ctx.out.write(`[telegram] lastUpdateOffset: ${cfg.lastUpdateOffset}\n`);
+    // P-12 D-5: surface wire-level last-received timestamp.
+    ctx.out.write(`[telegram] lastReceivedAt: ${cfg.lastReceivedAt ?? "(none)"}\n`);
     ctx.out.write(`[telegram] stickyFallbackIp: ${cfg.stickyFallbackIp ?? "(none)"}\n`);
     ctx.out.write(`[telegram] running: ${ctx.pollerHandle?.running === true}\n`);
     return;

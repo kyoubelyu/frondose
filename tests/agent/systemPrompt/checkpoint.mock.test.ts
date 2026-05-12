@@ -94,12 +94,40 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
 
 // ─── T-Checkpoint.7 — character count budget ─────────────────────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 1500 characters (rough proxy for ~250-token budget per OQ-7; regression guard)", () => {
-  // Given: CHECKPOINT constant post-Step-4b; §6.4 content estimated ~1350 chars
-  // When: CHECKPOINT.length
-  // Then: <= 1500 — conservative ceiling preventing accidental bloat in future edits
+test("T-Checkpoint.7: CHECKPOINT.length is <= 1800 characters (P-12 D-2: budget raised from 1500 to 1800 to fit bidirectional-Telegram subsection; regression guard)", () => {
+  // Given: CHECKPOINT constant (1458 chars before P-12 D-3; ~1786 after D-3 subsection appended)
+  // When: CHECKPOINT.length measured
+  // Then: <= 1800 — D-2 ceiling with 14-char headroom preserves meaningful regression guard
   assert.ok(
-    CHECKPOINT.length <= 1500,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 1500-char budget (regression guard)`,
+    CHECKPOINT.length <= 1800,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 1800-char budget (P-12 D-2 regression guard)`,
+  );
+});
+
+// ─── T-Checkpoint.8 — bidirectional Telegram subsection content (P-12 D-3) ────
+
+test("T-Checkpoint.8: CHECKPOINT contains all 5 bidirectional-Telegram anchor substrings (P-12 D-3 — B-2 fix Step 3b: uppercase D in 'Do NOT include')", () => {
+  // Given: compiled CHECKPOINT string (post-builder Step 4b — D-3 appends the 4th subsection)
+  // When: String.includes() (case-sensitive) for each of the 5 locked §6.2 substrings
+  // Then: all 5 present — subsection title, TG_FROM header, TG_PHOTO media tag, auto-reply semantic, don't-echo instruction
+  assert.ok(
+    CHECKPOINT.includes("Bidirectional Telegram"),
+    `CHECKPOINT must contain "Bidirectional Telegram" (D-3 subsection title); len=${CHECKPOINT.length}`,
+  );
+  assert.ok(
+    CHECKPOINT.includes("[TG_FROM="),
+    `CHECKPOINT must contain "[TG_FROM=" (inbound DM header format); len=${CHECKPOINT.length}`,
+  );
+  assert.ok(
+    CHECKPOINT.includes("[TG_PHOTO="),
+    `CHECKPOINT must contain "[TG_PHOTO=" (media tag format); len=${CHECKPOINT.length}`,
+  );
+  assert.ok(
+    CHECKPOINT.includes("auto-pushed"),
+    `CHECKPOINT must contain "auto-pushed" (auto-reply semantic); len=${CHECKPOINT.length}`,
+  );
+  assert.ok(
+    CHECKPOINT.includes("Do NOT include"),
+    `CHECKPOINT must contain "Do NOT include" (uppercase D — don't-echo instruction, B-2 fix); len=${CHECKPOINT.length}`,
   );
 });

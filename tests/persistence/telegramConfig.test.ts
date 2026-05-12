@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -68,9 +68,9 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
   });
 
   it("T-Config.2: when the file exists with valid JSON, readTelegramConfig returns the parsed object exact-equal to the written values", () => {
-    // Given: file written with { enabled:true, boundUserId:12345, lastUpdateOffset:99, stickyFallbackIp:"149.154.166.110", pollTimeoutSec:30, pollBackoffSec:5 }
+    // Given: file written with all 7 fields including lastReceivedAt:null (P-12 D-5 schema addition)
     // When: readTelegramConfig reads it
-    // Then: parsed object deep-equals the written object
+    // Then: parsed object deep-equals the written object (including lastReceivedAt field)
     const { cfgPath, cleanup } = makeTmpDir();
     try {
       const cfg = {
@@ -80,6 +80,7 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
         stickyFallbackIp: "149.154.166.110",
         pollTimeoutSec: 30,
         pollBackoffSec: 5,
+        lastReceivedAt: null,
       };
       writeFileSync(cfgPath, JSON.stringify(cfg), "utf-8");
       const result = readTelegramConfig(cfgPath);
@@ -178,6 +179,64 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
       assert.notEqual(permissions, 0o600, "telegram.json must not be chmod 0600 (no secrets stored)");
       // Must at least be readable (not 0000)
       assert.ok(permissions > 0, "file must have some permissions");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Config.8: when readTelegramConfig parses a pre-P-12 config file (no lastReceivedAt field), the result has lastReceivedAt: null (Zod .optional().default(null) backfills missing field)", () => {
+    // Given: JSON file written with old-format config — no lastReceivedAt field at all
+    // When: readTelegramConfig(path) called with post-P-12 schema (builder Step 4b)
+    // Then: result.lastReceivedAt === null (Zod default(null) backfills; backward-compat preserved)
+    const { cfgPath, cleanup } = makeTmpDir();
+    try {
+      // Write pre-P-12 format: exactly the 6 fields that existed before D-5
+      writeFileSync(
+        cfgPath,
+        JSON.stringify({
+          enabled: false,
+          boundUserId: null,
+          lastUpdateOffset: 0,
+          stickyFallbackIp: null,
+          pollTimeoutSec: 30,
+          pollBackoffSec: 5,
+        }),
+        "utf-8",
+      );
+      const result = readTelegramConfig(cfgPath);
+      assert.equal(
+        result.lastReceivedAt,
+        null,
+        "pre-P-12 config (no lastReceivedAt field) must produce lastReceivedAt: null via Zod .optional().default(null)",
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Config.9: when writeTelegramConfig is called with lastReceivedAt: '2026-05-11T10:30:00.000Z', readTelegramConfig returns the same value verbatim (exact roundtrip)", () => {
+    // Given: TelegramConfig with lastReceivedAt timestamp set to a known ISO string
+    // When: writeTelegramConfig then readTelegramConfig
+    // Then: result.lastReceivedAt === "2026-05-11T10:30:00.000Z" AND raw JSON has the field verbatim
+    const { cfgPath, cleanup } = makeTmpDir();
+    try {
+      const ts = "2026-05-11T10:30:00.000Z";
+      const cfg = { ...DEFAULT_TELEGRAM_CONFIG, lastReceivedAt: ts };
+      writeTelegramConfig(cfg, cfgPath);
+      // Zod roundtrip
+      const result = readTelegramConfig(cfgPath);
+      assert.equal(
+        result.lastReceivedAt,
+        ts,
+        `readTelegramConfig must return lastReceivedAt="${ts}" verbatim; got: "${result.lastReceivedAt}"`,
+      );
+      // Raw JSON check — the string must be in the file without any transformation
+      const raw = JSON.parse(readFileSync(cfgPath, "utf-8")) as { lastReceivedAt?: string | null };
+      assert.equal(
+        raw.lastReceivedAt,
+        ts,
+        `raw JSON telegram.json must contain lastReceivedAt="${ts}" verbatim; got: "${raw.lastReceivedAt}"`,
+      );
     } finally {
       cleanup();
     }
