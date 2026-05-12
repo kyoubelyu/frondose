@@ -36,6 +36,8 @@ export async function runTelegramSubcommand(
     process.stdout.write(`[telegram] enabled: ${cfg.enabled}\n`);
     process.stdout.write(`[telegram] boundUserId: ${cfg.boundUserId ?? "(unset)"}\n`);
     process.stdout.write(`[telegram] lastUpdateOffset: ${cfg.lastUpdateOffset}\n`);
+    // P-12 D-5: surface wire-level last-received timestamp (parity with REPL slash output).
+    process.stdout.write(`[telegram] lastReceivedAt: ${cfg.lastReceivedAt ?? "(none)"}\n`);
     process.stdout.write(`[telegram] stickyFallbackIp: ${cfg.stickyFallbackIp ?? "(none)"}\n`);
     process.stdout.write(
       `[telegram] env: TOKEN=${process.env.TELEGRAM_TOKEN ? "set" : "unset"}, ` +

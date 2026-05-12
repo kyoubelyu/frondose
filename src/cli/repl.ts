@@ -64,13 +64,23 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     await opts.onStepFinish?.(step);
   };
 
+  // P-12 D-6 + B-3 fix: declare pollerHandle + pollerAbort BEFORE refreshStatus is defined.
+  // The closure body captures `let pollerHandle` by reference; placing the declarations earlier
+  // prevents TDZ (`let` bindings throw ReferenceError when accessed before their declaration line
+  // executes — NOT `undefined`). First refreshStatus() invocation at line 77 reads
+  // `pollerHandle === null` cleanly → `null?.running === true` evaluates to false. Subsequent
+  // re-bindings (poller start, /telegram on/off via onPollerStart) are observed by later invocations.
+  let pollerHandle: PollerHandle | null = null;
+  let pollerAbort: AbortController | null = null;
+
   // rev-3 D-18: status line. Construct once; no-op if not TTY.
   const statusLine = new StatusLine(out);
   const sessionId = (path: string) =>
     basename(path)
       .replace(/\.jsonl$/, "")
       .slice(0, 8);
-  const refreshStatus = () => statusLine.update(tokenBudget, opts.model, sessionId(sessionFileRef.path));
+  const refreshStatus = () =>
+    statusLine.update(tokenBudget, opts.model, sessionId(sessionFileRef.path), pollerHandle?.running === true);
   // SIGWINCH: terminal resize → recompute width + redraw.
   const onResize = () => statusLine.handleResize();
   process.stdout.on?.("resize", onResize);
@@ -98,12 +108,14 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     out,
   };
   // P-11 (D-7): telegram deps — same shape as cronDeps + telegram-specific fields.
+  // P-12 D-1: pass sessionFileRef (the mutable object) instead of sessionFileRef.path —
+  // background telegram turns observe rotation by `/new` because deps.sessionFile.path mutates.
   const telegramDeps: TelegramTurnDeps = {
     model: opts.model,
     system: opts.system,
     messages: opts.messages,
     tools: opts.tools,
-    sessionFile: sessionFileRef.path,
+    sessionFile: sessionFileRef,
     abortSignal: opts.abortSignal,
     onStepFinish: composedStepFinish,
     out,
@@ -121,8 +133,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   }
 
   // P-11 (D-7): start Telegram poller if config has it enabled AND env+bind ready.
-  let pollerHandle: PollerHandle | null = null;
-  let pollerAbort: AbortController | null = null;
+  // P-12 D-6 / B-3: pollerHandle + pollerAbort declarations moved before refreshStatus (line ~73) to avoid TDZ.
   const tgCfg = readTelegramConfig(effectiveTelegramConfigPath);
   if (tgCfg.enabled) {
     if (!process.env.TELEGRAM_TOKEN) {
@@ -246,8 +257,8 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     // Runs AFTER appendMessages + auto-compaction, BEFORE refreshStatus.
     // Refresh sessionFile in cronDeps in case /new rotated mid-turn.
     // P-11 (D-19): wrap drain in turnLock to serialize behind any in-flight telegram turn.
+    // P-12 D-1: telegramDeps.sessionFile is the sessionFileRef object — mutates in place, no refresh needed.
     cronDeps.sessionFile = sessionFileRef.path;
-    telegramDeps.sessionFile = sessionFileRef.path;
     await turnLock.run(() => drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps));
     if (opts.abortController?.signal.aborted) break;
 

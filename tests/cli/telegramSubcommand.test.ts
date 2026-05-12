@@ -127,10 +127,10 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     }
   });
 
-  it("T-CLI.tg.4: runTelegramSubcommand('status', {tcPath}) prints enabled, boundUserId, lastUpdateOffset, stickyFallbackIp, env var presence", async () => {
-    // Given: known telegram.json values; TELEGRAM_TOKEN env set
+  it("T-CLI.tg.4: runTelegramSubcommand('status', {tcPath}) prints enabled, boundUserId, lastUpdateOffset, stickyFallbackIp, env var presence, AND lastReceivedAt (P-12 D-5 NIT-1)", async () => {
+    // Given: known telegram.json values INCLUDING lastReceivedAt timestamp; TELEGRAM_TOKEN env set
     // When: runTelegramSubcommand("status", {tcPath}) called; stdout captured
-    // Then: output includes 'enabled:', 'boundUserId:', 'lastUpdateOffset:', 'TOKEN', 'CHAT_ID'
+    // Then: output includes 'enabled:', 'boundUserId:', 'lastUpdateOffset:', 'TOKEN', and '[telegram] lastReceivedAt: 2026-05-11T10:00:00Z'
     const { cfgPath, cleanup } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
@@ -140,6 +140,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
         pollBackoffSec: 5,
+        lastReceivedAt: "2026-05-11T10:00:00Z",
       });
       process.env.TELEGRAM_TOKEN = "my-test-tok";
       try {
@@ -152,6 +153,12 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
         assert.ok(
           stdout.includes("TOKEN") || stdout.includes("token"),
           `stdout must reference TOKEN env; got: "${stdout}"`,
+        );
+        // P-12 D-5 NIT-1: lastReceivedAt must be surfaced in status output
+        assert.ok(
+          stdout.match(/\[telegram\] lastReceivedAt: 2026-05-11T10:00:00Z/m) !== null ||
+            (stdout.includes("lastReceivedAt") && stdout.includes("2026-05-11T10:00:00Z")),
+          `stdout must contain lastReceivedAt timestamp; got: "${stdout.slice(0, 400)}"`,
         );
       } finally {
         delete process.env.TELEGRAM_TOKEN;
