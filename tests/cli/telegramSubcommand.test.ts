@@ -240,4 +240,21 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
       cleanup();
     }
   });
+
+  it("T-Nonint.3: 'bind' with userId arg (2-arg call, no prompter) still works after P-13 adds optional 3rd param", async () => {
+    // Given: pre-P-13 call pattern — runTelegramSubcommand("bind", { tcPath, userId }) with only 2 args
+    // When:  re-run against P-13 production (which adds optional prompter 3rd param with default=realPrompter)
+    // Then:  telegram.json.boundUserId written correctly; realPrompter (default) never invoked (args-present branch)
+
+    const { cfgPath, cleanup } = makeTmpCfgDir();
+    try {
+      writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
+
+      await captureStdout(() => runTelegramSubcommand("bind", { tcPath: cfgPath, userId: 77777 }));
+      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { boundUserId: number | null };
+      assert.equal(onDisk.boundUserId, 77777, "T-Nonint.3: boundUserId must be 77777 with 2-arg call pattern");
+    } finally {
+      cleanup();
+    }
+  });
 });

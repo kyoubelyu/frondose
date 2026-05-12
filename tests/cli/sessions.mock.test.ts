@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -191,7 +191,7 @@ test("T-Sessions3: runSessionsSubcommand continue updates mtime of target sessio
 // ─── T-Sessions4 — continue not-found → exit 1 ───────────────────────────────
 
 test("T-Sessions4: runSessionsSubcommand continue with nonexistent session-id exits 1 with error", async () => {
-  const { cleanup, sessionsRoot } = makeFakeSessionsEnv();
+  const { cleanup } = makeFakeSessionsEnv();
   try {
     // No sessions created.
     let exitCode: number | undefined;
@@ -269,6 +269,33 @@ test("T-Sessions5: runSessionsSubcommand new creates a fresh session file and pr
     });
     assert.ok(hashDirs.length >= 1, `T-Sessions5: at least one hash dir must be created; got ${hashDirs.length}`);
     console.log(`T-Sessions5: new session created: ${sessionId} ✓`);
+  } finally {
+    cleanup();
+  }
+});
+
+// ─── T-Nonint.2 — P-13 backward-compat regression scaffold ──────────────────
+
+test("T-Nonint.2: 'continue' with sessionId arg (2-arg call, no prompter) works after P-13 adds optional 3rd param", async () => {
+  // Given: pre-P-13 call pattern — runSessionsSubcommand("continue", { sessionId }) with only 2 args
+  // When:  re-run against P-13 production code (which adds optional prompter 3rd param with default=realPrompter)
+  // Then:  session mtime is updated; realPrompter (default) never invoked since args-present branch returns before interactive code
+
+  const { cleanup, sessionsRoot } = makeFakeSessionsEnv();
+  try {
+    const filePath = writeFakeSession(sessionsRoot, "nonintdeadbeef01", "2025-06-01T12-00-00-000Z", [
+      { role: "user", content: "Regression test session" },
+    ]);
+
+    // Back-date the file mtime so we can verify it gets bumped
+    const past = new Date("2020-01-01");
+    utimesSync(filePath, past, past);
+    const oldMtime = statSync(filePath).mtimeMs;
+
+    await captureStdout(() => runSessionsSubcommand("continue", { sessionId: "2025-06-01T12-00-00-000Z" }));
+
+    const newMtime = statSync(filePath).mtimeMs;
+    assert.ok(newMtime > oldMtime, `T-Nonint.2: mtime must update; old=${oldMtime} new=${newMtime}`);
   } finally {
     cleanup();
   }

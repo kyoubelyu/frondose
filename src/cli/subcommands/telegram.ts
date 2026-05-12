@@ -1,6 +1,7 @@
 /** P-11 D-9 (v0.4.6 rename): `mai telegram on|off|status|test|bind <user_id>` CLI subcommand handler. */
 import { readTelegramConfig, writeTelegramConfig } from "../../persistence/telegramConfig.js";
 import { telegramFetch } from "../../tools/telegram/transport.js";
+import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";
 
 export interface TelegramSubcommandOpts {
   /** Path to telegram.json. */
@@ -12,6 +13,8 @@ export interface TelegramSubcommandOpts {
 export async function runTelegramSubcommand(
   action: "on" | "off" | "status" | "test" | "bind",
   opts: TelegramSubcommandOpts,
+  // P-13 D-3: optional Prompter for interactive `bind` path.
+  prompter: Prompter = realPrompter,
 ): Promise<void> {
   const cfg = readTelegramConfig(opts.tcPath);
   if (action === "on") {
@@ -48,13 +51,73 @@ export async function runTelegramSubcommand(
     return;
   }
   if (action === "bind") {
-    if (opts.userId === undefined || Number.isNaN(opts.userId)) {
-      process.stderr.write("[telegram] bind: user_id required (integer)\n");
+    // P-13 D-7 5-step interactive flow when no positional userId + TTY.
+    let userId = opts.userId;
+    if (userId === undefined && isInteractive()) {
+      // Step 1: env check (D-7).
+      if (!process.env.TELEGRAM_TOKEN) {
+        printNoninteractiveGuidance(
+          "telegram bind",
+          "TELEGRAM_TOKEN env var",
+          "TELEGRAM_TOKEN=<bot-token> mai telegram bind <user_id>",
+        );
+        process.exit(1);
+      }
+      // Step 2: non-blocking getUpdates(timeout=0, limit=20) per D-7.
+      const senders = new Map<number, string>();
+      let fetchOk = false;
+      try {
+        const res = await telegramFetch(
+          `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}/getUpdates`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset: 0, limit: 20, timeout: 0, allowed_updates: ["message"] }),
+          },
+          { fallbackIp: cfg.stickyFallbackIp ?? undefined, proxyUrl: process.env.TELEGRAM_PROXY },
+        );
+        const j = (await res.json()) as {
+          ok: boolean;
+          result?: Array<{ message?: { from?: { id: number; username?: string; first_name?: string } } }>;
+        };
+        if (j.ok) {
+          fetchOk = true;
+          for (const upd of j.result ?? []) {
+            const from = upd.message?.from;
+            if (!from || senders.has(from.id)) continue;
+            const label = from.username ? `@${from.username}` : (from.first_name ?? `id${from.id}`);
+            senders.set(from.id, `${label} (ID: ${from.id})`);
+          }
+        }
+      } catch (_e) {
+        // fetchOk stays false → fall through to step 4 fallback.
+      }
+      // Step 3 + 4: select or fallback (D-7).
+      if (fetchOk && senders.size === 0) {
+        process.stdout.write("No recent senders found. DM your bot first, then re-run `mai telegram bind`.\n");
+        return;
+      }
+      if (fetchOk) {
+        const selected = await prompter.telegramUserSelect(senders);
+        if (selected !== null) userId = selected;
+      } else {
+        process.stdout.write("[telegram] getUpdates failed — falling back to manual input.\n");
+        const raw = await prompter.input("Enter Telegram user_id (integer): ");
+        const parsed = Number(raw.trim());
+        if (!Number.isInteger(parsed) || parsed <= 0) {
+          process.stderr.write(`[telegram bind] invalid user_id "${raw}" — must be positive integer.\n`);
+          process.exit(1);
+        }
+        userId = parsed;
+      }
+    }
+    if (userId === undefined || Number.isNaN(userId)) {
+      printNoninteractiveGuidance("telegram bind", "<user_id>", "<user_id-from-DM-to-bot>");
       process.exit(1);
     }
-    cfg.boundUserId = opts.userId;
+    cfg.boundUserId = userId;
     writeTelegramConfig(cfg, opts.tcPath);
-    process.stdout.write(`[telegram] boundUserId set to ${opts.userId}\n`);
+    process.stdout.write(`[telegram] boundUserId set to ${userId}\n`);
     return;
   }
   if (action === "test") {

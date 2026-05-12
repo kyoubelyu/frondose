@@ -3,6 +3,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { ExitPromptError } from "@inquirer/core";
 import type { CoreMessage } from "ai";
 import { Command } from "commander";
 import { HookRunner } from "../agent/hooks.js";
@@ -30,13 +31,30 @@ import { loadDotenv } from "./env.js";
 import { runIdentityBootstrap } from "./identity-init.js";
 import { runOneShot, runRepl } from "./repl.js";
 import { handleCronSlash } from "./replCron.js";
+import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
+import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
+import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
+
+/**
+ * P-13 D-2: canonical Ctrl-C catch helper. Every Commander action body that may
+ * invoke a prompt wraps via this — operator Ctrl-C during inquirer prompt throws
+ * ExitPromptError, which we treat as a clean cancel (exit 0, no stack trace).
+ */
+async function runWithExitGuard(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    if (e instanceof ExitPromptError) process.exit(0);
+    throw e;
+  }
+}
 
 interface CliOpts {
   model?: string;
@@ -227,26 +245,36 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
-  // P-7: `mai auth` — provider key management (~/.mai/auth.json).
+  // P-7 / P-13: `mai auth` — provider key management (~/.mai/auth.json).
+  // P-13 D-10: positional args become optional (`[name]`) so missing args + TTY
+  // trigger the interactive Prompter path inside runAuthSubcommand.
   const auth = program.command("auth").description("Provider key management (~/.mai/auth.json)");
   auth
-    .command("set <spec>")
+    .command("set [spec]")
     .option("--key <value>", "API key")
     .option("--base-url <url>", "Custom base URL (e.g. for DeepSeek's OpenAI-compat endpoint)")
-    .action(async (spec: string, cliOpts: { key?: string; baseUrl?: string }) => {
-      await runAuthSubcommand("set", { spec, key: cliOpts.key, baseUrl: cliOpts.baseUrl });
+    .action(async (spec: string | undefined, cliOpts: { key?: string; baseUrl?: string }) => {
+      await runWithExitGuard(async () => {
+        await runAuthSubcommand("set", { spec, key: cliOpts.key, baseUrl: cliOpts.baseUrl });
+      });
       process.exit(0);
     });
   auth.command("list").action(async () => {
-    await runAuthSubcommand("list", {});
+    await runWithExitGuard(async () => {
+      await runAuthSubcommand("list", {});
+    });
     process.exit(0);
   });
-  auth.command("remove <provider>").action(async (provider: string) => {
-    await runAuthSubcommand("remove", { provider });
+  auth.command("remove [provider]").action(async (provider: string | undefined) => {
+    await runWithExitGuard(async () => {
+      await runAuthSubcommand("remove", { provider });
+    });
     process.exit(0);
   });
-  auth.command("default <spec>").action(async (spec: string) => {
-    await runAuthSubcommand("default", { spec });
+  auth.command("default [spec]").action(async (spec: string | undefined) => {
+    await runWithExitGuard(async () => {
+      await runAuthSubcommand("default", { spec });
+    });
     process.exit(0);
   });
 
@@ -273,8 +301,10 @@ async function main(): Promise<void> {
       await runSessionsSubcommand("list", { json: cliOpts.json });
       process.exit(0);
     });
-  sessions.command("continue <id>").action(async (id: string) => {
-    await runSessionsSubcommand("continue", { sessionId: id });
+  sessions.command("continue [id]").action(async (id: string | undefined) => {
+    await runWithExitGuard(async () => {
+      await runSessionsSubcommand("continue", { sessionId: id });
+    });
     process.exit(0);
   });
   sessions.command("new").action(async () => {
@@ -306,8 +336,12 @@ async function main(): Promise<void> {
     await runTelegramSubcommand("test", { tcPath: telegramConfigPath });
     process.exit(0);
   });
-  tg.command("bind <user_id>").action(async (id: string) => {
-    await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId: Number(id) });
+  tg.command("bind [user_id]").action(async (id: string | undefined) => {
+    await runWithExitGuard(async () => {
+      // P-13 D-7: when id absent, runTelegramSubcommand's interactive bind flow handles it.
+      const userId = id === undefined ? undefined : Number(id);
+      await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId });
+    });
     process.exit(0);
   });
 
@@ -334,10 +368,45 @@ async function main(): Promise<void> {
     await handleCronSlash("/cron list", schedulePath, process.stdout);
     process.exit(0);
   });
-  cron.command("remove <id>").action(async (id: string) => {
-    await handleCronSlash(`/cron remove ${id}`, schedulePath, process.stdout);
+  // P-13 D-10 + B-1: optional [id] — when omitted + TTY, delegate to
+  // runCronRemoveInteractive (DI-injectable helper in subcommands/cronRemove.ts).
+  cron.command("remove [id]").action(async (id: string | undefined) => {
+    await runWithExitGuard(async () => {
+      let effectiveId = id;
+      if (!effectiveId) {
+        if (!isInteractive()) {
+          printNoninteractiveGuidance("cron remove", "<job-id>", "<job-id-from-mai-cron-list>");
+          process.exit(1);
+        }
+        const selected = await runCronRemoveInteractive(schedulePath);
+        if (selected === null) {
+          // Empty schedule, no selection, or operator declined confirm — clean exit.
+          process.exit(0);
+        }
+        effectiveId = selected;
+      }
+      await handleCronSlash(`/cron remove ${effectiveId}`, schedulePath, process.stdout);
+    });
     process.exit(0);
   });
+
+  // P-13 D-6: `mai setup` — interactive wizard (auth → identity → telegram → soul).
+  program
+    .command("setup")
+    .description("Interactive wizard: auth + identity + telegram + soul configuration")
+    .action(async () => {
+      await runWithExitGuard(async () => {
+        await runSetupSubcommand({
+          authPath: DEFAULT_AUTH_PATH(),
+          identityPath,
+          tcPath: telegramConfigPath,
+          schedulePath,
+          memoryDbPath,
+          cdpPort,
+        });
+      });
+      process.exit(0);
+    });
 
   await program.parseAsync(process.argv);
   // No code after parseAsync — root + sub actions run themselves.
