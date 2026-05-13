@@ -27,6 +27,7 @@ import {
 import { continueRecent, loadMessages } from "../persistence/session.js";
 import type { ControlSignals } from "../tools/index.js";
 import { makeAllTools } from "../tools/index.js";
+import { registerCrashHandlers } from "./crashLogger.js";
 import { loadDotenv } from "./env.js";
 import { runIdentityBootstrap } from "./identity-init.js";
 import { runOneShot, runRepl } from "./repl.js";
@@ -99,6 +100,9 @@ async function promptFreeAxesAndPersist(identityPath: string): Promise<void> {
 async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
+
+  // P-18 D-1: register crash handlers early — before any async work that could throw
+  registerCrashHandlers();
 
   // P-3 env reads (CDP layer): port + profile dir.
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
@@ -179,6 +183,15 @@ async function main(): Promise<void> {
       // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
       // Memory + identity tools work without Chrome.
       const linkedinSession = createLinkedinSession({ port: cdpPort, profileDir });
+
+      // P-18 D-2: periodic CDP health check — clears stale cache between idle periods
+      const heartbeatInterval = setInterval(() => {
+        linkedinSession.heartbeat().catch(() => {
+          /* best-effort; heartbeat failures are non-fatal */
+        });
+      }, 30_000);
+      // Allow Node to exit even if this interval is pending
+      heartbeatInterval.unref();
 
       // P-6: single AbortController for the binary lifetime (sticky once aborted —
       // a turn-N stop should prevent turn N+1 from starting). Wired into makeAllTools
