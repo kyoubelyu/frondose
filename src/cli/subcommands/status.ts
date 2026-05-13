@@ -3,8 +3,10 @@ import { existsSync, statSync } from "node:fs";
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained per src/cdp/types.ts precedent
 import CDP from "chrome-remote-interface";
 import { readAuth } from "../../persistence/auth.js";
+import { readGithubConfig } from "../../persistence/github.js";
 import { readIdentity } from "../../persistence/identity.js";
 import { readSchedule } from "../../persistence/schedule.js";
+import { readSearchConfig } from "../../persistence/search.js";
 import { readTelegramConfig } from "../../persistence/telegramConfig.js";
 
 export interface StatusOpts {
@@ -14,6 +16,8 @@ export interface StatusOpts {
   tcPath: string;
   memoryDbPath: string;
   cdpPort: number;
+  ghPath?: string;
+  searchPath?: string;
 }
 
 export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
@@ -51,7 +55,17 @@ export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
   // telegram
   const tg = readTelegramConfig(opts.tcPath);
   process.stdout.write(
-    `telegram: enabled=${tg.enabled}, boundUserId=${tg.boundUserId ?? "(unset)"}, offset=${tg.lastUpdateOffset}\n`,
+    `telegram: enabled=${tg.enabled}, boundUserId=${tg.boundUserId ?? "(unset)"}, offset=${tg.lastUpdateOffset}, proxy=${tg.proxyUrl ?? "(unset)"}\n`,
+  );
+
+  // github
+  const ghCfg = readGithubConfig(opts.ghPath);
+  process.stdout.write(`github: token=${ghCfg.token ? "***" : "(unset)"}, repo=${ghCfg.repo ?? "(unset)"}\n`);
+
+  // search
+  const sCfg = readSearchConfig(opts.searchPath);
+  process.stdout.write(
+    `search: brave=${sCfg.braveApiKey ? "***" : "(unset)"}, tavily=${sCfg.tavilyApiKey ? "***" : "(unset)"}\n`,
   );
 
   // cron

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { resolveModel } from "../../agent/modelResolver.js";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { assertFileReadable } from "../../linkedin/uploadAllowlist.js";
+import { readAuth } from "../../persistence/auth.js";
 
 const DEFAULT_VISION_MODEL = "anthropic:claude-sonnet-4-5";
 const DEFAULT_PROMPT = "Describe what you see, focusing on UI elements, text content, and notable structure.";
@@ -44,7 +45,8 @@ export function makeAnalyzeScreenshotTool() {
         const buffer = readFileSync(filePath);
         const ext = path.extname(filePath).toLowerCase();
         const mimeType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
-        const visionSpec = process.env.MAI_VISION_MODEL ?? DEFAULT_VISION_MODEL;
+        const auth = readAuth();
+        const visionSpec = process.env.MAI_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL;
         let model: LanguageModel;
         try {
           model = resolveModel({ factory: visionSpec });

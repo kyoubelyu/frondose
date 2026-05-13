@@ -121,7 +121,7 @@ export async function startTelegramPoller(
           {
             signal: abort.signal,
             fallbackIp: cfg.stickyFallbackIp ?? undefined,
-            proxyUrl: process.env.TELEGRAM_PROXY,
+            proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
             onFallbackSuccess: (ip) => {
               cfg.stickyFallbackIp = ip;
               writeTelegramConfig(cfg, deps.configPath);
@@ -195,7 +195,7 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
           (u, init) =>
             telegramFetch(u, init, {
               fallbackIp: cfg.stickyFallbackIp ?? undefined,
-              proxyUrl: process.env.TELEGRAM_PROXY,
+              proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
             }),
         );
         lines.push(mediaTagFor(field, localPath));
@@ -242,7 +242,7 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
         await sendTelegramMessage(token, chatId, truncated, (u, init) =>
           telegramFetch(u, init, {
             fallbackIp: cfg.stickyFallbackIp ?? undefined,
-            proxyUrl: process.env.TELEGRAM_PROXY,
+            proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
           }),
         );
         // P-12 D-4: visibility — operator sees the outbound reply after sendTelegramMessage succeeds.

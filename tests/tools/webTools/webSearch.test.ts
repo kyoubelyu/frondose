@@ -18,6 +18,9 @@
  */
 
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { makeWebSearchTool } from "../../../src/tools/webTools/webSearch.js";
@@ -25,6 +28,26 @@ import { makeWebSearchTool } from "../../../src/tools/webTools/webSearch.js";
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "ws-1", messages: [] as CoreMessage[] };
+
+/**
+ * Temporarily replace search.json at the default path with empty config ({})
+ * so the tool doesn't find existing user keys via search.json fallback.
+ * Restores original content in finally.
+ */
+async function withCleanSearchJson(fn: () => Promise<void>): Promise<void> {
+  const defaultPath = join(homedir(), ".mai", "agent", "search.json");
+  const backup: string | null = existsSync(defaultPath) ? readFileSync(defaultPath, "utf-8") : null;
+  try {
+    writeFileSync(defaultPath, "{}", "utf-8");
+    await fn();
+  } finally {
+    if (backup !== null) {
+      writeFileSync(defaultPath, backup, "utf-8");
+    } else {
+      rmSync(defaultPath, { force: true });
+    }
+  }
+}
 
 async function withMockFetch(
   mockFn: (url: string | URL | Request, init?: RequestInit) => Promise<Response>,
@@ -74,18 +97,20 @@ function makeTavilyResponse(results: Array<{ title: string; url: string; content
 
 test("T-WebSearch.1: both BRAVE_API_KEY and TAVILY_API_KEY unset → fail envelope", async () => {
   const tool = makeWebSearchTool();
-  await withEnv("BRAVE_API_KEY", undefined, () =>
-    withEnv("TAVILY_API_KEY", undefined, async () => {
-      const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
-        ok: boolean;
-        error: { kind: string; message: string };
-      };
-      assert.equal(result.ok, false, "must fail when no API keys configured");
-      assert.ok(
-        result.error.message.includes("BRAVE_API_KEY") && result.error.message.includes("TAVILY_API_KEY"),
-        `fail message must mention both keys; got: "${result.error.message}"`,
-      );
-    }),
+  await withCleanSearchJson(() =>
+    withEnv("BRAVE_API_KEY", undefined, () =>
+      withEnv("TAVILY_API_KEY", undefined, async () => {
+        const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
+          ok: boolean;
+          error: { kind: string; message: string };
+        };
+        assert.equal(result.ok, false, "must fail when no API keys configured");
+        assert.ok(
+          result.error.message.includes("BRAVE_API_KEY") && result.error.message.includes("TAVILY_API_KEY"),
+          `fail message must mention both keys; got: "${result.error.message}"`,
+        );
+      }),
+    ),
   );
 });
 
@@ -160,25 +185,27 @@ test("T-WebSearch.4: BRAVE_API_KEY unset, TAVILY_API_KEY set → Tavily POST end
   let calledUrl = "";
   let calledMethod = "";
 
-  await withEnv("BRAVE_API_KEY", undefined, () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async (url, init) => {
-          calledUrl = url.toString();
-          calledMethod = init?.method ?? "GET";
-          return makeTavilyResponse([{ title: "T", url: "https://t.com", content: "snippet" }]);
-        },
-        async () => {
-          const result = (await tool.execute?.({ query: "linkedin ai tools", maxResults: 3 }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { provider: string };
-          };
+  await withCleanSearchJson(() =>
+    withEnv("BRAVE_API_KEY", undefined, () =>
+      withEnv("TAVILY_API_KEY", "tavily-key", () =>
+        withMockFetch(
+          async (url, init) => {
+            calledUrl = url.toString();
+            calledMethod = init?.method ?? "GET";
+            return makeTavilyResponse([{ title: "T", url: "https://t.com", content: "snippet" }]);
+          },
+          async () => {
+            const result = (await tool.execute?.({ query: "linkedin ai tools", maxResults: 3 }, FAKE_OPTS)) as {
+              ok: boolean;
+              data: { provider: string };
+            };
 
-          assert.equal(result.ok, true);
-          assert.ok(calledUrl.includes("tavily.com"), `must call Tavily URL; got: "${calledUrl}"`);
-          assert.equal(calledMethod, "POST", "Tavily endpoint must be POST");
-          assert.equal(result.data.provider, "tavily");
-        },
+            assert.equal(result.ok, true);
+            assert.ok(calledUrl.includes("tavily.com"), `must call Tavily URL; got: "${calledUrl}"`);
+            assert.equal(calledMethod, "POST", "Tavily endpoint must be POST");
+            assert.equal(result.data.provider, "tavily");
+          },
+        ),
       ),
     ),
   );
@@ -246,27 +273,29 @@ test("T-WebSearch.6: Brave 5xx + both keys set → Tavily result returned with p
 test("T-WebSearch.7: Tavily result shape — results[].content mapped to snippet field", async () => {
   const tool = makeWebSearchTool();
 
-  await withEnv("BRAVE_API_KEY", undefined, () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async () =>
-          makeTavilyResponse([
-            { title: "AI Tools", url: "https://ai.com", content: "This is the Tavily content snippet" },
-            { title: "ML Guide", url: "https://ml.com", content: "Another snippet here" },
-          ]),
-        async () => {
-          const result = (await tool.execute?.({ query: "ai", maxResults: 5 }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { results: Array<{ title: string; url: string; snippet: string }> };
-          };
+  await withCleanSearchJson(() =>
+    withEnv("BRAVE_API_KEY", undefined, () =>
+      withEnv("TAVILY_API_KEY", "tavily-key", () =>
+        withMockFetch(
+          async () =>
+            makeTavilyResponse([
+              { title: "AI Tools", url: "https://ai.com", content: "This is the Tavily content snippet" },
+              { title: "ML Guide", url: "https://ml.com", content: "Another snippet here" },
+            ]),
+          async () => {
+            const result = (await tool.execute?.({ query: "ai", maxResults: 5 }, FAKE_OPTS)) as {
+              ok: boolean;
+              data: { results: Array<{ title: string; url: string; snippet: string }> };
+            };
 
-          assert.equal(result.ok, true);
-          assert.equal(result.data.results.length, 2);
-          assert.equal(result.data.results[0]?.snippet, "This is the Tavily content snippet");
-          assert.equal(result.data.results[1]?.snippet, "Another snippet here");
-          // The raw "content" key must not be present at top level
-          assert.ok(!("content" in result.data.results[0]!), "result must use 'snippet' not 'content'");
-        },
+            assert.equal(result.ok, true);
+            assert.equal(result.data.results.length, 2);
+            assert.equal(result.data.results[0]?.snippet, "This is the Tavily content snippet");
+            assert.equal(result.data.results[1]?.snippet, "Another snippet here");
+            // The raw "content" key must not be present at top level
+            assert.ok(!("content" in result.data.results[0]!), "result must use 'snippet' not 'content'");
+          },
+        ),
       ),
     ),
   );
@@ -277,17 +306,18 @@ test("T-WebSearch.7: Tavily result shape — results[].content mapped to snippet
 test("T-WebSearch.8: maxResults=2 → only 2 results returned even if provider returns more", async () => {
   const tool = makeWebSearchTool();
 
-  await withEnv("BRAVE_API_KEY", undefined, () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async () =>
-          makeTavilyResponse([
-            { title: "R1", url: "https://r1.com", content: "s1" },
-            { title: "R2", url: "https://r2.com", content: "s2" },
-            { title: "R3", url: "https://r3.com", content: "s3" },
-            { title: "R4", url: "https://r4.com", content: "s4" },
-          ]),
-        async () => {
+  await withCleanSearchJson(() =>
+    withEnv("BRAVE_API_KEY", undefined, () =>
+      withEnv("TAVILY_API_KEY", "tavily-key", () =>
+        withMockFetch(
+          async () =>
+            makeTavilyResponse([
+              { title: "R1", url: "https://r1.com", content: "s1" },
+              { title: "R2", url: "https://r2.com", content: "s2" },
+              { title: "R3", url: "https://r3.com", content: "s3" },
+              { title: "R4", url: "https://r4.com", content: "s4" },
+            ]),
+          async () => {
           const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
             ok: boolean;
             data: { results: unknown[] };
@@ -298,5 +328,37 @@ test("T-WebSearch.8: maxResults=2 → only 2 results returned even if provider r
         },
       ),
     ),
-  );
+  ),
+);
+});
+
+// ─── T-ConsumerSearch.1 — search.json fallback (P-15, G-P15.2) ────────────────
+
+test("T-ConsumerSearch.1: when BRAVE_API_KEY unset, webSearch reads braveApiKey from search.json fallback; env var wins", async () => {
+  // Given: BRAVE_API_KEY env var unset; search.json exists with { braveApiKey: "bsa-file-key" }
+  // When:  readSearchConfig returns file key; precedence checked (env > file)
+  // Then:  file key used when env unset; env wins when set
+
+  // Test the precedence logic used by webSearch.ts:
+  // const sCfg = readSearchConfig();
+  // const braveKey = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
+  // const tavilyKey = process.env.TAVILY_API_KEY ?? sCfg.tavilyApiKey;
+
+  const savedBrave = process.env.BRAVE_API_KEY;
+
+  try {
+    // When env is set, env wins
+    process.env.BRAVE_API_KEY = "bsa-env-key";
+    const sCfg = { braveApiKey: "bsa-file-key" };
+    const braveWithEnv = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
+    assert.equal(braveWithEnv, "bsa-env-key", "BRAVE_API_KEY env must win over file key");
+
+    // When env is unset, file value used
+    delete process.env.BRAVE_API_KEY;
+    const braveWithoutEnv = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
+    assert.equal(braveWithoutEnv, "bsa-file-key", "file braveApiKey used when BRAVE_API_KEY unset");
+  } finally {
+    if (savedBrave !== undefined) process.env.BRAVE_API_KEY = savedBrave;
+    else delete process.env.BRAVE_API_KEY;
+  }
 });

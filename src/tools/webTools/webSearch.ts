@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
+import { readSearchConfig } from "../../persistence/search.js";
 
 const webSearchParams = z.object({
   query: z.string().min(2).max(400).describe("Search query string."),
@@ -30,8 +31,9 @@ export function makeWebSearchTool() {
       "Use for ICP/company/industry research outside LinkedIn.",
     parameters: webSearchParams,
     execute: async ({ query, maxResults }) => {
-      const braveKey = process.env.BRAVE_API_KEY;
-      const tavilyKey = process.env.TAVILY_API_KEY;
+      const sCfg = readSearchConfig();
+      const braveKey = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
+      const tavilyKey = process.env.TAVILY_API_KEY ?? sCfg.tavilyApiKey;
       if (!braveKey && !tavilyKey) {
         return fail(
           "web_search",
