@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { launch as chromeLaunch } from "chrome-launcher";
+import { DEFAULT_FLAGS } from "chrome-launcher/dist/flags.js";
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
 import type { ChromeHandle, ChromeLaunchOptions } from "./types.js";
@@ -97,10 +98,21 @@ export async function ensureChrome(opts: ChromeLaunchOptions = {}): Promise<Chro
     // Not reachable; launch.
   }
 
+  // P-15 fix: chrome-launcher's DEFAULT_FLAGS include --password-store=basic and
+  // --use-mock-keychain. When the profile is shared with mai-browser (which does
+  // NOT use these flags), cookie encryption via mock keychain is incompatible with
+  // cookies previously encrypted via the system keychain — li_at (LinkedIn auth)
+  // becomes unreadable and the operator is silently logged out. Filter both out
+  // and use --password-store=default instead so cookie encryption stays compatible.
+  const persistentFlags = DEFAULT_FLAGS.filter(
+    (f: string) => f !== "--password-store=basic" && f !== "--use-mock-keychain",
+  );
+  persistentFlags.push("--password-store=default");
   const launched = await launchFn({
     port,
     userDataDir: profileDir,
-    chromeFlags: opts.chromeFlags ?? [],
+    chromeFlags: [...persistentFlags, ...(opts.chromeFlags ?? [])],
+    ignoreDefaultFlags: true,
     handleSIGINT: true,
   });
 
