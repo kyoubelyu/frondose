@@ -132,6 +132,13 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     return;
   }
 
+  // P-19 D-1: background cron poll — fires every 60s.
+  // Placed after abort gate: interval must NOT be created if boot drain already aborted.
+  const cronInterval = setInterval(() => {
+    turnLock.run(() => drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps));
+  }, 60_000);
+  cronInterval.unref();
+
   // P-11 (D-7): start Telegram poller if config has it enabled AND env+bind ready.
   // P-12 D-6 / B-3: pollerHandle + pollerAbort declarations moved before refreshStatus (line ~73) to avoid TDZ.
   const tgCfg = readTelegramConfig(effectiveTelegramConfigPath);
@@ -271,6 +278,8 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   statusLine.dispose();
   // P-11 (D-19): clean up Telegram poller on REPL exit.
   pollerAbort?.abort();
+  // P-19 D-1: clean up background cron ticker on REPL exit.
+  clearInterval(cronInterval);
 }
 
 function extractAssistantText(turnMessages: CoreMessage[]): string {

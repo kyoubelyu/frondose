@@ -204,31 +204,45 @@ describe("nextRunAfter — next firing time computation", () => {
     assert.equal(result.toISOString(), "2026-05-10T09:30:00.000Z");
   });
 
-  it("T-Parse.10: when expr is '0 9 * * *' and now=2026-05-10T08:59:59Z, nextRunAfter returns 2026-05-10T09:00:00Z", () => {
-    // Given: daily-at-09:00 expr + now is 1 second before the firing boundary
-    // When: nextRunAfter(parsed, new Date("2026-05-10T08:59:59Z"))
-    // Then: returned Date equals 2026-05-10T09:00:00.000Z (today's fire)
+  it("T-Parse.10: when expr is '0 9 * * *' and now=2026-05-10T08:59:59 local (1s before 09:00), nextRunAfter returns today's 09:00 local (local-time Date construction)", () => {
+    // Given: daily-at-09:00 expr + now is 1 second before the firing boundary (local-time constructor)
+    // When: nextRunAfter(parsed, new Date(2026, 4, 10, 8, 59, 59))
+    // Then: returned Date equals 09:00 local same day
     const parsed = parseCronExpr("0 9 * * *");
-    const result = nextRunAfter(parsed, new Date("2026-05-10T08:59:59Z"));
-    assert.equal(result.toISOString(), "2026-05-10T09:00:00.000Z");
+    const result = nextRunAfter(parsed, new Date(2026, 4, 10, 8, 59, 59));
+    assert.equal(result.getTime(), new Date(2026, 4, 10, 9, 0, 0).getTime());
   });
 
-  it("T-Parse.11: when expr is '0 9 * * *' and now=2026-05-10T09:00:00Z (exactly), nextRunAfter returns 2026-05-11T09:00:00Z (strict > semantics)", () => {
-    // Given: daily-at-09:00 expr + now exactly equals the firing boundary
-    // When: nextRunAfter(parsed, new Date("2026-05-10T09:00:00Z"))
-    // Then: returns TOMORROW's 09:00:00Z — NOT today's (strict greater-than: "after now")
+  it("T-Parse.11: when expr is '0 9 * * *' and now=2026-05-10T09:00:00 local (exactly), nextRunAfter returns 2026-05-11T09:00:00 local (strict > semantics)", () => {
+    // Given: daily-at-09:00 expr + now exactly equals the firing boundary (local-time constructor)
+    // When: nextRunAfter(parsed, new Date(2026, 4, 10, 9, 0, 0))
+    // Then: returns NEXT day's 09:00 local — NOT today's (strict greater-than: "after now")
     const parsed = parseCronExpr("0 9 * * *");
-    const result = nextRunAfter(parsed, new Date("2026-05-10T09:00:00Z"));
-    assert.equal(result.toISOString(), "2026-05-11T09:00:00.000Z");
+    const result = nextRunAfter(parsed, new Date(2026, 4, 10, 9, 0, 0));
+    assert.equal(result.getTime(), new Date(2026, 4, 11, 9, 0, 0).getTime());
   });
 
-  it("T-Parse.12: when expr is '0 9 * * *' and now=2026-05-10T15:00:00Z (past today's fire), nextRunAfter returns 2026-05-11T09:00:00Z", () => {
-    // Given: daily-at-09:00 expr + now is well past today's firing time
-    // When: nextRunAfter(parsed, new Date("2026-05-10T15:00:00Z"))
-    // Then: returns next day's 09:00:00.000Z
+  it("T-Parse.12: when expr is '0 9 * * *' and now=2026-05-10T15:00:00 local (past today's fire), nextRunAfter returns 2026-05-11T09:00:00 local", () => {
+    // Given: daily-at-09:00 expr + now is well past today's firing time (local-time constructor)
+    // When: nextRunAfter(parsed, new Date(2026, 4, 10, 15, 0, 0))
+    // Then: returns next day's 09:00 local
     const parsed = parseCronExpr("0 9 * * *");
-    const result = nextRunAfter(parsed, new Date("2026-05-10T15:00:00Z"));
-    assert.equal(result.toISOString(), "2026-05-11T09:00:00.000Z");
+    const result = nextRunAfter(parsed, new Date(2026, 4, 10, 15, 0, 0));
+    assert.equal(result.getTime(), new Date(2026, 4, 11, 9, 0, 0).getTime());
+  });
+
+  it('T-SchedLocal.1: when nextRunAfter is called with cron "30 14 * * *" and now=14:29:59 local (1s before 14:30), returns 14:30 local — proving matches() uses local getHours/getMinutes', () => {
+    // Given: a cron expression "30 14 * * *" (14:30 local) and a Date at 14:29:59 local (1s before)
+    // When:  nextRunAfter(parsedCronExpr("30 14 * * *"), dateAt14_29_59Local)
+    // Then:  returns 14:30 local same day (which would have been false under UTC, since 06:29:59 UTC → next would be UTC 14:30 = local 22:30)
+    const parsed = parseCronExpr("30 14 * * *");
+    const now = new Date("2026-05-13T14:29:59+08:00");
+    const result = nextRunAfter(parsed, now);
+    assert.equal(
+      result.getTime(),
+      new Date("2026-05-13T14:30:00+08:00").getTime(),
+      "nextRunAfter must return 14:30 local same day (1s before 14:30)",
+    );
   });
 });
 
@@ -413,6 +427,27 @@ describe("findDueJobs — filtering due records", () => {
     const result = findDueJobs([r], new Date("2026-05-10T09:30:00Z"));
     assert.deepEqual(result, []);
   });
+
+  it('T-SchedLocal.2: when findDueJobs is called at 14:25 local for a "30 14 * * *" job (due at 14:30), returns [] — but at 14:31 local, returns the job', () => {
+    // Given: a recurring record with cron "30 14 * * *" and nextRunAt set to today's 14:30 local
+    // When:  findDueJobs([record], nowAt14_25Local) is called at 14:25 local
+    // Then:  returns [] (not due yet)
+    // When:  findDueJobs([record], nowAt14_31Local) is called at 14:31 local
+    // Then:  returns [record] (due — 14:30 has passed)
+    const record = makeRecord({
+      cronExpr: "30 14 * * *",
+      nextRunAt: new Date("2026-05-13T14:30:00+08:00").toISOString(),
+    });
+
+    const now14_25 = new Date("2026-05-13T14:25:00+08:00");
+    const notDue = findDueJobs([record], now14_25);
+    assert.deepEqual(notDue, [], "at 14:25 local, job with nextRunAt=14:30 must NOT be due yet");
+
+    const now14_31 = new Date("2026-05-13T14:31:00+08:00");
+    const isDue = findDueJobs([record], now14_31);
+    assert.equal(isDue.length, 1, "at 14:31 local, job with nextRunAt=14:30 must be due");
+    assert.deepEqual(isDue[0], record, "the returned record must be the original record");
+  });
 });
 
 describe("markRan — updating records after firing", () => {
@@ -425,7 +460,9 @@ describe("markRan — updating records after firing", () => {
     const updated = markRan(r, fireDate);
     assert.ok(updated !== null, "recurring markRan must NOT return null");
     assert.equal(updated!.lastRunAt, "2026-05-10T09:00:00.000Z");
-    assert.equal(updated!.nextRunAt, "2026-05-11T09:00:00.000Z");
+    // With local-time matching (Asia/Hong_Kong, UTC+8):
+    // fireDate=09:00Z = 17:00 local; next "0 9" is tomorrow 09:00 local = 01:00Z
+    assert.equal(updated!.nextRunAt, "2026-05-11T01:00:00.000Z");
     // All other fields preserved
     assert.equal(updated!.id, r.id);
     assert.equal(updated!.task, r.task);
