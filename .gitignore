@@ -19,10 +19,8 @@ sessions/
 *.sqlite3
 *.db
 
-# Personal/per-machine overrides only — agents/, settings.json (team-shared) stay tracked.
-.claude/settings.local.json
-.claude/cache/
-.claude/projects/
+# Claude Code local artifacts — not shipped.
+.claude/
 
 # Phase Gate Matrix process documents — local only, not shipped.
 docs/
