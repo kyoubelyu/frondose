@@ -233,3 +233,72 @@ test("runStatusSubcommand (G-P11.17)", { concurrency: 1 }, async (t) => {
     },
   );
 });
+
+// ─── T-Status.2 — P-15 github + search + proxy lines ──────────────────────
+
+test("T-Status.2: when github.json + search.json exist AND telegram.json has proxyUrl, output includes github/search/telegram proxy lines", async () => {
+  // Given: github.json with { repo: "own/r" }; search.json with { braveApiKey: "bsa-xxx" };
+  //        telegram.json with { proxyUrl: "http://p:7890" }
+  // When:  runStatusSubcommand called with ghPath + searchPath + tcPath pointing to these
+  // Then:  output includes "github:", "search:", and "telegram:" with proxy=http://p:7890
+
+  const { dir, cleanup } = makeTmpDir();
+  try {
+    const authPath = join(dir, "auth.json");
+    const identityPath = join(dir, "identity.json");
+    const schedulePath = join(dir, "schedule.jsonl");
+    const tcPath = join(dir, "telegram.json");
+    const memoryDbPath = join(dir, "memory.sqlite");
+    const ghPath = join(dir, "github.json");
+    const searchPath = join(dir, "search.json");
+
+    // Write minimal config files
+    writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "x" } }, default: "anthropic" }), "utf-8");
+    writeFileSync(
+      identityPath,
+      JSON.stringify({ fullName: "Test", role: "Dev", company: "Acme", updatedAt: new Date().toISOString() }),
+      "utf-8",
+    );
+    writeFileSync(schedulePath, "", "utf-8");
+    writeFileSync(memoryDbPath, Buffer.alloc(4096), "binary");
+
+    // P-15 files
+    writeFileSync(ghPath, JSON.stringify({ repo: "own/r", token: "ghp_test" }), "utf-8");
+    writeFileSync(searchPath, JSON.stringify({ braveApiKey: "bsa-xxx" }), "utf-8");
+    writeFileSync(
+      tcPath,
+      JSON.stringify({
+        enabled: true,
+        boundUserId: 123,
+        lastUpdateOffset: 0,
+        stickyFallbackIp: null,
+        proxyUrl: "http://p:7890",
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+      }),
+      "utf-8",
+    );
+
+    const output = await captureStdout(async () => {
+      await runStatusSubcommand({
+        authPath,
+        identityPath,
+        schedulePath,
+        tcPath,
+        memoryDbPath,
+        cdpPort: DEAD_CDP_PORT,
+        ghPath,
+        searchPath,
+      });
+    });
+
+    assert.ok(output.includes("github:"), `output must contain "github:"; got: "${output.slice(0, 400)}"`);
+    assert.ok(output.includes("search:"), `output must contain "search:"; got: "${output.slice(0, 400)}"`);
+    assert.ok(
+      output.includes("proxy=http://p:7890") || output.includes("proxy: http://p:7890"),
+      `output must contain proxy URL; got: "${output.slice(0, 400)}"`,
+    );
+  } finally {
+    cleanup();
+  }
+});

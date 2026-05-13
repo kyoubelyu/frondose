@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
+import { readGithubConfig } from "../../persistence/github.js";
 
 const ghIssueParams = z.object({
   title: z.string().min(1).max(256).describe("Issue title. The dedup_key typically appears here."),
@@ -20,8 +21,8 @@ export type GhIssueOpts = {};
  * Build the gh_issue Vercel tool. Creates a GitHub issue via REST API, with
  * agent-side dedup against existing open issues whose title contains dedup_key.
  *
- * Reads GH_TOKEN + GITHUB_REPO from process.env on first execute. Graceful
- * degradation when env unset.
+ * Reads GH_TOKEN + GITHUB_REPO from process.env (or ~/.mai/agent/github.json fallback).
+ * Graceful degradation when both unset.
  */
 export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
   return tool({
@@ -32,8 +33,9 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
     parameters: ghIssueParams,
     execute: async (params) => {
       try {
-        const token = process.env.GH_TOKEN;
-        const repo = process.env.GITHUB_REPO;
+        const ghCfg = readGithubConfig();
+        const token = process.env.GH_TOKEN ?? ghCfg.token;
+        const repo = process.env.GITHUB_REPO ?? ghCfg.repo;
         if (!token) {
           return {
             ok: false,

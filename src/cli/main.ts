@@ -34,7 +34,9 @@ import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
 import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
+import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
+import { runSearchSubcommand } from "./subcommands/search.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
@@ -342,6 +344,56 @@ async function main(): Promise<void> {
       const userId = id === undefined ? undefined : Number(id);
       await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId });
     });
+    process.exit(0);
+  });
+  tg.command("proxy [url]")
+    .option("--unset", "Clear proxy URL")
+    .action(async (url: string | undefined, cliOpts: { unset?: boolean }) => {
+      await runTelegramSubcommand("proxy", {
+        tcPath: telegramConfigPath,
+        proxyUrl: url,
+        unsetProxy: cliOpts.unset ?? false,
+      });
+      process.exit(0);
+    });
+
+  // P-15: `mai gh` — GitHub issue tool configuration
+  const gh = program.command("gh").description("GitHub issue tool configuration");
+  gh.command("set [token]")
+    .option("--repo <owner/repo>", "GitHub repo (format owner/repo)")
+    .action(async (token: string | undefined, cliOpts: { repo?: string }) => {
+      await runWithExitGuard(async () => {
+        await runGhSubcommand("set", { token, repo: cliOpts.repo });
+      });
+      process.exit(0);
+    });
+  gh.command("status").action(async () => {
+    await runGhSubcommand("status", {});
+    process.exit(0);
+  });
+  gh.command("remove").action(async () => {
+    await runGhSubcommand("remove", {});
+    process.exit(0);
+  });
+
+  // P-15: `mai search` — web search API key management
+  const search = program.command("search").description("Web search API key management");
+  search
+    .command("set")
+    .option("--brave <key>", "Brave Search API key")
+    .option("--tavily <key>", "Tavily Search API key")
+    .action(async (cliOpts: { brave?: string; tavily?: string }) => {
+      await runWithExitGuard(async () => {
+        await runSearchSubcommand("set", { braveApiKey: cliOpts.brave, tavilyApiKey: cliOpts.tavily });
+      });
+      process.exit(0);
+    });
+  search.command("status").action(async () => {
+    await runSearchSubcommand("status", {});
+    process.exit(0);
+  });
+  search.command("remove").action(async () => {
+    await runSearchSubcommand("remove", {});
     process.exit(0);
   });
 

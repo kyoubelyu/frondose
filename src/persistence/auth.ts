@@ -12,6 +12,7 @@ const providerEntrySchema = z.object({
 
 export const authJsonSchema = z.object({
   default: z.string().min(1).optional(),
+  visionModel: z.string().min(1).optional(),
   providers: z.record(z.string().min(1), providerEntrySchema).optional(),
 });
 export type AuthJson = z.infer<typeof authJsonSchema>;
@@ -62,6 +63,11 @@ export function writeAuth(auth: AuthJson, path: string = DEFAULT_AUTH_PATH()): v
 export function readAuthJsonKey(provider: string, path: string = DEFAULT_AUTH_PATH()): string | undefined {
   const auth = readAuth(path);
   return auth?.providers?.[provider]?.key;
+}
+
+export function readAuthJsonVisionModel(path: string = DEFAULT_AUTH_PATH()): string | undefined {
+  const auth = readAuth(path);
+  return auth?.visionModel;
 }
 
 /** Mask an API key for `mai auth list` output: keep last 4 chars; replace middle with stars. */
