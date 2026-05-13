@@ -23,7 +23,8 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
 
   return {
     getOrInitClient(): Promise<CdpClient> {
-      if (cached) return Promise.resolve(cached);
+      if (cached && cached.isConnected()) return Promise.resolve(cached);
+      if (!cached?.isConnected()) cached = undefined;
       if (initPromise) return initPromise;
       const bootPromise = (async (): Promise<CdpClient> => {
         const handle = await ensureChrome(opts);

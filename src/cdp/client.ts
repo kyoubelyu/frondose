@@ -223,6 +223,16 @@ export class CdpClient {
     return this.refMap;
   }
 
+  /** True if the underlying WebSocket is connected and ready. */
+  isConnected(): boolean {
+    try {
+      const ws = this.client._ws;
+      return ws !== null && ws !== undefined && ws.readyState === 1; // WebSocket.OPEN
+    } catch {
+      return false;
+    }
+  }
+
   /** Close the underlying CDP WebSocket (does NOT kill Chrome). */
   async close(): Promise<void> {
     await this.client.close();
