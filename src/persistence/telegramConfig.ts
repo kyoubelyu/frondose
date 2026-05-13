@@ -13,6 +13,7 @@ export const telegramConfigSchema = z.object({
   boundUserId: z.number().int().nullable().default(null),
   lastUpdateOffset: z.number().int().min(0),
   stickyFallbackIp: z.string().nullable(),
+  proxyUrl: z.string().nullable().default(null),
   pollTimeoutSec: z.number().int().min(1).max(60),
   pollBackoffSec: z.number().int().min(1).max(60),
   // P-12 D-5: optional + default(null) preserves forward-compat with pre-P-12 telegram.json.
@@ -25,6 +26,7 @@ export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   boundUserId: null,
   lastUpdateOffset: 0,
   stickyFallbackIp: null,
+  proxyUrl: null,
   pollTimeoutSec: 30,
   pollBackoffSec: 5,
   lastReceivedAt: null,

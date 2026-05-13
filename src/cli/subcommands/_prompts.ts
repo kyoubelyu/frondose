@@ -14,7 +14,9 @@
 import { existsSync } from "node:fs";
 import { checkbox, input, confirm as inquirerConfirm, password, select } from "@inquirer/prompts";
 import { readAuth } from "../../persistence/auth.js";
+import { DEFAULT_GITHUB_CONFIG_PATH, readGithubConfig } from "../../persistence/github.js";
 import { readIdentity } from "../../persistence/identity.js";
+import { DEFAULT_SEARCH_CONFIG_PATH, readSearchConfig } from "../../persistence/search.js";
 import type { ScheduleRecord } from "../../persistence/schedule.js";
 import type { SessionEntry } from "../../persistence/session.js";
 import { readTelegramConfig } from "../../persistence/telegramConfig.js";
@@ -138,4 +140,9 @@ export function isTelegramConfigured(tcPath: string): boolean {
 export function isSoulConfigured(identityPath: string): boolean {
   const rec = readIdentity(identityPath);
   return !!rec && !!rec.freeAxes;
+}
+export function isIntegrationsConfigured(ghPath?: string, searchPath?: string): boolean {
+  const gh = readGithubConfig(ghPath ?? DEFAULT_GITHUB_CONFIG_PATH());
+  const sc = readSearchConfig(searchPath ?? DEFAULT_SEARCH_CONFIG_PATH());
+  return !!(gh.token || gh.repo || sc.braveApiKey || sc.tavilyApiKey);
 }

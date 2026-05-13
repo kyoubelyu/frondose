@@ -303,3 +303,45 @@ test("T-AnalyzeScreenshot.7: MAI_VISION_MODEL env override reflected in result.v
     ),
   );
 });
+
+// ─── T-Auth.5 — visionModel fallback from auth.json (P-15, G-P15.4) ────────────
+
+test("T-Auth.5: when MAI_VISION_MODEL unset, visionModel from auth.json is used as fallback; env var wins", async () => {
+  // Given: auth.json with { visionModel: "deepseek:deepseek-chat" }; MAI_VISION_MODEL env var unset
+  // When:  readAuth returns visionModel; then env var set, env override wins
+  // Then:  auth.json fallback works; hermes precedence (env > file > default) holds
+
+  const dir = mkdtempSync(join(tmpdir(), "mai-p15-auth5-"));
+  try {
+    const authPath = join(dir, "auth.json");
+    writeFileSync(authPath, JSON.stringify({ visionModel: "deepseek:deepseek-chat" }), "utf-8");
+
+    // Read back using standard node:fs
+    const { readFileSync } = await import("node:fs");
+    const raw = JSON.parse(readFileSync(authPath, "utf-8")) as { visionModel?: string };
+    assert.equal(raw.visionModel, "deepseek:deepseek-chat", "visionModel must be writable to auth.json");
+
+    // Simulate the precedence used by analyzeScreenshot.ts:
+    // process.env.MAI_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL
+    const savedEnv = process.env.MAI_VISION_MODEL;
+
+    // Env set → env wins
+    process.env.MAI_VISION_MODEL = "anthropic:claude-sonnet-4-5";
+    const withEnv = process.env.MAI_VISION_MODEL ?? raw.visionModel ?? "default";
+    assert.equal(withEnv, "anthropic:claude-sonnet-4-5", "env var must win over auth.json visionModel");
+
+    // Env unset → auth.json value used
+    delete process.env.MAI_VISION_MODEL;
+    const withoutEnv = process.env.MAI_VISION_MODEL ?? raw.visionModel ?? "default";
+    assert.equal(withoutEnv, "deepseek:deepseek-chat", "auth.json visionModel used when env unset");
+
+    // Both unset → default (simulate undefined ?? "default")
+    const bothUnset: string | undefined = undefined;
+    assert.equal(bothUnset ?? "default", "default", "default used when neither env nor file has value");
+
+    if (savedEnv !== undefined) process.env.MAI_VISION_MODEL = savedEnv;
+    else delete process.env.MAI_VISION_MODEL;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

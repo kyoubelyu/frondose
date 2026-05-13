@@ -14,6 +14,7 @@ import { applyIdentityPatch, identityRecordSchema, readIdentity, writeIdentity }
 import {
   isAuthConfigured,
   isIdentityConfigured,
+  isIntegrationsConfigured,
   isInteractive,
   isSoulConfigured,
   isTelegramConfigured,
@@ -21,7 +22,9 @@ import {
   realPrompter,
 } from "./_prompts.js";
 import { runAuthSubcommand } from "./auth.js";
+import { runGhSubcommand } from "./gh.js";
 import { runIdentitySubcommand } from "./identity.js";
+import { runSearchSubcommand } from "./search.js";
 import { runStatusSubcommand } from "./status.js";
 import { runTelegramSubcommand } from "./telegram.js";
 
@@ -34,7 +37,7 @@ export interface SetupSubcommandOpts {
   cdpPort: number;
 }
 
-const SECTION_ORDER = ["auth", "identity", "telegram", "soul"] as const;
+const SECTION_ORDER = ["auth", "identity", "telegram", "soul", "integrations"] as const;
 type SectionKey = (typeof SECTION_ORDER)[number];
 
 export async function runSetupSubcommand(opts: SetupSubcommandOpts, prompter: Prompter = realPrompter): Promise<void> {
@@ -65,6 +68,11 @@ export async function runSetupSubcommand(opts: SetupSubcommandOpts, prompter: Pr
     },
     { name: "telegram — bind Telegram user_id", value: "telegram", checked: !isTelegramConfigured(opts.tcPath) },
     { name: "soul     — 4 methodology habit axes", value: "soul", checked: !isSoulConfigured(opts.identityPath) },
+    {
+      name: "integrations — GitHub + web search API keys",
+      value: "integrations",
+      checked: !isIntegrationsConfigured(),
+    },
   ];
 
   const selected = (await prompter.checkboxSections(checkboxChoices)) as SectionKey[];
@@ -85,6 +93,9 @@ export async function runSetupSubcommand(opts: SetupSubcommandOpts, prompter: Pr
         break;
       case "soul":
         await runSoulSection(opts, prompter);
+        break;
+      case "integrations":
+        await runIntegrationsSection(opts, prompter);
         break;
     }
   }
@@ -126,6 +137,16 @@ async function runTelegramSection(opts: SetupSubcommandOpts, prompter: Prompter)
     if (!reconfig) return;
   }
   await runTelegramSubcommand("bind", { tcPath: opts.tcPath }, prompter);
+}
+
+async function runIntegrationsSection(_opts: SetupSubcommandOpts, prompter: Prompter): Promise<void> {
+  if (isIntegrationsConfigured()) {
+    const reconfig = await prompter.confirm("Integrations already configured. Reconfigure?", false);
+    if (!reconfig) return;
+  }
+  // Run both gh + search set interactively
+  await runGhSubcommand("set", {}, prompter);
+  await runSearchSubcommand("set", {}, prompter);
 }
 
 async function runSoulSection(opts: SetupSubcommandOpts, prompter: Prompter): Promise<void> {

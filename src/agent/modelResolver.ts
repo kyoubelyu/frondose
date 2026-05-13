@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
-import { readAuthJsonKey as readAuthJsonKeyFromAuthJs } from "../persistence/auth.js";
+import { readAuth, readAuthJsonKey as readAuthJsonKeyFromAuthJs } from "../persistence/auth.js";
 
 // P-7: re-export for callers (e.g. bootstrap-agent) that already import from modelResolver.
 export const readAuthJsonKey = readAuthJsonKeyFromAuthJs;
@@ -131,7 +131,9 @@ function buildModel(spec: string): LanguageModel {
   if (provider === "openai") {
     if (modelId.startsWith("deepseek")) {
       const key = process.env.DEEPSEEK_API_KEY ?? readAuthJsonKey("deepseek");
-      const rawBase = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
+      const auth = readAuth(AUTH_JSON_PATH());
+      const storedBaseUrl = auth?.providers?.deepseek?.baseUrl;
+      const rawBase = process.env.DEEPSEEK_BASE_URL ?? storedBaseUrl ?? "https://api.deepseek.com";
       // Normalize: strip trailing /v1 (with optional trailing slash) so we don't
       // produce https://api.deepseek.com/v1/v1/chat/completions when operator
       // sets DEEPSEEK_BASE_URL=https://api.deepseek.com/v1 (OQ-4).

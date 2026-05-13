@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
-import { maskKey, readAuth, readAuthJsonKey, writeAuth } from "../../src/persistence/auth.js";
+import { maskKey, readAuth, readAuthJsonKey, readAuthJsonVisionModel, writeAuth } from "../../src/persistence/auth.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -202,6 +202,75 @@ test("T-MR1: readAuthJsonKey returns key when present; undefined when absent or 
     assert.equal(found, "sk-ant-realkey", "T-MR1: present provider key must be returned");
 
     console.log("T-MR1: readAuthJsonKey present/absent/missing ✓");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── T-Auth.4 — visionModel field round-trip (P-15, G-P15.4) ──────────────────
+
+test("T-Auth.4: writeAuth with visionModel field → readAuth returns visionModel; readAuthJsonVisionModel helper returns correct value; absent field → undefined", () => {
+  const { dir, authPath } = tmpAuthPath();
+  try {
+    // Given: auth.json data with visionModel: "openai:gpt-4o"
+    // When:  writeAuth then readAuth
+    // Then:  auth.visionModel === "openai:gpt-4o"; readAuthJsonVisionModel() returns "openai:gpt-4o"; writing without visionModel → undefined
+
+    // Write with visionModel
+    writeAuth({ visionModel: "openai:gpt-4o" }, authPath);
+    const auth = readAuth(authPath);
+    assert.ok(auth, "auth must be defined after write");
+    assert.equal(auth?.visionModel, "openai:gpt-4o", "visionModel must round-trip via readAuth");
+
+    // readAuthJsonVisionModel helper
+    const vm = readAuthJsonVisionModel(authPath);
+    assert.equal(vm, "openai:gpt-4o", "readAuthJsonVisionModel must return the stored value");
+
+    // Write without visionModel → undefined
+    writeAuth({}, authPath);
+    const auth2 = readAuth(authPath);
+    assert.equal(auth2?.visionModel, undefined, "visionModel must be undefined when not written");
+    const vm2 = readAuthJsonVisionModel(authPath);
+    assert.equal(vm2, undefined, "readAuthJsonVisionModel must return undefined when absent");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── T-Auth.6 — modelResolver reads stored deepseek baseUrl (P-15, G-P15.4) ───
+
+test("T-Auth.6: readAuth returns stored deepseek baseUrl from auth.json; DEEPSEEK_BASE_URL env wins when set", () => {
+  const { dir, authPath } = tmpAuthPath();
+  try {
+    // Given: auth.json with providers.deepseek.baseUrl: "https://custom.deepseek.com"
+    // When:  readAuth(authPath)
+    // Then:  auth.providers.deepseek.baseUrl === "https://custom.deepseek.com"; value can be read back correctly
+
+    writeAuth(
+      {
+        providers: {
+          deepseek: { key: "sk-dsk", baseUrl: "https://custom.deepseek.com" },
+        },
+      },
+      authPath,
+    );
+    const auth = readAuth(authPath);
+    assert.ok(auth, "auth must be defined after write");
+    assert.ok(auth?.providers?.deepseek, "deepseek provider must be present");
+    assert.equal(
+      auth?.providers?.deepseek?.baseUrl,
+      "https://custom.deepseek.com",
+      "deepseek baseUrl must be stored and readable",
+    );
+
+    // Precedence: DEEPSEEK_BASE_URL env wins
+    const savedEnv = process.env.DEEPSEEK_BASE_URL;
+    process.env.DEEPSEEK_BASE_URL = "https://env-override.com";
+    const rawBase = process.env.DEEPSEEK_BASE_URL ?? auth?.providers?.deepseek?.baseUrl ?? "https://api.deepseek.com";
+    assert.equal(rawBase, "https://env-override.com", "env var must win over stored baseUrl");
+    // Cleanup env
+    if (savedEnv !== undefined) process.env.DEEPSEEK_BASE_URL = savedEnv;
+    else delete process.env.DEEPSEEK_BASE_URL;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

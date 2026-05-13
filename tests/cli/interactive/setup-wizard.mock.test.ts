@@ -138,10 +138,11 @@ describe("runSetupSubcommand — non-interactive path", () => {
 // ─── T-Setup.2 ───────────────────────────────────────────────────────────────
 
 describe("runSetupSubcommand — checkbox pre-check defaults", () => {
-  it("T-Setup.2: when auth+telegram+soul unconfigured AND identity configured, checkboxSections receives auth/telegram/soul pre-checked=true, identity pre-checked=false", async () => {
+  it("T-Setup.2: when auth+telegram+soul unconfigured AND identity configured, checkboxSections receives auth/telegram/soul pre-checked=true, identity pre-checked=false; integrations choice present", async () => {
     // Given: identityPath has valid identity.json; auth/telegram/soul not configured
     // When:  runSetupSubcommand({...opts}, mockPrompter) — checkboxSections returns []
-    // Then:  choices passed to checkboxSections: auth=checked, identity=unchecked, telegram=checked, soul=checked
+    // Then:  choices passed: auth=checked, identity=unchecked, telegram=checked, soul=checked;
+    //        integrations choice present (pre-check state depends on ~/.mai/agent/ files, not asserted)
 
     const { opts, cleanup } = makeTmpSetupEnv();
     const restore = stubInteractive(true);
@@ -159,15 +160,21 @@ describe("runSetupSubcommand — checkbox pre-check defaults", () => {
       writeMinimalIdentity(opts.identityPath);
 
       await captureStdout(() => runSetupSubcommand(opts, mp));
-      assert.equal(capturedChoices.length, 4, "T-Setup.2: must present 4 section choices");
+      assert.equal(capturedChoices.length, 5, "T-Setup.2: must present 5 section choices (integrations added in P-15)");
       const authChoice = capturedChoices.find((c) => c.value === "auth");
       const identityChoice = capturedChoices.find((c) => c.value === "identity");
       const telegramChoice = capturedChoices.find((c) => c.value === "telegram");
       const soulChoice = capturedChoices.find((c) => c.value === "soul");
+      const integrationsChoice = capturedChoices.find((c) => c.value === "integrations");
       assert.ok(authChoice?.checked === true, "T-Setup.2: auth must be pre-checked (not configured)");
       assert.ok(identityChoice?.checked === false, "T-Setup.2: identity must be unchecked (already configured)");
       assert.ok(telegramChoice?.checked === true, "T-Setup.2: telegram must be pre-checked (not configured)");
       assert.ok(soulChoice?.checked === true, "T-Setup.2: soul must be pre-checked (not configured)");
+      assert.ok(integrationsChoice !== undefined, "T-Setup.2: integrations choice must be present in checkbox sections");
+      assert.ok(
+        integrationsChoice?.name.includes("GitHub") && integrationsChoice?.name.includes("search"),
+        `T-Setup.2: integrations name must reference GitHub + search; got: "${integrationsChoice?.name}"`,
+      );
     } finally {
       restore();
       cleanup();
@@ -379,6 +386,54 @@ describe("runSetupSubcommand — summary runStatusSubcommand called at end", () 
         `T-Setup.6: stdout must include status summary output; got: "${stdout.slice(0, 300)}"`,
       );
       assert.equal(mp.calls.checkboxSections.length, 1, "T-Setup.6: checkboxSections called once");
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+});
+
+// ─── T-Integrations.1 — P-15 5th integrations section ────────────────────────
+
+describe("runSetupSubcommand — P-15 integrations section (G-P15.8)", () => {
+  it("T-Integrations.1: checkbox includes 'integrations' section choice; when selected, gh+search set invoked", async () => {
+    // Given: isInteractive()=true; checkboxSections returns ["integrations"]
+    // When:  runSetupSubcommand({...opts}, mockPrompter) runs
+    // Then:  checkbox choices include "integrations — GitHub + web search API keys";
+    //        gh + search subcommands invoked when selected
+
+    const { opts, cleanup } = makeTmpSetupEnv();
+    const restore = stubInteractive(true);
+    let capturedChoices: Array<{ name: string; value: string; checked: boolean }> = [];
+    const mp = makeMockPrompter({
+      checkboxSections: async (choices) => {
+        capturedChoices = choices;
+        return ["integrations"];
+      },
+      apiKeyInput: async () => "mock-api-key",
+      // If user has existing config at default paths, "Reconfigure?" prompt returns true
+      confirm: async (msg, _default) => {
+        if (msg.includes("Integrations")) return true;
+        return false;
+      },
+    });
+    try {
+      const stdout = await captureStdout(() => runSetupSubcommand(opts, mp));
+      // Checkbox must include the 5th "integrations" choice
+      const integrationsChoice = capturedChoices.find((c) => c.value === "integrations");
+      assert.ok(
+        integrationsChoice !== undefined,
+        `checkbox choices must include 'integrations'; got: ${capturedChoices.map((c) => c.value).join(", ")}`,
+      );
+      assert.ok(
+        integrationsChoice?.name.includes("GitHub") && integrationsChoice?.name.includes("search"),
+        `integrations choice name must reference GitHub + search; got: "${integrationsChoice?.name}"`,
+      );
+      // When selected, gh + search set are invoked — stdout confirms github.json was updated
+      assert.ok(
+        stdout.includes("github.json updated"),
+        `stdout must confirm github.json updated; got: "${stdout.slice(0, 400)}"`,
+      );
     } finally {
       restore();
       cleanup();

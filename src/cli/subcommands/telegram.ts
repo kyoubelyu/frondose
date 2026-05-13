@@ -8,10 +8,14 @@ export interface TelegramSubcommandOpts {
   tcPath: string;
   /** Telegram user_id for bind action; ignored otherwise. In a DM context this also serves as the chat_id for outbound sendMessage. */
   userId?: number;
+  /** proxy URL for proxy action. */
+  proxyUrl?: string;
+  /** Clear proxy URL for proxy action. */
+  unsetProxy?: boolean;
 }
 
 export async function runTelegramSubcommand(
-  action: "on" | "off" | "status" | "test" | "bind",
+  action: "on" | "off" | "status" | "test" | "bind" | "proxy",
   opts: TelegramSubcommandOpts,
   // P-13 D-3: optional Prompter for interactive `bind` path.
   prompter: Prompter = realPrompter,
@@ -45,7 +49,7 @@ export async function runTelegramSubcommand(
     process.stdout.write(
       `[telegram] env: TOKEN=${process.env.TELEGRAM_TOKEN ? "set" : "unset"}, ` +
         `CHAT_ID=${process.env.TELEGRAM_CHAT_ID ? "set" : "unset"}, ` +
-        `PROXY=${process.env.TELEGRAM_PROXY ?? "(unset)"}\n`,
+        `PROXY=${process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? "(unset)"}\n`,
     );
     process.stdout.write("[telegram] running: false (CLI mode — no poller)\n");
     return;
@@ -74,7 +78,10 @@ export async function runTelegramSubcommand(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ offset: 0, limit: 20, timeout: 0, allowed_updates: ["message"] }),
           },
-          { fallbackIp: cfg.stickyFallbackIp ?? undefined, proxyUrl: process.env.TELEGRAM_PROXY },
+          {
+            fallbackIp: cfg.stickyFallbackIp ?? undefined,
+            proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
+          },
         );
         const j = (await res.json()) as {
           ok: boolean;
@@ -136,7 +143,7 @@ export async function runTelegramSubcommand(
         },
         {
           fallbackIp: cfg.stickyFallbackIp ?? undefined,
-          proxyUrl: process.env.TELEGRAM_PROXY,
+          proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
           onFallbackSuccess: (ip) => {
             cfg.stickyFallbackIp = ip;
             writeTelegramConfig(cfg, opts.tcPath);
@@ -148,5 +155,21 @@ export async function runTelegramSubcommand(
       process.stderr.write(`[telegram] test failed: ${e instanceof Error ? e.message : String(e)}\n`);
       process.exit(1);
     }
+  }
+  if (action === "proxy") {
+    if (opts.unsetProxy) {
+      cfg.proxyUrl = null;
+    } else if (opts.proxyUrl !== undefined) {
+      cfg.proxyUrl = opts.proxyUrl || null;
+    } else if (isInteractive()) {
+      const raw = await prompter.input("Proxy URL (e.g. http://127.0.0.1:7890, leave blank to clear): ");
+      cfg.proxyUrl = raw.trim() || null;
+    } else {
+      printNoninteractiveGuidance("telegram proxy", "[url]", "http://127.0.0.1:7890");
+      process.exit(1);
+    }
+    writeTelegramConfig(cfg, opts.tcPath);
+    process.stdout.write(`[telegram] proxy ${cfg.proxyUrl ? `set to ${cfg.proxyUrl}` : "cleared"}\n`);
+    return;
   }
 }

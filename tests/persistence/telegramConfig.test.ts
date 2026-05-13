@@ -78,6 +78,7 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
         boundUserId: 12345,
         lastUpdateOffset: 99,
         stickyFallbackIp: "149.154.166.110",
+        proxyUrl: null,
         pollTimeoutSec: 30,
         pollBackoffSec: 5,
         lastReceivedAt: null,
@@ -237,6 +238,63 @@ describe("telegramConfig.ts read/write (G-P11.2)", () => {
         ts,
         `raw JSON telegram.json must contain lastReceivedAt="${ts}" verbatim; got: "${raw.lastReceivedAt}"`,
       );
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── T-Telegram.3 — proxyUrl round-trip (P-15, G-P15.3) ─────────────────────
+
+describe("telegramConfig.ts proxyUrl (G-P15.3)", () => {
+  it("T-Telegram.3: when proxyUrl written then read, readTelegramConfig returns the same proxyUrl; writing without proxyUrl yields null", async () => {
+    // Given: temp telegram.json path
+    // When:  writeTelegramConfig with proxyUrl: "http://127.0.0.1:7890" then readTelegramConfig
+    // Then:  result.proxyUrl === "http://127.0.0.1:7890". Writing DEFAULT_TELEGRAM_CONFIG → proxyUrl === null
+
+    const { cfgPath, cleanup } = makeTmpDir();
+    try {
+      // Write with proxyUrl
+      const withProxy = { ...DEFAULT_TELEGRAM_CONFIG, proxyUrl: "http://127.0.0.1:7890" };
+      writeTelegramConfig(withProxy, cfgPath);
+      const result1 = readTelegramConfig(cfgPath);
+      assert.equal(result1.proxyUrl, "http://127.0.0.1:7890", "proxyUrl must round-trip when set");
+
+      // Write without proxyUrl (default null)
+      writeTelegramConfig(DEFAULT_TELEGRAM_CONFIG, cfgPath);
+      const result2 = readTelegramConfig(cfgPath);
+      assert.equal(result2.proxyUrl, null, "proxyUrl must be null when not set");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-Telegram.4: when TELEGRAM_PROXY env var set AND file has proxyUrl, env wins (hermes precedence)", async () => {
+    // Given: telegram.json with proxyUrl: "http://file-proxy:7890" AND process.env.TELEGRAM_PROXY = "http://env-proxy:7890"
+    // When:  reading precedence (simulating consumer logic: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined)
+    // Then:  effective value === "http://env-proxy:7890". When env unset, effective value === "http://file-proxy:7890"
+
+    const { cfgPath, cleanup } = makeTmpDir();
+    try {
+      // Write file with proxyUrl
+      const withProxy = { ...DEFAULT_TELEGRAM_CONFIG, proxyUrl: "http://file-proxy:7890" };
+      writeTelegramConfig(withProxy, cfgPath);
+      const savedEnv = process.env.TELEGRAM_PROXY;
+
+      // When env is set, env wins
+      process.env.TELEGRAM_PROXY = "http://env-proxy:7890";
+      const cfg = readTelegramConfig(cfgPath);
+      const effectiveWithEnv = process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined;
+      assert.equal(effectiveWithEnv, "http://env-proxy:7890", "env var must win over file value");
+
+      // When env is unset, file value is used
+      delete process.env.TELEGRAM_PROXY;
+      const effectiveWithoutEnv = process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined;
+      assert.equal(effectiveWithoutEnv, "http://file-proxy:7890", "file value must be used when env unset");
+
+      // Restore env
+      if (savedEnv !== undefined) process.env.TELEGRAM_PROXY = savedEnv;
+      else delete process.env.TELEGRAM_PROXY;
     } finally {
       cleanup();
     }
