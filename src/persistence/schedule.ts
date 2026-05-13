@@ -100,11 +100,11 @@ export function nextRunAfter(parsed: ParsedCronExpr, from: Date): Date {
 }
 
 function matches(p: ParsedCronExpr, d: Date): boolean {
-  const m = d.getUTCMinutes();
-  const h = d.getUTCHours();
-  const dom = d.getUTCDate();
-  const mon = d.getUTCMonth() + 1;
-  const dow = d.getUTCDay();
+  const m = d.getMinutes();
+  const h = d.getHours();
+  const dom = d.getDate();
+  const mon = d.getMonth() + 1;
+  const dow = d.getDay();
   return (
     fieldMatches(p.minute, m) &&
     fieldMatches(p.hour, h) &&
