@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { applyPacing, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
+import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
 const typeParams = z.object({
@@ -19,16 +19,40 @@ export function makeTypeTool(session: LinkedinSession) {
     execute: async ({ text, ref, label, scope }) => {
       try {
         const client = await session.getOrInitClient();
-        let target: string;
+        let target = "";
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
-        } else if (label) {
+        } else {
           const ctx = session.getLastContext();
           if (!ctx) throw new Error("type: call inspect first to populate inputs.");
-          const entry = resolveByLabel(ctx.entries, label, { kind: "type", scope });
-          target = entry.ref;
-        } else {
-          throw new Error("type: provide either 'ref' or 'label'.");
+
+          // Ambiguity enforcement: when scope provided without label, check for multiple inputs.
+          if (scope && !label) {
+            const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "textarea"]);
+            const scopeInputs = ctx.entries.filter((e) => INPUT_ROLES.has(e.role) && e.name.length > 0);
+            if (scopeInputs.length > 1) {
+              const candidates = scopeInputs.map((e) => ({ ref: e.ref, label: e.name }));
+              return fail(
+                "type",
+                "ambiguous_target",
+                `scope '${scope}' exposes ${scopeInputs.length} inputs. Provide --label to target one.`,
+                candidates,
+              );
+            }
+            if (scopeInputs.length === 1) {
+              // biome-ignore lint/style/noNonNullAssertion: length-checked above.
+              target = scopeInputs[0]!.ref;
+            }
+          }
+
+          if (!target) {
+            if (label) {
+              const entry = resolveByLabel(ctx.entries, label, { kind: "type", scope });
+              target = entry.ref;
+            } else {
+              throw new Error("type: provide either 'ref' or 'label'.");
+            }
+          }
         }
         // Focus the input.
         await client.clickAt(target);

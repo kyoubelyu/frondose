@@ -28,6 +28,11 @@ function makeFakeSession() {
         data: fakeBase64Png,
       }),
     },
+    Runtime: {
+      evaluate: async (_args: unknown) => ({
+        result: { value: "https://www.linkedin.com/feed/" },
+      }),
+    },
   };
 
   const client = CdpClient.fromHandle(fakeHandle);
@@ -86,6 +91,29 @@ test("T-M79: screenshot tool writes to custom 'out' path when provided", async (
   const data = (result as any).data;
   assert.equal(data.path, customOut, "data.path must equal the custom 'out' path");
   assert.ok(existsSync(customOut), "screenshot file must exist at custom path");
+
+  // Cleanup
+  rmSync(customOut, { force: true });
+});
+
+// ─── T-Screenshot.3 — pageUrl in success response ────────────────────────────
+
+test("T-Screenshot.3: pageUrl is present in success response when getCurrentUrl() succeeds", async () => {
+  // Given: session with CDP client whose getCurrentUrl() evaluates window.location.href → "https://www.linkedin.com/feed/"
+  // When:  screenshot({ out: customPath }) executed
+  // Then:  ok=true; data.path matches customPath; data.pageUrl equals "https://www.linkedin.com/feed/"
+
+  const customOut = path.join(os.tmpdir(), `mai-test-shot-url-${Date.now()}.png`);
+  const session = makeFakeSession();
+  const tool = makeScreenshotTool(session);
+
+  const result = await tool.execute({ out: customOut }, { toolCallId: "t3", messages: [], abortSignal });
+
+  assert.equal(result.ok, true);
+  // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+  const data = (result as any).data;
+  assert.equal(data.path, customOut, "data.path must match customOut");
+  assert.equal(data.pageUrl, "https://www.linkedin.com/feed/", "data.pageUrl must be present from getCurrentUrl()");
 
   // Cleanup
   rmSync(customOut, { force: true });
