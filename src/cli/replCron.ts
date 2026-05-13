@@ -102,7 +102,13 @@ export async function runCronTurn(
   deps: RunCronTurnDeps,
 ): Promise<void> {
   const cronRunId = computeCronRunId(record, fireDate);
-  const prompt = `[CRON_RUN_ID=${cronRunId}]\n${record.task}`;
+  const timeTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeStr = fireDate.toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "long",
+    timeZone: timeTz,
+  });
+  const prompt = `[TIME] ${timeStr} — autonomous check-in\n[CRON_RUN_ID=${cronRunId}]\n${record.task}`;
   deps.out.write(`\n[cron-fired] ${cronRunId} — running scheduled task\n`);
   const turnStart = deps.messages.length;
   deps.messages.push({ role: "user", content: prompt });

@@ -342,3 +342,42 @@ test("T-M_p6.25: composeSoulBand extended Section 5 (escalate directive) contain
 
   console.log("T-M_p6.25: zero F-5 banned tokens in extended Section 5 ✓");
 });
+
+// ─── T-Soul.3 — Daily workflow cadence in Soul band (P-19 G-P19.4) ──────────
+
+test("T-Soul.3: composed Soul band mission contains daily workflow cadence with all 4 time periods — Morning, Midday, Afternoon, Evening", () => {
+  // Given: any identity record (mission is identity-independent)
+  // When:  composeSoulBand() is called (with null identity for simplicity)
+  // Then:  the output contains "Morning", "Midday", "Afternoon", "Evening"
+  //        with role-appropriate verbs in each time block
+  const out = composeSoulBand(null);
+
+  // All 4 time periods must be present
+  assert.ok(out.includes("Morning"), `Soul output must contain "Morning"`);
+  assert.ok(out.includes("Midday"), `Soul output must contain "Midday"`);
+  assert.ok(out.includes("Afternoon"), `Soul output must contain "Afternoon"`);
+  assert.ok(out.includes("Evening"), `Soul output must contain "Evening"`);
+
+  // Morning block: search + qualify
+  assert.ok(out.includes("search"), `Soul output must contain "search"`);
+  assert.ok(out.includes("qualify"), `Soul output must contain "qualify"`);
+
+  // Midday block: feed
+  assert.ok(out.includes("feed"), `Soul output must contain "feed"`);
+
+  // Afternoon block: follow up
+  assert.ok(out.includes("follow up"), `Soul output must contain "follow up"`);
+
+  // Evening block: telegram_notify
+  assert.ok(out.includes("telegram_notify"), `Soul output must contain "telegram_notify"`);
+
+  // Verify the daily rhythm is in the mission section (not just mentioned incidentally)
+  // The mission section ends with the daily rhythm text
+  const dailyRhythmIdx = out.indexOf("Daily rhythm");
+  assert.ok(dailyRhythmIdx >= 0, "Soul output must contain 'Daily rhythm' heading");
+  const missionEnd = out.slice(dailyRhythmIdx, dailyRhythmIdx + 300);
+  assert.ok(
+    missionEnd.includes("Morning") && missionEnd.includes("telegram_notify"),
+    "Daily rhythm section must span all 4 time periods with telegram_notify",
+  );
+});
