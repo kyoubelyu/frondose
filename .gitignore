@@ -23,3 +23,9 @@ sessions/
 .claude/settings.local.json
 .claude/cache/
 .claude/projects/
+
+# Phase Gate Matrix process documents — local only, not shipped.
+docs/
+
+# Team bootstrap guide — for local session reset only.
+bootstrap.md
