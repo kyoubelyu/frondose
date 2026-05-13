@@ -71,8 +71,8 @@ test("T-Search.1: agent calls expected tools in Search flow", { timeout: 600_000
 
   assert.ok(launchCount >= 1, `launch count ${launchCount} should be ≥ 1`);
   assert.ok(inspectCount >= 2, `inspect count ${inspectCount} should be ≥ 2`);
-  assert.ok(qualifyCount >= 1, `qualify_profile count ${qualifyCount} should be ≥ 1`);
-  assert.ok(rememberCount >= 1, `remember count ${rememberCount} should be ≥ 1`);
+  assert.ok(qualifyCount >= 2, `qualify_profile count ${qualifyCount} should be ≥ 2`);
+  assert.ok(rememberCount >= 2, `remember count ${rememberCount} should be ≥ 2`);
 
   // Order assertion: launch before first inspect
   const launchIdx = toolNames.indexOf("launch");
@@ -89,8 +89,8 @@ test("T-Search.1: agent calls expected tools in Search flow", { timeout: 600_000
 test("T-Search.2: methodology terms appear in text output", { timeout: 600_000 }, async () => {
   const foundTerms = METHODOLOGY_TERMS.filter((t) => searchResult.textOutput.includes(t));
   assert.ok(
-    foundTerms.length >= 2,
-    `Expected ≥2 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
+    foundTerms.length >= 3,
+    `Expected ≥3 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
   );
 });
 

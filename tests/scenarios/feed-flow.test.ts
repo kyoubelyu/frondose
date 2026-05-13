@@ -82,8 +82,8 @@ test("T-Feed.1: agent calls expected tools in Feed flow", { timeout: 600_000 }, 
 test("T-Feed.2: methodology terms appear in text output", { timeout: 600_000 }, async () => {
   const foundTerms = METHODOLOGY_TERMS.filter((t) => feedResult.textOutput.includes(t));
   assert.ok(
-    foundTerms.length >= 1,
-    `Expected ≥1 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
+    foundTerms.length >= 2,
+    `Expected ≥2 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
   );
 });
 
@@ -102,7 +102,7 @@ test("T-Feed.3: agent remembers ICP-relevant leads, ignores non-ICP", { timeout:
 
   // At least one ICP lead should be remembered (Mark Rivera or James Okafor) — best-effort soft-fail
   const icpRemembered = rememberPeople.some((n: string) =>
-    n.includes("mark") || n.includes("rivera") || n.includes("james") || n.includes("okafor"));
+    n.includes("alex") || n.includes("chen") || n.includes("mark") || n.includes("rivera") || n.includes("james") || n.includes("okafor"));
   if (!icpRemembered) {
     process.stderr.write("[T-Feed.3] Soft fail: No ICP-relevant lead (Mark Rivera or James Okafor) remembered. " +
       "Agent may have focused on content browsing rather than prospect identification.\n");
