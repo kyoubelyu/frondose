@@ -8,6 +8,13 @@ const inspectParams = z.object({
     .string()
     .optional()
     .describe("Limit inspect output to a specific scope (e.g. 'feed', 'messagingThread'). Omit for full page."),
+  full: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, append debug diagnostics (totalEntries, entriesByRole, roleDetails) " +
+        "to the response data. Useful when compact discovery is insufficient.",
+    ),
 });
 
 export function makeInspectTool(session: LinkedinSession) {
@@ -17,12 +24,19 @@ export function makeInspectTool(session: LinkedinSession) {
       "{surface, availableScopes, text[], buttons[], inputs[]}. " +
       "Buttons and inputs each have ref strings (e.g. @e14) usable by `click` and `type`.",
     parameters: inspectParams,
-    execute: async ({ scope }) => {
+    execute: async ({ scope, full }) => {
       try {
         const ctx = await captureCurrentSurfaceContext(await session.getOrInitClient());
         session.setLastContext(ctx);
         const summary = buildInspectSummary(ctx, scope);
-        // inspect's data is the InspectSummary shape directly (LLM consumes structured fields).
+        if (full) {
+          const entriesByRole: Record<string, number> = {};
+          for (const e of ctx.entries) {
+            entriesByRole[e.role] = (entriesByRole[e.role] ?? 0) + 1;
+          }
+          const roleDetails = Object.keys(entriesByRole);
+          return ok("inspect", { ...summary, totalEntries: ctx.entries.length, entriesByRole, roleDetails });
+        }
         return ok("inspect", { ...summary });
       } catch (e) {
         return failFromError("inspect", e);
