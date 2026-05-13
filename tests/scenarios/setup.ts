@@ -9,6 +9,7 @@ import { readIdentity } from "../../src/persistence/identity.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
+import { __setPacingFn } from "../../src/linkedin/pacing.js";
 
 export const TEST_IDENTITY_PATH = new URL("../fixtures/test-identity.json", import.meta.url).pathname;
 
@@ -54,6 +55,7 @@ export async function runScenario(opts: ScenarioOpts): Promise<ScenarioResult> {
   });
 
   const world = new FakeLinkedInWorld();
+  __setPacingFn(async () => ({ waitedMs: 0, jitterMs: 0, serial: true }));
   const session: LinkedinSession = world.makeSession();
 
   const abortController = new AbortController();

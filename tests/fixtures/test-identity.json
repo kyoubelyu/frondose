@@ -1,12 +1,12 @@
 {
-  "fullName": "张明 (Zhang Ming)",
+  "fullName": "Zhang Ming",
   "profileUrl": "https://www.linkedin.com/in/zhang-ming-mai-agent/",
-  "headline": "BD @ 某 SaaS 公司 | 专注北美企业市场",
-  "persona": "你做 outbound 销售工作，方法论是 Solution Selling®",
+  "headline": "BD @ SaaS company | Focused on North American enterprise market",
+  "persona": "You do outbound sales, methodology is Solution Selling®",
   "company": "Kyoube Technologies",
   "role": "Head of Business Development",
   "contact": "zhangming@kyoube.com",
-  "style": "直接、技术化、有同理心。用数据说话，但不忽视人的感受。",
+  "style": "Direct, technical, empathetic. Data-driven but mindful of human signals.",
   "icp": {
     "targetRole": ["VP Sales", "CRO", "Head of Revenue"],
     "industry": ["B2B SaaS", "Enterprise Software", "Cloud Infrastructure"],
