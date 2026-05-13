@@ -70,6 +70,10 @@ export interface LinkedinSession {
    * introspection paths that should NOT force-boot Chrome.
    */
   getClient(): CdpClient | undefined;
+  /** P-18 D-2: probe cached CDP connection health via Runtime.evaluate("1").
+   *  Returns true if healthy (or no cached client to check).
+   *  On failure, clears the stale cache so next tool call triggers reconnect. */
+  heartbeat(): Promise<boolean>;
   setLastContext(ctx: CurrentSurfaceContext): void;
   getLastContext(): CurrentSurfaceContext | undefined;
 }

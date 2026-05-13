@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -76,5 +76,7 @@ export function readIdentity(path: string = DEFAULT_IDENTITY_PATH()): IdentityRe
 /** Write identity to disk atomically (mkdir -p parents; pretty JSON; UTF-8). */
 export function writeIdentity(record: IdentityRecord, path: string = DEFAULT_IDENTITY_PATH()): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(record, null, 2), "utf-8");
+  const tmp = `${path}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(record, null, 2), "utf-8");
+  renameSync(tmp, path);
 }

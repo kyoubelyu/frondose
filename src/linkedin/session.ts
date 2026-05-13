@@ -61,5 +61,20 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
     getLastContext(): CurrentSurfaceContext | undefined {
       return lastContext;
     },
+
+    /** P-18 D-2: Probe cached CDP connection health via Runtime.evaluate("1").
+     *  Returns true if healthy (or no cached client to check).
+     *  On failure, clears the stale cache so next tool call triggers reconnect. */
+    async heartbeat(): Promise<boolean> {
+      const client = cached;
+      if (!client) return true;
+      try {
+        await client.evaluate("1");
+        return true;
+      } catch {
+        cached = undefined;
+        return false;
+      }
+    },
   };
 }
