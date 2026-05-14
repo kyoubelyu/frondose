@@ -108,6 +108,16 @@ async function main(): Promise<void> {
   // P-18 D-1: register crash handlers early — before any async work that could throw
   registerCrashHandlers();
 
+  // P-22 §3.1: auto-update on every startup (unless skipped or invoked as `mai update`).
+  // `mai update [...]` subcommand path is bypassed to avoid an infinite re-exec loop
+  // (the manual subcommand IS the explicit refresh). The success path inside
+  // `runStartupAutoUpdate` calls `process.exit` after a successful re-exec; if we
+  // reach the line below, the update was skipped, completed without re-exec, or failed.
+  if (process.env.MAI_AUTOUPDATE !== "skip" && process.argv[2] !== "update") {
+    const { runStartupAutoUpdate } = await import("./autoUpdate.js");
+    await runStartupAutoUpdate();
+  }
+
   // P-3 env reads (CDP layer): port + profile dir.
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
   const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
@@ -436,11 +446,21 @@ async function main(): Promise<void> {
   });
 
   // P-20: `mai update` — check GitHub Releases for newer mai-agent version.
+  // P-22 §3.2: `--bootstrap` triggers a forced auto-update (bypasses dev-link guard).
   program
     .command("update")
     .description("Check for mai-agent updates on GitHub Releases")
     .option("--json", "Output machine-readable JSON")
-    .action(async (cliOpts: { json?: boolean }) => {
+    .option(
+      "--bootstrap",
+      "One-time migration: install latest release to ~/.mai/agent/releases/ and swap the global symlink (use when running from a dev-link npm-link setup)",
+    )
+    .action(async (cliOpts: { json?: boolean; bootstrap?: boolean }) => {
+      if (cliOpts.bootstrap === true) {
+        const { runStartupAutoUpdate } = await import("./autoUpdate.js");
+        await runStartupAutoUpdate({ force: true, source: "bootstrap" });
+        process.exit(0);
+      }
       await runUpdateSubcommand({ json: cliOpts.json ?? false });
       process.exit(0);
     });

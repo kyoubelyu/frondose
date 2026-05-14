@@ -162,9 +162,11 @@ describe("runUpdateSubcommand — version comparison", () => {
 
   it("T-UPDATE.3: newer version prints update notice", async () => {
     // Given: Token configured, fetchImpl returns tag_name "v0.4.15", localVersion "0.4.14"
+    //        MAI_AUTOUPDATE unset (auto-update mode)
     // When:  runUpdateSubcommand is called
-    // Then:  stdout contains "Current:  v0.4.14", "Latest:   v0.4.15", "Update available!"
-    //        stdout contains npm upgrade hint
+    // Then:  stdout contains "Current:  v0.4.14", "Latest:   v0.4.15", "Update available:"
+    //        stdout contains "auto-update" (P-22 §3.3 context-aware message);
+    //        stdout does NOT contain old "npm install -g" hint (removed in P-22)
     const { cfgPath, cleanup } = makeTmpDir();
     writeTokenConfig(cfgPath);
     const fetch = makeMockFetch(
@@ -176,17 +178,26 @@ describe("runUpdateSubcommand — version comparison", () => {
     );
 
     await withoutGhToken(async () => {
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }),
-      );
+      const origAutoUpdate = process.env.MAI_AUTOUPDATE;
+      delete process.env.MAI_AUTOUPDATE;
+      try {
+        const out = await captureStdout(() =>
+          runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }),
+        );
 
-      assert.ok(out.includes("Current:  v0.4.14"), `missing "Current:  v0.4.14": ${JSON.stringify(out)}`);
-      assert.ok(out.includes("Latest:   v0.4.15"), `missing "Latest:   v0.4.15": ${JSON.stringify(out)}`);
-      assert.ok(out.includes("Update available!"), `missing "Update available!": ${JSON.stringify(out)}`);
-      assert.ok(
-        out.includes("npm install -g @kyoube/mai-agent"),
-        `missing npm upgrade hint: ${JSON.stringify(out)}`,
-      );
+        assert.ok(out.includes("Current:  v0.4.14"), `missing "Current:  v0.4.14": ${JSON.stringify(out)}`);
+        assert.ok(out.includes("Latest:   v0.4.15"), `missing "Latest:   v0.4.15": ${JSON.stringify(out)}`);
+        // P-22: message changed from "Update available!" to "Update available: vX.Y.Z — mai will auto-update…"
+        assert.ok(out.includes("Update available:"), `missing "Update available:": ${JSON.stringify(out)}`);
+        assert.ok(out.includes("auto-update"), `missing auto-update hint: ${JSON.stringify(out)}`);
+        // The old npm-install hint must NOT appear
+        assert.ok(
+          !out.includes("npm install -g @kyoube/mai-agent"),
+          `unexpected old npm install hint in: ${JSON.stringify(out)}`,
+        );
+      } finally {
+        if (origAutoUpdate !== undefined) process.env.MAI_AUTOUPDATE = origAutoUpdate;
+      }
     });
     cleanup();
   });
@@ -502,6 +513,86 @@ describe("compareVersions", () => {
         expected,
         `compareVersions(${JSON.stringify(a)}, ${JSON.stringify(b)}) → expected ${expected}, got ${actual}. Rationale: ${rationale}`,
       );
+    }
+  });
+});
+
+// ─── T-MSG.1..2: P-22 message fix (update.ts:139) ───────────────────────────
+
+describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
+  it("T-MSG.1: when MAI_AUTOUPDATE unset and update available, stdout says 'mai will auto-update on next startup' NOT 'npm install -g'", async () => {
+    // Given: MAI_AUTOUPDATE is unset; fetchImpl returns tag_name 'v0.4.20' (newer than localVersion '0.4.15')
+    // When:  runUpdateSubcommand({ fetchImpl, cfgPath, localVersion: '0.4.15' }) called
+    // Then:  stdout contains "mai will auto-update on next startup";
+    //        stdout does NOT contain "npm install -g @kyoube/mai-agent"
+    const { cfgPath, cleanup } = makeTmpDir();
+    writeTokenConfig(cfgPath);
+    const fetch = makeMockFetch(
+      makeJsonResponse(200, {
+        tag_name: "v0.4.20",
+        published_at: "2026-05-14T10:00:00Z",
+        html_url: "https://github.com/kyoubelyu/mai-agent/releases/tag/v0.4.20",
+      }),
+    );
+    const origAutoUpdate = process.env.MAI_AUTOUPDATE;
+    delete process.env.MAI_AUTOUPDATE;
+    try {
+      await withoutGhToken(async () => {
+        const out = await captureStdout(() =>
+          runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.15" }),
+        );
+        assert.ok(
+          out.includes("mai will auto-update on next startup"),
+          `expected 'mai will auto-update on next startup' in stdout, got: ${JSON.stringify(out)}`,
+        );
+        assert.ok(
+          !out.includes("npm install -g @kyoube/mai-agent"),
+          `unexpected npm install hint in stdout: ${JSON.stringify(out)}`,
+        );
+      });
+    } finally {
+      if (origAutoUpdate !== undefined) process.env.MAI_AUTOUPDATE = origAutoUpdate;
+      cleanup();
+    }
+  });
+
+  it("T-MSG.2: when MAI_AUTOUPDATE='skip' and update available, stdout mentions MAI_AUTOUPDATE=skip opt-out hint", async () => {
+    // Given: MAI_AUTOUPDATE='skip'; fetchImpl returns tag_name 'v0.4.20' (newer); localVersion '0.4.15'
+    // When:  runUpdateSubcommand({ fetchImpl, cfgPath, localVersion: '0.4.15' }) called
+    // Then:  stdout contains "MAI_AUTOUPDATE=skip";
+    //        stdout does NOT contain "npm install -g @kyoube/mai-agent"
+    const { cfgPath, cleanup } = makeTmpDir();
+    writeTokenConfig(cfgPath);
+    const fetch = makeMockFetch(
+      makeJsonResponse(200, {
+        tag_name: "v0.4.20",
+        published_at: "2026-05-14T10:00:00Z",
+        html_url: "https://github.com/kyoubelyu/mai-agent/releases/tag/v0.4.20",
+      }),
+    );
+    const origAutoUpdate = process.env.MAI_AUTOUPDATE;
+    process.env.MAI_AUTOUPDATE = "skip";
+    try {
+      await withoutGhToken(async () => {
+        const out = await captureStdout(() =>
+          runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.15" }),
+        );
+        assert.ok(
+          out.includes("MAI_AUTOUPDATE=skip"),
+          `expected 'MAI_AUTOUPDATE=skip' hint in stdout, got: ${JSON.stringify(out)}`,
+        );
+        assert.ok(
+          !out.includes("npm install -g @kyoube/mai-agent"),
+          `unexpected npm install hint in stdout: ${JSON.stringify(out)}`,
+        );
+      });
+    } finally {
+      if (origAutoUpdate !== undefined) {
+        process.env.MAI_AUTOUPDATE = origAutoUpdate;
+      } else {
+        delete process.env.MAI_AUTOUPDATE;
+      }
+      cleanup();
     }
   });
 });
