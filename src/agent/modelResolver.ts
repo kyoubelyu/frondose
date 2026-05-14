@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
+import type { ProviderEntry } from "../persistence/auth.js";
 import { readAuth, readAuthJsonKey as readAuthJsonKeyFromAuthJs } from "../persistence/auth.js";
 
 // P-7: re-export for callers (e.g. bootstrap-agent) that already import from modelResolver.
@@ -47,15 +48,23 @@ export function resolveModel(opts: ResolveModelOpts = {}): LanguageModel {
 
 /**
  * P-7: returns true if any LLM key is detected — env vars OR auth.json.
+ * P-21: iterates ALL configured providers (not just 3 hardcoded names).
  * Used by runIdentityBootstrap before runBootstrapAgent (chicken-and-egg guard per F-3r.4).
  */
 export function detectAnyModelKey(): boolean {
   if (process.env.ANTHROPIC_API_KEY) return true;
   if (process.env.OPENAI_API_KEY) return true;
   if (process.env.DEEPSEEK_API_KEY) return true;
-  if (readAuthJsonKey("anthropic")) return true;
-  if (readAuthJsonKey("openai")) return true;
-  if (readAuthJsonKey("deepseek")) return true;
+  try {
+    const auth = readAuth(AUTH_JSON_PATH());
+    if (auth?.providers) {
+      for (const entry of Object.values(auth.providers)) {
+        if (entry.key) return true;
+      }
+    }
+  } catch {
+    // auth.json missing or corrupt — no keys from file
+  }
   return false;
 }
 
@@ -121,33 +130,54 @@ export function makeNoThinkingFetch(modelId: string): typeof globalThis.fetch {
   };
 }
 
+/**
+ * P-21: Resolve the API key for a provider. Env var (backward compat) takes
+ * precedence over auth.json stored key for the three well-known provider names
+ * (anthropic / openai / deepseek). All other named providers use the stored key.
+ */
+function resolveModelKey(provider: string, entry: ProviderEntry): string {
+  if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_API_KEY;
+  }
+  if (provider === "openai" && process.env.OPENAI_API_KEY) {
+    return process.env.OPENAI_API_KEY;
+  }
+  if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
+    return process.env.DEEPSEEK_API_KEY;
+  }
+  return entry.key;
+}
+
 function buildModel(spec: string): LanguageModel {
   const { provider, modelId } = parseModelSpec(spec);
-  if (provider === "anthropic") {
-    // P-7 (F-10): env wins; auth.json fallback.
-    const key = process.env.ANTHROPIC_API_KEY ?? readAuthJsonKey("anthropic");
-    return createAnthropic({ apiKey: key })(modelId);
+  const auth = readAuth(AUTH_JSON_PATH());
+  const entry = auth?.providers?.[provider];
+  if (!entry) {
+    throw new Error(`Provider '${provider}' not configured in auth.json. Run \`mai auth set\` to add it.`);
   }
-  if (provider === "openai") {
-    if (modelId.startsWith("deepseek")) {
-      const key = process.env.DEEPSEEK_API_KEY ?? readAuthJsonKey("deepseek");
-      const auth = readAuth(AUTH_JSON_PATH());
-      const storedBaseUrl = auth?.providers?.deepseek?.baseUrl;
-      const rawBase = process.env.DEEPSEEK_BASE_URL ?? storedBaseUrl ?? "https://api.deepseek.com";
-      // Normalize: strip trailing /v1 (with optional trailing slash) so we don't
-      // produce https://api.deepseek.com/v1/v1/chat/completions when operator
-      // sets DEEPSEEK_BASE_URL=https://api.deepseek.com/v1 (OQ-4).
-      const baseURL = `${rawBase.replace(/\/v1\/?$/, "")}/v1`;
-      return createOpenAI({
-        baseURL,
-        apiKey: key,
-        compatibility: "compatible",
-        name: "deepseek",
-        fetch: makeNoThinkingFetch(modelId), // v0.4-fix1: force non-thinking on v4-flash / v4-pro
-      })(modelId);
-    }
-    const key = process.env.OPENAI_API_KEY ?? readAuthJsonKey("openai");
-    return createOpenAI({ apiKey: key })(modelId);
+
+  const key = resolveModelKey(provider, entry);
+  const type = entry.type ?? "openai"; // migrated entries always have type
+
+  if (type === "anthropic") {
+    return createAnthropic({
+      baseURL: entry.baseUrl,
+      apiKey: key,
+    })(modelId);
   }
-  throw new Error(`Unknown provider '${provider}' in model spec '${spec}'. Supported: 'anthropic', 'openai'.`);
+
+  // type === "openai" — OpenAI-compatible provider.
+  // DEEPSEEK_BASE_URL env override preserved for backward compat (research §4.2a).
+  // Normalize to ensure trailing /v1 (idempotent).
+  const rawDeepseekOverride = provider === "deepseek" ? process.env.DEEPSEEK_BASE_URL : undefined;
+  const deepseekNorm = rawDeepseekOverride ? `${rawDeepseekOverride.replace(/\/v1\/?$/, "")}/v1` : undefined;
+  const baseURL = deepseekNorm ?? entry.baseUrl;
+  const fetchFn = DEEPSEEK_THINKING_DEFAULT_MODELS.has(modelId) ? makeNoThinkingFetch(modelId) : undefined;
+  return createOpenAI({
+    baseURL,
+    apiKey: key,
+    compatibility: "compatible",
+    name: provider,
+    ...(fetchFn ? { fetch: fetchFn } : {}),
+  })(modelId);
 }

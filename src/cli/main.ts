@@ -266,15 +266,25 @@ async function main(): Promise<void> {
   // trigger the interactive Prompter path inside runAuthSubcommand.
   const auth = program.command("auth").description("Provider key management (~/.mai/auth.json)");
   auth
-    .command("set [spec]")
+    .command("set [url]")
     .option("--key <value>", "API key")
-    .option("--base-url <url>", "Custom base URL (e.g. for DeepSeek's OpenAI-compat endpoint)")
-    .action(async (spec: string | undefined, cliOpts: { key?: string; baseUrl?: string }) => {
-      await runWithExitGuard(async () => {
-        await runAuthSubcommand("set", { spec, key: cliOpts.key, baseUrl: cliOpts.baseUrl });
-      });
-      process.exit(0);
-    });
+    .option("--model <id>", "Model ID")
+    .option("--name <name>", "Provider name (default: derived from URL hostname)")
+    .option("--default", "Set this provider:model as the new default model spec", false)
+    .action(
+      async (url: string | undefined, cliOpts: { key?: string; model?: string; name?: string; default?: boolean }) => {
+        await runWithExitGuard(async () => {
+          await runAuthSubcommand("set", {
+            url,
+            key: cliOpts.key,
+            model: cliOpts.model,
+            name: cliOpts.name,
+            asDefault: cliOpts.default ?? false,
+          });
+        });
+        process.exit(0);
+      },
+    );
   auth.command("list").action(async () => {
     await runWithExitGuard(async () => {
       await runAuthSubcommand("list", {});

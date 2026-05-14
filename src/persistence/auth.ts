@@ -8,7 +8,9 @@ export const DEFAULT_AUTH_PATH = (): string => join(homedir(), ".mai", "auth.jso
 const providerEntrySchema = z.object({
   key: z.string().min(1),
   baseUrl: z.string().url().optional(),
+  type: z.enum(["openai", "anthropic"]).optional(),
 });
+export type ProviderEntry = z.infer<typeof providerEntrySchema>;
 
 export const authJsonSchema = z.object({
   default: z.string().min(1).optional(),
@@ -17,13 +19,45 @@ export const authJsonSchema = z.object({
 });
 export type AuthJson = z.infer<typeof authJsonSchema>;
 
+// P-21: well-known provider default base URLs (used for migration + fallback).
+export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
+
+export const KNOWN_PROVIDER_DEFAULTS: Record<string, string> = {
+  anthropic: DEFAULT_ANTHROPIC_BASE_URL,
+  openai: DEFAULT_OPENAI_BASE_URL,
+  deepseek: DEFAULT_DEEPSEEK_BASE_URL,
+};
+
+/** P-21: auto-upgrade old-format provider entries that lack `type` and `baseUrl`. */
+export function migrateProviderEntry(name: string, entry: ProviderEntry): ProviderEntry {
+  if (entry.type !== undefined) return entry;
+  const isAnthropic = name === "anthropic" && (!entry.baseUrl || entry.baseUrl.includes("anthropic"));
+  const defaultBaseUrl = KNOWN_PROVIDER_DEFAULTS[name] ?? DEFAULT_OPENAI_BASE_URL;
+  return {
+    ...entry,
+    type: isAnthropic ? "anthropic" : "openai",
+    baseUrl: entry.baseUrl ?? defaultBaseUrl,
+  };
+}
+
+function migrateAuth(auth: AuthJson): AuthJson {
+  if (!auth.providers) return auth;
+  const migrated: Record<string, ProviderEntry> = {};
+  for (const [name, entry] of Object.entries(auth.providers)) {
+    migrated[name] = migrateProviderEntry(name, entry);
+  }
+  return { ...auth, providers: migrated };
+}
+
 /** Read auth.json. Missing file → null. Corrupt JSON → null + stderr log. */
 export function readAuth(path: string = DEFAULT_AUTH_PATH()): AuthJson | null {
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, "utf-8");
     const parsed = JSON.parse(raw);
-    return authJsonSchema.parse(parsed);
+    return migrateAuth(authJsonSchema.parse(parsed));
   } catch (e) {
     process.stderr.write(`[mai] auth.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return null;

@@ -16,8 +16,8 @@ import { checkbox, input, confirm as inquirerConfirm, password, select } from "@
 import { readAuth } from "../../persistence/auth.js";
 import { DEFAULT_GITHUB_CONFIG_PATH, readGithubConfig } from "../../persistence/github.js";
 import { readIdentity } from "../../persistence/identity.js";
-import { DEFAULT_SEARCH_CONFIG_PATH, readSearchConfig } from "../../persistence/search.js";
 import type { ScheduleRecord } from "../../persistence/schedule.js";
+import { DEFAULT_SEARCH_CONFIG_PATH, readSearchConfig } from "../../persistence/search.js";
 import type { SessionEntry } from "../../persistence/session.js";
 import { readTelegramConfig } from "../../persistence/telegramConfig.js";
 
@@ -58,6 +58,8 @@ export interface Prompter {
   input(message: string): Promise<string>;
   /** D-6 wizard top-level section picker. */
   checkboxSections(choices: { name: string; value: string; checked: boolean }[]): Promise<string[]>;
+  /** P-21: model picker after auto-fetched `/v1/models` list. */
+  modelSelect(models: string[]): Promise<string>;
 }
 
 export const realPrompter: Prompter = {
@@ -121,6 +123,14 @@ export const realPrompter: Prompter = {
     return await checkbox({
       message: "Which sections to configure? (space=toggle, enter=confirm)",
       choices,
+    });
+  },
+  async modelSelect(models) {
+    const choices = models.map((m) => ({ name: m, value: m }));
+    return await select({
+      message: "Select model:",
+      choices,
+      pageSize: 15,
     });
   },
 };
