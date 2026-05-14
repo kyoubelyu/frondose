@@ -5,7 +5,7 @@ import type { LinkedinSession } from "../../linkedin/types.js";
 
 const scrollParams = z.object({
   direction: z.enum(["up", "down", "left", "right"]).default("down").describe("Scroll direction."),
-  amount: z.number().int().positive().default(300).describe("Pixels to scroll. Default 300."),
+  amount: z.number().int().positive().default(3500).describe("Pixels to scroll. Default 3500."),
 });
 
 export function makeScrollTool(session: LinkedinSession) {
