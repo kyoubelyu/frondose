@@ -136,7 +136,15 @@ export async function runUpdateSubcommand(opts: UpdateSubcommandOpts = {}): Prom
   process.stdout.write(`Latest:   ${latestWithV}  (published ${release.published_at.split("T")[0]})\n`);
   if (cmp === -1) {
     process.stdout.write("\n");
-    process.stdout.write("Update available! Run `npm install -g @kyoube/mai-agent` to upgrade.\n");
+    // P-22 §3.3: context-aware message — auto-update is the default path; only
+    // when MAI_AUTOUPDATE=skip do we point the operator at manual recovery.
+    if (process.env.MAI_AUTOUPDATE === "skip") {
+      process.stdout.write(
+        `Update available: ${latestWithV} — auto-update is disabled (MAI_AUTOUPDATE=skip). Run \`mai\` to apply, or unset MAI_AUTOUPDATE.\n`,
+      );
+    } else {
+      process.stdout.write(`Update available: ${latestWithV} — mai will auto-update on next startup.\n`);
+    }
   } else if (cmp === 1) {
     process.stdout.write("Local build is ahead of latest release.\n");
   } else {
