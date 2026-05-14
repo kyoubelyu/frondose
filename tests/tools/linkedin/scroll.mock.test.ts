@@ -86,23 +86,23 @@ test(
 // ─── T-M77 ─────────────────────────────────────────────────────────────────────
 
 test(
-  "T-M77: scroll tool Zod schema defaults amount to 300; parsed params work for 'up' direction",
+  "T-M77: scroll tool Zod schema defaults amount to 3500; parsed params work for 'up' direction",
   { timeout: 5000 },
   async () => {
     const session = makeFakeSession();
     const tool = makeScrollTool(session);
 
-    // Parse through Zod to apply the default (amount defaults to 300 when omitted)
+    // Parse through Zod to apply the default (amount defaults to 3500 when omitted — Phase 86.1 upstream fix)
     const params = tool.parameters.parse({ direction: "up" });
-    assert.equal(params.amount, 300, "Zod schema must default amount to 300");
+    assert.equal(params.amount, 3500, "Zod schema must default amount to 3500");
 
-    // Execute with the Zod-parsed params (amount = 300 from default)
+    // Execute with the Zod-parsed params (amount = 3500 from default)
     const result = await tool.execute(params, { toolCallId: "t2", messages: [], abortSignal });
 
     assert.equal(result.ok, true, "scroll with default amount must succeed");
     // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
     const data = (result as any).data;
-    assert.equal(data.amount, 300, "execute data.amount must be 300 (from default)");
+    assert.equal(data.amount, 3500, "execute data.amount must be 3500 (from default)");
     assert.equal(data.direction, "up");
   },
 );
