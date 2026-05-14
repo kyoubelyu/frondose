@@ -1,7 +1,23 @@
-/** P-11 D-9 (v0.4.6 rename): `mai telegram on|off|status|test|bind <user_id>` CLI subcommand handler. */
+/** P-11 D-9 (v0.4.6 rename): `mai telegram on|off|status|test|bind|proxy` CLI subcommand handler.
+ *  P-23 §6.8: `on/off/status` extended to install/uninstall launchd LaunchAgent
+ *  + report daemon liveness via telegram.pid + tail err.log on `status`.
+ */
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { parseModelSpec, resolveModelSpec } from "../../agent/modelResolver.js";
+import { isPidAlive, readPid } from "../../persistence/processLock.js";
 import { readTelegramConfig, writeTelegramConfig } from "../../persistence/telegramConfig.js";
 import { telegramFetch } from "../../tools/telegram/transport.js";
 import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";
+import {
+  type EnvSnapshot,
+  installLaunchAgent,
+  isDaemonInstalled,
+  type PlistArgs,
+  plistPath,
+  uninstallLaunchAgent,
+} from "./launchd.js";
 
 export interface TelegramSubcommandOpts {
   /** Path to telegram.json. */
@@ -12,6 +28,62 @@ export interface TelegramSubcommandOpts {
   proxyUrl?: string;
   /** Clear proxy URL for proxy action. */
   unsetProxy?: boolean;
+  /** P-23 §6.8: bypass install consent prompt (operator-facing --yes flag). */
+  yes?: boolean;
+}
+
+/** P-23 §6.8: assemble env snapshot for launchd plist. Provider key picked
+ *  from resolved default model spec → matching well-known env-var name. */
+function buildEnvSnapshot(): EnvSnapshot {
+  const env: EnvSnapshot = {
+    // biome-ignore lint/style/noNonNullAssertion: caller checks process.env.TELEGRAM_TOKEN before this is called.
+    TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN!,
+  };
+  if (process.env.TELEGRAM_PROXY) env.TELEGRAM_PROXY = process.env.TELEGRAM_PROXY;
+  if (process.env.MAI_MODEL) env.MAI_MODEL = process.env.MAI_MODEL;
+  // Resolve the model spec to determine which provider key to snapshot.
+  try {
+    const spec = resolveModelSpec({});
+    const { provider } = parseModelSpec(spec);
+    if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+      env.providerKeyName = "ANTHROPIC_API_KEY";
+      env.providerKeyValue = process.env.ANTHROPIC_API_KEY;
+    } else if (provider === "openai" && process.env.OPENAI_API_KEY) {
+      env.providerKeyName = "OPENAI_API_KEY";
+      env.providerKeyValue = process.env.OPENAI_API_KEY;
+    } else if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
+      env.providerKeyName = "DEEPSEEK_API_KEY";
+      env.providerKeyValue = process.env.DEEPSEEK_API_KEY;
+    }
+  } catch {
+    // Spec parse failure shouldn't block install — operator can re-run if needed.
+  }
+  return env;
+}
+
+function buildConsentText(args: PlistArgs): string {
+  return (
+    `Install launchd LaunchAgent for persistent Telegram?\n` +
+    `  Plist: ${plistPath(args.home)}\n` +
+    `  Node:  ${args.nodeBin}\n` +
+    `  Entry: ${args.maiEntry}\n` +
+    `  TELEGRAM_TOKEN will be snapshotted into the plist (chmod 600).\n` +
+    `Proceed?`
+  );
+}
+
+/** P-23 §3.3: read last non-empty line from err.log, truncated to 120 chars. */
+function tailLogLastLine(logPath: string): string | null {
+  if (!existsSync(logPath)) return null;
+  try {
+    const raw = readFileSync(logPath, "utf-8");
+    const lines = raw.split(/\r?\n/).filter((l) => l.length > 0);
+    const last = lines.at(-1);
+    if (!last) return null;
+    return last.length > 120 ? `${last.slice(0, 120)}…` : last;
+  } catch {
+    return null;
+  }
 }
 
 export async function runTelegramSubcommand(
@@ -22,21 +94,51 @@ export async function runTelegramSubcommand(
 ): Promise<void> {
   const cfg = readTelegramConfig(opts.tcPath);
   if (action === "on") {
-    cfg.enabled = true;
-    writeTelegramConfig(cfg, opts.tcPath);
-    process.stdout.write("[telegram] enabled (poller starts on next `mai` REPL launch)\n");
+    // P-23 §6.8 / §3.1: install launchd LaunchAgent.
+    if (process.platform !== "darwin") {
+      process.stderr.write("[telegram on] macOS-only — daemon supervision requires launchd\n");
+      process.exit(1);
+    }
+    const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
+    if (isPidAlive(replPidPath)) {
+      process.stderr.write("[telegram on] mai REPL is currently running — close it first (Close mai REPL first)\n");
+      process.exit(1);
+    }
     if (!process.env.TELEGRAM_TOKEN) {
-      process.stdout.write("⚠ TELEGRAM_TOKEN env var is unset — set it before launching the REPL\n");
+      process.stderr.write("[telegram on] TELEGRAM_TOKEN env var must be set\n");
+      process.exit(1);
     }
     if (cfg.boundUserId === null) {
-      process.stdout.write("⚠ no boundUserId — run `mai telegram bind <user_id>` first\n");
+      process.stderr.write("[telegram on] no boundUserId — run `mai telegram bind <user_id>` first\n");
+      process.exit(1);
     }
+    const env = buildEnvSnapshot();
+    const args: PlistArgs = {
+      nodeBin: process.execPath,
+      maiEntry: realpathSync(process.argv[1] ?? ""),
+      home: os.homedir(),
+      env,
+    };
+    const result = await installLaunchAgent(args, {
+      yes: opts.yes ?? false,
+      consent: async () => prompter.confirm(buildConsentText(args), false),
+    });
+    if (result.cancelled) {
+      process.stdout.write("[telegram on] cancelled\n");
+      return;
+    }
+    cfg.enabled = true;
+    writeTelegramConfig(cfg, opts.tcPath);
+    process.stdout.write("[telegram on] daemon installed and running\n");
+    process.stdout.write(`  Plist: ${plistPath()}\n  Logs:  ~/.mai/agent/logs/telegram-daemon.{out,err}.log\n`);
     return;
   }
   if (action === "off") {
+    // P-23 §6.8 / §3.2: uninstall launchd LaunchAgent, then flip flag.
+    if (process.platform === "darwin") uninstallLaunchAgent();
     cfg.enabled = false;
     writeTelegramConfig(cfg, opts.tcPath);
-    process.stdout.write("[telegram] disabled\n");
+    process.stdout.write("[telegram off] daemon stopped, plist removed, cfg disabled\n");
     return;
   }
   if (action === "status") {
@@ -51,7 +153,18 @@ export async function runTelegramSubcommand(
         `CHAT_ID=${process.env.TELEGRAM_CHAT_ID ? "set" : "unset"}, ` +
         `PROXY=${process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? "(unset)"}\n`,
     );
-    process.stdout.write("[telegram] running: false (CLI mode — no poller)\n");
+    // P-23 §3.3: daemon plist + PID + log tail.
+    const home = os.homedir();
+    const tgPidPath = path.join(home, ".mai", "agent", "telegram.pid");
+    const installed = isDaemonInstalled(home);
+    const daemonPid = readPid(tgPidPath);
+    const daemonAlive = daemonPid !== null && isPidAlive(tgPidPath);
+    process.stdout.write(`[telegram] daemon plist: ${plistPath(home)} (installed=${installed})\n`);
+    process.stdout.write(`[telegram] daemon pid: ${daemonPid ?? "(none)"} (alive=${daemonAlive})\n`);
+    const errLog = path.join(home, ".mai", "agent", "logs", "telegram-daemon.err.log");
+    const tail = tailLogLastLine(errLog);
+    process.stdout.write(`[telegram] log file: ${errLog} (last line: ${tail ?? "(empty)"})\n`);
+    process.stdout.write("[telegram] running: false (CLI mode — no in-process poller)\n");
     return;
   }
   if (action === "bind") {

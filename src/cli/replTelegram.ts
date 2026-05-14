@@ -1,18 +1,25 @@
 /**
  * P-11 / D-1 / D-7 / D-8 / D-19 / D-20: bidirectional Telegram REPL integration.
+ * P-23 §6.4: daemon-mode poller `startDaemonPoller` added alongside the existing
+ *   REPL-mode poller; gated on `repl.pid` (offset pinned while REPL is alive)
+ *   and on cross-process `turn.lock` (LockBusy → defer, no offset advance).
  *
  * Exports:
- *   - startTelegramPoller(cfg, deps, turnLock, abort): fire-and-forget Promise loop
+ *   - startTelegramPoller(cfg, deps, turnLock, abort): REPL-mode poller
+ *   - startDaemonPoller(cfg, deps, turnLock, abort): P-23 daemon-mode poller
  *   - handleTelegramSlash(line, ctx): /telegram on|off|status REPL slash dispatcher
  *   - handleTelegramTurn(update, deps): inject inbound message → run loop → auto-push reply
  *   - sendTelegramMessage(token, chatId, text, transport): outbound helper for auto-reply
  *
  * BLOCKER-1 fix locked: abort guard between turnLock release and offset write.
  */
+import os from "node:os";
+import path from "node:path";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import type { TurnLock } from "../agent/turnSemaphore.js";
-import { appendMessages } from "../persistence/session.js";
+import { acquireTurnLock, isPidAlive, releaseTurnLock } from "../persistence/processLock.js";
+import { appendMessages as appendMessagesPerCwd } from "../persistence/session.js";
 import { readTelegramConfig, type TelegramConfig, writeTelegramConfig } from "../persistence/telegramConfig.js";
 import { downloadTelegramFile, mediaTagFor } from "../tools/telegram/inboundMedia.js";
 import { telegramFetch } from "../tools/telegram/transport.js";
@@ -41,6 +48,10 @@ export interface TelegramTurnDeps {
   out: NodeJS.WritableStream;
   configPath: string;
   uploadAllowlistRoot: string;
+  /** P-23 §6.7: pluggable session-append writer.
+   *  REPL injects per-cwd `appendMessages`; daemon injects `appendMessagesShared`.
+   *  Default = per-cwd `appendMessages` (preserves P-11/P-12 callers). */
+  appendMessages?: (file: string, messages: CoreMessage[]) => void;
 }
 
 interface TelegramFileRef {
@@ -230,7 +241,8 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
   if (deps.abortSignal?.aborted) return;
   const tail = deps.messages.slice(turnStart);
   // P-12 D-1: dereference at use site; deps.sessionFile is now { path: string } (mutable ref).
-  appendMessages(deps.sessionFile.path, tail);
+  // P-23 §6.7: writer is pluggable via deps.appendMessages (daemon → appendMessagesShared).
+  (deps.appendMessages ?? appendMessagesPerCwd)(deps.sessionFile.path, tail);
   // D-20 + D-24: auto-push reply (bypass telegram_notify tool); truncate at 4000 chars.
   const finalText = extractAssistantText(tail);
   if (finalText && token) {
@@ -324,6 +336,102 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
     return;
   }
   ctx.out.write(`/telegram: unknown verb "${verb}" — valid: on | off | status\n`);
+}
+
+/** P-23 §6.4: daemon-mode poller with REPL-pause + cross-process turn-lock gates.
+ *  Two gates per update:
+ *    (1) C1 BLOCKER fix — while `repl.pid` is alive, defer turn AND do NOT
+ *        advance offset (Telegram redelivers buffered updates after REPL exits).
+ *    (2) C2 CONCERN-MR fix — acquire cross-process `acquireTurnLock(turn.lock)`
+ *        before invoking the in-process `turnLock.run(handleTelegramTurn)`. On
+ *        LockBusy, log + defer + offset unchanged. */
+export async function startDaemonPoller(
+  cfg: TelegramConfig,
+  deps: TelegramTurnDeps,
+  turnLock: TurnLock,
+  abort: AbortController,
+): Promise<PollerHandle> {
+  const handle: PollerHandle = {
+    running: true,
+    offset: cfg.lastUpdateOffset,
+    lastPollAt: null,
+    lastReceivedAt: cfg.lastReceivedAt ?? null,
+    abort,
+  };
+  const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
+  const turnLockPath = path.join(os.homedir(), ".mai", "agent", "turn.lock");
+  void (async () => {
+    const token = process.env.TELEGRAM_TOKEN;
+    if (!token) {
+      deps.out.write("[telegram daemon] cannot start: TELEGRAM_TOKEN unset\n");
+      handle.running = false;
+      return;
+    }
+    while (!abort.signal.aborted) {
+      try {
+        const url = `https://api.telegram.org/bot${token}/getUpdates`;
+        const body = JSON.stringify({
+          offset: handle.offset,
+          timeout: cfg.pollTimeoutSec,
+          allowed_updates: ["message"],
+        });
+        const res = await telegramFetch(
+          url,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body },
+          {
+            signal: abort.signal,
+            fallbackIp: cfg.stickyFallbackIp ?? undefined,
+            proxyUrl: process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? undefined,
+            onFallbackSuccess: (ip) => {
+              cfg.stickyFallbackIp = ip;
+              writeTelegramConfig(cfg, deps.configPath);
+            },
+          },
+        );
+        const j = (await res.json()) as { ok: boolean; result?: TelegramUpdate[] };
+        handle.lastPollAt = new Date().toISOString();
+        for (const upd of j.result ?? []) {
+          if (abort.signal.aborted) break;
+          handle.lastReceivedAt = new Date().toISOString();
+          // Gate 1 (C1 fix): REPL alive → defer + offset UNCHANGED.
+          if (isPidAlive(replPidPath)) {
+            deps.out.write(
+              `[telegram daemon] REPL active — deferring update ${upd.update_id} (offset NOT advanced; will redeliver)\n`,
+            );
+            continue;
+          }
+          // Gate 2 (C2 fix): cross-process turn lock around handleTelegramTurn.
+          let xLock: Awaited<ReturnType<typeof acquireTurnLock>>;
+          try {
+            xLock = await acquireTurnLock(turnLockPath, "daemon-tg", { timeoutMs: 60_000 });
+          } catch (e) {
+            // LockBusy → REPL is running a turn; defer (no offset advance).
+            deps.out.write(
+              `[telegram daemon] turn.lock busy (${e instanceof Error ? e.message : String(e)}); deferring update ${upd.update_id}\n`,
+            );
+            continue;
+          }
+          try {
+            await turnLock.run(() => handleTelegramTurn(upd, deps));
+          } finally {
+            releaseTurnLock(xLock);
+          }
+          if (abort.signal.aborted) break;
+          // Offset advance + persist ONLY when the turn was actually executed.
+          handle.offset = upd.update_id + 1;
+          cfg.lastUpdateOffset = handle.offset;
+          cfg.lastReceivedAt = handle.lastReceivedAt;
+          writeTelegramConfig(cfg, deps.configPath);
+        }
+      } catch (e) {
+        if (abort.signal.aborted) break;
+        deps.out.write(`[telegram daemon] poll error: ${e instanceof Error ? e.message : String(e)}\n`);
+        await new Promise((r) => setTimeout(r, cfg.pollBackoffSec * 1000));
+      }
+    }
+    handle.running = false;
+  })();
+  return handle;
 }
 
 function extractAssistantText(turnMessages: CoreMessage[]): string {

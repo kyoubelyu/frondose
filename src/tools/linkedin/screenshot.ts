@@ -18,7 +18,9 @@ export function makeScreenshotTool(session: LinkedinSession) {
     parameters: screenshotParams,
     execute: async ({ out }) => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         let pageUrl: string | undefined;
         try {
           pageUrl = await client.getCurrentUrl();

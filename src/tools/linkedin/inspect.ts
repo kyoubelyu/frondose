@@ -26,7 +26,9 @@ export function makeInspectTool(session: LinkedinSession) {
     parameters: inspectParams,
     execute: async ({ scope, full }) => {
       try {
-        const ctx = await captureCurrentSurfaceContext(await session.getOrInitClient());
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const ctx = await captureCurrentSurfaceContext(r.client);
         session.setLastContext(ctx);
         const summary = buildInspectSummary(ctx, scope);
         if (full) {

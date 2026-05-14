@@ -55,15 +55,29 @@ export interface PacingResult {
   serial: true;
 }
 
+/**
+ * P-23 §6.5: Sentinel envelope returned by getOrInitClient. When daemon's
+ * `chromeAcquireGuard` denies Chrome ownership (REPL is alive), the success
+ * branch is replaced by a structured `{ok:false}` envelope; tools narrow on
+ * `r.ok` and propagate the envelope back to the model verbatim.
+ */
+export type ClientOrUnavailable =
+  | { ok: true; client: CdpClient }
+  | { ok: false; error: "chrome_unavailable"; message: string };
+
 /** Session-scoped LinkedIn state; shared across all LinkedIn tools in one binary. */
 export interface LinkedinSession {
   /**
-   * Lazy-boot accessor. Returns the cached CdpClient if already booted; otherwise
-   * boots Chrome (ensureChrome + CdpClient.connect + injectStealth) and caches.
-   * Concurrent calls dedupe via promise sharing. Failed boots reset internal
-   * pending state so subsequent calls retry.
+   * Lazy-boot accessor. Returns the cached CdpClient via {ok:true,client} on
+   * success; otherwise boots Chrome (ensureChrome + CdpClient.connect +
+   * injectStealth) and caches. Concurrent calls dedupe via promise sharing.
+   * Failed boots reset internal pending state so subsequent calls retry.
+   *
+   * P-23 §6.5: when the optional `chromeAcquireGuard` (passed to
+   * createLinkedinSession) returns false, returns
+   * `{ok:false, error:"chrome_unavailable", message}` instead of throwing.
    */
-  getOrInitClient(): Promise<CdpClient>;
+  getOrInitClient(): Promise<ClientOrUnavailable>;
   /**
    * Returns the cached CdpClient if Chrome has been booted (via a prior
    * getOrInitClient() call); otherwise undefined. Useful for diagnostic /

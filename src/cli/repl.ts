@@ -6,7 +6,16 @@ import { compactMessages } from "../agent/compaction.js";
 import { runAgentLoop } from "../agent/loop.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
+import {
+  acquireTurnLock,
+  isPidAlive,
+  readPid,
+  releaseTurnLock,
+  removePid,
+  writePid,
+} from "../persistence/processLock.js";
 import { appendMessages, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
+import { appendMessagesShared } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { renderMarkdown } from "./markdown.js";
 import { drainDueJobs } from "./replCron.js";
@@ -44,7 +53,7 @@ export interface ReplOpts {
   telegramConfigPath?: string;
 }
 
-const AUTO_COMPACT_THRESHOLD = 0.50;
+const AUTO_COMPACT_THRESHOLD = 0.5;
 
 export async function runRepl(opts: ReplOpts): Promise<void> {
   const out = opts.out ?? process.stdout;
@@ -58,6 +67,19 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   // continue to compile and run.
   const cwd = opts.cwd ?? process.cwd();
   const tokenBudget = new TokenBudget(opts.model);
+
+  // P-23 §6.7: repl.pid lifecycle + cross-process turn-lock path. Written here
+  // so daemon's §6.4 gate observes REPL liveness on subsequent poll iterations.
+  const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
+  const turnLockPath = path.join(os.homedir(), ".mai", "agent", "turn.lock");
+  writePid(replPidPath);
+  const cleanupReplPid = (): void => removePid(replPidPath);
+  process.once("exit", cleanupReplPid);
+
+  // P-23 §6.7: when daemon is alive, REPL switches its session file to the
+  // shared JSONL so operator turns + daemon-deferred turns coexist on one log.
+  const telegramPidPath = path.join(os.homedir(), ".mai", "agent", "telegram.pid");
+  const daemonAliveAtBoot = isPidAlive(telegramPidPath);
   const sessionFileRef = { path: opts.sessionFile };
   const composedStepFinish = async (step: StepResult<ToolSet>) => {
     tokenBudget.add(step.usage);
@@ -141,8 +163,12 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
 
   // P-11 (D-7): start Telegram poller if config has it enabled AND env+bind ready.
   // P-12 D-6 / B-3: pollerHandle + pollerAbort declarations moved before refreshStatus (line ~73) to avoid TDZ.
+  // P-23 §6.7: when daemon is alive, REPL must NOT start its own poller (daemon owns inbound).
   const tgCfg = readTelegramConfig(effectiveTelegramConfigPath);
-  if (tgCfg.enabled) {
+  if (tgCfg.enabled && daemonAliveAtBoot) {
+    const daemonPid = readPid(telegramPidPath);
+    out.write(`[telegram] daemon active (PID ${daemonPid}); REPL poller disabled — daemon owns inbound.\n`);
+  } else if (tgCfg.enabled) {
     if (!process.env.TELEGRAM_TOKEN) {
       out.write("[telegram] config enabled but TELEGRAM_TOKEN unset — poller not started\n");
     } else if (tgCfg.boundUserId === null) {
@@ -208,26 +234,37 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     }
 
     // P-11 (D-19): serialize operator turn body behind cron / telegram turns.
+    // P-23 §6.7 (C2 reciprocal): wrap operator turn + session append in the
+    // cross-process turn.lock so daemon's §6.4 LockBusy gate observes us.
     const turnStart = opts.messages.length;
     opts.messages.push({ role: "user", content: text });
-    await turnLock.run(async () => {
-      await runAgentLoop({
-        model: opts.model,
-        system: opts.system,
-        messages: opts.messages,
-        tools: opts.tools,
-        // D-7: NO onText — buffered render after the loop resolves
-        abortSignal: opts.abortSignal,
-        onStepFinish: composedStepFinish,
+    let finalText = "";
+    let tail: CoreMessage[] = [];
+    const xLock = await acquireTurnLock(turnLockPath, "repl-op", { timeoutMs: 60_000 });
+    try {
+      await turnLock.run(async () => {
+        await runAgentLoop({
+          model: opts.model,
+          system: opts.system,
+          messages: opts.messages,
+          tools: opts.tools,
+          // D-7: NO onText — buffered render after the loop resolves
+          abortSignal: opts.abortSignal,
+          onStepFinish: composedStepFinish,
+        });
       });
-    });
+      tail = opts.messages.slice(turnStart);
+      finalText = extractAssistantText(tail);
+      // P-23 §6.7: when telegram cfg is enabled, append to shared JSONL; else per-cwd.
+      if (tgCfg.enabled) appendMessagesShared(sessionFileRef.path, tail);
+      else appendMessages(sessionFileRef.path, tail);
+    } finally {
+      releaseTurnLock(xLock);
+    }
 
     // buffered markdown render of the final assistant text (D-7)
-    const tail = opts.messages.slice(turnStart);
-    const finalText = extractAssistantText(tail);
     if (finalText) out.write(`${renderMarkdown(finalText)}\n`);
 
-    appendMessages(sessionFileRef.path, tail);
     if (opts.abortController?.signal.aborted) break;
 
     // auto-compaction (D-8 + rev-2 D-16 / D-17)
@@ -280,6 +317,9 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   pollerAbort?.abort();
   // P-19 D-1: clean up background cron ticker on REPL exit.
   clearInterval(cronInterval);
+  // P-23 §6.7: best-effort cleanup of repl.pid here (process.once('exit')
+  // handler is the canonical safety net; this fires earlier on graceful loop fall-through).
+  cleanupReplPid();
 }
 
 function extractAssistantText(turnMessages: CoreMessage[]): string {

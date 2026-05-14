@@ -35,7 +35,7 @@ function makeFakeSession() {
 
   const client = CdpClient.fromHandle(fakeHandle);
   return {
-    getOrInitClient: () => Promise.resolve(client),
+    getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () => undefined as CurrentSurfaceContext | undefined,
