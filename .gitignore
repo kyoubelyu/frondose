@@ -30,5 +30,5 @@ docs/
 
 # Team bootstrap guide — for local session reset only.
 bootstrap.md
-ClAUDE.md
+CLAUDE.md
 .gitignore
