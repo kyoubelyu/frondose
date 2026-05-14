@@ -2,6 +2,14 @@
 
 All notable changes to mai-agent.
 
+## v0.4.15 (2026-05-14)
+
+- `mai update` CLI subcommand — checks GitHub Releases API for newer mai-agent versions
+- Token reuse: reads `GH_TOKEN` from `~/.mai/agent/github.json` with env-var fallback
+- `--json` flag for machine-readable output (scripting)
+- Error classification: `unauthorized` / `not_found` / `network` / `no_token`
+- `compareVersions()` handles v-prefix, multi-digit minor, cross-major, local-ahead-of-latest
+
 ## v0.4.14 (2026-05-13)
 
 - Background cron ticker — `setInterval` 60s poll with `unref()` for autonomous scheduling

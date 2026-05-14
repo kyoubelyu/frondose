@@ -43,6 +43,7 @@ import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
+import { runUpdateSubcommand } from "./subcommands/update.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
 
 /**
@@ -409,6 +410,16 @@ async function main(): Promise<void> {
     await runSearchSubcommand("remove", {});
     process.exit(0);
   });
+
+  // P-20: `mai update` — check GitHub Releases for newer mai-agent version.
+  program
+    .command("update")
+    .description("Check for mai-agent updates on GitHub Releases")
+    .option("--json", "Output machine-readable JSON")
+    .action(async (cliOpts: { json?: boolean }) => {
+      await runUpdateSubcommand({ json: cliOpts.json ?? false });
+      process.exit(0);
+    });
 
   // P-11 D-9: `mai status` — aggregator (auth + chrome + identity + telegram + cron + memory).
   program
