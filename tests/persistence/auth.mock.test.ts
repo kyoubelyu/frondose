@@ -18,9 +18,35 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import { runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
-import { maskKey, readAuth, readAuthJsonKey, readAuthJsonVisionModel, writeAuth } from "../../src/persistence/auth.js";
+import {
+  DEFAULT_ANTHROPIC_BASE_URL,
+  DEFAULT_OPENAI_BASE_URL,
+  maskKey,
+  migrateProviderEntry,
+  readAuth,
+  readAuthJsonKey,
+  readAuthJsonVisionModel,
+  writeAuth,
+} from "../../src/persistence/auth.js";
+
+// Tiny helper: mock process.exit to throw instead of killing the test runner.
+// Returns the exit code that was passed, or undefined if not called.
+function mockProcessExit(): { getCode: () => number | undefined; restore: () => void } {
+  let capturedCode: number | undefined;
+  const orig = process.exit.bind(process);
+  // biome-ignore lint/suspicious/noExplicitAny: intentional override for test isolation
+  (process as any).exit = (code?: number) => {
+    capturedCode = code;
+    throw new Error(`process.exit(${code})`);
+  };
+  return {
+    getCode: () => capturedCode,
+    // biome-ignore lint/suspicious/noExplicitAny: restore
+    restore: () => { (process as any).exit = orig; },
+  };
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -70,17 +96,19 @@ test("T-Auth1b: writeAuth overwrite enforces mode 0o600 via defensive chmodSync"
 // ─── T-Auth2 — set with baseUrl ───────────────────────────────────────────────
 
 test("T-Auth2: runAuthSubcommand set stores baseUrl in providers[provider]", async () => {
+  // P-21: "set" now takes url: instead of spec: + baseUrl:. Update to URL-based API.
   const { dir, authPath } = tmpAuthPath();
   try {
     await runAuthSubcommand("set", {
-      spec: "openai:deepseek-chat",
+      url: "https://api.deepseek.com/v1",
       key: "sk-dsk-test",
-      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-chat",
+      name: "deepseek",
       authPath,
     });
     const auth = readAuth(authPath);
-    assert.equal(auth?.providers?.openai?.key, "sk-dsk-test", "T-Auth2: key must be stored");
-    assert.equal(auth?.providers?.openai?.baseUrl, "https://api.deepseek.com", "T-Auth2: baseUrl must be stored");
+    assert.equal(auth?.providers?.deepseek?.key, "sk-dsk-test", "T-Auth2: key must be stored");
+    assert.equal(auth?.providers?.deepseek?.baseUrl, "https://api.deepseek.com/v1", "T-Auth2: baseUrl must be stored verbatim from url arg");
     console.log("T-Auth2: baseUrl stored correctly ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -136,7 +164,8 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
 test("T-Auth4: set then remove leaves provider absent in auth.json", async () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    await runAuthSubcommand("set", { spec: "anthropic:claude-sonnet-4-5", key: "sk-ant-toremove", authPath });
+    // P-21: "set" now takes url: instead of spec:. Update to URL-based API.
+    await runAuthSubcommand("set", { url: "https://api.anthropic.com/v1", key: "sk-ant-toremove", model: "claude-sonnet-4-5", name: "anthropic", authPath });
     const before = readAuth(authPath);
     assert.ok(before?.providers?.anthropic, "T-Auth4: pre-condition: provider must exist before remove");
 
@@ -165,21 +194,21 @@ test("T-Auth5: runAuthSubcommand default writes default field to auth.json", asy
 
 // ─── T-Auth6 — invalid spec rejected ─────────────────────────────────────────
 
-test("T-Auth6: runAuthSubcommand set with invalid spec (no colon) exits 1 with error", async () => {
+test("T-Auth6: runAuthSubcommand set with missing url in non-interactive mode exits 1", async () => {
+  // P-21: "set" requires url: in non-interactive mode; missing url → process.exit(1).
+  // We mock process.exit to throw instead of killing the test runner.
   const { dir, authPath } = tmpAuthPath();
+  const exitMock = mockProcessExit();
   try {
-    // parseModelSpec throws when no colon — runAuthSubcommand propagates the throw.
-    let threw = false;
-    try {
-      await runAuthSubcommand("set", { spec: "invalidspec", key: "sk-test", authPath });
-    } catch {
-      threw = true;
-    }
-    assert.equal(threw, true, "T-Auth6: invalid spec must throw parseModelSpec error");
-    console.log("T-Auth6: invalid spec rejected by parseModelSpec ✓");
+    await runAuthSubcommand("set", { key: "sk-test", authPath }); // no url
+  } catch {
+    // expected mock exit throw
   } finally {
+    exitMock.restore();
     rmSync(dir, { recursive: true, force: true });
   }
+  assert.equal(exitMock.getCode(), 1, "T-Auth6: missing url must call process.exit(1)");
+  console.log("T-Auth6: missing url in non-interactive mode exits 1 ✓");
 });
 
 // ─── T-MR1 — readAuthJsonKey ──────────────────────────────────────────────────
@@ -274,4 +303,93 @@ test("T-Auth.6: readAuth returns stored deepseek baseUrl from auth.json; DEEPSEE
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-21 scaffolds — T-MIG.1..T-MIG.4
+//
+// NOTE: These tests import `migrateProviderEntry`, `DEFAULT_ANTHROPIC_BASE_URL`,
+// and `DEFAULT_OPENAI_BASE_URL` which DO NOT EXIST in `src/persistence/auth.ts`
+// until builder Step 4b. All tests will fail to compile until then.
+// After Step 4b: scaffolds compile + reach assert.fail("TODO...").
+// After Step 5: assertion bodies filled in.
+//
+// Gate coverage:
+//   G-P21.4 — T-MIG.1, T-MIG.2, T-MIG.3, T-MIG.4
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("migrateProviderEntry — old-format provider entries get type + default baseUrl (G-P21.4)", () => {
+  it("T-MIG.1: when anthropic entry has no type field, migrateProviderEntry → type=anthropic + DEFAULT_ANTHROPIC_BASE_URL", () => {
+    // Given: entry = { key: "sk-ant-xxx" } (no type, no baseUrl), name = "anthropic"
+    // When:  migrateProviderEntry("anthropic", entry) is called
+    // Then:  returned entry.type === "anthropic", entry.baseUrl === DEFAULT_ANTHROPIC_BASE_URL, entry.key preserved
+    const entry = migrateProviderEntry("anthropic", { key: "sk-ant-xxx" });
+    assert.equal(entry.type, "anthropic", `T-MIG.1: type must be "anthropic"`);
+    assert.equal(entry.baseUrl, DEFAULT_ANTHROPIC_BASE_URL, `T-MIG.1: baseUrl must be DEFAULT_ANTHROPIC_BASE_URL (${DEFAULT_ANTHROPIC_BASE_URL})`);
+    assert.equal(entry.key, "sk-ant-xxx", "T-MIG.1: key must be preserved");
+  });
+
+  it("T-MIG.2: when openai entry has no type field, migrateProviderEntry → type=openai + DEFAULT_OPENAI_BASE_URL", () => {
+    // Given: entry = { key: "sk-proj-xxx" } (no type, no baseUrl), name = "openai"
+    // When:  migrateProviderEntry("openai", entry) is called
+    // Then:  returned entry.type === "openai", entry.baseUrl === DEFAULT_OPENAI_BASE_URL, entry.key preserved
+    const entry = migrateProviderEntry("openai", { key: "sk-proj-xxx" });
+    assert.equal(entry.type, "openai", `T-MIG.2: type must be "openai"`);
+    assert.equal(entry.baseUrl, DEFAULT_OPENAI_BASE_URL, `T-MIG.2: baseUrl must be DEFAULT_OPENAI_BASE_URL (${DEFAULT_OPENAI_BASE_URL})`);
+    assert.equal(entry.key, "sk-proj-xxx", "T-MIG.2: key must be preserved");
+  });
+
+  it("T-MIG.3: when deepseek entry has baseUrl but no type, migrateProviderEntry → type=openai + baseUrl preserved", () => {
+    // Given: entry = { key: "sk-xxx", baseUrl: "https://api.deepseek.com/v1" } (no type), name = "deepseek"
+    // When:  migrateProviderEntry("deepseek", entry) is called
+    // Then:  returned entry.type === "openai", entry.baseUrl === "https://api.deepseek.com/v1" (unchanged), key preserved
+    const entry = migrateProviderEntry("deepseek", { key: "sk-xxx", baseUrl: "https://api.deepseek.com/v1" });
+    assert.equal(entry.type, "openai", "T-MIG.3: type must be 'openai' for non-anthropic provider");
+    assert.equal(entry.baseUrl, "https://api.deepseek.com/v1", "T-MIG.3: existing baseUrl must be preserved unchanged");
+    assert.equal(entry.key, "sk-xxx", "T-MIG.3: key must be preserved");
+  });
+
+  it("T-MIG.4: when entry already has type field, migrateProviderEntry → returns entry unchanged", () => {
+    // Given: entry = { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" } (already typed)
+    // When:  migrateProviderEntry("anthropic", entry) is called
+    // Then:  returned entry is the same reference (short-circuit) with all fields unchanged
+    const input = { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" as const };
+    const entry = migrateProviderEntry("anthropic", input);
+    assert.equal(entry.type, "anthropic", "T-MIG.4: type must be unchanged");
+    assert.equal(entry.baseUrl, "https://api.anthropic.com/v1", "T-MIG.4: baseUrl must be unchanged");
+    assert.equal(entry.key, "sk-ant-xxx", "T-MIG.4: key must be unchanged");
+    // The implementation returns the entry as-is when type is set (early return)
+    assert.deepEqual(entry, input, "T-MIG.4: deep-equal to input (no fields added or changed)");
+  });
+});
+
+describe("readAuth — migrateAuth called on read; old on-disk entries upgraded in-memory (G-P21.4)", () => {
+  it("T-MIG.1b: when on-disk anthropic entry lacks type, readAuth returns entry with type=anthropic + default baseUrl", () => {
+    // Given: auth.json on disk has { providers: { anthropic: { key: "sk-ant-mig" } } } (no type, no baseUrl)
+    // When:  readAuth(path) is called
+    // Then:  returned auth.providers.anthropic.type === "anthropic" AND baseUrl === DEFAULT_ANTHROPIC_BASE_URL
+    const { dir, authPath } = tmpAuthPath();
+    try {
+      writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-ant-mig" } } }), "utf-8");
+      const auth = readAuth(authPath);
+      assert.ok(auth, "T-MIG.1b: readAuth must return non-null for valid JSON");
+      assert.equal(
+        auth?.providers?.anthropic?.type,
+        "anthropic",
+        "T-MIG.1b: readAuth must migrate type to 'anthropic' for name='anthropic' entry",
+      );
+      assert.equal(
+        auth?.providers?.anthropic?.baseUrl,
+        DEFAULT_ANTHROPIC_BASE_URL,
+        `T-MIG.1b: readAuth must migrate baseUrl to DEFAULT_ANTHROPIC_BASE_URL (${DEFAULT_ANTHROPIC_BASE_URL})`,
+      );
+      assert.equal(
+        auth?.providers?.anthropic?.key,
+        "sk-ant-mig",
+        "T-MIG.1b: key must be preserved during in-memory migration",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
