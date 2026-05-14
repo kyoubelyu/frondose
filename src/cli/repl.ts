@@ -44,7 +44,7 @@ export interface ReplOpts {
   telegramConfigPath?: string;
 }
 
-const AUTO_COMPACT_THRESHOLD = 0.75;
+const AUTO_COMPACT_THRESHOLD = 0.50;
 
 export async function runRepl(opts: ReplOpts): Promise<void> {
   const out = opts.out ?? process.stdout;
