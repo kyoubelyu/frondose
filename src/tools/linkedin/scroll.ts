@@ -14,7 +14,9 @@ export function makeScrollTool(session: LinkedinSession) {
     parameters: scrollParams,
     execute: async ({ direction, amount }) => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         await client.scroll(direction, amount);
         const pacing = await applyPacing();
         return ok("scroll", { direction, amount, pacing });

@@ -93,7 +93,9 @@ export function makePressTool(session: LinkedinSession) {
     parameters: pressParams,
     execute: async ({ key }) => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         const m = key.match(MODIFIER_PREFIX_RE);
         if (m) {
           // biome-ignore lint/style/noNonNullAssertion: regex match guarantees groups 1 and 2.

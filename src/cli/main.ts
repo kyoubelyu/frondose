@@ -25,6 +25,8 @@ import {
   writeIdentity,
 } from "../persistence/identity.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
+import { loadMessagesShared, sharedSessionPath } from "../persistence/sharedSession.js";
+import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import type { ControlSignals } from "../tools/index.js";
 import { makeAllTools } from "../tools/index.js";
 import { registerCrashHandlers } from "./crashLogger.js";
@@ -43,6 +45,7 @@ import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
+import { runTelegramDaemon } from "./subcommands/telegramDaemon.js";
 import { runUpdateSubcommand } from "./subcommands/update.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
 
@@ -177,8 +180,12 @@ async function main(): Promise<void> {
         soul: composeSoulBand(finalIdentity),
         checkpoint: CHECKPOINT, // P-10 D-10
       });
-      const sessionFile = continueRecent(opts.cwd, { newSession: opts.newSession });
-      const messages: CoreMessage[] = loadMessages(sessionFile);
+      // P-23 §6.7: when telegram daemon is enabled in cfg, REPL switches to
+      // shared session JSONL so operator + daemon turns share one log.
+      const tgCfgForSession = readTelegramConfig(telegramConfigPath);
+      const usingShared = tgCfgForSession.enabled;
+      const sessionFile = usingShared ? sharedSessionPath() : continueRecent(opts.cwd, { newSession: opts.newSession });
+      const messages: CoreMessage[] = usingShared ? loadMessagesShared(sessionFile) : loadMessages(sessionFile);
 
       // v0.3-fix1: lazy LinkedinSession factory — captures launch options only; Chrome
       // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
@@ -378,6 +385,13 @@ async function main(): Promise<void> {
         proxyUrl: url,
         unsetProxy: cliOpts.unset ?? false,
       });
+      process.exit(0);
+    });
+  // P-23 §6.9: daemon entry — invoked by launchd, not for direct operator use.
+  tg.command("poll")
+    .description("(daemon) long-running Telegram poll loop — invoked by launchd; not for direct operator use")
+    .action(async () => {
+      await runTelegramDaemon();
       process.exit(0);
     });
 
