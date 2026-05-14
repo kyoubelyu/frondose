@@ -17,7 +17,7 @@ test("T-M80: makeLinkedinTools returns exactly 10 LinkedIn tools with correct na
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
-    getOrInitClient: () => Promise.resolve(client),
+    getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () => undefined as CurrentSurfaceContext | undefined,

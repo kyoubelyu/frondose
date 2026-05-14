@@ -22,7 +22,7 @@ import { launch as chromeLaunch } from "chrome-launcher";
 import { CdpClient } from "../../src/cdp/client.js";
 import { __setLaunchFn } from "../../src/cdp/launcher.js";
 import { createLinkedinSession } from "../../src/linkedin/session.js";
-import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
+import type { ClientOrUnavailable, CurrentSurfaceContext } from "../../src/linkedin/types.js";
 
 // ─── Fake CDP handle ─────────────────────────────────────────────────────────
 
@@ -139,8 +139,10 @@ test("T-V031.6: first getOrInitClient() boots Chrome once and returns a CdpClien
   try {
     const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-6" });
 
-    const client = await session.getOrInitClient();
-
+    // P-23: getOrInitClient returns ClientOrUnavailable; unwrap the .client from ok=true result
+    const result = await session.getOrInitClient() as ClientOrUnavailable;
+    assert.strictEqual(result.ok, true, "getOrInitClient must succeed (ok=true)");
+    const client = (result as { ok: true; client: CdpClient }).client;
     assert.ok(client instanceof CdpClient, "getOrInitClient must return a CdpClient instance");
     assert.equal(launchCallCount.count, 1, "ensureChrome launchFn must be called exactly once");
   } finally {
@@ -158,9 +160,13 @@ test("T-V031.7: second getOrInitClient() returns the cached client without re-bo
   try {
     const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-7" });
 
-    const client1 = await session.getOrInitClient();
-    const client2 = await session.getOrInitClient();
-
+    // P-23: unwrap ClientOrUnavailable to compare inner CdpClient references
+    const result1 = await session.getOrInitClient() as ClientOrUnavailable;
+    const result2 = await session.getOrInitClient() as ClientOrUnavailable;
+    assert.strictEqual(result1.ok, true, "first call must succeed");
+    assert.strictEqual(result2.ok, true, "second call must succeed");
+    const client1 = (result1 as { ok: true; client: CdpClient }).client;
+    const client2 = (result2 as { ok: true; client: CdpClient }).client;
     assert.strictEqual(client1, client2, "second call must return the exact same CdpClient reference");
     assert.equal(launchCallCount.count, 1, "ensureChrome must be called exactly once (cached on second call)");
   } finally {
@@ -178,8 +184,15 @@ test("T-V031.8: concurrent getOrInitClient() calls dedupe to a single boot", asy
   try {
     const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-8" });
 
-    const [client1, client2] = await Promise.all([session.getOrInitClient(), session.getOrInitClient()]);
-
+    // P-23: unwrap ClientOrUnavailable from concurrent calls; compare inner CdpClient
+    const [result1, result2] = await Promise.all([
+      session.getOrInitClient() as Promise<ClientOrUnavailable>,
+      session.getOrInitClient() as Promise<ClientOrUnavailable>,
+    ]);
+    assert.strictEqual(result1.ok, true, "first concurrent call must succeed");
+    assert.strictEqual(result2.ok, true, "second concurrent call must succeed");
+    const client1 = (result1 as { ok: true; client: CdpClient }).client;
+    const client2 = (result2 as { ok: true; client: CdpClient }).client;
     assert.strictEqual(client1, client2, "both concurrent calls must resolve to the same CdpClient");
     assert.equal(launchCallCount.count, 1, "ensureChrome must be called exactly once (deduped concurrent calls)");
   } finally {
@@ -204,7 +217,10 @@ test("T-V031.9: failed boot resets initPromise so next call retries", async () =
     assert.equal(session.getClient(), undefined, "getClient() must still be undefined after a failed boot");
 
     // Second call: launchFn succeeds (initPromise was reset by the failure handler)
-    const client = await session.getOrInitClient();
+    // P-23: unwrap ClientOrUnavailable
+    const result = await session.getOrInitClient() as ClientOrUnavailable;
+    assert.strictEqual(result.ok, true, "second call must succeed after the failed first attempt");
+    const client = (result as { ok: true; client: CdpClient }).client;
     assert.ok(client instanceof CdpClient, "second call must succeed after the failed first attempt");
     assert.equal(launchCallCount.count, 2, "launchFn must be called again on retry");
   } finally {
@@ -223,7 +239,10 @@ test("T-V031.10: getClient() returns undefined before getOrInitClient, then the 
 
     assert.equal(session.getClient(), undefined, "getClient() must be undefined before getOrInitClient()");
 
-    const client = await session.getOrInitClient();
+    // P-23: unwrap ClientOrUnavailable; getClient() still returns CdpClient directly
+    const result = await session.getOrInitClient() as ClientOrUnavailable;
+    assert.strictEqual(result.ok, true, "getOrInitClient must succeed");
+    const client = (result as { ok: true; client: CdpClient }).client;
     const cached = session.getClient();
 
     assert.strictEqual(cached, client, "getClient() must return the same CdpClient after getOrInitClient()");

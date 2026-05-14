@@ -11,7 +11,9 @@ export function makeCloseTool(session: LinkedinSession) {
     parameters: z.object({}),
     execute: async () => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         await client.closeBrowser();
         return ok("close", {});
       } catch (e) {

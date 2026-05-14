@@ -55,7 +55,7 @@ function makeFakeSessionWithEntries(entries: Array<{ ref: string; role: string; 
   const client = CdpClient.fromHandle(fakeHandle);
 
   return {
-    getOrInitClient: () => Promise.resolve(client),
+    getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () =>
@@ -107,7 +107,7 @@ function makeFakeSession() {
   const client = CdpClient.fromHandle(fakeHandle);
 
   return {
-    getOrInitClient: () => Promise.resolve(client),
+    getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
     getLastContext: () =>

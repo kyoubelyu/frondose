@@ -18,7 +18,9 @@ export function makeTypeTool(session: LinkedinSession) {
     parameters: typeParams,
     execute: async ({ text, ref, label, scope }) => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         let target = "";
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;

@@ -44,7 +44,9 @@ export function makeUploadTool(session: LinkedinSession) {
         // P-14: preflight file size + image dimensions
         preflightUpload(absolute);
 
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         const ctx = session.getLastContext() ?? (await captureCurrentSurfaceContext(client));
         session.setLastContext(ctx);
 

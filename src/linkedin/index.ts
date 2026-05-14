@@ -21,6 +21,7 @@ export { inferSurface, isLinkedInLoginUrl, LINKEDIN_APP_HOSTS } from "./scopeRes
 export { createLinkedinSession } from "./session.js";
 export { captureCurrentSurfaceContext } from "./snapshotCapture.js";
 export type {
+  ClientOrUnavailable,
   CurrentSurfaceContext,
   InspectSummary,
   LinkedInSurface,

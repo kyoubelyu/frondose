@@ -21,7 +21,9 @@ export function makeClickTool(session: LinkedinSession) {
     parameters: clickParams,
     execute: async ({ ref, label, scope }) => {
       try {
-        const client = await session.getOrInitClient();
+        const r = await session.getOrInitClient();
+        if (!r.ok) return r;
+        const { client } = r;
         let target: string;
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;

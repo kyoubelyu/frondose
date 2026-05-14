@@ -1,10 +1,17 @@
 import { CdpClient } from "../cdp/client.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
-import type { CurrentSurfaceContext, LinkedinSession } from "./types.js";
+import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
 
 export interface CreateLinkedinSessionOpts {
   port: number;
   profileDir: string;
+  /**
+   * P-23 §6.5: daemon-mode Chrome guard. When provided and returns false at
+   * the moment of a getOrInitClient() call, the session returns a
+   * `{ok:false, error:"chrome_unavailable"}` sentinel instead of booting
+   * Chrome. Default (undefined) preserves existing REPL behavior.
+   */
+  chromeAcquireGuard?: () => boolean;
 }
 
 /**
@@ -22,10 +29,18 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
   let lastContext: CurrentSurfaceContext | undefined;
 
   return {
-    getOrInitClient(): Promise<CdpClient> {
-      if (cached && cached.isConnected()) return Promise.resolve(cached);
+    async getOrInitClient(): Promise<ClientOrUnavailable> {
+      // P-23 §6.5: refuse Chrome boot when daemon's guard denies ownership.
+      if (opts.chromeAcquireGuard && !opts.chromeAcquireGuard()) {
+        return {
+          ok: false,
+          error: "chrome_unavailable",
+          message: "REPL holds Chrome lock — daemon must yield",
+        };
+      }
+      if (cached?.isConnected()) return { ok: true, client: cached };
       if (!cached?.isConnected()) cached = undefined;
-      if (initPromise) return initPromise;
+      if (initPromise) return { ok: true, client: await initPromise };
       const bootPromise = (async (): Promise<CdpClient> => {
         const handle = await ensureChrome(opts);
         // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
@@ -47,7 +62,8 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
           throw err;
         },
       );
-      return initPromise;
+      const client = await initPromise;
+      return { ok: true, client };
     },
 
     getClient(): CdpClient | undefined {
