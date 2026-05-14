@@ -18,6 +18,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { DEEPSEEK_THINKING_DEFAULT_MODELS, makeNoThinkingFetch, resolveModel } from "../../src/agent/modelResolver.js";
 
@@ -225,9 +228,17 @@ test("T-MR-FIX1.SET1: DEEPSEEK_THINKING_DEFAULT_MODELS contains deepseek-v4-flas
 // ─── T-MR-FIX1.M9: resolveModel smoke (no API call) ─────────────────────────
 
 test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageModel without throwing", () => {
-  const restore = saveEnv("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY");
+  // P-21: auth.json entry required; provide mock HOME + auth.json for determinism.
+  const restore = saveEnv("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME");
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m9-"));
   try {
-    process.env.DEEPSEEK_API_KEY = "stub-key-for-smoke";
+    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    writeFileSync(
+      join(tmpHome, ".mai", "auth.json"),
+      JSON.stringify({ providers: { openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" } } }),
+      "utf-8",
+    );
+    process.env.HOME = tmpHome;
     process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
     const model = resolveModel({ factory: "openai:deepseek-v4-flash" });
     assert.ok(model !== null && typeof model === "object", "resolveModel must return an object");
@@ -238,6 +249,7 @@ test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageMod
     );
   } finally {
     restore();
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
@@ -259,14 +271,24 @@ test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — 
 // ─── T-MR-FIX1.M11: resolveModel native openai path unaffected ───────────────
 
 test("T-MR-FIX1.M11: resolveModel('openai:gpt-4o-mini') unaffected — no fetch wrapper", () => {
-  const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY");
+  // P-21: auth.json entry required; provide mock HOME + auth.json for determinism.
+  const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME");
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m11-"));
   try {
+    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    writeFileSync(
+      join(tmpHome, ".mai", "auth.json"),
+      JSON.stringify({ providers: { openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" } } }),
+      "utf-8",
+    );
+    process.env.HOME = tmpHome;
     process.env.OPENAI_API_KEY = "sk-stub";
     const model = resolveModel({ factory: "openai:gpt-4o-mini" });
     assert.ok(model !== null && typeof model === "object", "must return LanguageModel object");
     // gpt-4o-mini does not startsWith("deepseek") → makeNoThinkingFetch not called.
   } finally {
     restore();
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 

@@ -4,11 +4,102 @@ import { type AuthJson, DEFAULT_AUTH_PATH, maskKey, readAuth, writeAuth } from "
 import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";
 
 export interface AuthSubcommandOpts {
-  spec?: string; // for "set", "default"
+  // P-21: URL-based set flow
+  url?: string; // for "set" — API base URL (positional)
+  model?: string; // for "set" — model ID
+  name?: string; // for "set" — provider name (default: derived from URL hostname)
+  asDefault?: boolean; // for "set" — also write `default: <name>:<model>`
+  // Legacy / shared
+  spec?: string; // for "default"
   provider?: string; // for "remove"
   key?: string; // for "set"
-  baseUrl?: string; // for "set"
+  baseUrl?: string; // legacy override (kept for back-compat callers)
   authPath?: string; // override DEFAULT_AUTH_PATH (for tests)
+  /** DI: fetch implementation for tests (injected to fetchModelListSafe).
+   *  Defaults to globalThis.fetch. Matches the P-20 pattern in src/cli/subcommands/update.ts. */
+  fetchImpl?: typeof globalThis.fetch;
+}
+
+/**
+ * P-21: derive a default provider name from a base URL.
+ * Strips `api.`/`www.` prefix and takes the first hostname segment.
+ *   https://api.deepseek.com/v1 → "deepseek"
+ *   https://api.together.xyz/v1 → "together"
+ *   https://api.openai.com/v1   → "openai"
+ */
+export function deriveNameFromUrl(url: string): string {
+  const hostname = new URL(url).hostname;
+  const stripped = hostname.replace(/^api\./, "").replace(/^www\./, "");
+  return stripped.split(".")[0] ?? stripped;
+}
+
+/**
+ * P-21: inner fetch — throws on any error. Caller wraps it.
+ * Exposed for testing only; production callers use fetchModelListSafe.
+ */
+async function fetchModelList(
+  url: string,
+  key: string,
+  fetchImpl: typeof globalThis.fetch,
+  signal: AbortSignal,
+): Promise<string[]> {
+  const resp = await fetchImpl(`${url.replace(/\/$/, "")}/models`, {
+    headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    signal,
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const body = (await resp.json()) as { data?: Array<{ id: string }> };
+  return (body.data ?? []).map((m) => m.id).filter(Boolean);
+}
+
+/**
+ * P-21: safe wrapper around model-list fetch.
+ *
+ *   - Returns string[] of model IDs on success.
+ *   - On any error (network, non-2xx, non-JSON, timeout) returns [].
+ *   - On error writes to stderr: `Could not fetch model list: <message>\n`.
+ *   - Anthropic URLs (hostname ends with .anthropic.com or equals api.anthropic.com)
+ *     SKIP the fetch entirely (different auth header + schema). Returns [] with NO stderr.
+ *
+ * `fetchImpl` is dependency-injected so tests pass a mock fetch.
+ */
+export async function fetchModelListSafe(
+  url: string,
+  key: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<string[]> {
+  try {
+    const host = new URL(url).hostname;
+    if (host === "api.anthropic.com" || host.endsWith(".anthropic.com")) {
+      return [];
+    }
+  } catch {
+    // Malformed URL — let the fetch path produce a normal error.
+  }
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 5_000);
+  try {
+    return await fetchModelList(url, key, fetchImpl, ac.signal);
+  } catch (err) {
+    process.stderr.write(`Could not fetch model list: ${err instanceof Error ? err.message : String(err)}\n`);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** P-21: return the inferred provider `type` from a URL hostname. */
+function inferTypeFromUrl(url: string): "openai" | "anthropic" {
+  try {
+    const hostname = new URL(url).hostname;
+    if (hostname === "api.anthropic.com" || hostname.endsWith(".anthropic.com")) {
+      return "anthropic";
+    }
+  } catch {
+    // URL already validated upstream; default to openai-compat.
+  }
+  return "openai";
 }
 
 export async function runAuthSubcommand(
@@ -23,49 +114,106 @@ export async function runAuthSubcommand(
 
   switch (action) {
     case "set": {
-      // P-13 D-3 + D-5 + C-1 Option A: interactive fallback when args absent.
-      let spec = opts.spec;
+      // P-21: URL-based flow.
+      const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+      let url = opts.url;
       let key = opts.key;
-      if ((!spec || !key) && isInteractive()) {
-        if (!spec) {
-          const configured = Object.keys(existing.providers ?? {});
-          spec = await prompter.providerSelect(configured);
-          // C-1 fix Step 3b: "(add new provider spec…)" sentinel → free-form input for spec.
-          if (spec === "__NEW__") {
-            spec = await prompter.input("Provider spec (e.g. openai:gpt-4o):");
+      let model = opts.model;
+      let name = opts.name;
+      // asDefault: non-interactive defaults from --default flag; interactive overrides via confirm prompt.
+      let asDefault: boolean = opts.asDefault ?? false;
+
+      if (isInteractive() && (!url || !key || !model)) {
+        if (!url) {
+          url = await prompter.input("API base URL:");
+          try {
+            new URL(url);
+          } catch {
+            process.stderr.write(`Invalid URL: ${url}\n`);
+            process.exit(1);
           }
         }
         if (!key) {
-          // C-3 fix: operator may select a bare provider family key (e.g. "anthropic")
-          // from providerSelect, OR a full spec (e.g. "openai:gpt-4o") via __NEW__ +
-          // prompter.input(). Handle both without crashing parseModelSpec.
-          const provider = spec.includes(":") ? parseModelSpec(spec).provider : spec;
-          key = await prompter.apiKeyInput(provider);
+          key = await prompter.apiKeyInput(deriveNameFromUrl(url));
         }
+        if (!model) {
+          const modelList = await fetchModelListSafe(url, key, fetchImpl);
+          if (modelList.length > 0) {
+            model = await prompter.modelSelect(modelList);
+          } else {
+            model = await prompter.input("Model ID (e.g. gpt-4o, deepseek-chat):");
+          }
+        }
+        if (!name) {
+          const defaultName = deriveNameFromUrl(url);
+          const entered = await prompter.input(`Provider name (default: ${defaultName}):`);
+          name = entered ? entered : defaultName;
+        }
+        asDefault = await prompter.confirm("Set as default provider?", asDefault);
       }
-      if (!spec) {
-        printNoninteractiveGuidance("auth set", "<provider:modelId>", "<provider:modelId> --key $ANTHROPIC_API_KEY");
+
+      if (!url) {
+        printNoninteractiveGuidance(
+          "auth set",
+          "<url>",
+          "https://api.openai.com/v1 --key sk-xxx --model gpt-4o --name openai",
+        );
         process.exit(1);
       }
+
+      // /v1 path warning: OpenAI-compatible providers require /v1 in baseURL.
+      // Anthropic URLs are exempt (createAnthropic appends /v1 internally).
+      // Fires for both interactive (post-prompt) and non-interactive (post-url-guard) paths.
+      try {
+        const u = new URL(url);
+        const isAnthropicHost = u.hostname === "api.anthropic.com" || u.hostname.endsWith(".anthropic.com");
+        const hasV1 = u.pathname.replace(/\/$/, "").endsWith("/v1");
+        if (!hasV1 && !isAnthropicHost) {
+          process.stderr.write(
+            `[mai] warning: URL "${url}" has no /v1 path segment; ` +
+              `OpenAI-compatible providers usually require /v1 ` +
+              `(e.g. https://api.openai.com/v1). Continuing as entered.\n`,
+          );
+        }
+      } catch {
+        // Malformed URL — caught upstream.
+      }
+
       if (!key) {
-        printNoninteractiveGuidance("auth set", "--key <value>", `${spec} --key $ANTHROPIC_API_KEY`);
+        printNoninteractiveGuidance("auth set", "--key <value>", `${url} --key sk-xxx --model gpt-4o`);
         process.exit(1);
       }
-      const { provider } = parseModelSpec(spec); // validates spec format
+      if (!model) {
+        printNoninteractiveGuidance("auth set", "--model <id>", `${url} --key sk-xxx --model gpt-4o`);
+        process.exit(1);
+      }
+
+      if (!name) name = deriveNameFromUrl(url);
+
+      // Collision check: auto-increment to name-1, name-2, ...
+      if (existing.providers?.[name]) {
+        let suffix = 1;
+        while (existing.providers?.[`${name}-${suffix}`]) suffix++;
+        name = `${name}-${suffix}`;
+      }
+
+      const type = inferTypeFromUrl(url);
+
       const next: AuthJson = {
         ...existing,
+        default: asDefault ? `${name}:${model}` : existing.default,
         providers: {
           ...(existing.providers ?? {}),
-          [provider]: { key, ...(opts.baseUrl ? { baseUrl: opts.baseUrl } : {}) },
+          [name]: { key, baseUrl: url, type },
         },
       };
       writeAuth(next, path);
-      process.stdout.write(`[mai] auth.json updated for provider: ${provider}\n`);
+      process.stdout.write(`[mai] auth.json updated for provider: ${name} (${type})\n`);
       return;
     }
     case "list": {
       if (!existsSync(path)) {
-        process.stdout.write("No auth.json found. Run `mai auth set <provider:modelId> --key <value>` to configure.\n");
+        process.stdout.write("No auth.json found. Run `mai auth set <url> --key <value> --model <id>` to configure.\n");
         return;
       }
       process.stdout.write(`auth.json (${path})\n`);
@@ -80,8 +228,9 @@ export async function runAuthSubcommand(
           // biome-ignore lint/style/noNonNullAssertion: name iterated from Object.keys(providers).
           const entry = providers[name]!;
           const masked = maskKey(entry.key);
-          const baseUrlNote = entry.baseUrl ? ` (baseUrl: ${entry.baseUrl})` : "";
-          process.stdout.write(`    ${name}: ${masked}${baseUrlNote}\n`);
+          const typeStr = entry.type ?? "(unknown)";
+          const baseUrlStr = entry.baseUrl ?? "(unknown)";
+          process.stdout.write(`    ${name}: ${masked}  type=${typeStr}  baseUrl=${baseUrlStr}\n`);
         }
       }
       return;
@@ -117,9 +266,6 @@ export async function runAuthSubcommand(
     }
     case "default": {
       // P-13 D-3 + D-5 + C-1: interactive fallback; sentinel = cancel no-op.
-      // C-3 note: providerSelect returns whatever the operator chose (family-key
-      // like "anthropic" OR full spec from "__NEW__" branch — but here we don't
-      // surface the __NEW__ branch for default; if selected we cancel). Stored as-is.
       let spec = opts.spec;
       if (!spec && isInteractive()) {
         const configured = Object.keys(existing.providers ?? {});
@@ -137,8 +283,6 @@ export async function runAuthSubcommand(
         printNoninteractiveGuidance("auth default", "<provider:modelId>", "anthropic:claude-sonnet-4-5");
         process.exit(1);
       }
-      // Validate format only when spec looks like a full provider:model spec.
-      // Operator picking a configured family key (e.g. "anthropic") is stored as-is per C-3.
       if (spec.includes(":")) {
         parseModelSpec(spec); // throws on bad format
       }
