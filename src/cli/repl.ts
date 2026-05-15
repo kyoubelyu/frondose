@@ -17,11 +17,13 @@ import {
 import { appendMessages, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
 import { appendMessagesShared } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
 import { renderMarkdown } from "./markdown.js";
 import { drainDueJobs } from "./replCron.js";
 import { dispatchSlash } from "./replSlash.js";
 import { type PollerHandle, startTelegramPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { StatusLine } from "./statusLine.js";
+import { drainWorkerInbox } from "./workerInbox.js";
 
 export interface ReplOpts {
   model: LanguageModel;
@@ -148,6 +150,30 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   // P-10 (D-3 + D-16): boot-time drain of overdue jobs before first prompt.
   // P-11 (D-19): wrap each cron drain in turnLock so operator + cron + telegram turns serialize.
   await turnLock.run(() => drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps));
+  if (opts.abortController?.signal.aborted) {
+    process.stdout.off?.("resize", onResize);
+    statusLine.dispose();
+    return;
+  }
+
+  // P-26 §6.18 / C-2: worker inbox drain — wraps in turnLock.run() (serializes
+  // against Telegram poller + cron drain on the shared messages array) AND
+  // try/catch (so a runAgentLoop throw inside drain doesn't kill the for-await
+  // loop). Mark-consumed-BEFORE-inject invariant is preserved inside
+  // drainWorkerInbox itself.
+  const workerInboxDbPath = WORKER_INBOX_DB_PATH();
+  const drainOnce = async (): Promise<void> => {
+    await turnLock.run(async () => {
+      try {
+        await drainWorkerInbox(workerInboxDbPath, opts.abortController?.signal, cronDeps);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.write(`[mai] drainWorkerInbox failed: ${msg}; continuing\n`);
+      }
+    });
+  };
+  // Boot-time drain (BEFORE first prompt + AFTER cron drain).
+  await drainOnce();
   if (opts.abortController?.signal.aborted) {
     process.stdout.off?.("resize", onResize);
     statusLine.dispose();
@@ -304,6 +330,10 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     // P-12 D-1: telegramDeps.sessionFile is the sessionFileRef object — mutates in place, no refresh needed.
     cronDeps.sessionFile = sessionFileRef.path;
     await turnLock.run(() => drainDueJobs(effectiveSchedulePath, opts.abortController?.signal, cronDeps));
+    if (opts.abortController?.signal.aborted) break;
+
+    // P-26 §6.18: drain worker inbox after each operator turn (mirrors drainDueJobs).
+    await drainOnce();
     if (opts.abortController?.signal.aborted) break;
 
     // rev-3 D-18: redraw status after every turn (budget changed).

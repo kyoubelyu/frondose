@@ -52,6 +52,12 @@ export interface TelegramTurnDeps {
    *  REPL injects per-cwd `appendMessages`; daemon injects `appendMessagesShared`.
    *  Default = per-cwd `appendMessages` (preserves P-11/P-12 callers). */
   appendMessages?: (file: string, messages: CoreMessage[]) => void;
+  /** P-26 Step-5a B-26R-1: optional pre-turn prefix injection. Server daemon
+   *  supplies `drainServerInbox(serverInboxDb)`; worker telegram daemon leaves
+   *  undefined. When defined and returns non-null, the result is prepended to
+   *  the user message with a "\n\n---\n\n" separator BEFORE `runAgentLoop`,
+   *  so the server LLM sees fleet events as context. */
+  inboxPrefix?: () => string | null;
 }
 
 interface TelegramFileRef {
@@ -229,7 +235,12 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
   deps.out.write(`[telegram] ↓ @${username}: ${inPreview}\n`);
 
   const turnStart = deps.messages.length;
-  deps.messages.push({ role: "user", content: lines.join("\n") });
+  // P-26 Step-5a B-26R-1: server daemon supplies `inboxPrefix`; worker daemon
+  // leaves it undefined. When supplied + non-null, prepend the formatted
+  // pending-events summary so the server LLM sees fleet activity as context.
+  const prefix = deps.inboxPrefix?.() ?? null;
+  const userContent = prefix ? `${prefix}\n\n---\n\n${lines.join("\n")}` : lines.join("\n");
+  deps.messages.push({ role: "user", content: userContent });
   await runAgentLoop({
     model: deps.model,
     system: deps.system,

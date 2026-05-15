@@ -1,7 +1,12 @@
 import type { Tool, ToolSet } from "ai";
 import type { HookRunner } from "../agent/hooks.js";
 import { IDEMPOTENT_TOOLS, withRetry } from "../agent/retryWrapper.js";
+import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
+import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
+import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
+import { openServerInboxDb } from "../persistence/serverInbox.js";
+import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { echoTool } from "./control/echo.js";
 import { makeControlTools } from "./control/index.js";
 import type { ControlSignals } from "./control/stop.js";
@@ -12,11 +17,14 @@ import { makeMemoryTools } from "./memory/index.js";
 import { makeMethodologyTools } from "./methodology/index.js";
 import { makeOperatorOutputTools } from "./operatorOutput/index.js";
 import { makeListWorkersTool } from "./server/listWorkers.js";
+import { makePublishEventTool } from "./server/publishEvent.js";
+import { makeQueryLeadGloballyTool, type ServerCoords } from "./server/queryLeadGlobally.js";
+import { makeSendWorkerMessageTool } from "./server/sendWorkerMessage.js";
 import { makeWebTools } from "./webTools/index.js";
 
-/** P-25: tool-set mode. `worker` (default) is the existing 24-tool inventory.
- *  `server` is the 14-tool orchestrator inventory: no LinkedIn primitives, no
- *  methodology (qualify_profile is ICP-specific), plus `list_workers` stub. */
+/** P-25: tool-set mode. `worker` (default) is the worker inventory; `server`
+ *  is the orchestrator inventory: no LinkedIn primitives, no methodology
+ *  (qualify_profile is ICP-specific), plus `list_workers` + `send_worker_message`. */
 export type ToolMode = "worker" | "server";
 
 // Re-export ControlSignals for callers (e.g. src/cli/main.ts).
@@ -37,31 +45,63 @@ export type ToolKey = keyof typeof tools;
 export interface PersistencePaths {
   memoryDbPath: string;
   identityPath: string;
+  // P-26: optional paths for serverCoords resolution + server-side DB handles.
+  configPath?: string;
+  secretsPath?: string;
+  workersDbPath?: string;
+  serverInboxDbPath?: string;
 }
 
 /**
- * Build the full tool inventory. P-9 surface (with all factories provisioned):
- *   1 echo + 2 memory + 2 identity + 1 methodology + 10 LinkedIn
- *   + 2 operatorOutput + 3 control + 3 webTools = 24 tools.
+ * Build the full tool inventory. P-26 surface:
+ *   - worker mode: 26 tools (P-9 24 + query_lead_globally + publish_event)
+ *   - server  mode: 15 tools (P-25 14 + send_worker_message; list_workers
+ *                              upgraded from P-25 stub to registry-backed)
  *
- * P-9 (D-1 / D-11): after base registration, all idempotent tools are wrapped
- * with withRetry; if hookRunner present, ALL tools are then wrapped with
- * wrapWithHooks. Layer order (outermost → innermost): hookWrapper → retryWrapper
- * → original execute.
+ * Layer order applied across BOTH modes (outermost → innermost):
+ *   hookWrapper → safeModeWrap → retryWrap → original execute
+ *
+ * Safe-mode wrap (P-26): worker mode only, ONLY when `serverCoords !== null`.
+ * Refuses 4 outreach tools (`click`/`type`/`press`/`upload`) when no
+ * successful heartbeat in the last 2 min. Standalone workers (no `server.url`
+ * configured) skip safe-mode entirely.
  */
 export function makeAllTools(
   session?: LinkedinSession,
   persistence?: PersistencePaths,
   control?: ControlSignals,
   hookRunner?: HookRunner,
-  opts?: { mode?: ToolMode }, // P-25: defaults to "worker"; "server" excludes LinkedIn + methodology and adds list_workers.
+  opts?: { mode?: ToolMode; workerId?: string },
 ): ToolSet {
   const mode: ToolMode = opts?.mode ?? "worker";
   const out: ToolSet = { echo: echoTool };
+
+  // P-26: lazy serverCoords resolution from config + secrets. Resolved ONLY
+  // in worker mode + only when both url + token + workerId are present. The
+  // tools always register; null coords surface a graceful envelope at execute
+  // time (so the LLM sees a clear error rather than a missing-tool surprise).
+  let serverCoords: ServerCoords | null = null;
+  if (mode === "worker" && persistence) {
+    try {
+      const cfg = readConfig(persistence.configPath ?? DEFAULT_CONFIG_PATH());
+      const secrets = readSecrets(persistence.secretsPath ?? DEFAULT_SECRETS_PATH());
+      if (cfg.server.url && secrets.server?.token && opts?.workerId) {
+        serverCoords = {
+          serverUrl: cfg.server.url,
+          token: secrets.server.token,
+          workerId: opts.workerId,
+        };
+      }
+    } catch {
+      // Config/secrets read errors → fall back to standalone (null coords).
+    }
+  }
+
   // Memory + identity register from persistence regardless of session/mode.
-  // They're 100% Chrome-free (scout F-13) and useful for both worker AND server.
   if (persistence) {
-    Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
+    // P-26: pass serverCoords through to `remember` so it can fire-and-forget
+    // POST /api/lead/touch alongside the local SQLite insert.
+    Object.assign(out, makeMemoryTools(persistence.memoryDbPath, serverCoords ?? undefined));
     Object.assign(out, makeIdentityTools(persistence.identityPath));
     // P-5 / P-25: methodology (qualify_profile) is LinkedIn-ICP-specific — worker only.
     if (mode === "worker") {
@@ -69,18 +109,14 @@ export function makeAllTools(
     }
   }
   // P-25: LinkedIn tools register ONLY in worker mode. Server mode overrides
-  // session presence — if caller misconfigures (passes session in server mode),
-  // emit a one-time stderr warning and skip the LinkedIn factory.
+  // session presence — if caller misconfigures, emit a stderr warning and skip.
   if (mode === "worker" && session) {
     Object.assign(out, makeLinkedinTools(session));
   } else if (mode === "server" && session) {
     process.stderr.write("[mai] makeAllTools: ignoring session in server mode\n");
   }
 
-  // P-6: operator-output (telegram_notify + gh_issue) + control (stop / sleep /
-  // escalate_for_capability) tools. Registered only when `control` is given —
-  // matches operator's "I want full agent capability" intent. Operator-output tools
-  // read env vars at execute time; missing env returns error envelope.
+  // P-6: operator-output + control tools. Registered when `control` is given.
   if (control) {
     const operatorOutputTools = makeOperatorOutputTools();
     Object.assign(out, operatorOutputTools);
@@ -101,15 +137,44 @@ export function makeAllTools(
   // P-9 F-3 / F-4: web tools always registered; no deps.
   Object.assign(out, makeWebTools());
 
-  // P-25: list_workers stub — server mode only. P-26 will replace the executor.
+  // P-26: mode-specific tools.
   if (mode === "server") {
-    Object.assign(out, makeListWorkersTool());
+    // server-only: list_workers (real impl, replaces P-25 stub) +
+    // send_worker_message. DB handles passed as null when persistence.* paths
+    // unset → tools surface a graceful envelope instead of crashing at boot
+    // (server boot before `mai server worker add` has created workers.sqlite).
+    let workersDb: import("better-sqlite3").Database | null = null;
+    let serverInboxDb: import("better-sqlite3").Database | null = null;
+    if (persistence?.workersDbPath && persistence?.serverInboxDbPath) {
+      workersDb = openWorkersDb(persistence.workersDbPath);
+      serverInboxDb = openServerInboxDb(persistence.serverInboxDbPath);
+    }
+    Object.assign(out, {
+      list_workers: makeListWorkersTool(workersDb),
+      send_worker_message: makeSendWorkerMessageTool(workersDb, serverInboxDb),
+    });
+  } else {
+    // worker-only: query_lead_globally + publish_event. Both always register;
+    // both return a structured envelope when serverCoords===null.
+    Object.assign(out, {
+      query_lead_globally: makeQueryLeadGloballyTool(serverCoords),
+      publish_event: makePublishEventTool(serverCoords),
+    });
   }
 
   // P-9 D-1 / D-11: retry-wrap idempotent tools.
   for (const name of Object.keys(out)) {
     if (IDEMPOTENT_TOOLS.has(name)) {
       out[name] = withRetry(out[name] as Tool);
+    }
+  }
+  // P-26: safe-mode wrap pass. ONLY worker mode, ONLY when serverCoords is set
+  // (standalone workers never enter safe-mode). Wraps the 4 outreach tools.
+  if (mode === "worker" && serverCoords !== null) {
+    for (const name of Object.keys(out)) {
+      if (OUTREACH_TOOL_NAMES.has(name)) {
+        out[name] = withSafeMode(out[name] as Tool, name);
+      }
     }
   }
   // P-9 D-11: hook-wrap every tool when hookRunner present (no-op if hooks.json absent).
