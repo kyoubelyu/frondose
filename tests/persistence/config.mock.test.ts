@@ -57,7 +57,7 @@ describe("readConfig — missing file → full default shape (G-P24.8)", () => {
       process.env.HOME = dir;
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 1, "T-CONFIG.1: schema_version must be 1");
-      assert.deepEqual(result.server, { url: null }, "T-CONFIG.1: server must be {url:null}");
+      assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30 }, "T-CONFIG.1: server must be {url:null, bind_address:null, poll_interval_s:30} (P-26 adds bind_address + poll_interval_s)");
       assert.deepEqual(result.worker, { id: null, hostname: null, label: null }, "T-CONFIG.1: worker must be all-null");
       assert.deepEqual(
         result.telegram,
@@ -85,7 +85,7 @@ describe("readConfig — minimal {schema_version:1} → Zod fills defaults (G-P2
       writeFileSync(configPath, JSON.stringify({ schema_version: 1 }), "utf-8");
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 1, "T-CONFIG.2: schema_version must be 1");
-      assert.deepEqual(result.server, { url: null }, "T-CONFIG.2: server default must be {url:null}");
+      assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30 }, "T-CONFIG.2: server default must be {url:null, bind_address:null, poll_interval_s:30} (P-26 adds bind_address + poll_interval_s)");
       assert.deepEqual(result.worker, { id: null, hostname: null, label: null }, "T-CONFIG.2: worker default must be all-null");
       assert.deepEqual(
         result.telegram,

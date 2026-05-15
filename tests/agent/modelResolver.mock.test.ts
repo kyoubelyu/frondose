@@ -566,18 +566,17 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: P-21 does not add Vercel tools — tool() count remains 24 worker + 1 server = 25 total", () => {
+  it("T-CONTRACT: P-21 does not add Vercel tools — tool() count is 28 after P-26 (24 worker base + 2 server-push + list_workers + query_lead_globally + publish_event + send_worker_message)", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  exactly 25 — P-25 added list_workers (server-only tool); total is now 25
-    //        (24 worker tools + 1 server-only list_workers).
-    //        buildModel rewrite is internal routing, not a new Vercel tool.
+    // Then:  exactly 28 — P-26 added query_lead_globally + publish_event + send_worker_message (3 new tools)
+    //        over P-25 baseline of 25. Total is now 28.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      25,
-      `Expected exactly 25 tool() calls in src/tools/, got ${count}. P-25 added list_workers (server-only); total is 25.`,
+      28,
+      `Expected exactly 28 tool() calls in src/tools/, got ${count}. P-26 added query_lead_globally + publish_event + send_worker_message (3 new tools over P-25 baseline of 25).`,
     );
   });
 });

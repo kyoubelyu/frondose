@@ -17,6 +17,7 @@ import { createLinkedinSession } from "../linkedin/index.js";
 import type { FreeAxesRecord } from "../methodology/types.js";
 import { makeAuditWriter } from "../persistence/audit.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
+import { readConfig } from "../persistence/config.js";
 import {
   applyIdentityPatch,
   type IdentityRecord,
@@ -24,9 +25,12 @@ import {
   readIdentity,
   writeIdentity,
 } from "../persistence/identity.js";
+import { setSafeModeServerUrl } from "../persistence/safeModeState.js";
+import { readSecrets } from "../persistence/secrets.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
 import { loadMessagesShared, sharedSessionPath } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
 import type { ControlSignals } from "../tools/index.js";
 import { makeAllTools } from "../tools/index.js";
 import { registerCrashHandlers } from "./crashLogger.js";
@@ -41,6 +45,7 @@ import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
+import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
@@ -49,6 +54,8 @@ import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runTelegramDaemon } from "./subcommands/telegramDaemon.js";
 import { runUpdateSubcommand } from "./subcommands/update.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
+import { startWorkerHeartbeat } from "./workerHeartbeat.js";
+import { startWorkerServerPoll } from "./workerServerPoll.js";
 
 /**
  * P-13 D-2: canonical Ctrl-C catch helper. Every Commander action body that may
@@ -236,7 +243,41 @@ async function main(): Promise<void> {
 
       // P-9 D-10: lazy-loads ~/.mai/agent/hooks.json; missing-file = no-op runner.
       const hookRunner = new HookRunner();
-      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control, hookRunner);
+
+      // P-26: worker-side server-coord plumbing. When `config.server.url` is set
+      // AND `secrets.server.token` is provisioned (via `mai server worker add`),
+      // start the heartbeat + long-poll loops. Otherwise the worker runs
+      // standalone (safe-mode never activates; query_lead_globally / publish_event
+      // return graceful envelopes via their null-coords paths).
+      const workerCfg = readConfig();
+      const workerSecrets = readSecrets();
+      const workerId = finalIdentity?.fullName ?? os.hostname();
+      if (workerCfg.server.url) {
+        if (workerSecrets.server?.token) {
+          setSafeModeServerUrl(workerCfg.server.url);
+          const coords = {
+            serverUrl: workerCfg.server.url,
+            token: workerSecrets.server.token,
+            workerId,
+          };
+          startWorkerHeartbeat(coords, abortController.signal);
+          startWorkerServerPoll(
+            coords,
+            WORKER_INBOX_DB_PATH(),
+            abortController.signal,
+            workerCfg.server.poll_interval_s * 1000,
+          );
+        } else {
+          process.stderr.write(
+            "[mai] config.server.url set but secrets.server.token missing — server features disabled\n",
+          );
+        }
+      }
+
+      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control, hookRunner, {
+        mode: "worker",
+        workerId,
+      });
 
       if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
         await runOneShot({
@@ -480,6 +521,36 @@ async function main(): Promise<void> {
     });
     process.exit(0);
   });
+  // P-26: `mai server worker add/rotate/remove/list` — worker-registry subgroup.
+  const serverWorker = server.command("worker").description("Worker registry");
+  serverWorker
+    .command("add <worker_id>")
+    .option("--hostname <h>", "worker hostname")
+    .option("--persona <p>", "worker persona label")
+    .action(async (workerId: string, cliOpts: { hostname?: string; persona?: string }) => {
+      await runServerWorkerSubcommand("add", {
+        workerId,
+        hostname: cliOpts.hostname,
+        persona: cliOpts.persona,
+      });
+      process.exit(0);
+    });
+  serverWorker.command("rotate <worker_id>").action(async (workerId: string) => {
+    await runServerWorkerSubcommand("rotate", { workerId });
+    process.exit(0);
+  });
+  serverWorker.command("remove <worker_id>").action(async (workerId: string) => {
+    await runServerWorkerSubcommand("remove", { workerId });
+    process.exit(0);
+  });
+  serverWorker
+    .command("list")
+    .option("--json", "JSON output", false)
+    .action(async (cliOpts: { json?: boolean }) => {
+      await runServerWorkerSubcommand("list", { json: cliOpts.json ?? false });
+      process.exit(0);
+    });
+
   // Hidden launchd entry — invoked by ProgramArguments only.
   server.command("daemon", { hidden: true }).action(async () => {
     // Same env propagation as the foreground `server` action so the daemon

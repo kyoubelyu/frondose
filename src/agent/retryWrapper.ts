@@ -22,6 +22,9 @@ export const IDEMPOTENT_TOOLS: ReadonlySet<string> = new Set([
   "web_fetch", // P-9 D-13: GET-style; idempotent
   "web_search", // P-9 D-13: GET/POST search query; idempotent at protocol level
   // analyze_screenshot is NOT idempotent for retry purposes (D-13: vision-token cost on each call)
+  // P-26: query_lead_globally is read-only ⇒ safe to retry. publish_event is
+  // fire-and-forget write ⇒ NOT idempotent (retry would double-event).
+  "query_lead_globally",
 ]);
 
 export interface RetryPolicy {

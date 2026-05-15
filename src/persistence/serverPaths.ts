@@ -14,3 +14,7 @@ export const SERVER_IDENTITY_PATH = (): string => join(SERVER_ROOT(), "identity.
 export const SERVER_CONFIG_PATH = (): string => join(SERVER_ROOT(), "config.json");
 export const SERVER_SECRETS_PATH = (): string => join(SERVER_ROOT(), "secrets.json");
 export const SERVER_LOGS_DIR = (): string => join(SERVER_ROOT(), "logs");
+
+// P-26: worker registry + server-side inbox.
+export const SERVER_WORKERS_DB_PATH = (): string => join(SERVER_ROOT(), "workers.sqlite");
+export const SERVER_INBOX_DB_PATH = (): string => join(SERVER_ROOT(), "inbox.sqlite");
