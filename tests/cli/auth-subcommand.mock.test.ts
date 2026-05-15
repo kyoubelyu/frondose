@@ -85,17 +85,24 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
     }
   });
 
-  it("T-Nonint.1b: 'list' with no providers (no prompter) prints 'No auth.json found' message", async () => {
+  it("T-Nonint.1b: 'list' with no providers (no prompter) prints no-auth or empty-providers message", async () => {
     // Given: runAuthSubcommand called with 2 args; no auth.json exists yet
     // When:  runAuthSubcommand("list", { authPath })
-    // Then:  stdout contains message about no auth.json; function returns normally
+    // Then:  stdout contains message about no providers OR no auth; function returns normally
+    //
+    // NOTE (P-25 builder change): auth.ts 'list' command changed output format —
+    // when auth path has no providers it now shows "providers: (none configured)"
+    // instead of "No auth.json found". Both formats satisfy the test intent.
 
     const { authPath, cleanup } = makeTmpAuthDir();
     try {
       const stdout = await captureStdout(() => runAuthSubcommand("list", { authPath }));
       assert.ok(
-        stdout.includes("No auth.json found") || stdout.includes("not found"),
-        `T-Nonint.1b: must print no-auth message; got: "${stdout}"`,
+        stdout.includes("No auth.json found") ||
+          stdout.includes("not found") ||
+          stdout.includes("none configured") ||
+          stdout.includes("(none)"),
+        `T-Nonint.1b: must print no-auth or no-providers message; got: "${stdout}"`,
       );
     } finally {
       cleanup();
@@ -274,7 +281,11 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     const auth = readAuth(authPath);
     assert.ok(auth?.providers?.together, "T-AUTH.1: providers.together must exist");
     assert.equal(auth?.providers?.together?.key, "tapi-xxx", "T-AUTH.1: key must be stored");
-    assert.equal(auth?.providers?.together?.baseUrl, "https://api.together.xyz/v1", "T-AUTH.1: baseUrl must be stored verbatim");
+    assert.equal(
+      auth?.providers?.together?.baseUrl,
+      "https://api.together.xyz/v1",
+      "T-AUTH.1: baseUrl must be stored verbatim",
+    );
     assert.equal(auth?.providers?.together?.type, "openai", "T-AUTH.1: type must be 'openai' for non-anthropic URL");
     assert.ok(out.includes("together"), "T-AUTH.1: stdout must confirm provider name 'together'");
   });
@@ -291,7 +302,10 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     };
     await captureStdout(() => runAuthSubcommand("set", opts));
     const auth = readAuth(authPath);
-    assert.ok(auth?.providers?.deepseek, `T-AUTH.2: providers.deepseek must exist (hostname "api.deepseek.com" → "deepseek")`);
+    assert.ok(
+      auth?.providers?.deepseek,
+      `T-AUTH.2: providers.deepseek must exist (hostname "api.deepseek.com" → "deepseek")`,
+    );
     assert.equal(auth?.providers?.deepseek?.key, "sk-xxx", "T-AUTH.2: key must be stored");
   });
 
@@ -319,7 +333,10 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     assert.ok(auth?.providers?.openai, `T-AUTH.6: original "openai" entry must be preserved`);
     assert.equal(auth?.providers?.openai?.key, "sk-existing", "T-AUTH.6: original key must be unchanged");
     // New entry stored as "openai-1" (auto-incremented)
-    assert.ok(auth?.providers?.["openai-1"], `T-AUTH.6: new entry must be stored as "openai-1" (collision auto-increment)`);
+    assert.ok(
+      auth?.providers?.["openai-1"],
+      `T-AUTH.6: new entry must be stored as "openai-1" (collision auto-increment)`,
+    );
     assert.equal(auth?.providers?.["openai-1"]?.key, "sk-new", "T-AUTH.6: new key must be stored under openai-1");
   });
 
@@ -394,7 +411,11 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     const auth = readAuth(authPath);
     assert.ok(auth?.providers?.deepseek, "T-AUTH.3: providers.deepseek must be written after interactive flow");
     assert.equal(auth?.providers?.deepseek?.key, "sk-deepseek-test", "T-AUTH.3: key from apiKeyInput must be stored");
-    assert.equal(auth?.providers?.deepseek?.baseUrl, "https://api.deepseek.com/v1", "T-AUTH.3: baseUrl from URL prompt must be stored");
+    assert.equal(
+      auth?.providers?.deepseek?.baseUrl,
+      "https://api.deepseek.com/v1",
+      "T-AUTH.3: baseUrl from URL prompt must be stored",
+    );
     assert.equal(auth?.providers?.deepseek?.type, "openai", "T-AUTH.3: type must be 'openai' for deepseek");
   });
 
@@ -424,7 +445,10 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
       `T-AUTH.4: stderr must contain "Could not fetch model list:"; got: "${stderrOutput}"`,
     );
     const auth = readAuth(authPath);
-    assert.ok(auth?.providers?.deepseek, "T-AUTH.4: providers.deepseek must be stored after fallback to manual model entry");
+    assert.ok(
+      auth?.providers?.deepseek,
+      "T-AUTH.4: providers.deepseek must be stored after fallback to manual model entry",
+    );
     assert.equal(auth?.providers?.deepseek?.key, "sk-deepseek-test", "T-AUTH.4: key from apiKeyInput must be stored");
   });
 
@@ -466,9 +490,7 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
       name: "deepseek",
       authPath,
     };
-    const stderrOutput = await captureStderr(() =>
-      captureStdout(() => runAuthSubcommand("set", opts)),
-    );
+    const stderrOutput = await captureStderr(() => captureStdout(() => runAuthSubcommand("set", opts)));
     assert.ok(
       stderrOutput.toLowerCase().includes("warning"),
       `T-AUTH.9: stderr must contain "warning"; got: "${stderrOutput}"`,
@@ -497,9 +519,7 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
       name: "anthropic",
       authPath,
     };
-    const stderrOutput = await captureStderr(() =>
-      captureStdout(() => runAuthSubcommand("set", opts)),
-    );
+    const stderrOutput = await captureStderr(() => captureStdout(() => runAuthSubcommand("set", opts)));
     assert.ok(
       !stderrOutput.includes("[mai] warning:"),
       `T-AUTH.10: NO /v1 warning expected for Anthropic hostname; got: "${stderrOutput}"`,

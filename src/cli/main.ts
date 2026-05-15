@@ -40,6 +40,7 @@ import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
+import { runServerSubcommand } from "./subcommands/server.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
 import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
@@ -414,6 +415,84 @@ async function main(): Promise<void> {
       await runTelegramDaemon();
       process.exit(0);
     });
+
+  // P-25: `mai server` — orchestrator agent (chief-of-staff). Independent
+  // directory tree at ~/.mai/server/, distinct Telegram bot via
+  // MAI_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
+  const server = program.command("server").description("Operator's orchestrator agent");
+  server.action(async () => {
+    // P-25 §6.11: propagate MAI_SERVER_TELEGRAM_TOKEN → TELEGRAM_TOKEN in-process
+    // so replTelegram.ts (which reads process.env.TELEGRAM_TOKEN) sees the
+    // operator's server-bot token. Guard prevents clobbering an explicitly-set
+    // TELEGRAM_TOKEN (per GQ-3 + plan §6.11).
+    if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
+      process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+    }
+    await runServerSubcommand("repl", {});
+    process.exit(0);
+  });
+  server
+    .command("install")
+    .option("--yes", "Bypass consent prompt", false)
+    .action(async (cliOpts: { yes?: boolean }) => {
+      await runWithExitGuard(async () => {
+        await runServerSubcommand("install", { yes: cliOpts.yes ?? false });
+      });
+      process.exit(0);
+    });
+  server.command("uninstall").action(async () => {
+    await runServerSubcommand("uninstall", {});
+    process.exit(0);
+  });
+  server.command("status").action(async () => {
+    await runServerSubcommand("status", {});
+    process.exit(0);
+  });
+  server.command("bind [user_id]").action(async (id: string | undefined) => {
+    await runWithExitGuard(async () => {
+      const userId = id === undefined ? undefined : Number(id);
+      await runServerSubcommand("bind", { userId });
+    });
+    process.exit(0);
+  });
+  const serverIdent = server.command("identity");
+  serverIdent
+    .command("init")
+    .option("--reset", "Re-run from scratch", false)
+    .action(async (cliOpts: { reset?: boolean }) => {
+      await runWithExitGuard(async () => {
+        await runServerSubcommand("identity-init", { reset: cliOpts.reset ?? false });
+      });
+      process.exit(0);
+    });
+  const serverSoul = server.command("soul");
+  serverSoul.command("show").action(async () => {
+    await runServerSubcommand("soul-show", {});
+    process.exit(0);
+  });
+  serverSoul.command("edit").action(async () => {
+    await runServerSubcommand("soul-edit", {});
+    process.exit(0);
+  });
+  serverSoul.command("reset").action(async () => {
+    await runWithExitGuard(async () => {
+      await runServerSubcommand("soul-reset", {});
+    });
+    process.exit(0);
+  });
+  // Hidden launchd entry — invoked by ProgramArguments only.
+  server.command("daemon", { hidden: true }).action(async () => {
+    // Same env propagation as the foreground `server` action so the daemon
+    // (which is launchd-spawned) sees the server-bot token under
+    // process.env.TELEGRAM_TOKEN (the plist's EnvironmentVariables already
+    // sets TELEGRAM_TOKEN to the snapshot of MAI_SERVER_TELEGRAM_TOKEN, but
+    // this guard keeps the dev-mode `mai server daemon` invocation correct).
+    if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
+      process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+    }
+    await runServerSubcommand("daemon", {});
+    process.exit(0);
+  });
 
   // P-15: `mai gh` — GitHub issue tool configuration
   const gh = program.command("gh").description("GitHub issue tool configuration");

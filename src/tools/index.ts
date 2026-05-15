@@ -11,7 +11,13 @@ import { makeLinkedinTools } from "./linkedin/index.js";
 import { makeMemoryTools } from "./memory/index.js";
 import { makeMethodologyTools } from "./methodology/index.js";
 import { makeOperatorOutputTools } from "./operatorOutput/index.js";
+import { makeListWorkersTool } from "./server/listWorkers.js";
 import { makeWebTools } from "./webTools/index.js";
+
+/** P-25: tool-set mode. `worker` (default) is the existing 24-tool inventory.
+ *  `server` is the 14-tool orchestrator inventory: no LinkedIn primitives, no
+ *  methodology (qualify_profile is ICP-specific), plus `list_workers` stub. */
+export type ToolMode = "worker" | "server";
 
 // Re-export ControlSignals for callers (e.g. src/cli/main.ts).
 export type { ControlSignals } from "./control/stop.js";
@@ -48,19 +54,28 @@ export function makeAllTools(
   persistence?: PersistencePaths,
   control?: ControlSignals,
   hookRunner?: HookRunner,
+  opts?: { mode?: ToolMode }, // P-25: defaults to "worker"; "server" excludes LinkedIn + methodology and adds list_workers.
 ): ToolSet {
+  const mode: ToolMode = opts?.mode ?? "worker";
   const out: ToolSet = { echo: echoTool };
-  // Memory + identity register from persistence regardless of session presence.
-  // They're 100% Chrome-free (scout F-13) and useful even without LinkedIn.
+  // Memory + identity register from persistence regardless of session/mode.
+  // They're 100% Chrome-free (scout F-13) and useful for both worker AND server.
   if (persistence) {
     Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
     Object.assign(out, makeIdentityTools(persistence.identityPath));
-    // P-5: methodology layer — qualify_profile reads identity.json ICP lazily.
-    Object.assign(out, makeMethodologyTools({ identityPath: persistence.identityPath }));
+    // P-5 / P-25: methodology (qualify_profile) is LinkedIn-ICP-specific — worker only.
+    if (mode === "worker") {
+      Object.assign(out, makeMethodologyTools({ identityPath: persistence.identityPath }));
+    }
   }
-  // LinkedIn tools register when a session factory is given; they lazy-boot
-  // Chrome on first call to session.getOrInitClient() inside execute.
-  if (session) Object.assign(out, makeLinkedinTools(session));
+  // P-25: LinkedIn tools register ONLY in worker mode. Server mode overrides
+  // session presence — if caller misconfigures (passes session in server mode),
+  // emit a one-time stderr warning and skip the LinkedIn factory.
+  if (mode === "worker" && session) {
+    Object.assign(out, makeLinkedinTools(session));
+  } else if (mode === "server" && session) {
+    process.stderr.write("[mai] makeAllTools: ignoring session in server mode\n");
+  }
 
   // P-6: operator-output (telegram_notify + gh_issue) + control (stop / sleep /
   // escalate_for_capability) tools. Registered only when `control` is given —
@@ -85,6 +100,11 @@ export function makeAllTools(
   }
   // P-9 F-3 / F-4: web tools always registered; no deps.
   Object.assign(out, makeWebTools());
+
+  // P-25: list_workers stub — server mode only. P-26 will replace the executor.
+  if (mode === "server") {
+    Object.assign(out, makeListWorkersTool());
+  }
 
   // P-9 D-1 / D-11: retry-wrap idempotent tools.
   for (const name of Object.keys(out)) {
