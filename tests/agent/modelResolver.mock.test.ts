@@ -169,8 +169,7 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
       // P-21: error message changed from "Unknown provider" to "not configured in auth.json"
       assert.throws(
         () => resolveModel({ factory: "groq:llama-3" }),
-        (err: Error) =>
-          err.message.includes("not configured in auth.json") || err.message.includes("Unknown provider"),
+        (err: Error) => err.message.includes("not configured in auth.json") || err.message.includes("Unknown provider"),
       );
     } finally {
       restoreEnv(saved);
@@ -420,10 +419,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
       capturedUrl?.startsWith("https://api.deepseek.com/v1/"),
       `T-BUILD.6: request URL must include /v1 after normalization; got "${capturedUrl}"`,
     );
-    assert.ok(
-      !capturedUrl?.includes("/v1/v1"),
-      `T-BUILD.6: URL must NOT have double /v1; got "${capturedUrl}"`,
-    );
+    assert.ok(!capturedUrl?.includes("/v1/v1"), `T-BUILD.6: URL must NOT have double /v1; got "${capturedUrl}"`);
   });
 
   it("T-BUILD.7: when DEEPSEEK_BASE_URL already has /v1, createOpenAI is NOT double-suffixed", async () => {
@@ -570,16 +566,18 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: P-21 does not add Vercel tools — tool() count remains 24", () => {
+  it("T-CONTRACT: P-21 does not add Vercel tools — tool() count remains 24 worker + 1 server = 25 total", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  exactly 24 — buildModel rewrite is internal routing, not a new Vercel tool
+    // Then:  exactly 25 — P-25 added list_workers (server-only tool); total is now 25
+    //        (24 worker tools + 1 server-only list_workers).
+    //        buildModel rewrite is internal routing, not a new Vercel tool.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      24,
-      `Expected exactly 24 tool() calls in src/tools/, got ${count}. P-21 must not add Vercel tools.`,
+      25,
+      `Expected exactly 25 tool() calls in src/tools/, got ${count}. P-25 added list_workers (server-only); total is 25.`,
     );
   });
 });

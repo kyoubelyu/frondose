@@ -26,18 +26,9 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  renameSync,
-  rmSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -95,8 +86,15 @@ function makeSuccessSpawn(): {
 } {
   const calls: Array<{ cmd: string; args: string[] }> = [];
   const impl: AutoUpdateDI["spawnSyncImpl"] = (cmd, args = [], _opts = {}) => {
-    calls.push({ cmd: String(cmd), args: (args as string[]) });
-    return { status: 0, signal: null, output: [], pid: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) } as SpawnSyncReturns<Buffer>;
+    calls.push({ cmd: String(cmd), args: args as string[] });
+    return {
+      status: 0,
+      signal: null,
+      output: [],
+      pid: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    } as SpawnSyncReturns<Buffer>;
   };
   return { impl, calls };
 }
@@ -115,8 +113,7 @@ function makePartialFailSpawn(
     const cmdStr = String(cmd);
     const argsArr = args as string[];
     calls.push({ cmd: cmdStr, args: argsArr });
-    const isFailTarget =
-      cmdStr === failCmd && failArgs.every((fa) => argsArr.includes(fa));
+    const isFailTarget = cmdStr === failCmd && failArgs.every((fa) => argsArr.includes(fa));
     return {
       status: isFailTarget ? failStatus : 0,
       signal: null,
@@ -166,10 +163,7 @@ async function captureStderr(fn: () => Promise<void>): Promise<string> {
  *   argv1     = dir/bin/mai (the symlink process.argv[1] points to)
  *   pkgSymlink = dir/lib/@kyoube/mai-agent (the resolved package symlink)
  */
-function makeSymlinkSetup(
-  dir: string,
-  devLink: boolean,
-): { argv1: string; pkgSymlink: string } {
+function makeSymlinkSetup(dir: string, devLink: boolean): { argv1: string; pkgSymlink: string } {
   const binDir = join(dir, "bin");
   const libDir = join(dir, "lib", "@kyoube");
   const versionDir = join(dir, "lib", "releases", "v0.4.15");
@@ -219,21 +213,21 @@ describe("autoUpdate — skip conditions", () => {
   });
 
   it("T-AUTO.2: when GH_TOKEN unset and github.json absent, runStartupAutoUpdate → {action:'skipped',reason:'no_token'}; no fetch", async () => {
-    // Given: process.env.GH_TOKEN unset; ~/.mai/agent/github.json does not exist (or has no token)
+    // Given: process.env.GH_TOKEN unset; HOME overridden to empty tmpDir (no secrets.json, no github.json)
     // When:  runStartupAutoUpdate({ fetchImpl: trackedFetch, ... }) called
     // Then:  returns {action:'skipped',reason:'no_token'}; fetchImpl never called
+    //
+    // NOTE (P-24 fix): readGithubConfig() now routes through readSecrets() with P-24 legacy fallback.
+    // Without HOME isolation, the fallback reads real ~/.mai/agent/secrets.json which may contain
+    // a real GitHub token, causing 'network' instead of 'no_token'. We override HOME to an empty
+    // tmpDir so readGithubConfig() finds no token anywhere in the fallback chain.
     const origMai = process.env.MAI_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    // Temporarily back up github.json if it exists to prevent token leaking into test
-    const cfgPath = join(homedir(), ".mai", "agent", "github.json");
-    const backupPath = `${cfgPath}.p22test.bak`;
-    let didBackup = false;
-    if (existsSync(cfgPath)) {
-      renameSync(cfgPath, backupPath);
-      didBackup = true;
-    }
+    const origHome = process.env.HOME;
+    const tmpHome = mkdtempSync(join(tmpdir(), "mai-p22-t2-home-"));
     delete process.env.MAI_AUTOUPDATE; // ensure opt_out doesn't fire first
     delete process.env.GH_TOKEN;
+    process.env.HOME = tmpHome;
     let fetchCallCount = 0;
     const trackingFetch: AutoUpdateDI["fetchImpl"] = async () => {
       fetchCallCount++;
@@ -245,11 +239,16 @@ describe("autoUpdate — skip conditions", () => {
       assert.equal(result.reason, "no_token", "reason must be no_token");
       assert.equal(fetchCallCount, 0, "fetchImpl must not be called when no token");
     } finally {
-      if (didBackup) renameSync(backupPath, cfgPath);
+      process.env.HOME = origHome;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
+      try {
+        rmSync(tmpHome, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup
+      }
     }
   });
 
@@ -366,10 +365,7 @@ describe("autoUpdate — skip conditions", () => {
     assert.ok(result !== undefined, "result must be defined");
     assert.equal(result.action, "skipped", "action must be skipped");
     assert.equal(result.reason, "dev_link", "reason must be dev_link for npm-link checkout");
-    assert.ok(
-      stderr.includes("dev source (npm link)"),
-      `stderr must contain dev-link advisory; got: "${stderr}"`,
-    );
+    assert.ok(stderr.includes("dev source (npm link)"), `stderr must contain dev-link advisory; got: "${stderr}"`);
   });
 
   it("T-AUTO.15: when derivePackageSymlink returns null (argv[1] not a symlink), runStartupAutoUpdate → {action:'skipped',reason:'not_global_install'}", async () => {
@@ -392,7 +388,11 @@ describe("autoUpdate — skip conditions", () => {
         spawnSyncImpl: spawnFn,
       });
       assert.equal(result.action, "skipped", "action must be skipped");
-      assert.equal(result.reason, "not_global_install", "reason must be not_global_install when argv1 is not a symlink");
+      assert.equal(
+        result.reason,
+        "not_global_install",
+        "reason must be not_global_install when argv1 is not a symlink",
+      );
       assert.equal(spawnCalls.length, 0, "spawnSyncImpl must not be called for not_global_install");
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
@@ -424,7 +424,9 @@ describe("autoUpdate — full update flow", () => {
     process.env.GH_TOKEN = "test-gh-token-p22-7";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
-    (process as any).exit = (code?: number) => { exitCode = code; };
+    (process as any).exit = (code?: number) => {
+      exitCode = code;
+    };
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
     try {
       const { argv1 } = makeSymlinkSetup(dir, false /* non-dev-link */);
@@ -438,20 +440,20 @@ describe("autoUpdate — full update flow", () => {
       assert.equal(exitCode, 0, "process.exit(0) must have been called for re-exec");
       // Verify all build steps were invoked
       assert.ok(
-        spawnCalls.some(c => c.cmd === "tar" && c.args.includes("-xzf")),
+        spawnCalls.some((c) => c.cmd === "tar" && c.args.includes("-xzf")),
         "tar -xzf must be called",
       );
       assert.ok(
-        spawnCalls.some(c => c.cmd === "npm" && c.args.includes("install") && c.args.includes("--prefer-offline")),
+        spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("install") && c.args.includes("--prefer-offline")),
         "npm install --prefer-offline must be called",
       );
       assert.ok(
-        spawnCalls.some(c => c.cmd === "npm" && c.args.includes("run") && c.args.includes("build")),
+        spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("run") && c.args.includes("build")),
         "npm run build must be called",
       );
       // Re-exec: spawns process.execPath with argv1 as first arg
       assert.ok(
-        spawnCalls.some(c => c.cmd === process.execPath),
+        spawnCalls.some((c) => c.cmd === process.execPath),
         "re-exec with process.execPath must be called",
       );
     } finally {
@@ -462,8 +464,12 @@ describe("autoUpdate — full update flow", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       // Clean up release dir created in real homedir
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -489,14 +495,8 @@ describe("autoUpdate — full update flow", () => {
       assert.equal(result.action, "failed", "action must be failed");
       assert.equal(result.reason, "extract", "reason must be extract when tar exits non-zero");
       // npm and re-exec must NOT be called after extract failure
-      assert.ok(
-        !spawnCalls.some(c => c.cmd === "npm"),
-        "npm must not be called after extract failure",
-      );
-      assert.ok(
-        !spawnCalls.some(c => c.cmd === process.execPath),
-        "re-exec must not happen after extract failure",
-      );
+      assert.ok(!spawnCalls.some((c) => c.cmd === "npm"), "npm must not be called after extract failure");
+      assert.ok(!spawnCalls.some((c) => c.cmd === process.execPath), "re-exec must not happen after extract failure");
       // Release dir must be cleaned up by cleanupPartial
       const releaseDir = join(releasesDirPath(), "v0.4.99");
       assert.ok(!existsSync(releaseDir), "release dir must be removed after extract failure");
@@ -505,8 +505,12 @@ describe("autoUpdate — full update flow", () => {
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -533,12 +537,12 @@ describe("autoUpdate — full update flow", () => {
       assert.equal(result.reason, "install", "reason must be install when npm install exits 137");
       // tar must have been called
       assert.ok(
-        spawnCalls.some(c => c.cmd === "tar"),
+        spawnCalls.some((c) => c.cmd === "tar"),
         "tar must have been called before install",
       );
       // npm run build must NOT be called after install failure
       assert.ok(
-        !spawnCalls.some(c => c.cmd === "npm" && c.args.includes("run") && c.args.includes("build")),
+        !spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("run") && c.args.includes("build")),
         "npm run build must not be called after install failure",
       );
       // Release dir must be cleaned up
@@ -549,8 +553,12 @@ describe("autoUpdate — full update flow", () => {
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -576,16 +584,16 @@ describe("autoUpdate — full update flow", () => {
       assert.equal(result.action, "failed", "action must be failed");
       assert.equal(result.reason, "build", "reason must be build when npm run build exits non-zero");
       // tar and npm install must have been called
-      assert.ok(spawnCalls.some(c => c.cmd === "tar"), "tar must have been called");
       assert.ok(
-        spawnCalls.some(c => c.cmd === "npm" && c.args.includes("install")),
+        spawnCalls.some((c) => c.cmd === "tar"),
+        "tar must have been called",
+      );
+      assert.ok(
+        spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("install")),
         "npm install must have been called before build",
       );
       // Re-exec must NOT be called after build failure
-      assert.ok(
-        !spawnCalls.some(c => c.cmd === process.execPath),
-        "re-exec must not happen after build failure",
-      );
+      assert.ok(!spawnCalls.some((c) => c.cmd === process.execPath), "re-exec must not happen after build failure");
       // Release dir must be cleaned up
       const releaseDir = join(releasesDirPath(), "v0.4.99");
       assert.ok(!existsSync(releaseDir), "release dir must be removed after build failure");
@@ -594,8 +602,12 @@ describe("autoUpdate — full update flow", () => {
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -660,7 +672,9 @@ describe("autoUpdate — lock handling", () => {
       assert.equal(spawnCalls.length, 0, "spawnSyncImpl must not be called when lock_busy");
     } finally {
       // The function never acquired the lock (threw EEXIST), so WE must clean it up
-      try { unlinkSync(updateLockPath()); } catch {}
+      try {
+        unlinkSync(updateLockPath());
+      } catch {}
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
@@ -691,7 +705,9 @@ describe("autoUpdate — lock handling", () => {
       assert.equal(result.reason, "up_to_date", "reason must be up_to_date after stale lock reaped");
     } finally {
       // The new lock is released + unlinked by the function's finally block; best-effort cleanup
-      try { unlinkSync(updateLockPath()); } catch {}
+      try {
+        unlinkSync(updateLockPath());
+      } catch {}
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
@@ -748,7 +764,9 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     process.env.GH_TOKEN = "test-gh-token-p22-boot1";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
-    (process as any).exit = (code?: number) => { exitCode = code; };
+    (process as any).exit = (code?: number) => {
+      exitCode = code;
+    };
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
     try {
       const { argv1 } = makeSymlinkSetup(dir, true /* devLink */);
@@ -765,10 +783,22 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       assert.equal(result.latestTag, "v0.4.99", "latestTag must match fetched tag");
       assert.equal(exitCode, 0, "process.exit(0) must have been called for re-exec");
       // All build steps must be called
-      assert.ok(spawnCalls.some(c => c.cmd === "tar"), "tar must be called");
-      assert.ok(spawnCalls.some(c => c.cmd === "npm" && c.args.includes("install")), "npm install must be called");
-      assert.ok(spawnCalls.some(c => c.cmd === "npm" && c.args.includes("build")), "npm run build must be called");
-      assert.ok(spawnCalls.some(c => c.cmd === process.execPath), "re-exec must be called");
+      assert.ok(
+        spawnCalls.some((c) => c.cmd === "tar"),
+        "tar must be called",
+      );
+      assert.ok(
+        spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("install")),
+        "npm install must be called",
+      );
+      assert.ok(
+        spawnCalls.some((c) => c.cmd === "npm" && c.args.includes("build")),
+        "npm run build must be called",
+      );
+      assert.ok(
+        spawnCalls.some((c) => c.cmd === process.execPath),
+        "re-exec must be called",
+      );
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
@@ -776,8 +806,12 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -795,7 +829,9 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     process.env.GH_TOKEN = "test-gh-token-p22-boot2";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
-    (process as any).exit = (code?: number) => { exitCode = code; };
+    (process as any).exit = (code?: number) => {
+      exitCode = code;
+    };
     const { impl: spawnFn } = makeSuccessSpawn();
     try {
       const { argv1 } = makeSymlinkSetup(dir, false /* non-dev-link */);
@@ -816,8 +852,12 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       else delete process.env.GH_TOKEN;
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
-      try { rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true }); } catch {}
-      try { unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz")); } catch {}
+      try {
+        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+      } catch {}
       cleanup();
     }
   });
@@ -834,13 +874,10 @@ describe("autoUpdate — lint boundary + contract checks", () => {
       encoding: "utf-8",
       cwd: process.cwd(),
     });
-    assert.ok(
-      !toolsResult.includes("Found"),
-      `src/tools/ has biome lint issues:\n${toolsResult}`,
-    );
+    assert.ok(!toolsResult.includes("Found"), `src/tools/ has biome lint issues:\n${toolsResult}`);
 
     const cpCheck = execSync(
-      "grep -rE \"from ['\\\"]node:child_process['\\\"]|require\\(.*child_process\" src/tools/ 2>/dev/null || echo CLEAN",
+      'grep -rE "from [\'\\"]node:child_process[\'\\"]|require\\(.*child_process" src/tools/ 2>/dev/null || echo CLEAN',
       { encoding: "utf-8" },
     );
     assert.ok(
@@ -852,16 +889,14 @@ describe("autoUpdate — lint boundary + contract checks", () => {
   it("T-CONTRACT: tool count remains 24 after P-22 changes (autoUpdate is NOT a Vercel tool)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  grep tool() in src/tools/**
-    // Then:  exactly 24 tool() calls — mai auto-update is a startup hook, not a Vercel tool
-    const out = execSync(
-      "grep -r \"tool(\" src/tools/ --include=\"*.ts\" | wc -l",
-      { encoding: "utf-8" },
-    );
+    // Then:  exactly 25 tool() calls — P-25 added list_workers (server-only); total is now 25.
+    //        mai auto-update is a startup hook, not a Vercel tool.
+    const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      24,
-      `Expected exactly 24 tool() calls in src/tools/, got ${count}. P-22 must not add Vercel tools.`,
+      25,
+      `Expected exactly 25 tool() calls in src/tools/, got ${count}. P-25 added list_workers (server-only); total is 25.`,
     );
   });
 });
