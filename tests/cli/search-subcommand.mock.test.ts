@@ -15,11 +15,12 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runSearchSubcommand } from "../../src/cli/subcommands/search.js";
+import { readSearchConfig } from "../../src/persistence/search.js";
 import { runTelegramSubcommand } from "../../src/cli/subcommands/telegram.js";
 import {
   DEFAULT_TELEGRAM_CONFIG,
@@ -92,8 +93,8 @@ describe("runSearchSubcommand (G-P15.6)", () => {
       await captureStdout(() =>
         runSearchSubcommand("set", { braveApiKey: "bsa-test", tavilyApiKey: "tvly-test", cfgPath }, makeMockPrompter()),
       );
-      assert.ok(existsSync(cfgPath), "search.json must exist");
-      const content = JSON.parse(readFileSync(cfgPath, "utf-8")) as { braveApiKey?: string; tavilyApiKey?: string };
+      // P-24 path-shift: writeSearchConfig routes to secrets.json; use readSearchConfig to verify
+      const content = readSearchConfig(cfgPath);
       assert.equal(content.braveApiKey, "bsa-test", "braveApiKey must be written");
       assert.equal(content.tavilyApiKey, "tvly-test", "tavilyApiKey must be written");
     } finally {
@@ -133,7 +134,8 @@ describe("runSearchSubcommand (G-P15.6)", () => {
       await captureStdout(() =>
         runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, makeMockPrompter()),
       );
-      const content = JSON.parse(readFileSync(cfgPath, "utf-8")) as { braveApiKey?: string; tavilyApiKey?: string };
+      // P-24 path-shift: writeSearchConfig routes to secrets.json; use readSearchConfig to verify merge
+      const content = readSearchConfig(cfgPath);
       assert.equal(content.braveApiKey, "bsa-new", "braveApiKey must be bsa-new");
       assert.equal(content.tavilyApiKey, "tvly-old", "tavilyApiKey must be preserved (merged, not overwritten)");
     } finally {

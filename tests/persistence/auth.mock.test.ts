@@ -23,6 +23,7 @@ import { runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
 import {
   DEFAULT_ANTHROPIC_BASE_URL,
   DEFAULT_OPENAI_BASE_URL,
+  authPathToSecretsPath,
   maskKey,
   migrateProviderEntry,
   readAuth,
@@ -55,15 +56,20 @@ function tmpAuthPath(): { dir: string; authPath: string } {
   return { dir, authPath: join(dir, "auth.json") };
 }
 
+// P-24 Step 5: authPathToSecretsPath imported from auth.js (replaces local secretsPathFor helper).
+// Logic: production auth path → DEFAULT_SECRETS_PATH(); test path (tmpDir/auth.json) → tmpDir/secrets.json.
+
 // ─── T-Auth1a — initial-create mode 0o600 ────────────────────────────────────
 
-test("T-Auth1a: writeAuth initial-create sets mode 0o600 via openSync", () => {
+test("T-Auth1a: writeAuth initial-create sets mode 0o600 on secrets.json (P-24 shim: write lands on secrets.json, not auth.json)", () => {
   const { dir, authPath } = tmpAuthPath();
   try {
     writeAuth({ providers: { anthropic: { key: "sk-ant-test1234" } } }, authPath);
-    const mode = statSync(authPath).mode & 0o777;
+    // P-24 Step 5: authPathToSecretsPath(authPath) derives co-located secrets.json.
+    // Mode assertion is on secrets.json, not auth.json (write lands on secrets.json).
+    const mode = statSync(authPathToSecretsPath(authPath)).mode & 0o777;
     assert.equal(mode, 0o600, `T-Auth1a: file mode must be 0o600 on initial create; got ${mode.toString(8)}`);
-    // Contents round-trip
+    // Contents round-trip (readAuth shim reads from secrets.json via authPathToSecretsPath)
     const read = readAuth(authPath);
     assert.equal(read?.providers?.anthropic?.key, "sk-ant-test1234", "T-Auth1a: provider key must round-trip");
     console.log("T-Auth1a: initial-create mode 0o600 ✓");
@@ -74,19 +80,20 @@ test("T-Auth1a: writeAuth initial-create sets mode 0o600 via openSync", () => {
 
 // ─── T-Auth1b — overwrite enforces mode 0o600 ────────────────────────────────
 
-test("T-Auth1b: writeAuth overwrite enforces mode 0o600 via defensive chmodSync", () => {
+test("T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 shim: write lands on secrets.json)", () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    // Pre-create at 0o644 (simulates a pre-existing file created by another tool).
-    writeFileSync(authPath, JSON.stringify({ providers: {} }), "utf-8");
-    // Manually set mode to 0o644.
-    chmodSync(authPath, 0o644);
-    assert.equal(statSync(authPath).mode & 0o777, 0o644, "T-Auth1b: pre-condition: file must be 0o644");
+    // P-24 Step 5: pre-create at secrets.json path (authPathToSecretsPath imported from auth.js).
+    const secretsPath = authPathToSecretsPath(authPath);
+    writeFileSync(secretsPath, JSON.stringify({ schema_version: 1, providers: {} }), "utf-8");
+    // Manually set mode to 0o644 (simulates pre-existing file from another tool).
+    chmodSync(secretsPath, 0o644);
+    assert.equal(statSync(secretsPath).mode & 0o777, 0o644, "T-Auth1b: pre-condition: secrets.json must be 0o644");
 
-    // writeAuth must upgrade it to 0o600.
+    // writeAuth must upgrade secrets.json to 0o600.
     writeAuth({ providers: { openai: { key: "sk-openai-overwrite" } } }, authPath);
-    const mode = statSync(authPath).mode & 0o777;
-    assert.equal(mode, 0o600, `T-Auth1b: overwrite must enforce 0o600; got ${mode.toString(8)}`);
+    const mode = statSync(secretsPath).mode & 0o777;
+    assert.equal(mode, 0o600, `T-Auth1b: overwrite must enforce 0o600 on secrets.json; got ${mode.toString(8)}`);
     console.log("T-Auth1b: overwrite defensive chmodSync 0o600 ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -18,6 +18,10 @@ export interface StatusOpts {
   cdpPort: number;
   ghPath?: string;
   searchPath?: string;
+  /** P-24 DEF-P24-1: config.json path. After the P-24 telegram-config split,
+   *  `proxyUrl` / `enabled` / `boundUserId` live in `config.json.telegram` and
+   *  `readTelegramConfig` needs an explicit `configPath` for test isolation. */
+  configPath?: string;
 }
 
 export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
@@ -53,7 +57,7 @@ export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
   }
 
   // telegram
-  const tg = readTelegramConfig(opts.tcPath);
+  const tg = readTelegramConfig(opts.tcPath, opts.configPath);
   process.stdout.write(
     `telegram: enabled=${tg.enabled}, boundUserId=${tg.boundUserId ?? "(unset)"}, offset=${tg.lastUpdateOffset}, proxy=${tg.proxyUrl ?? "(unset)"}\n`,
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it, test } from "node:test";
@@ -103,8 +103,12 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
       writeFileSync(join(maiDir, "auth.json"), '{"default":"openai:auth-model"}', "utf-8");
       const result = resolveModelSpec({});
       assert.equal(result, "openai:auth-model");
-      // Remove auth.json so next sub-test (e) gets the hardcoded fallback
+      // Remove auth.json so next sub-test (e) gets the hardcoded fallback.
+      // P-24 path-shift: readSecrets migrated auth.json → secrets.json on first read above;
+      // remove secrets.json too so sub-test (e) falls back to hardcoded DEFAULT_MODEL_SPEC.
       rmSync(join(maiDir, "auth.json"));
+      const migratedSecretsPath = join(tmpHome, ".mai", "agent", "secrets.json");
+      if (existsSync(migratedSecretsPath)) rmSync(migratedSecretsPath);
     });
 
     // (e) hardcoded fallback when all sources absent

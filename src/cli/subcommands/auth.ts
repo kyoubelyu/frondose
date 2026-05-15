@@ -1,6 +1,13 @@
 import { existsSync } from "node:fs";
 import { parseModelSpec } from "../../agent/modelResolver.js";
-import { type AuthJson, DEFAULT_AUTH_PATH, maskKey, readAuth, writeAuth } from "../../persistence/auth.js";
+import {
+  type AuthJson,
+  authPathToSecretsPath,
+  DEFAULT_AUTH_PATH,
+  maskKey,
+  readAuth,
+  writeAuth,
+} from "../../persistence/auth.js";
 import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";
 
 export interface AuthSubcommandOpts {
@@ -212,7 +219,9 @@ export async function runAuthSubcommand(
       return;
     }
     case "list": {
-      if (!existsSync(path)) {
+      // P-24: data lives in secrets.json (via shim). Show empty-state message if
+      // secrets.json is absent AND legacy auth.json has not been migrated yet.
+      if (!existsSync(authPathToSecretsPath(path)) && !existsSync(path)) {
         process.stdout.write("No auth.json found. Run `mai auth set <url> --key <value> --model <id>` to configure.\n");
         return;
       }

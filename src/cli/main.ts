@@ -136,6 +136,16 @@ async function main(): Promise<void> {
   const telegramConfigPath =
     process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
 
+  // P-24 §6.9: path to ~/.mai/agent/config.json. CLI production honors
+  // MAI_CONFIG_PATH (operator override); library-level DEFAULT_CONFIG_PATH()
+  // getter does NOT — see plan §8 NIT-B. Both env vars are undocumented in
+  // CLAUDE.md and unsupported for direct readConfig()/readSecrets() calls.
+  // Currently unused in main.ts dispatch — subcommands rely on the
+  // DEFAULT_CONFIG_PATH() default inside writeTelegramConfigFields. Reserved
+  // for future P-25 server/worker reads + explicit threading.
+  const _configPath = process.env.MAI_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "config.json");
+  void _configPath;
+
   // P-11 (D-3 / D-19): single TurnLock for the binary lifetime. Threaded into runRepl
   // so operator + cron + telegram turns serialize on a single mutex chain.
   const turnLock = new TurnLock();

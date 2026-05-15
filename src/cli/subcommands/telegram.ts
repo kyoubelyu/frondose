@@ -7,7 +7,11 @@ import os from "node:os";
 import path from "node:path";
 import { parseModelSpec, resolveModelSpec } from "../../agent/modelResolver.js";
 import { isPidAlive, readPid } from "../../persistence/processLock.js";
-import { readTelegramConfig, writeTelegramConfig } from "../../persistence/telegramConfig.js";
+import {
+  readTelegramConfig,
+  writeTelegramConfig,
+  writeTelegramConfigFields,
+} from "../../persistence/telegramConfig.js";
 import { telegramFetch } from "../../tools/telegram/transport.js";
 import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";
 import {
@@ -127,8 +131,8 @@ export async function runTelegramSubcommand(
       process.stdout.write("[telegram on] cancelled\n");
       return;
     }
-    cfg.enabled = true;
-    writeTelegramConfig(cfg, opts.tcPath);
+    // P-24 §6.7: enabled lives in config.json now; runtime telegram.json untouched.
+    writeTelegramConfigFields({ enabled: true });
     process.stdout.write("[telegram on] daemon installed and running\n");
     process.stdout.write(`  Plist: ${plistPath()}\n  Logs:  ~/.mai/agent/logs/telegram-daemon.{out,err}.log\n`);
     return;
@@ -136,8 +140,8 @@ export async function runTelegramSubcommand(
   if (action === "off") {
     // P-23 §6.8 / §3.2: uninstall launchd LaunchAgent, then flip flag.
     if (process.platform === "darwin") uninstallLaunchAgent();
-    cfg.enabled = false;
-    writeTelegramConfig(cfg, opts.tcPath);
+    // P-24 §6.7: enabled lives in config.json now; runtime telegram.json untouched.
+    writeTelegramConfigFields({ enabled: false });
     process.stdout.write("[telegram off] daemon stopped, plist removed, cfg disabled\n");
     return;
   }
@@ -235,8 +239,8 @@ export async function runTelegramSubcommand(
       printNoninteractiveGuidance("telegram bind", "<user_id>", "<user_id-from-DM-to-bot>");
       process.exit(1);
     }
-    cfg.boundUserId = userId;
-    writeTelegramConfig(cfg, opts.tcPath);
+    // P-24 §6.7: boundUserId lives in config.json now.
+    writeTelegramConfigFields({ boundUserId: userId });
     process.stdout.write(`[telegram] boundUserId set to ${userId}\n`);
     return;
   }
@@ -270,19 +274,21 @@ export async function runTelegramSubcommand(
     }
   }
   if (action === "proxy") {
+    // P-24 §6.7: proxyUrl lives in config.json now; resolve final value, then write.
+    let nextProxy: string | null;
     if (opts.unsetProxy) {
-      cfg.proxyUrl = null;
+      nextProxy = null;
     } else if (opts.proxyUrl !== undefined) {
-      cfg.proxyUrl = opts.proxyUrl || null;
+      nextProxy = opts.proxyUrl || null;
     } else if (isInteractive()) {
       const raw = await prompter.input("Proxy URL (e.g. http://127.0.0.1:7890, leave blank to clear): ");
-      cfg.proxyUrl = raw.trim() || null;
+      nextProxy = raw.trim() || null;
     } else {
       printNoninteractiveGuidance("telegram proxy", "[url]", "http://127.0.0.1:7890");
       process.exit(1);
     }
-    writeTelegramConfig(cfg, opts.tcPath);
-    process.stdout.write(`[telegram] proxy ${cfg.proxyUrl ? `set to ${cfg.proxyUrl}` : "cleared"}\n`);
+    writeTelegramConfigFields({ proxyUrl: nextProxy });
+    process.stdout.write(`[telegram] proxy ${nextProxy ? `set to ${nextProxy}` : "cleared"}\n`);
     return;
   }
 }

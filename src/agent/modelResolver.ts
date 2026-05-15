@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
@@ -12,17 +9,11 @@ export const readAuthJsonKey = readAuthJsonKeyFromAuthJs;
 
 export const DEFAULT_MODEL_SPEC = "anthropic:claude-sonnet-4-5";
 
-const AUTH_JSON_PATH = (): string => join(homedir(), ".mai", "auth.json");
-
-/** Read ~/.mai/auth.json's `.default` field if file exists; else undefined. */
+/** P-24 B-2 fix: pre-P-24 read direct from auth.json via readFileSync.
+ *  Now routes through readAuth() shim which reads secrets.json (with legacy
+ *  fallback). Function signature preserved for resolveModelSpec's caller. */
 export function readAuthJsonDefault(): string | undefined {
-  try {
-    const raw = readFileSync(AUTH_JSON_PATH(), "utf-8");
-    const json = JSON.parse(raw) as { default?: unknown };
-    return typeof json.default === "string" ? json.default : undefined;
-  } catch {
-    return undefined;
-  }
+  return readAuth()?.default;
 }
 
 export interface ResolveModelOpts {
@@ -56,7 +47,7 @@ export function detectAnyModelKey(): boolean {
   if (process.env.OPENAI_API_KEY) return true;
   if (process.env.DEEPSEEK_API_KEY) return true;
   try {
-    const auth = readAuth(AUTH_JSON_PATH());
+    const auth = readAuth();
     if (auth?.providers) {
       for (const entry of Object.values(auth.providers)) {
         if (entry.key) return true;
@@ -150,7 +141,7 @@ function resolveModelKey(provider: string, entry: ProviderEntry): string {
 
 function buildModel(spec: string): LanguageModel {
   const { provider, modelId } = parseModelSpec(spec);
-  const auth = readAuth(AUTH_JSON_PATH());
+  const auth = readAuth();
   const entry = auth?.providers?.[provider];
   if (!entry) {
     throw new Error(`Provider '${provider}' not configured in auth.json. Run \`mai auth set\` to add it.`);

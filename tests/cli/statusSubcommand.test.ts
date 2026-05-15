@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { runStatusSubcommand } from "../../src/cli/subcommands/status.js";
+import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -236,10 +237,10 @@ test("runStatusSubcommand (G-P11.17)", { concurrency: 1 }, async (t) => {
 
 // ─── T-Status.2 — P-15 github + search + proxy lines ──────────────────────
 
-test("T-Status.2: when github.json + search.json exist AND telegram.json has proxyUrl, output includes github/search/telegram proxy lines", async () => {
-  // Given: github.json with { repo: "own/r" }; search.json with { braveApiKey: "bsa-xxx" };
-  //        telegram.json with { proxyUrl: "http://p:7890" }
-  // When:  runStatusSubcommand called with ghPath + searchPath + tcPath pointing to these
+test("T-Status.2: when github.json + search.json exist AND config.json has proxyUrl, output includes github/search/telegram proxy lines", async () => {
+  // Given: secrets.json with github token+repo + search braveApiKey;
+  //        config.json.telegram.proxyUrl = "http://p:7890" (P-24: proxyUrl lives in config.json, not telegram.json)
+  // When:  runStatusSubcommand called with ghPath + searchPath + tcPath + configPath pointing to tmpDir
   // Then:  output includes "github:", "search:", and "telegram:" with proxy=http://p:7890
 
   const { dir, cleanup } = makeTmpDir();
@@ -248,6 +249,7 @@ test("T-Status.2: when github.json + search.json exist AND telegram.json has pro
     const identityPath = join(dir, "identity.json");
     const schedulePath = join(dir, "schedule.jsonl");
     const tcPath = join(dir, "telegram.json");
+    const configPath = join(dir, "config.json");
     const memoryDbPath = join(dir, "memory.sqlite");
     const ghPath = join(dir, "github.json");
     const searchPath = join(dir, "search.json");
@@ -261,23 +263,19 @@ test("T-Status.2: when github.json + search.json exist AND telegram.json has pro
     );
     writeFileSync(schedulePath, "", "utf-8");
     writeFileSync(memoryDbPath, Buffer.alloc(4096), "binary");
-
-    // P-15 files
-    writeFileSync(ghPath, JSON.stringify({ repo: "own/r", token: "ghp_test" }), "utf-8");
-    writeFileSync(searchPath, JSON.stringify({ braveApiKey: "bsa-xxx" }), "utf-8");
+    // telegram.json: runtime-only fields (P-24: no proxyUrl here)
     writeFileSync(
       tcPath,
-      JSON.stringify({
-        enabled: true,
-        boundUserId: 123,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        proxyUrl: "http://p:7890",
-        pollTimeoutSec: 30,
-        pollBackoffSec: 5,
-      }),
+      JSON.stringify({ lastUpdateOffset: 0, stickyFallbackIp: null, pollTimeoutSec: 30, pollBackoffSec: 5 }),
       "utf-8",
     );
+
+    // P-15 files: write via shims so secrets.json gets populated
+    writeFileSync(ghPath, JSON.stringify({ repo: "own/r", token: "ghp_test" }), "utf-8");
+    writeFileSync(searchPath, JSON.stringify({ braveApiKey: "bsa-xxx" }), "utf-8");
+
+    // P-24: proxyUrl now lives in config.json.telegram — use writeTelegramConfigFields for isolation
+    writeTelegramConfigFields({ proxyUrl: "http://p:7890" }, configPath);
 
     const output = await captureStdout(async () => {
       await runStatusSubcommand({
@@ -285,6 +283,7 @@ test("T-Status.2: when github.json + search.json exist AND telegram.json has pro
         identityPath,
         schedulePath,
         tcPath,
+        configPath,
         memoryDbPath,
         cdpPort: DEAD_CDP_PORT,
         ghPath,
