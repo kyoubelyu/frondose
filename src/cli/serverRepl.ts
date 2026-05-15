@@ -17,20 +17,26 @@ import { SERVER_BOUNDARY } from "../agent/systemPrompt/serverBoundary.js";
 import { composeServerSoulBand } from "../agent/systemPrompt/serverSoul.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import { makeAuditWriter } from "../persistence/audit.js";
+import { readConfig } from "../persistence/config.js";
 import { isAlive, readPid } from "../persistence/processLock.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
+import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
 import {
   SERVER_AUDIT_PATH,
   SERVER_CONFIG_PATH,
   SERVER_IDENTITY_PATH,
+  SERVER_INBOX_DB_PATH,
   SERVER_MEMORY_DB_PATH,
   SERVER_PID_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
+  SERVER_WORKERS_DB_PATH,
 } from "../persistence/serverPaths.js";
 import { appendServerSession, loadServerSession, serverSessionFile } from "../persistence/serverSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
+import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
 
 export interface ServerReplDeps {
   /** Override stdin (test injection). */
@@ -64,14 +70,39 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   const control = { requestStop: () => abortController.abort(), auditPath };
   const auditWriter = makeAuditWriter(auditPath);
 
-  // P-25 mode="server" — 14 tools, no LinkedIn.
+  // P-26: open server-side DB handles ONCE per REPL boot. Threaded into
+  // makeAllTools + the HTTP listener below.
+  const workersDb = openWorkersDb(SERVER_WORKERS_DB_PATH());
+  const serverInboxDb = openServerInboxDb(SERVER_INBOX_DB_PATH());
+
+  // P-26 mode="server" — 15 tools (list_workers real + send_worker_message added).
   const tools = makeAllTools(
     undefined,
-    { memoryDbPath: SERVER_MEMORY_DB_PATH(), identityPath: SERVER_IDENTITY_PATH() },
+    {
+      memoryDbPath: SERVER_MEMORY_DB_PATH(),
+      identityPath: SERVER_IDENTITY_PATH(),
+      workersDbPath: SERVER_WORKERS_DB_PATH(),
+      serverInboxDbPath: SERVER_INBOX_DB_PATH(),
+    },
     control,
     undefined,
     { mode: "server" },
   );
+
+  // P-26: server-side HTTP listener (Tailscale-private; defaults to 127.0.0.1).
+  const serverCfg = readConfig(SERVER_CONFIG_PATH());
+  const httpServer = startServerHttp(
+    { workersDb, serverInboxDb },
+    serverCfg.server.bind_address ?? null,
+    SERVER_HTTP_PORT,
+  );
+  process.once("exit", () => {
+    try {
+      httpServer.close();
+    } catch {
+      // already closed — ignore
+    }
+  });
 
   const turnLock = new TurnLock();
   const sessionPath = serverSessionFile();
@@ -112,7 +143,13 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
     if (input === "/exit" || input === "/quit") break;
 
     await turnLock.run(async () => {
-      messages.push({ role: "user", content: input });
+      // P-26 Step-5a B-26R-1: drain pending worker events from server_inbox and
+      // prepend to the operator's user message so the server LLM sees fleet
+      // activity as context BEFORE answering. Capped at MAX_PER_DRAIN=20 rows
+      // per call; remaining rows surface in the next turn.
+      const inboxPrefix = drainServerInbox(serverInboxDb);
+      const userContent = inboxPrefix ? `${inboxPrefix}\n\n---\n\n${input}` : input;
+      messages.push({ role: "user", content: userContent });
       await runAgentLoop({
         model,
         system,

@@ -14,8 +14,13 @@ export const DEFAULT_CONFIG_PATH = (): string => join(homedir(), ".mai", "agent"
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
+// P-26: `bind_address` (Tailscale-private listen addr; default null → 127.0.0.1)
+//        and `poll_interval_s` (worker long-poll cadence; 5..120 sec, default 30)
+//        added as optional fields. Existing P-24 configs parse unchanged.
 const serverSubSchema = z.object({
   url: z.string().url().nullable().default(null),
+  bind_address: z.string().nullable().default(null),
+  poll_interval_s: z.number().int().min(5).max(120).default(30),
 });
 
 const workerSubSchema = z.object({
@@ -32,7 +37,7 @@ const telegramSubSchema = z.object({
 
 export const configJsonSchema = z.object({
   schema_version: z.literal(1),
-  server: serverSubSchema.default({ url: null }),
+  server: serverSubSchema.default({ url: null, bind_address: null, poll_interval_s: 30 }),
   worker: workerSubSchema.default({ id: null, hostname: null, label: null }),
   telegram: telegramSubSchema.default({ enabled: false, boundUserId: null, proxyUrl: null }),
 });
@@ -40,7 +45,7 @@ export type ConfigJson = z.infer<typeof configJsonSchema>;
 
 const DEFAULT_CONFIG: ConfigJson = {
   schema_version: 1,
-  server: { url: null },
+  server: { url: null, bind_address: null, poll_interval_s: 30 },
   worker: { id: null, hostname: null, label: null },
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
 };

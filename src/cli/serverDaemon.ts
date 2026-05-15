@@ -11,21 +11,27 @@ import { SERVER_BOUNDARY } from "../agent/systemPrompt/serverBoundary.js";
 import { composeServerSoulBand } from "../agent/systemPrompt/serverSoul.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import { makeAuditWriter } from "../persistence/audit.js";
+import { readConfig } from "../persistence/config.js";
 import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
+import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
 import {
   SERVER_AUDIT_PATH,
   SERVER_CONFIG_PATH,
   SERVER_IDENTITY_PATH,
+  SERVER_INBOX_DB_PATH,
   SERVER_MEMORY_DB_PATH,
   SERVER_PID_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
+  SERVER_WORKERS_DB_PATH,
 } from "../persistence/serverPaths.js";
 // Step-3b C-3 fix: import serverSessionFile so daemon uses the auto-mkdir helper.
 import { serverSessionFile } from "../persistence/serverSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
+import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
 
 export async function runServerDaemon(): Promise<void> {
   const pidPath = SERVER_PID_PATH();
@@ -82,14 +88,41 @@ export async function runServerDaemon(): Promise<void> {
   const control = { requestStop: () => abortController.abort(), auditPath: SERVER_AUDIT_PATH() };
   const auditWriter = makeAuditWriter(SERVER_AUDIT_PATH());
 
-  // P-25 mode="server" — 14 tools, no LinkedIn, list_workers stub included.
+  // P-26: open server-side DB handles ONCE per daemon boot. Threaded both into
+  //   `makeAllTools` (for list_workers + send_worker_message) AND into the HTTP
+  //   listener handlers below.
+  const workersDb = openWorkersDb(SERVER_WORKERS_DB_PATH());
+  const serverInboxDb = openServerInboxDb(SERVER_INBOX_DB_PATH());
+
+  // P-26 mode="server" — 15 tools (list_workers real + send_worker_message added).
   const tools = makeAllTools(
     undefined, // no session
-    { memoryDbPath: SERVER_MEMORY_DB_PATH(), identityPath: SERVER_IDENTITY_PATH() },
+    {
+      memoryDbPath: SERVER_MEMORY_DB_PATH(),
+      identityPath: SERVER_IDENTITY_PATH(),
+      workersDbPath: SERVER_WORKERS_DB_PATH(),
+      serverInboxDbPath: SERVER_INBOX_DB_PATH(),
+    },
     control,
-    undefined, // no hookRunner at P-25
+    undefined, // no hookRunner at P-26
     { mode: "server" },
   );
+
+  // P-26: server-side HTTP listener (Tailscale-private; defaults to 127.0.0.1).
+  const serverCfg = readConfig(SERVER_CONFIG_PATH());
+  const httpServer = startServerHttp(
+    { workersDb, serverInboxDb },
+    serverCfg.server.bind_address ?? null,
+    SERVER_HTTP_PORT,
+  );
+  // Best-effort HTTP teardown on shutdown (registered alongside pid cleanup).
+  process.once("exit", () => {
+    try {
+      httpServer.close();
+    } catch {
+      // already closed — ignore
+    }
+  });
 
   const turnLock = new TurnLock();
   const messages: CoreMessage[] = [];
@@ -106,6 +139,9 @@ export async function runServerDaemon(): Promise<void> {
     out: process.stdout,
     configPath: SERVER_TELEGRAM_CONFIG_PATH(),
     uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
+    // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
+    // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
+    inboxPrefix: () => drainServerInbox(serverInboxDb),
   };
 
   process.stdout.write(`[server daemon] up, PID ${process.pid}, session ${sessionFile.path}\n`);
