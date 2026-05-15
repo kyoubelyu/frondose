@@ -1,7 +1,15 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
+/** P-15 + P-24: github config (token + repo) — shim to secrets.json.
+ *
+ * P-24 (plan §6.3 pattern): `readGithubConfig` / `writeGithubConfig` route
+ * through `readSecrets` / `writeSecrets` co-located with the supplied path
+ * (production → DEFAULT_SECRETS_PATH; tests pass tmpDir/github.json which
+ * derives tmpDir/secrets.json). The C-1 RMW pattern preserves sibling
+ * `providers`/`search`/`server` fields on write.
+ */
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
 export const DEFAULT_GITHUB_CONFIG_PATH = (): string => join(homedir(), ".mai", "agent", "github.json");
 
@@ -16,29 +24,26 @@ export type GithubConfig = z.infer<typeof githubConfigSchema>;
 
 export const DEFAULT_GITHUB_CONFIG: GithubConfig = {};
 
+/** Derive the secrets path co-located with the given legacy github path. */
+function githubPathToSecretsPath(path: string): string {
+  if (path === DEFAULT_GITHUB_CONFIG_PATH()) return DEFAULT_SECRETS_PATH();
+  return join(dirname(path), "secrets.json");
+}
+
 export function readGithubConfig(path: string = DEFAULT_GITHUB_CONFIG_PATH()): GithubConfig {
-  if (!existsSync(path)) return { ...DEFAULT_GITHUB_CONFIG };
-  try {
-    const raw = readFileSync(path, "utf-8");
-    return githubConfigSchema.parse(JSON.parse(raw));
-  } catch (e) {
-    process.stderr.write(
-      `[mai] github.json corrupt at ${path} (${e instanceof Error ? e.message : String(e)}); using defaults.\n`,
-    );
-    return { ...DEFAULT_GITHUB_CONFIG };
-  }
+  const s = readSecrets(githubPathToSecretsPath(path), { githubPath: path });
+  return s.github ?? { ...DEFAULT_GITHUB_CONFIG };
 }
 
 export function writeGithubConfig(cfg: GithubConfig, path: string = DEFAULT_GITHUB_CONFIG_PATH()): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const data = JSON.stringify(cfg, null, 2);
-  const fd = openSync(path, "w", 0o600);
-  try {
-    writeSync(fd, data, 0, "utf-8");
-  } finally {
-    closeSync(fd);
-  }
-  chmodSync(path, 0o600);
+  const secretsPath = githubPathToSecretsPath(path);
+  const s = readSecrets(secretsPath, { githubPath: path });
+  const merged: SecretsJson = {
+    ...s,
+    schema_version: 1,
+    github: cfg.token || cfg.repo ? cfg : undefined,
+  };
+  writeSecrets(merged, secretsPath);
 }
 
 export function maskToken(token: string): string {

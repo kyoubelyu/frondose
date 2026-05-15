@@ -1,11 +1,22 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
+/** P-7 + P-21 + P-24: provider auth + secrets shim.
+ *
+ * P-24 (plan §6.3): `readAuth` / `writeAuth` route through `readSecrets` /
+ * `writeSecrets`. The path arg is derived via `authPathToSecretsPath` so
+ * tests passing `tmpDir/auth.json` write to `tmpDir/secrets.json`, never
+ * touching the operator's real `~/.mai/agent/secrets.json` (B-1 fix).
+ *
+ * Schemas + `migrateProviderEntry` remain exported here — `secrets.ts`
+ * imports `providerEntrySchema` + `migrateProviderEntry` to validate
+ * + auto-migrate provider entries inside `secrets.json`.
+ */
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
 export const DEFAULT_AUTH_PATH = (): string => join(homedir(), ".mai", "auth.json");
 
-const providerEntrySchema = z.object({
+export const providerEntrySchema = z.object({
   key: z.string().min(1),
   baseUrl: z.string().url().optional(),
   type: z.enum(["openai", "anthropic"]).optional(),
@@ -42,56 +53,50 @@ export function migrateProviderEntry(name: string, entry: ProviderEntry): Provid
   };
 }
 
-function migrateAuth(auth: AuthJson): AuthJson {
-  if (!auth.providers) return auth;
-  const migrated: Record<string, ProviderEntry> = {};
-  for (const [name, entry] of Object.entries(auth.providers)) {
-    migrated[name] = migrateProviderEntry(name, entry);
-  }
-  return { ...auth, providers: migrated };
+/** Step-3b B-1 helper: derive the secrets path co-located with the given
+ *  legacy auth path. Production calls (`authPath === DEFAULT_AUTH_PATH()`)
+ *  hit `DEFAULT_SECRETS_PATH()`; test calls (`tmpDir/auth.json`) co-locate
+ *  `secrets.json` in the same directory so `writeAuth(data, tmpDir/auth.json)`
+ *  writes to `tmpDir/secrets.json`, never the operator's real path. */
+export function authPathToSecretsPath(authPath: string): string {
+  if (authPath === DEFAULT_AUTH_PATH()) return DEFAULT_SECRETS_PATH();
+  return join(dirname(authPath), "secrets.json");
 }
 
-/** Read auth.json. Missing file → null. Corrupt JSON → null + stderr log. */
+/** Read auth.json — actually reads `secrets.json` via the shim. Missing file → null.
+ *  Threads `authPath` as the legacy override so test calls `readAuth(tmpDir/auth.json)`
+ *  see tmpDir/auth.json on first-read fallback, never the operator's real auth.json. */
 export function readAuth(path: string = DEFAULT_AUTH_PATH()): AuthJson | null {
-  if (!existsSync(path)) return null;
-  try {
-    const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw);
-    return migrateAuth(authJsonSchema.parse(parsed));
-  } catch (e) {
-    process.stderr.write(`[mai] auth.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
+  const s = readSecrets(authPathToSecretsPath(path), { authPath: path });
+  if (s.providers === undefined && s.default === undefined && s.visionModel === undefined) {
     return null;
   }
+  return {
+    default: s.default,
+    visionModel: s.visionModel,
+    providers: s.providers,
+  };
 }
 
-/**
- * Write auth.json with mode 0600 from the first syscall (no race window).
- *
- * `openSync(path, "w", 0o600)` opens for write with O_CREAT | O_WRONLY | O_TRUNC
- * and applies the mode to a NEWLY-created file atomically. For overwrites of an
- * existing file, the open-for-write flag truncates but does NOT change the file's
- * existing mode — so we retain a defensive `chmodSync(path, 0o600)` as a
- * belt-and-suspenders for the overwrite path.
- *
- * No-op on Windows (which is not a target platform per scout OQ-3).
- */
+/** Write auth fields atomically via secrets.ts. Preserves github/search/server (C-1 RMW). */
 export function writeAuth(auth: AuthJson, path: string = DEFAULT_AUTH_PATH()): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const data = JSON.stringify(auth, null, 2);
-  const fd = openSync(path, "w", 0o600);
-  try {
-    writeSync(fd, data, 0, "utf-8");
-  } finally {
-    closeSync(fd);
-  }
-  // Defensive: enforce 0o600 on overwrites where openSync 'w' did not change mode.
-  chmodSync(path, 0o600);
+  const secretsPath = authPathToSecretsPath(path);
+  const s = readSecrets(secretsPath, { authPath: path });
+  const merged: SecretsJson = {
+    schema_version: 1,
+    default: auth.default,
+    visionModel: auth.visionModel,
+    providers: auth.providers,
+    github: s.github,
+    search: s.search,
+    server: s.server, // C-1 RMW: preserve server.token if P-25 has populated it.
+  };
+  writeSecrets(merged, secretsPath);
 }
 
 /**
- * Read a provider's API key from auth.json.
+ * Read a provider's API key.
  * Returns undefined if file missing OR provider not configured.
- *
  * Used by modelResolver.buildModel as fallback when env var absent.
  */
 export function readAuthJsonKey(provider: string, path: string = DEFAULT_AUTH_PATH()): string | undefined {

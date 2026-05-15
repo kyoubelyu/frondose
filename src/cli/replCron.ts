@@ -94,7 +94,10 @@ export interface RunCronTurnDeps {
   out: NodeJS.WritableStream;
 }
 
-/** D-14: prepend [CRON_RUN_ID=...]\n header; run agent loop; persist tail; same shape as operator turn. */
+/** P-24 §6.5: cron prompt simplification + C-3 escape chain.
+ *  Soul-band day-rhythm (soul.ts §7) drives behavior from the [TIME HH:MM]
+ *  marker; record.task appears as secondary informational context per OQ-1.
+ *  Escape order: backslash FIRST, then CR drop, then newline → space, then quote. */
 export async function runCronTurn(
   record: ScheduleRecord,
   fireDate: Date,
@@ -102,13 +105,17 @@ export async function runCronTurn(
   deps: RunCronTurnDeps,
 ): Promise<void> {
   const cronRunId = computeCronRunId(record, fireDate);
-  const timeTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const timeStr = fireDate.toLocaleString("en-US", {
-    dateStyle: "full",
-    timeStyle: "long",
-    timeZone: timeTz,
-  });
-  const prompt = `[TIME] ${timeStr} — autonomous check-in\n[CRON_RUN_ID=${cronRunId}]\n${record.task}`;
+  const localHH = fireDate.getHours().toString().padStart(2, "0");
+  const localMM = fireDate.getMinutes().toString().padStart(2, "0");
+  const escapeTask = (t: string): string =>
+    t
+      .replace(/\\/g, "\\\\") // backslash first — must precede quote escape
+      .replace(/\r/g, "") // drop CR
+      .replace(/\n/g, " ") // newline → space
+      .replace(/"/g, '\\"'); // finally escape double-quote
+  const trimmed = record.task.trim();
+  const taskLine = trimmed.length > 0 ? `\n(scheduled task: "${escapeTask(trimmed)}")` : "";
+  const prompt = `[TIME ${localHH}:${localMM}]\n[CRON_RUN_ID=${cronRunId}]${taskLine}`;
   deps.out.write(`\n[cron-fired] ${cronRunId} — running scheduled task\n`);
   const turnStart = deps.messages.length;
   deps.messages.push({ role: "user", content: prompt });
@@ -167,6 +174,11 @@ export async function drainDueJobs(
 // NIT-1 (Round 1): peekDueJob alias intentionally NOT exported — drainDueJobs has
 // full side-effects, "peek" semantics would invert the contract.
 
+/** P-24 OQ-2 advisory hint: one line printed at the end of `/cron schedule`
+ *  confirmation and once at the end of `/cron list` output (NOT per-row). */
+const OQ2_HINT =
+  "Note: task text is informational. Soul-band day-rhythm drives the agent's primary behavior at scheduled times.\n";
+
 /** /cron schedule | list | remove dispatcher. Writes to `out`. */
 export async function handleCronSlash(line: string, schedulePath: string, out: NodeJS.WritableStream): Promise<void> {
   let parsed: CronSlashParsed;
@@ -192,6 +204,8 @@ export async function handleCronSlash(line: string, schedulePath: string, out: N
       const expr = r.cronExpr ?? "(oneshot)";
       out.write(`${id8}  ${taskTrim.padEnd(41)}  ${expr.padEnd(20)}  ${r.enabled ? "yes" : "no "}  ${last}\n`);
     }
+    // P-24 §6.5 / OQ-2: advisory hint printed once after the per-row loop.
+    out.write(OQ2_HINT);
     return;
   }
   if (parsed.verb === "remove") {
@@ -242,6 +256,8 @@ export async function handleCronSlash(line: string, schedulePath: string, out: N
     writeSchedule(schedulePath, records);
     const id8 = record.id.replace(/-/g, "").slice(0, 8);
     out.write(`scheduled: ${id8} — ${type} — next ${firstNext.toISOString()}\n`);
+    // P-24 §6.5 / OQ-2: advisory hint printed once at schedule confirmation.
+    out.write(OQ2_HINT);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     out.write(`/cron schedule: ${msg}\n`);
