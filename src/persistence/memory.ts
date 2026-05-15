@@ -28,17 +28,39 @@ export function closeMemoryDatabase(db: DB): void {
   db.close();
 }
 
-const CURRENT_SCHEMA_VERSION = 1;
+/** Current memory schema version. Exported as a stable contract for diagnostics
+ *  (e.g. tests asserting the latest applied version exists in `schema_version`). */
+export const CURRENT_SCHEMA_VERSION = 2;
 
+/**
+ * P-25 Step-3b B-1 fix: each migration step is wrapped in its own
+ * `db.transaction()` that covers BOTH the DDL and the version-row INSERT.
+ * Without this, a crash between `applyVN(db)` and the version INSERT would
+ * leave the DB in "VN-with-newer-columns / version=N-1" state; the next
+ * startup would re-run `applyVN`, and SQLite's non-IF-NOT-EXISTS
+ * `ALTER TABLE ADD COLUMN` would throw "duplicate column", permanently
+ * breaking the operator's memory.sqlite.
+ *
+ * better-sqlite3's `db.transaction()` provides rollback-on-throw + supports
+ * DDL inside transactions on SQLite >= 3.7.11 (bundled SQLite is 3.43.x).
+ */
 function runMemoryMigrations(db: DB): void {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
   const row = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as
     | { version: number }
     | undefined;
   const current = row?.version ?? 0;
-  if (current < 1) applyV1(db);
-  if (current < CURRENT_SCHEMA_VERSION) {
-    db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(CURRENT_SCHEMA_VERSION);
+  if (current < 1) {
+    db.transaction(() => {
+      applyV1(db);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(1);
+    })();
+  }
+  if (current < 2) {
+    db.transaction(() => {
+      applyV2(db);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
+    })();
   }
 }
 
@@ -60,6 +82,19 @@ function applyV1(db: DB): void {
   `);
 }
 
+/** P-25: 4 nullable attribution columns. P-26 worker→server sync populates;
+ *  worker's own writes leave these NULL (attribution is meaningless on the
+ *  local DB). Existing rows get NULL; existing SELECT projections ignore
+ *  the extra columns (backward-compat). */
+function applyV2(db: DB): void {
+  db.exec(`
+    ALTER TABLE person_memory_events ADD COLUMN source_worker_id TEXT;
+    ALTER TABLE person_memory_events ADD COLUMN source_hostname TEXT;
+    ALTER TABLE person_memory_events ADD COLUMN source_persona TEXT;
+    ALTER TABLE person_memory_events ADD COLUMN ts INTEGER;
+  `);
+}
+
 export const rememberInputSchema = z.object({
   personName: z.string().trim().min(1),
   profileUrl: z.string().trim().url(),
@@ -68,6 +103,12 @@ export const rememberInputSchema = z.object({
   notes: z.string().trim().min(1).max(220).optional(),
   avoid: z.string().trim().min(1).max(160).optional(),
   nextAction: z.string().trim().min(1).max(160).optional(),
+  // P-25 attribution (optional; P-26 worker→server sync populates these).
+  // Worker's local `remember` calls leave them undefined → SQL NULL.
+  sourceWorkerId: z.string().trim().min(1).optional(),
+  sourceHostname: z.string().trim().min(1).optional(),
+  sourcePersona: z.string().trim().min(1).optional(),
+  ts: z.number().int().nonnegative().optional(),
 });
 export type RememberInput = z.infer<typeof rememberInputSchema>;
 
@@ -76,15 +117,19 @@ export function normalizeProfileUrl(url: string): string {
   return `${url.replace(/\/+$/, "")}/`;
 }
 
-/** Insert a person interaction event. Returns the inserted MemoryEvent. */
+/** Insert a person interaction event. Returns the inserted MemoryEvent.
+ *  P-25: writes the 4 V2 attribution columns when supplied; NULL otherwise.
+ *  Worker's own `remember` calls leave attribution undefined (NULL). P-26
+ *  worker→server sync sets all four. */
 export function appendPersonInteraction(input: RememberInput, db: DB): MemoryEvent {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   const profileUrl = normalizeProfileUrl(input.profileUrl);
   db.prepare(`
     INSERT INTO person_memory_events
-      (id, profile_url, person_name, interaction, summary, notes, avoid, next_action, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, profile_url, person_name, interaction, summary, notes, avoid, next_action, created_at,
+       source_worker_id, source_hostname, source_persona, ts)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     profileUrl,
@@ -95,6 +140,10 @@ export function appendPersonInteraction(input: RememberInput, db: DB): MemoryEve
     input.avoid ?? null,
     input.nextAction ?? null,
     createdAt,
+    input.sourceWorkerId ?? null,
+    input.sourceHostname ?? null,
+    input.sourcePersona ?? null,
+    input.ts ?? null,
   );
   return {
     id,
