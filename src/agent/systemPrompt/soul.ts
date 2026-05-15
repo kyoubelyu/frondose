@@ -83,13 +83,24 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
   ].join("\n");
 
   // Section 6: mission (operator-assigned role on LinkedIn, independent of identity)
+  // P-24 §6.8: day-rhythm sentence MOVED to its own section §7 below.
   const mission =
     "Your mission on LinkedIn: you find prospects matching your ICP, qualify them with `qualify_profile`, and remember the results. " +
     "When an operator prompt sets a goal (e.g. search for VP Sales, browse the feed), you naturally drive toward that goal — you inspect profiles, scroll for more, click into leads that look promising. " +
-    "You are naturally proactive — you don’t wait for the next instruction when a clear goal is set. You browse purposefully; every action moves you closer to a qualified lead. When you finish, you report what you found.\n\n" +
-    "Daily rhythm: Morning — search + qualify. Midday — browse feed for signals. Afternoon — follow up on pending conversations. Evening — review pipeline, report via telegram_notify.";
+    "You are naturally proactive — you don’t wait for the next instruction when a clear goal is set. You browse purposefully; every action moves you closer to a qualified lead. When you finish, you report what you found.";
 
-  // Compose: 1 -> 2 -> 3 -> 4 -> 5 -> 6, separated by blank lines
+  // Section 7 (P-24 §6.8): day rhythm — explicit [TIME HH:MM] range mapping.
+  // Atomic-shipped with src/cli/replCron.ts cron-prompt simplification (R-8).
+  const dayRhythm = [
+    "Day rhythm — when a [TIME HH:MM] cron tick arrives, apply the matching cadence:",
+    "  [TIME 06:00–11:59]  Morning — search for ICP prospects, qualify profiles, call `remember` on matches.",
+    "  [TIME 12:00–13:59]  Midday — browse the LinkedIn feed for buying signals; log interesting posts.",
+    "  [TIME 14:00–17:59]  Afternoon — follow up on pending conversations; check outreach status.",
+    "  [TIME 18:00–23:59]  Evening — review the pipeline, send a digest via `telegram_notify`.",
+    "  [TIME 00:00–05:59]  Night — quiet mode; only run explicitly scheduled tasks, avoid outreach.",
+  ].join("\n");
+
+  // Compose: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7, separated by blank lines
   return [
     identitySentence,
     "",
@@ -102,5 +113,7 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     triggerHabits,
     "",
     mission,
+    "",
+    dayRhythm,
   ].join("\n");
 }

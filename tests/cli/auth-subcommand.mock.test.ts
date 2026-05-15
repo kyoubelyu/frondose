@@ -19,7 +19,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -73,9 +73,10 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
           authPath,
         }),
       );
-      const written = JSON.parse(readFileSync(authPath, "utf-8"));
+      // P-24 path-shift: writeAuth now routes to secrets.json; use readAuth to read back
+      const written = readAuth(authPath);
       assert.equal(
-        written.providers?.anthropic?.key,
+        written?.providers?.anthropic?.key,
         "sk-nonint-test",
         "T-Nonint.1a: key must be written correctly with URL-based call",
       );
@@ -115,9 +116,10 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
       );
 
       await captureStdout(() => runAuthSubcommand("remove", { provider: "openai", authPath }));
-      const written = JSON.parse(readFileSync(authPath, "utf-8"));
-      assert.ok(!written.providers?.openai, "T-Nonint.1c: openai must be removed");
-      assert.ok(written.providers?.anthropic, "T-Nonint.1c: anthropic must be preserved");
+      // P-24 path-shift: writeAuth routes to secrets.json; use readAuth to verify
+      const written = readAuth(authPath);
+      assert.ok(!written?.providers?.openai, "T-Nonint.1c: openai must be removed");
+      assert.ok(written?.providers?.anthropic, "T-Nonint.1c: anthropic must be preserved");
     } finally {
       cleanup();
     }
@@ -133,9 +135,10 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
       writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-a" } } }), "utf-8");
 
       await captureStdout(() => runAuthSubcommand("default", { spec: "anthropic:claude-sonnet-4-5", authPath }));
-      const written = JSON.parse(readFileSync(authPath, "utf-8"));
+      // P-24 path-shift: writeAuth routes to secrets.json; use readAuth to verify
+      const written = readAuth(authPath);
       assert.equal(
-        written.default,
+        written?.default,
         "anthropic:claude-sonnet-4-5",
         "T-Nonint.1d: default field must be written correctly",
       );

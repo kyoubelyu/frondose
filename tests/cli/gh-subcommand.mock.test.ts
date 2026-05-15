@@ -15,11 +15,12 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runGhSubcommand } from "../../src/cli/subcommands/gh.js";
+import { readGithubConfig } from "../../src/persistence/github.js";
 import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 
 // ─── mock Prompter ────────────────────────────────────────────────────────────
@@ -95,17 +96,19 @@ describe("runGhSubcommand (G-P15.5)", () => {
     // When:  function executes with cfgPath injection
     // Then:  github.json exists with { "token": "ghp_test", "repo": "own/r" }; file mode === 0o600
 
-    const { cfgPath, cleanup } = makeTmpDir();
+    const { dir, cfgPath, cleanup } = makeTmpDir();
     try {
       await captureStdout(() =>
         runGhSubcommand("set", { token: "ghp_test", repo: "own/r", cfgPath }, makeMockPrompter()),
       );
-      assert.ok(existsSync(cfgPath), "github.json must exist after 'set'");
-      const content = JSON.parse(readFileSync(cfgPath, "utf-8")) as { token?: string; repo?: string };
+      // P-24 path-shift: writeGithubConfig routes to co-located secrets.json, NOT cfgPath (github.json)
+      const secretsPath = join(dir, "secrets.json");
+      assert.ok(existsSync(secretsPath), "secrets.json must exist after 'set' (P-24: write goes to secrets.json)");
+      const content = readGithubConfig(cfgPath); // shim reads from secrets.json
       assert.equal(content.token, "ghp_test", "token must be written");
       assert.equal(content.repo, "own/r", "repo must be written");
-      const mode = statSync(cfgPath).mode & 0o777;
-      assert.equal(mode, 0o600, `file mode must be 0o600; got ${mode.toString(8)}`);
+      const mode = statSync(secretsPath).mode & 0o777;
+      assert.equal(mode, 0o600, `secrets.json mode must be 0o600; got ${mode.toString(8)}`);
     } finally {
       cleanup();
     }
@@ -128,8 +131,8 @@ describe("runGhSubcommand (G-P15.5)", () => {
       // Verify prompt was called
       assert.ok(mp.calls.apiKeyInput.length > 0, "prompter.apiKeyInput must be called");
       assert.equal(mp.calls.apiKeyInput[0], "GitHub PAT", "must prompt for 'GitHub PAT'");
-      // Token from prompt should be written
-      const content = JSON.parse(readFileSync(cfgPath, "utf-8")) as { token?: string };
+      // P-24 path-shift: writeGithubConfig routes to secrets.json; use readGithubConfig to verify
+      const content = readGithubConfig(cfgPath);
       assert.equal(content.token, "mock-key-from-prompt", "token from prompt must be written to file");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
