@@ -36,7 +36,11 @@ async function startAndWait(
   bindAddress: string | null = "127.0.0.1",
 ): Promise<{ server: Server; port: number }> {
   return new Promise<{ server: Server; port: number }>((resolve, reject) => {
-    const srv = startServerHttp({ workersDb, serverInboxDb }, bindAddress, 0);
+    // C-1 fix: ServerHttpHandlers expands 2→6 fields at builder Step 4b.
+    // Stub new fields (invitesDb=null, personasDir="", serverUrl="", maiVersion="")
+    // and cast to `any` until builder lands the 6-field interface.
+    // biome-ignore lint/suspicious/noExplicitAny: C-1 pre-builder cast; remove after Step 4b
+    const srv = startServerHttp({ workersDb, serverInboxDb, invitesDb: null, personasDir: "", serverUrl: "", maiVersion: "" } as any, bindAddress, 0);
     srv.on("listening", () => {
       const addr = srv.address() as AddressInfo;
       resolve({ server: srv, port: addr.port });

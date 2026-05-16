@@ -4,8 +4,10 @@ import { IDEMPOTENT_TOOLS, withRetry } from "../agent/retryWrapper.js";
 import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
+import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
+import { SERVER_PERSONAS_DIR } from "../persistence/serverPaths.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { echoTool } from "./control/echo.js";
 import { makeControlTools } from "./control/index.js";
@@ -16,9 +18,12 @@ import { makeLinkedinTools } from "./linkedin/index.js";
 import { makeMemoryTools } from "./memory/index.js";
 import { makeMethodologyTools } from "./methodology/index.js";
 import { makeOperatorOutputTools } from "./operatorOutput/index.js";
+import { makeListPersonasTool } from "./server/listPersonas.js";
 import { makeListWorkersTool } from "./server/listWorkers.js";
+import { makeProvisionWorkerTool } from "./server/provisionWorker.js";
 import { makePublishEventTool } from "./server/publishEvent.js";
 import { makeQueryLeadGloballyTool, type ServerCoords } from "./server/queryLeadGlobally.js";
+import { makeRevokeWorkerTool } from "./server/revokeWorker.js";
 import { makeSendWorkerMessageTool } from "./server/sendWorkerMessage.js";
 import { makeWebTools } from "./webTools/index.js";
 
@@ -50,6 +55,10 @@ export interface PersistencePaths {
   secretsPath?: string;
   workersDbPath?: string;
   serverInboxDbPath?: string;
+  // P-27: invite store + persona library + server URL (server mode).
+  invitesDbPath?: string;
+  personasDir?: string;
+  serverUrl?: string;
 }
 
 /**
@@ -149,9 +158,25 @@ export function makeAllTools(
       workersDb = openWorkersDb(persistence.workersDbPath);
       serverInboxDb = openServerInboxDb(persistence.serverInboxDbPath);
     }
+    // P-27: invite store + persona library. invitesDb may stay null (graceful
+    // envelope at execute time); personasDir falls back to the default.
+    let invitesDb: import("better-sqlite3").Database | null = null;
+    if (persistence?.invitesDbPath) {
+      try {
+        invitesDb = openInvitesDb(persistence.invitesDbPath);
+      } catch (e) {
+        process.stderr.write(`[mai] cannot open invites.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
+      }
+    }
+    const personasDir = persistence?.personasDir ?? SERVER_PERSONAS_DIR();
+    const serverUrl =
+      persistence?.serverUrl ?? (persistence?.configPath ? (readConfig(persistence.configPath).server.url ?? "") : "");
     Object.assign(out, {
       list_workers: makeListWorkersTool(workersDb),
       send_worker_message: makeSendWorkerMessageTool(workersDb, serverInboxDb),
+      provision_worker: makeProvisionWorkerTool(invitesDb, personasDir, serverUrl),
+      revoke_worker: makeRevokeWorkerTool(workersDb),
+      list_personas: makeListPersonasTool(personasDir),
     });
   } else {
     // worker-only: query_lead_globally + publish_event. Both always register;

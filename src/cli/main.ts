@@ -40,11 +40,13 @@ import { runOneShot, runRepl } from "./repl.js";
 import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
+import { runBootstrapRegister } from "./subcommands/bootstrapRegister.js";
 import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
+import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
@@ -548,6 +550,75 @@ async function main(): Promise<void> {
     .option("--json", "JSON output", false)
     .action(async (cliOpts: { json?: boolean }) => {
       await runServerWorkerSubcommand("list", { json: cliOpts.json ?? false });
+      process.exit(0);
+    });
+  // P-27: provision (mint invite + curl one-liner) + revoke CLI shortcuts.
+  serverWorker
+    .command("provision <persona_id>")
+    .option("--hostname <h>", "worker hostname hint")
+    .option("--ttl-min <n>", "invite TTL in minutes", "30")
+    .action(async (personaId: string, cliOpts: { hostname?: string; ttlMin?: string }) => {
+      await runServerWorkerSubcommand("provision", {
+        personaId,
+        hostname: cliOpts.hostname,
+        ttlMin: cliOpts.ttlMin ? Number.parseInt(cliOpts.ttlMin, 10) : 30,
+      });
+      process.exit(0);
+    });
+  serverWorker.command("revoke <worker_id>").action(async (workerId: string) => {
+    await runServerWorkerSubcommand("revoke", { workerId });
+    process.exit(0);
+  });
+
+  // P-27: `mai server persona add/list/show/remove` — persona library subgroup.
+  const serverPersona = server.command("persona").description("Persona template library");
+  const runPersona = async (
+    action: "add" | "list" | "show" | "remove",
+    opts: { personaId?: string; json?: boolean; fromTemplate?: string },
+  ): Promise<void> => {
+    try {
+      await runServerPersonaSubcommand(action, opts);
+    } catch (e) {
+      process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+      process.exit(1);
+    }
+    process.exit(0);
+  };
+  serverPersona
+    .command("add <persona_id>")
+    .option("--from-template <id_or_json>", "copy from an existing persona ID or inline JSON")
+    .action(async (personaId: string, cliOpts: { fromTemplate?: string }) => {
+      await runWithExitGuard(async () => {
+        await runPersona("add", { personaId, fromTemplate: cliOpts.fromTemplate });
+      });
+    });
+  serverPersona
+    .command("list")
+    .option("--json", "JSON output", false)
+    .action(async (cliOpts: { json?: boolean }) => {
+      await runPersona("list", { json: cliOpts.json ?? false });
+    });
+  serverPersona.command("show <persona_id>").action(async (personaId: string) => {
+    await runPersona("show", { personaId });
+  });
+  serverPersona.command("remove <persona_id>").action(async (personaId: string) => {
+    await runPersona("remove", { personaId });
+  });
+
+  // P-27: `mai bootstrap-register` — worker-side registration (called by the
+  // bootstrap script). NOT a Vercel tool — a Commander subcommand.
+  program
+    .command("bootstrap-register")
+    .description("Register this worker with a mai server (called by the bootstrap script)")
+    .requiredOption("--server-url <url>", "server base URL")
+    .requiredOption("--invite-token <token>", "invite token from provision_worker")
+    .action(async (cliOpts: { serverUrl: string; inviteToken: string }) => {
+      try {
+        await runBootstrapRegister({ serverUrl: cliOpts.serverUrl, inviteToken: cliOpts.inviteToken });
+      } catch (e) {
+        process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+        process.exit(1);
+      }
       process.exit(0);
     });
 
