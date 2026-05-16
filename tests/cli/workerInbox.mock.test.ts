@@ -85,9 +85,9 @@ describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
       const pending = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='pending'").get() as { c: number })
         .c;
       assert.equal(pending, 0, "T-WINBOX.1: 0 pending rows after drain");
-      const consumed = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='consumed'").get() as { c: number })
-        .c;
-      assert.equal(consumed, 2, "T-WINBOX.1: 2 consumed rows");
+      // P-28.5 D-6: rows DELETEd after drain (not flagged consumed)
+      const allRows = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
+      assert.equal(allRows, 0, "T-WINBOX.1: all rows DELETEd after drain (D-6)");
       // Verify messages were injected (deps.messages has user messages + possible assistant responses)
       const userMessages = deps.messages.filter((m) => m.role === "user");
       assert.equal(userMessages.length, 2, "T-WINBOX.1: 2 user messages pushed to deps.messages");
@@ -113,8 +113,9 @@ describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
       await drainWorkerInbox(dbPath, undefined, deps1);
       const userMsgs = deps1.messages.filter((m) => m.role === "user");
       assert.equal(userMsgs.length, 1, "T-WINBOX.2: first drain injects 1 user message");
-      const row = db.prepare("SELECT status FROM worker_inbox WHERE content='ONCE_ONLY'").get() as { status: string };
-      assert.equal(row.status, "consumed", "T-WINBOX.2: row marked consumed after first drain");
+      // P-28.5 D-6: row DELETEd after drain (not flagged consumed); restructured per §11 C-3
+      const c = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE content='ONCE_ONLY'").get() as { c: number }).c;
+      assert.equal(c, 0, "T-WINBOX.2: row DELETEd after first drain (D-6)");
       // Second drain — DB is empty (all consumed); throwing model would fail IF it was called
       const deps2 = makeDeps(dir, makeThrowingModel());
       await drainWorkerInbox(dbPath, undefined, deps2);
@@ -157,10 +158,9 @@ describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
       const deps = makeDeps(dir, makeThrowingModel()); // model would throw if called
       // With aborted signal, loop body checks abortSignal?.aborted before runAgentLoop
       await drainWorkerInbox(dbPath, ac.signal, deps);
-      // All rows are consumed upfront (mark-consumed-BEFORE-iterate is batch)
-      const consumed = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='consumed'").get() as { c: number })
-        .c;
-      assert.equal(consumed, 3, "T-WINBOX.4: rows consumed (batch mark before loop)");
+      // P-28.5 D-6: all rows DELETEd upfront (delete-BEFORE-iterate is batch)
+      const allRows = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
+      assert.equal(allRows, 0, "T-WINBOX.4: rows DELETEd (delete-before-iterate, D-6)");
       // No messages pushed because abort check fires before push
       assert.equal(deps.messages.length, 0, "T-WINBOX.4: no messages pushed when signal aborted");
     } finally {

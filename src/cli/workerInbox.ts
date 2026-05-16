@@ -9,7 +9,7 @@
 import { runAgentLoop } from "../agent/loop.js";
 import { appendMessages } from "../persistence/session.js";
 import {
-  markWorkerInboxMessagesConsumed,
+  deleteWorkerInboxMessages,
   openWorkerInboxDb,
   peekPendingWorkerInboxMessages,
 } from "../persistence/workerInbox.js";
@@ -23,11 +23,12 @@ export async function drainWorkerInbox(
   const db = openWorkerInboxDb(dbPath);
   const pending = peekPendingWorkerInboxMessages(db);
   if (pending.length === 0) return;
-  // Mark-consumed-BEFORE-inject (atomicity invariant). If runAgentLoop throws
-  // mid-iteration, the already-injected rows are still consumed (no double-
-  // inject on retry); the remaining-but-marked-consumed rows are visible in
-  // the session JSONL (operator can inspect).
-  markWorkerInboxMessagesConsumed(
+  // P-28.5 D-6: delete-BEFORE-inject (atomicity invariant). If runAgentLoop
+  // throws mid-iteration, the already-injected rows are already removed (no
+  // double-inject on retry). Rows are DELETED rather than marked consumed —
+  // inbox content may carry plaintext credentials; the partial turn is still
+  // visible in the session JSONL.
+  deleteWorkerInboxMessages(
     db,
     pending.map((r) => r.id),
   );

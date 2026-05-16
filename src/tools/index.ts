@@ -4,6 +4,7 @@ import { IDEMPOTENT_TOOLS, withRetry } from "../agent/retryWrapper.js";
 import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
+import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
@@ -18,6 +19,7 @@ import { makeLinkedinTools } from "./linkedin/index.js";
 import { makeMemoryTools } from "./memory/index.js";
 import { makeMethodologyTools } from "./methodology/index.js";
 import { makeOperatorOutputTools } from "./operatorOutput/index.js";
+import { makeDispatchGoogleLoginTool } from "./server/dispatchGoogleLogin.js";
 import { makeListPersonasTool } from "./server/listPersonas.js";
 import { makeListWorkersTool } from "./server/listWorkers.js";
 import { makeProvisionWorkerTool } from "./server/provisionWorker.js";
@@ -59,6 +61,8 @@ export interface PersistencePaths {
   invitesDbPath?: string;
   personasDir?: string;
   serverUrl?: string;
+  // P-28.5: server credential store handle for dispatch_google_login.
+  credentialsDbPath?: string;
 }
 
 /**
@@ -171,12 +175,27 @@ export function makeAllTools(
     const personasDir = persistence?.personasDir ?? SERVER_PERSONAS_DIR();
     const serverUrl =
       persistence?.serverUrl ?? (persistence?.configPath ? (readConfig(persistence.configPath).server.url ?? "") : "");
+    // P-28.5: credential store for dispatch_google_login (LLM passes only workerId).
+    let credentialsDb: import("better-sqlite3").Database | null = null;
+    if (persistence?.credentialsDbPath) {
+      try {
+        credentialsDb = openCredentialsDb(persistence.credentialsDbPath);
+      } catch (e) {
+        process.stderr.write(`[mai] cannot open credentials.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
+      }
+    }
     Object.assign(out, {
       list_workers: makeListWorkersTool(workersDb),
       send_worker_message: makeSendWorkerMessageTool(workersDb, serverInboxDb),
       provision_worker: makeProvisionWorkerTool(invitesDb, personasDir, serverUrl),
       revoke_worker: makeRevokeWorkerTool(workersDb),
       list_personas: makeListPersonasTool(personasDir),
+      dispatch_google_login: makeDispatchGoogleLoginTool({
+        workersDb,
+        serverInboxDb,
+        credentialsDb,
+        personasDir,
+      }),
     });
   } else {
     // worker-only: query_lead_globally + publish_event. Both always register;

@@ -566,17 +566,16 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: P-21 does not add Vercel tools — tool() count is 28 after P-26 (24 worker base + 2 server-push + list_workers + query_lead_globally + publish_event + send_worker_message)", () => {
+  it("T-CONTRACT: tool() count is 34 after P-28.5 (P-28.5 added navigate_to_url + clear_cookies + dispatch_google_login)", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  exactly 28 — P-26 added query_lead_globally + publish_event + send_worker_message (3 new tools)
-    //        over P-25 baseline of 25. Total is now 28.
+    // Then:  34 — baseline 28 at P-26, +3 P-27 (provision/revoke/listPersonas), +3 P-28.5 (navigate/clear/dispatch)
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      28,
-      `Expected exactly 28 tool() calls in src/tools/, got ${count}. P-26 added query_lead_globally + publish_event + send_worker_message (3 new tools over P-25 baseline of 25).`,
+      34,
+      `Expected exactly 34 tool() calls in src/tools/, got ${count}. P-28.5 added navigate_to_url + clear_cookies + dispatch_google_login.`,
     );
   });
 });

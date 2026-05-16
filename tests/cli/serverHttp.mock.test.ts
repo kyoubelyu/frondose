@@ -590,10 +590,11 @@ describe("GET /api/worker_inbox/poll (G-P26.8)", () => {
       assert.equal(result.body.messages.length, 2, "T-REST.POLL.1: 2 messages returned");
       const contents = (result.body.messages as Array<{ content: string }>).map((m) => m.content).sort();
       assert.deepEqual(contents, ["msg-one", "msg-two"], "T-REST.POLL.1: both message contents returned");
-      const consumed = serverInboxDb
-        .prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE status='consumed'")
+      // P-28.5 D-6: rows DELETEd after poll-drain (not flagged consumed); updated per §11 C-4
+      const remaining = serverInboxDb
+        .prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE worker_id='worker_A'")
         .get() as { c: number };
-      assert.equal(consumed.c, 2, "T-REST.POLL.1: both rows marked consumed");
+      assert.equal(remaining.c, 0, "T-REST.POLL.1: worker_pending rows DELETEd after poll-drain (D-6)");
     } finally {
       if (server) await closeServer(server);
       cleanup();

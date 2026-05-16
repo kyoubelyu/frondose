@@ -62,8 +62,11 @@ export function peekPendingWorkerInboxMessages(db: DB): Array<{ id: number; cont
   }>;
 }
 
-export function markWorkerInboxMessagesConsumed(db: DB, ids: number[]): void {
+/** P-28.5 D-6: DELETE drained rows — inbox content may carry plaintext
+ *  credentials (server-dispatched Google login) and nothing reads a consumed row.
+ *  Replaces P-26's markWorkerInboxMessagesConsumed (UPDATE status='consumed'). */
+export function deleteWorkerInboxMessages(db: DB, ids: number[]): void {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => "?").join(",");
-  db.prepare(`UPDATE worker_inbox SET status='consumed' WHERE id IN (${placeholders})`).run(...ids);
+  db.prepare(`DELETE FROM worker_inbox WHERE id IN (${placeholders})`).run(...ids);
 }

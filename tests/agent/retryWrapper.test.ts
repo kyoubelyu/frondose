@@ -116,11 +116,12 @@ test("T-Retry.4: error envelope (ok:false) is NOT retried — it is returned, no
 
 // ─── T-Retry.5: IDEMPOTENT_TOOLS count ───────────────────────────────────────
 
-test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 13 members (11 existing + web_fetch + web_search)", () => {
+test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 16 members (11 existing + web_fetch + web_search + query_lead_globally + navigate_to_url + clear_cookies)", () => {
+  // P-26: +query_lead_globally (14). P-28.5: +navigate_to_url +clear_cookies (16).
   assert.equal(
     IDEMPOTENT_TOOLS.size,
-    13,
-    `expected 13, got ${IDEMPOTENT_TOOLS.size}: ${[...IDEMPOTENT_TOOLS].join(", ")}`,
+    16,
+    `expected 16, got ${IDEMPOTENT_TOOLS.size}: ${[...IDEMPOTENT_TOOLS].join(", ")}`,
   );
 
   // analyze_screenshot MUST NOT be in the set (D-13: vision-token cost per call)
