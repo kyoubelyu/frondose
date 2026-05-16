@@ -25,6 +25,8 @@ export const IDEMPOTENT_TOOLS: ReadonlySet<string> = new Set([
   // P-26: query_lead_globally is read-only ⇒ safe to retry. publish_event is
   // fire-and-forget write ⇒ NOT idempotent (retry would double-event).
   "query_lead_globally",
+  "navigate_to_url", // P-28.5: navigation is idempotent
+  "clear_cookies", // P-28.5: clearing already-clear cookies is a no-op
 ]);
 
 export interface RetryPolicy {

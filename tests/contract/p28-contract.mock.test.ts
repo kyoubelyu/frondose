@@ -40,10 +40,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 26 tools (unchanged — D-7 no new LLM tools)", () => {
+  it("T-CONTRACT.P28.WORKER: worker mode → exactly 28 tools (P-28.5 adds navigate_to_url + clear_cookies)", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length
-    // Then:  26 (D-7: credential management is CLI-only, not exposed as agent tools)
+    // Then:  28 (P-28.5: +navigate_to_url +clear_cookies; updated from 26 per §11)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -57,8 +57,8 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.P28.WORKER: expected 26 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        28,
+        `T-CONTRACT.P28.WORKER: expected 28 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -69,10 +69,10 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
 // ─── T-CONTRACT.P28.SERVER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.SERVER: server mode → exactly 18 tools (unchanged from P-27 — no new credential management tools)", () => {
+  it("T-CONTRACT.P28.SERVER: server mode → exactly 19 tools (P-28.5 adds dispatch_google_login)", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
     // When:  Object.keys(tools).length
-    // Then:  18 (D-7: server tool count unchanged; credentials managed via CLI only)
+    // Then:  19 (P-28.5: +dispatch_google_login; updated from 18 per §11)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -85,8 +85,8 @@ describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        18,
-        `T-CONTRACT.P28.SERVER: expected 18 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        19,
+        `T-CONTRACT.P28.SERVER: expected 19 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

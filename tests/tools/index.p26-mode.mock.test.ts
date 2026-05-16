@@ -34,10 +34,10 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 26 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 28 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  26
+    // Then:  28 (was 26 at P-26; P-28.5 adds navigate_to_url + clear_cookies)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -48,18 +48,18 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.WORKER.TOOLS: expected 26 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        28, // P-28.5: +navigate_to_url +clear_cookies (was 26 at P-26)
+        `T-CONTRACT.WORKER.TOOLS: expected 28 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 18 tools (P-27 updated: +provision_worker +revoke_worker +list_personas)", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 19 tools (P-28.5 updated: +dispatch_google_login)", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
-    // Then:  18 (was 15 at P-26; P-27 adds provision_worker + revoke_worker + list_personas)
+    // Then:  19 (was 18 at P-26/P-27; P-28.5 adds dispatch_google_login)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -70,8 +70,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        18,
-        `T-CONTRACT.SERVER.TOOLS: expected 18 server tools (P-27); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        19, // P-28.5: +dispatch_google_login (was 18 at P-26/P-27)
+        `T-CONTRACT.SERVER.TOOLS: expected 19 server tools (P-28.5); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

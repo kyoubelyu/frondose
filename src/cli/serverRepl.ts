@@ -98,6 +98,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       invitesDbPath: SERVER_INVITES_DB_PATH(),
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
+      credentialsDbPath: SERVER_CREDENTIALS_DB_PATH(),
     },
     control,
     undefined,

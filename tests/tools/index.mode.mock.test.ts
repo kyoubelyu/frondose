@@ -32,33 +32,34 @@ const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" 
 // ─── T-MODE / T-CONTRACT ──────────────────────────────────────────────────────
 
 describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
-  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 24 tools; no 'list_workers'", () => {
+  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 28 tools; no 'list_workers'", () => {
     // Given: full worker startup path — session present, persistence present, mode defaults to "worker"
     // When:  makeAllTools(session, persistence, control, undefined) — no 5th opts arg
-    // Then:  returns ToolSet with 24 keys; does NOT include "list_workers"
+    // Then:  returns ToolSet with 28 keys (was 24 at P-25; +2 P-26 server-coords; +2 P-28.5 nav+clear)
+    //        does NOT include "list_workers"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl, undefined);
       const count = Object.keys(tools).length;
-      assert.equal(count, 24, `worker mode must have 24 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 28, `worker mode must have 28 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok(!("list_workers" in tools), "worker mode must NOT include 'list_workers'");
     } finally {
       cleanup();
     }
   });
 
-  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 14 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
+  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 19 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
     // Given: makeAllTools called with mode='server' (5th opts arg)
     // When:  makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
-    // Then:  Object.keys result has length 14;
+    // Then:  Object.keys result has length 19 (was 14 at P-25; grew each phase to 19 at P-28.5);
     //        includes "echo", "recall", "remember", "telegram_notify", "list_workers";
     //        does NOT include "launch", "inspect", "qualify_profile"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 14, `server mode must have 14 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 19, `server mode must have 19 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok("echo" in tools, "server must include 'echo'");
       assert.ok("getMemory" in tools, "server must include 'getMemory'");
       assert.ok("remember" in tools, "server must include 'remember'");
@@ -106,30 +107,30 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 24", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 28", () => {
     // Given: worker startup path — session present, persistence present, mode not set
     // When:  Object.keys(makeAllTools(session, persistence, control)).length checked
-    // Then:  equals 24
+    // Then:  28 (was 24 at P-25; +2 P-26 server-coords; +2 P-28.5 navigate_to_url + clear_cookies)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl);
       const count = Object.keys(tools).length;
-      assert.equal(count, 24, `worker tool count must be 24; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 28, `worker tool count must be 28; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 14", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 19", () => {
     // Given: server startup path — no session, persistence present, mode='server'
     // When:  Object.keys(tools).length checked
-    // Then:  equals 14
+    // Then:  19 (was 14 at P-25; +1 P-26 send_worker_message; +3 P-27 provision/revoke/listPersonas; +1 P-28.5 dispatch_google_login)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 14, `server tool count must be 14; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 19, `server tool count must be 19; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }

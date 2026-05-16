@@ -572,6 +572,11 @@ async function main(): Promise<void> {
     await runServerWorkerSubcommand("revoke", { workerId });
     process.exit(0);
   });
+  // P-28.5: dispatch a server-guided Google login task to a worker.
+  serverWorker.command("login <worker_id>").action(async (workerId: string) => {
+    await runServerWorkerSubcommand("login", { workerId });
+    process.exit(0);
+  });
 
   // P-27: `mai server persona add/list/show/remove` — persona library subgroup.
   const serverPersona = server.command("persona").description("Persona template library");
