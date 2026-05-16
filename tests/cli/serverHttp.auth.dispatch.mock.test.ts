@@ -38,10 +38,11 @@ async function startAndWait(handlers: {
   personasDir: string;
   serverUrl: string;
   maiVersion: string;
+  credentialsDb?: null; // P-28: 7th field (null until builder Step 4b)
 }): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
-    // biome-ignore lint/suspicious/noExplicitAny: 6-field handlers
-    const srv = startServerHttp(handlers as any, "127.0.0.1", 0);
+    // biome-ignore lint/suspicious/noExplicitAny: P-28 extends to 7 fields
+    const srv = startServerHttp({ ...handlers, credentialsDb: handlers.credentialsDb ?? null } as any, "127.0.0.1", 0);
     srv.on("listening", () => resolve({ server: srv, port: (srv.address() as AddressInfo).port }));
     srv.on("error", reject);
   });

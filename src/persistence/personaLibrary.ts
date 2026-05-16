@@ -13,6 +13,9 @@ export const personaTemplateSchema = z.object({
   soulBandOverride: z.string().max(3000).optional(),
   priorities: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
   traits: z.array(z.string().trim().min(1).max(80)).max(8).default([]),
+  // P-28: optional credential bindings — id in credentials.sqlite.
+  llmKeyRef: z.string().min(1).optional(),
+  googleAccountRef: z.string().min(1).optional(),
   updatedAt: z.string().datetime(),
 });
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>;

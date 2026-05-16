@@ -1,24 +1,26 @@
-/** P-27 worker side: `mai bootstrap-register --server-url <url> --invite-token <token>`.
- *  POSTs /api/register; writes config + secrets + identity atomically; prints a
- *  start-instruction and returns. Does NOT spawn a background process — the
- *  operator starts the worker explicitly (`mai telegram on` / `mai`).
+/** P-27/P-28 worker side: `mai bootstrap-register --server-url <url> --invite-token <token>`.
+ *  POSTs /api/register; folds the response into ONE config.json v2 write
+ *  (server.url + identity + soul.override — D-9) plus a secrets.json write
+ *  (server.token + the pushed LLM provider config). Prints a start-instruction
+ *  and returns. Does NOT spawn a background process.
  *
- *  NO `child_process` import (Step-3b B-1 revision).
+ *  NO `child_process` import.
  *
  *  Error paths THROW (caller in main.ts maps to exit 1) so the function is
  *  unit-testable without killing the test runner. */
-import { writeFileSync } from "node:fs";
 import os from "node:os";
-import { join } from "node:path";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../persistence/config.js";
-import { type IdentityRecord, writeIdentity } from "../../persistence/identity.js";
+import type { IdentityRecord, writeIdentity } from "../../persistence/identity.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, writeSecrets } from "../../persistence/secrets.js";
 
 export interface BootstrapRegisterDI {
   fetchImpl?: typeof globalThis.fetch;
-  writeIdentityImpl?: typeof writeIdentity;
   writeSecretsImpl?: typeof writeSecrets;
   writeConfigImpl?: typeof writeConfig;
+  /** P-28 D-9: bootstrapRegister no longer writes legacy identity.json — config.json
+   *  v2 is the sole source of truth for a provisioned worker. Retained as an
+   *  optional (unused) field for DI-shape backward compatibility. */
+  writeIdentityImpl?: typeof writeIdentity;
 }
 
 export async function runBootstrapRegister(
@@ -29,7 +31,6 @@ export async function runBootstrapRegister(
     throw new Error("[bootstrap-register] missing --server-url or --invite-token");
   }
   const fetchFn = di.fetchImpl ?? globalThis.fetch;
-  const writeId = di.writeIdentityImpl ?? writeIdentity;
   const writeSec = di.writeSecretsImpl ?? writeSecrets;
   const writeCfg = di.writeConfigImpl ?? writeConfig;
 
@@ -60,29 +61,40 @@ export async function runBootstrapRegister(
     personaId: string;
     identity: IdentityRecord;
     soulBandOverride?: string | null;
+    llmProviderConfig?: { name: string; type: "anthropic" | "openai"; baseUrl?: string; key: string };
+    googleAccountEmail?: string;
   };
 
-  // Write config.server.url (bootstrap script is the canonical config-write step).
+  // ─── Write config.json v2 — ONE writeConfig folding server.url + identity + soul (D-9) ───
   const cfg = readConfig(DEFAULT_CONFIG_PATH());
   cfg.server.url = opts.serverUrl;
+  cfg.identity = body.identity;
+  cfg.soul = { override: body.soulBandOverride ?? null };
   writeCfg(cfg, DEFAULT_CONFIG_PATH());
 
-  // Write permanent token into secrets.json.server.token (read-modify-write).
+  // ─── Write secrets.json — server.token + (P-28) LLM provider + default ───
   const secrets = readSecrets(DEFAULT_SECRETS_PATH());
   secrets.server = { ...(secrets.server ?? {}), token: body.permanentToken };
+  if (body.llmProviderConfig) {
+    const p = body.llmProviderConfig;
+    secrets.providers = {
+      ...(secrets.providers ?? {}),
+      [p.name]: { key: p.key, baseUrl: p.baseUrl, type: p.type },
+    };
+    secrets.default = p.name;
+  }
   writeSec(secrets, DEFAULT_SECRETS_PATH());
 
-  // Write identity.json from persona-derived record.
-  writeId(body.identity, undefined /* default path */);
-
-  // Optional: write soul band override.
-  if (body.soulBandOverride) {
-    writeFileSync(join(os.homedir(), ".mai", "agent", "soul_band_override.txt"), body.soulBandOverride, "utf-8");
-  }
-
-  // Step-3b B-1 revision: no background spawn. Print explicit operator next-steps.
+  // D-9: no writeIdentity, no soul_band_override.txt write — config.json v2 is the
+  // single source of truth for a freshly-provisioned worker.
   process.stdout.write(
     `✓ Registered as worker_id=${body.workerId}, persona=${body.personaId}.\n` +
+      (body.googleAccountEmail
+        ? `  LinkedIn login: use Google account ${body.googleAccountEmail} ("Continue with Google" in Chrome).\n`
+        : "") +
+      (body.llmProviderConfig
+        ? `  LLM provider configured: ${body.llmProviderConfig.name} — no \`mai auth set\` needed.\n`
+        : "  No LLM key was pushed — run `mai auth set` before starting the worker.\n") +
       "\n" +
       "Next steps:\n" +
       "  • Run `mai telegram on` to install the persistent Telegram daemon (recommended for production).\n" +

@@ -39,8 +39,8 @@ async function startAndWait(
     // C-1 fix: ServerHttpHandlers expands 2→6 fields at builder Step 4b.
     // Stub new fields (invitesDb=null, personasDir="", serverUrl="", maiVersion="")
     // and cast to `any` until builder lands the 6-field interface.
-    // biome-ignore lint/suspicious/noExplicitAny: C-1 pre-builder cast; remove after Step 4b
-    const srv = startServerHttp({ workersDb, serverInboxDb, invitesDb: null, personasDir: "", serverUrl: "", maiVersion: "" } as any, bindAddress, 0);
+    // biome-ignore lint/suspicious/noExplicitAny: P-28 adds credentialsDb (7th field); null until builder Step 4b
+    const srv = startServerHttp({ workersDb, serverInboxDb, invitesDb: null, personasDir: "", serverUrl: "", maiVersion: "", credentialsDb: null } as any, bindAddress, 0);
     srv.on("listening", () => {
       const addr = srv.address() as AddressInfo;
       resolve({ server: srv, port: addr.port });

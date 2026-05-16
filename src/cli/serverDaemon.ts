@@ -13,6 +13,7 @@ import { composeServerSoulBand } from "../agent/systemPrompt/serverSoul.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
+import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
@@ -20,6 +21,7 @@ import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.
 import {
   SERVER_AUDIT_PATH,
   SERVER_CONFIG_PATH,
+  SERVER_CREDENTIALS_DB_PATH,
   SERVER_IDENTITY_PATH,
   SERVER_INBOX_DB_PATH,
   SERVER_INVITES_DB_PATH,
@@ -99,6 +101,8 @@ export async function runServerDaemon(): Promise<void> {
   const serverInboxDb = openServerInboxDb(SERVER_INBOX_DB_PATH());
   // P-27: invite store handle (shared by HTTP /api/register + provision_worker).
   const invitesDb = openInvitesDb(SERVER_INVITES_DB_PATH());
+  // P-28: credential library handle (LLM keys + Google accounts).
+  const credentialsDb = openCredentialsDb(SERVER_CREDENTIALS_DB_PATH());
   const serverCfg = readConfig(SERVER_CONFIG_PATH());
   const maiVersion = (createRequire(import.meta.url)("../../package.json") as { version: string }).version;
 
@@ -128,6 +132,7 @@ export async function runServerDaemon(): Promise<void> {
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       maiVersion,
+      credentialsDb,
     },
     serverCfg.server.bind_address ?? null,
     SERVER_HTTP_PORT,
