@@ -17,6 +17,8 @@ session.jsonl
 sessions/
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 *.db
 
 # Claude Code local artifacts — not shipped.

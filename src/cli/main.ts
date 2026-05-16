@@ -11,13 +11,13 @@ import { resolveModel } from "../agent/modelResolver.js";
 import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
-import { composeSoulBand } from "../agent/systemPrompt/soul.js";
+import { resolveSoulBand } from "../agent/systemPrompt/soul.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import { createLinkedinSession } from "../linkedin/index.js";
 import type { FreeAxesRecord } from "../methodology/types.js";
 import { makeAuditWriter } from "../persistence/audit.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
-import { readConfig } from "../persistence/config.js";
+import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
 import {
   applyIdentityPatch,
   type IdentityRecord,
@@ -46,6 +46,7 @@ import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
+import { runServerCredentialSubcommand, type ServerCredentialOpts } from "./subcommands/serverCredential.js";
 import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
@@ -203,11 +204,13 @@ async function main(): Promise<void> {
 
       const model = resolveModel({ cli: opts.model });
 
-      // P-5: Soul band composed from final identity record (re-read after potential axes prompt).
+      // P-5 + P-28: Soul band — config.soul.override REPLACES the composed band when set.
       const finalIdentity: IdentityRecord | null = readIdentity(identityPath);
+      const cfgForSoul = readConfig(DEFAULT_CONFIG_PATH());
       const system = composeSystemPrompt({
         boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER
-        soul: composeSoulBand(finalIdentity),
+        // soul is non-optional in configJsonSchemaV2 (.default({override:null})).
+        soul: resolveSoulBand(cfgForSoul.soul.override, finalIdentity),
         checkpoint: CHECKPOINT, // P-10 D-10
       });
       // P-23 §6.7: when telegram daemon is enabled in cfg, REPL switches to
@@ -603,6 +606,79 @@ async function main(): Promise<void> {
   });
   serverPersona.command("remove <persona_id>").action(async (personaId: string) => {
     await runPersona("remove", { personaId });
+  });
+
+  // P-28: `mai server llm-key` + `mai server google-account` — credential library.
+  const runCred = async (
+    kind: "llm-key" | "google-account",
+    action: "add" | "list" | "remove",
+    credOpts: ServerCredentialOpts,
+  ): Promise<void> => {
+    try {
+      await runServerCredentialSubcommand(kind, action, credOpts);
+    } catch (e) {
+      process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+      process.exit(1);
+    }
+    process.exit(0);
+  };
+
+  const serverLlmKey = server.command("llm-key").description("LLM API key pool");
+  serverLlmKey
+    .command("add <id>")
+    .option("--type <type>", "anthropic | openai")
+    .option("--base-url <url>", "OpenAI-compatible base URL")
+    .option("--key <key>", "API key (prompted if omitted)")
+    .option("--label <label>", "display label")
+    .action(
+      async (id: string, o: { type?: "anthropic" | "openai"; baseUrl?: string; key?: string; label?: string }) => {
+        await runWithExitGuard(() => runCred("llm-key", "add", { id, ...o }));
+      },
+    );
+  serverLlmKey
+    .command("list")
+    .option("--json", "JSON output", false)
+    .action(async (o: { json?: boolean }) => {
+      await runCred("llm-key", "list", { json: o.json ?? false });
+    });
+  serverLlmKey.command("remove <id>").action(async (id: string) => {
+    await runCred("llm-key", "remove", { id });
+  });
+
+  const serverGoogle = server.command("google-account").description("Google account library (LinkedIn SSO)");
+  serverGoogle
+    .command("add <id>")
+    .option("--email <email>", "Google account email")
+    .option("--password <pw>", "password (prompted if omitted)")
+    .option("--recovery-email <email>", "recovery email (P-28.5)")
+    .option("--phone <phone>", "phone number (P-28.5)")
+    .option("--sms-link <url>", "hosted SMS-receive URL (P-28.5)")
+    .option("--twofa-link <url>", "hosted TOTP URL (P-28.5)")
+    .option("--label <label>", "display label")
+    .action(
+      async (
+        id: string,
+        o: {
+          email?: string;
+          password?: string;
+          recoveryEmail?: string;
+          phone?: string;
+          smsLink?: string;
+          twofaLink?: string;
+          label?: string;
+        },
+      ) => {
+        await runWithExitGuard(() => runCred("google-account", "add", { id, ...o }));
+      },
+    );
+  serverGoogle
+    .command("list")
+    .option("--json", "JSON output", false)
+    .action(async (o: { json?: boolean }) => {
+      await runCred("google-account", "list", { json: o.json ?? false });
+    });
+  serverGoogle.command("remove <id>").action(async (id: string) => {
+    await runCred("google-account", "remove", { id });
   });
 
   // P-27: `mai bootstrap-register` — worker-side registration (called by the

@@ -22,3 +22,6 @@ export const SERVER_INBOX_DB_PATH = (): string => join(SERVER_ROOT(), "inbox.sql
 // P-27: invite token store + persona template library.
 export const SERVER_INVITES_DB_PATH = (): string => join(SERVER_ROOT(), "invites.sqlite");
 export const SERVER_PERSONAS_DIR = (): string => join(SERVER_ROOT(), "personas");
+
+// P-28: credential library (LLM keys + Google accounts).
+export const SERVER_CREDENTIALS_DB_PATH = (): string => join(SERVER_ROOT(), "credentials.sqlite");

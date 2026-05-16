@@ -17,6 +17,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
+import { getGoogleAccount, getLlmKey, incrementLlmKeyAssignedCount } from "../persistence/credentialLibrary.js";
 import { consumeInvite, lookupInviteAny, lookupPendingInvite } from "../persistence/invitesRegistry.js";
 import { readPersonaTemplate } from "../persistence/personaLibrary.js";
 import { enqueueServerInbox } from "../persistence/serverInbox.js";
@@ -41,6 +42,9 @@ export interface ServerHttpHandlers {
   personasDir: string;
   serverUrl: string;
   maiVersion: string;
+  // P-28: credential library. Nullable — credential folding is skipped silently
+  // when the DB handle is absent (graceful degradation; register still 200s).
+  credentialsDb: import("better-sqlite3").Database | null;
 }
 
 // ─── Zod request schemas (mirror plan §4.4) ──────────────────────────────────
@@ -224,15 +228,47 @@ async function handleRegister(req: IncomingMessage, res: ServerResponse, h: Serv
   addWorker(h.workersDb, workerId, permanentToken, parsed.data.hostname ?? undefined, pending.persona_id);
 
   // (5) Build identity from persona template.
+  //     C-2 FIX: the field is `profileUrl` (identityRecordSchema's actual name),
+  //     NOT `linkedInUrl` — P-27 wrote `linkedInUrl`, which Zod silently STRIPPED
+  //     on every parse, losing the URL. Source stays `persona.linkedInUrl`
+  //     (personaTemplateSchema's field — unchanged); the identity KEY is `profileUrl`.
   const identity = {
     fullName: persona.fullName,
     role: persona.role,
     company: persona.company,
-    linkedInUrl: persona.linkedInUrl,
+    profileUrl: persona.linkedInUrl,
     email: persona.email,
     persona: pending.persona_id,
     updatedAt: new Date().toISOString(),
   };
+
+  // (5a) P-28: resolve LLM key + Google account from persona refs.
+  //      Missing/unresolvable refs (or a null credentialsDb) degrade gracefully —
+  //      register still 200s. Step 5a runs AFTER consumeInvite + addWorker so a
+  //      missing credential never burns an invite or blocks registration.
+  let llmProviderConfig: { name: string; type: "anthropic" | "openai"; baseUrl?: string; key: string } | undefined;
+  if (h.credentialsDb && persona.llmKeyRef) {
+    const k = getLlmKey(h.credentialsDb, persona.llmKeyRef);
+    if (k) {
+      llmProviderConfig = {
+        name: k.id,
+        type: k.provider_type,
+        baseUrl: k.base_url ?? undefined,
+        key: k.api_key,
+      };
+      incrementLlmKeyAssignedCount(h.credentialsDb, persona.llmKeyRef);
+    } else {
+      process.stderr.write(`[server http] register: llmKeyRef '${persona.llmKeyRef}' not found\n`);
+    }
+  }
+
+  let googleAccountEmail: string | undefined;
+  if (h.credentialsDb && persona.googleAccountRef) {
+    const g = getGoogleAccount(h.credentialsDb, persona.googleAccountRef);
+    if (g)
+      googleAccountEmail = g.email; // password NEVER pushed (G-P28.23)
+    else process.stderr.write(`[server http] register: googleAccountRef '${persona.googleAccountRef}' not found\n`);
+  }
 
   sendJson(res, 200, {
     ok: true,
@@ -241,6 +277,8 @@ async function handleRegister(req: IncomingMessage, res: ServerResponse, h: Serv
     personaId: pending.persona_id,
     identity,
     soulBandOverride: persona.soulBandOverride ?? null,
+    ...(llmProviderConfig ? { llmProviderConfig } : {}),
+    ...(googleAccountEmail ? { googleAccountEmail } : {}),
   });
 }
 

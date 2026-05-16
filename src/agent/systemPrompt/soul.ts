@@ -117,3 +117,11 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     dayRhythm,
   ].join("\n");
 }
+
+/** P-28: pick the soul band. A non-null override (from config.json.soul.override,
+ *  formerly the write-only soul_band_override.txt) REPLACES the whole composed
+ *  band; null → dynamic composition. composeSoulBand's signature is unchanged. */
+export function resolveSoulBand(override: string | null, identity: IdentityRecord | null): string {
+  if (override !== null && override.trim() !== "") return override;
+  return composeSoulBand(identity);
+}
