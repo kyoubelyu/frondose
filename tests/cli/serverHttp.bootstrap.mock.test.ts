@@ -29,7 +29,8 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-/** Start server with 6-field handlers on random port, wait for listen. */
+/** Start server with 7-field handlers on random port, wait for listen.
+ *  credentialsDb optional — P-28 adds it; null until builder Step 4b. */
 async function startAndWait(handlers: {
   workersDb: ReturnType<typeof openWorkersDb>;
   serverInboxDb: ReturnType<typeof openServerInboxDb>;
@@ -37,10 +38,11 @@ async function startAndWait(handlers: {
   personasDir: string;
   serverUrl: string;
   maiVersion: string;
+  credentialsDb?: null; // P-28: 7th field (null until builder Step 4b)
 }): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
-    // biome-ignore lint/suspicious/noExplicitAny: builder Step 4b extends ServerHttpHandlers with 4 more fields
-    const srv = startServerHttp(handlers as any, "127.0.0.1", 0);
+    // biome-ignore lint/suspicious/noExplicitAny: P-28 extends ServerHttpHandlers to 7 fields
+    const srv = startServerHttp({ ...handlers, credentialsDb: handlers.credentialsDb ?? null } as any, "127.0.0.1", 0);
     srv.on("listening", () => resolve({ server: srv, port: (srv.address() as AddressInfo).port }));
     srv.on("error", reject);
   });

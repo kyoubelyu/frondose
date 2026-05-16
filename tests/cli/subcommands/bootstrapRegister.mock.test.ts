@@ -66,7 +66,11 @@ describe("runBootstrapRegister — happy path writes config/secrets/identity (G-
     );
     assert.equal(writeConfigCalled.length, 1, "writeConfigImpl must be called exactly once");
     assert.equal(writeSecretsCalled.length, 1, "writeSecretsImpl must be called exactly once");
-    assert.equal(writeIdentityCalled.length, 1, "writeIdentityImpl must be called exactly once");
+    assert.equal(
+      writeIdentityCalled.length,
+      0,
+      "P-28 D-9: writeIdentityImpl must NOT be called — config.json v2 is the sole source of truth for a provisioned worker",
+    );
   });
 });
 

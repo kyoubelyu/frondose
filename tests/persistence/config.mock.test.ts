@@ -56,7 +56,7 @@ describe("readConfig — missing file → full default shape (G-P24.8)", () => {
       // HOME → tmpDir so migrateTelegramIntoConfig finds no telegram.json
       process.env.HOME = dir;
       const result = readConfig(configPath);
-      assert.equal(result.schema_version, 1, "T-CONFIG.1: schema_version must be 1");
+      assert.equal(result.schema_version, 2, "T-CONFIG.1: schema_version must be 2 (P-28: DEFAULT_CONFIG_V2)"); // P-28 update: default is v2
       assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30 }, "T-CONFIG.1: server must be {url:null, bind_address:null, poll_interval_s:30} (P-26 adds bind_address + poll_interval_s)");
       assert.deepEqual(result.worker, { id: null, hostname: null, label: null }, "T-CONFIG.1: worker must be all-null");
       assert.deepEqual(
@@ -84,7 +84,7 @@ describe("readConfig — minimal {schema_version:1} → Zod fills defaults (G-P2
     try {
       writeFileSync(configPath, JSON.stringify({ schema_version: 1 }), "utf-8");
       const result = readConfig(configPath);
-      assert.equal(result.schema_version, 1, "T-CONFIG.2: schema_version must be 1");
+      assert.equal(result.schema_version, 2, "T-CONFIG.2: schema_version must be 2 (P-28: v1 file migrated to v2)"); // P-28 update: v1 input → v2 output after migration
       assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30 }, "T-CONFIG.2: server default must be {url:null, bind_address:null, poll_interval_s:30} (P-26 adds bind_address + poll_interval_s)");
       assert.deepEqual(result.worker, { id: null, hostname: null, label: null }, "T-CONFIG.2: worker default must be all-null");
       assert.deepEqual(
@@ -118,8 +118,8 @@ describe("writeConfig — tmp+rename; no chmod (G-P24.5)", () => {
       assert.notEqual(mode, 0o600, `T-CONFIG.3: config.json mode must NOT be 0o600 (umask-derived); got ${mode.toString(8)}`);
       assert.deepEqual(
         JSON.parse(readFileSync(configPath, "utf-8")),
-        cfg,
-        "T-CONFIG.3: JSON must round-trip",
+        JSON.parse(JSON.stringify(cfg)),
+        "T-CONFIG.3: JSON must round-trip (JSON.parse(JSON.stringify) normalizes away any undefined own properties such as identity:undefined from v1→v2 migration)",
       );
     } finally {
       cleanup();

@@ -40,8 +40,12 @@ function cleanup(path: string): void {
 // ─── T-M91 ───────────────────────────────────────────────────────────────────
 
 test("T-M91: readIdentity returns null when file does not exist", () => {
-  const path = join(tmpdir(), `mai-p4-no-such-${Date.now()}.json`);
-  const result = readIdentity(path);
+  // P-28 B-1: pass a non-existent configPath so readConfig returns DEFAULT_CONFIG_V2
+  // (no identity), and the legacy-file path is tested in isolation.
+  const dir = join(tmpdir(), `mai-p4-m91-${Date.now()}`);
+  const path = join(dir, "identity.json");   // does not exist
+  const configPath = join(dir, "config.json"); // does not exist
+  const result = readIdentity(path, configPath);
   assert.equal(result, null, "readIdentity on missing file must return null");
 });
 
@@ -49,6 +53,9 @@ test("T-M91: readIdentity returns null when file does not exist", () => {
 
 test("T-M92: readIdentity returns null and writes to stderr when JSON is corrupt", () => {
   const path = makeTempPath("corrupt");
+  // P-28 B-1: pass non-existent configPath so readConfig returns DEFAULT_CONFIG_V2
+  // (no identity), forcing the legacy-file code path to be tested in isolation.
+  const configPath = join(path, "..", "config.json");
   try {
     writeFileSync(path, "{ not valid json }", "utf-8");
 
@@ -61,7 +68,7 @@ test("T-M92: readIdentity returns null and writes to stderr when JSON is corrupt
     };
     let result: unknown;
     try {
-      result = readIdentity(path);
+      result = readIdentity(path, configPath);
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process.stderr as any).write = origWrite;
@@ -81,6 +88,9 @@ test("T-M92: readIdentity returns null and writes to stderr when JSON is corrupt
 
 test("T-M93: readIdentity parses a valid identity.json with Zod and returns typed record", () => {
   const path = makeTempPath("valid");
+  // P-28 B-1: pass non-existent configPath so readConfig returns DEFAULT_CONFIG_V2
+  // (no identity), forcing the legacy-file code path to be tested in isolation.
+  const configPath = join(path, "..", "config.json");
   try {
     const record = {
       fullName: "Alice Smith",
@@ -90,7 +100,7 @@ test("T-M93: readIdentity parses a valid identity.json with Zod and returns type
     };
     writeFileSync(path, JSON.stringify(record), "utf-8");
 
-    const result = readIdentity(path);
+    const result = readIdentity(path, configPath);
     assert.ok(result !== null, "valid JSON must return a record (non-null)");
     assert.equal(result.fullName, "Alice Smith");
     assert.equal(result.company, "Acme Corp");
@@ -105,30 +115,28 @@ test("T-M93: readIdentity parses a valid identity.json with Zod and returns type
 
 test("T-M94: writeIdentity creates parent directories and writes pretty JSON", () => {
   // Use a nested path that doesn't yet exist
-  const dir = join(tmpdir(), `mai-p4-write-${process.pid}-${Date.now()}`, "nested", "dir");
+  const rootDir = join(tmpdir(), `mai-p4-write-${process.pid}-${Date.now()}`);
+  const dir = join(rootDir, "nested", "dir");
   const path = join(dir, "identity.json");
+  // P-28 B-1: pass non-existent configPath in the same rootDir to isolate from real config
+  const configPath = join(rootDir, "config.json");
   try {
     const record = identityRecordSchema.parse({
       fullName: "Bob Jones",
       company: "TestCo",
       updatedAt: new Date().toISOString(),
     });
-    writeIdentity(record, path);
+    writeIdentity(record, path, configPath);
 
     // File must now exist and be parse-able
-    const readBack = readIdentity(path);
+    const readBack = readIdentity(path, configPath);
     assert.ok(readBack !== null, "readIdentity must succeed after writeIdentity");
     assert.equal(readBack.fullName, "Bob Jones");
     assert.equal(readBack.company, "TestCo");
   } finally {
+    // Clean up the rootDir we created
     try {
-      rmSync(join(tmpdir(), `mai-p4-write-${process.pid}-${Date.now()}`), { recursive: true, force: true });
-    } catch {
-      // best-effort
-    }
-    // Clean up the actual dir we created
-    try {
-      rmSync(join(dir, "../../.."), { recursive: true, force: true });
+      rmSync(rootDir, { recursive: true, force: true });
     } catch {
       // best-effort
     }
@@ -210,6 +218,8 @@ test("T-IW.1: writeIdentity writes atomically via .tmp + rename — no partial f
   // Then:  the file exists and contains valid JSON;
   //        no .tmp.${pid} residue remains after completion
   const path = makeTempPath("iw1");
+  // P-28 B-1: pass non-existent configPath to isolate from real config
+  const configPath = join(path, "..", "config.json");
   try {
     const record = identityRecordSchema.parse({
       fullName: "Atomic Test",
@@ -221,11 +231,11 @@ test("T-IW.1: writeIdentity writes atomically via .tmp + rename — no partial f
     const tmpPattern = `${path}.tmp.${process.pid}`;
     assert.ok(!existsSync(tmpPattern), "no .tmp file with current PID before write");
 
-    writeIdentity(record, path);
+    writeIdentity(record, path, configPath);
 
     // After write: target file exists and is valid JSON
     assert.ok(existsSync(path), "target identity.json must exist after writeIdentity");
-    const readBack = readIdentity(path);
+    const readBack = readIdentity(path, configPath);
     assert.ok(readBack !== null, "written identity must be parseable by readIdentity");
     assert.equal(readBack.fullName, "Atomic Test");
     assert.equal(readBack.company, "TestCo");

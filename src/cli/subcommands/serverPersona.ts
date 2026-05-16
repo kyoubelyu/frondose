@@ -139,6 +139,12 @@ export async function runServerPersonaSubcommand(
   const traitsRaw = await ask("traits", "traits (comma-separated, optional)", (template?.traits ?? []).join(", "));
   const emailTemplate = await ask("emailTemplate", "emailTemplate (optional)", template?.emailTemplate);
   const soulBandOverride = await ask("soulBandOverride", "soulBandOverride (optional)", template?.soulBandOverride);
+  const llmKeyRef = await ask("llmKeyRef", "llmKeyRef (optional — see `mai server llm-key list`)", template?.llmKeyRef);
+  const googleAccountRef = await ask(
+    "googleAccountRef",
+    "googleAccountRef (optional — see `mai server google-account list`)",
+    template?.googleAccountRef,
+  );
 
   const t = personaTemplateSchema.parse({
     fullName,
@@ -148,6 +154,8 @@ export async function runServerPersonaSubcommand(
     email: email || undefined,
     emailTemplate: emailTemplate || undefined,
     soulBandOverride: soulBandOverride || undefined,
+    llmKeyRef: llmKeyRef || undefined,
+    googleAccountRef: googleAccountRef || undefined,
     priorities: prioritiesRaw
       .split(",")
       .map((s) => s.trim())
