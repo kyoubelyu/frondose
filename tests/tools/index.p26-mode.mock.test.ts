@@ -56,10 +56,10 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 15 tools", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 18 tools (P-27 updated: +provision_worker +revoke_worker +list_personas)", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
-    // Then:  15
+    // Then:  18 (was 15 at P-26; P-27 adds provision_worker + revoke_worker + list_personas)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -70,8 +70,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        15,
-        `T-CONTRACT.SERVER.TOOLS: expected 15 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        18,
+        `T-CONTRACT.SERVER.TOOLS: expected 18 server tools (P-27); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
