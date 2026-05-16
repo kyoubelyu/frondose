@@ -134,7 +134,9 @@ export async function drainPendingWorkerInbox(
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id);
       const placeholders = ids.map(() => "?").join(",");
-      db.prepare(`UPDATE worker_pending SET status='consumed' WHERE id IN (${placeholders})`).run(...ids);
+      // P-28.5 D-6: DELETE consumed rows — they may carry plaintext credentials
+      // (dispatch_google_login) and nothing ever reads a 'consumed' row.
+      db.prepare(`DELETE FROM worker_pending WHERE id IN (${placeholders})`).run(...ids);
       return rows;
     }
     await new Promise((r) => setTimeout(r, 1000));

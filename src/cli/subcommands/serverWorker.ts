@@ -5,10 +5,14 @@
  *  stored in `~/.mai/server/workers.sqlite`. */
 import { createHash, randomBytes } from "node:crypto";
 import { readConfig } from "../../persistence/config.js";
+import { openCredentialsDb } from "../../persistence/credentialLibrary.js";
 import { insertInvite, openInvitesDb } from "../../persistence/invitesRegistry.js";
 import { readPersonaTemplate } from "../../persistence/personaLibrary.js";
+import { openServerInboxDb } from "../../persistence/serverInbox.js";
 import {
   SERVER_CONFIG_PATH,
+  SERVER_CREDENTIALS_DB_PATH,
+  SERVER_INBOX_DB_PATH,
   SERVER_INVITES_DB_PATH,
   SERVER_PERSONAS_DIR,
   SERVER_WORKERS_DB_PATH,
@@ -20,9 +24,10 @@ import {
   removeWorker,
   rotateWorkerToken,
 } from "../../persistence/workersRegistry.js";
+import { dispatchGoogleLogin } from "../../tools/server/dispatchGoogleLogin.js";
 
 export async function runServerWorkerSubcommand(
-  action: "add" | "rotate" | "remove" | "list" | "provision" | "revoke",
+  action: "add" | "rotate" | "remove" | "list" | "provision" | "revoke" | "login",
   opts: {
     workerId?: string;
     hostname?: string;
@@ -115,6 +120,25 @@ export async function runServerWorkerSubcommand(
       process.exit(1);
     }
     process.stdout.write(`[worker revoke] ${opts.workerId} revoked; next heartbeat/poll will 401.\n`);
+    return;
+  }
+
+  if (action === "login") {
+    if (!opts.workerId) {
+      process.stderr.write("[server worker login] missing <worker_id>\n");
+      process.exit(1);
+    }
+    const serverInboxDb = openServerInboxDb(SERVER_INBOX_DB_PATH());
+    const credentialsDb = openCredentialsDb(SERVER_CREDENTIALS_DB_PATH());
+    const r = dispatchGoogleLogin(
+      { workersDb: db, serverInboxDb, credentialsDb, personasDir: SERVER_PERSONAS_DIR() },
+      opts.workerId,
+    );
+    if (!r.ok) {
+      process.stderr.write(`[server worker login] ${r.error}\n`);
+      process.exit(1);
+    }
+    process.stdout.write(`[server worker login] login task queued for ${opts.workerId} (id=${r.queuedId})\n`);
     return;
   }
 

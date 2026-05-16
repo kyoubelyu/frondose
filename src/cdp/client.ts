@@ -233,6 +233,17 @@ export class CdpClient {
     }
   }
 
+  /** P-28.5: clear ALL browser cookies (pre-login profile cleanup). */
+  async clearBrowserCookies(): Promise<void> {
+    await this.client.Network.enable();
+    await this.client.Network.clearBrowserCookies();
+  }
+
+  /** P-28.5: clear cookies + localStorage + IndexedDB + caches for one origin. */
+  async clearOriginData(origin: string): Promise<void> {
+    await this.client.Storage.clearDataForOrigin({ origin, storageTypes: "all" });
+  }
+
   /** Close the underlying CDP WebSocket (does NOT kill Chrome). */
   async close(): Promise<void> {
     await this.client.close();
