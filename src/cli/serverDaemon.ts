@@ -33,6 +33,7 @@ import {
   SERVER_PID_PATH,
   SERVER_SECRETS_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
+  SERVER_WORKERS_CONFIG_DIR,
   SERVER_WORKERS_DB_PATH,
 } from "../persistence/serverPaths.js";
 // Step-3b C-3 fix: import serverSessionFile so daemon uses the auto-mkdir helper.
@@ -164,6 +165,10 @@ export async function runServerDaemon(): Promise<void> {
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       assetRoot: webAssetRoot,
+      // P-30: SSH/VNC WebSocket bridge config.
+      sshUser: serverCfg.server.ssh_user,
+      sshPort: serverCfg.server.ssh_port,
+      workersConfigDir: SERVER_WORKERS_CONFIG_DIR(),
     },
     serverCfg.server.web_port,
     serverCfg.server.bind_address ?? null,
