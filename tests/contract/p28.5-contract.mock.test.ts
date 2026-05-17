@@ -109,15 +109,15 @@ describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)",
 // ─── T-CONTRACT.NO-BASH ───────────────────────────────────────────────────────
 
 describe("no-bash boundary P-28.5 (G-P28.5.19)", () => {
-  it("T-CONTRACT.NO-BASH: zero child_process imports in P-28.5's new + edited files (src/tools/linkedin/navigateToUrl.ts, clearCookies.ts, src/tools/server/dispatchGoogleLogin.ts, src/cdp/client.ts, src/persistence/serverInbox.ts, src/persistence/workerInbox.ts, src/cli/workerInbox.ts)", () => {
+  it("T-CONTRACT.NO-BASH: zero child_process imports in P-28.5's new + edited files (src/tools/browser/navigateToUrl.ts, clearCookies.ts, src/tools/server/dispatchGoogleLogin.ts, src/cdp/client.ts, src/persistence/serverInbox.ts, src/persistence/workerInbox.ts, src/cli/workerInbox.ts)", () => {
     // Given: the P-28.5 new/edited source files
     // When:  grep -rE child_process across those specific files
     // Then:  zero matches (Hard Rule 8: no child_process in tool/persistence layers)
     const projectRoot = resolve(process.cwd());
     // Check P-28.5 specific new/edited files — grep each file that builder will touch
     const p285Files = [
-      "src/tools/linkedin/navigateToUrl.ts",
-      "src/tools/linkedin/clearCookies.ts",
+      "src/tools/browser/navigateToUrl.ts",
+      "src/tools/browser/clearCookies.ts",
       "src/tools/server/dispatchGoogleLogin.ts",
       "src/cdp/client.ts",
       "src/persistence/serverInbox.ts",

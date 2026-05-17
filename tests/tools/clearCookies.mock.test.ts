@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
-import { makeClearCookiesTool } from "../../src/tools/linkedin/clearCookies.js";
+import { makeClearCookiesTool } from "../../src/tools/browser/clearCookies.js";
 
 // ─── Fake session helpers ──────────────────────────────────────────────────────
 

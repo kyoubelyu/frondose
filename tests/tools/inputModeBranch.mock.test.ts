@@ -27,10 +27,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CdpClient } from "../../src/cdp/client.js";
 import type { LinkedinSession, CurrentSurfaceContext } from "../../src/linkedin/types.js";
-import { makeClickTool } from "../../src/tools/linkedin/click.js";
-import { makeTypeTool } from "../../src/tools/linkedin/type.js";
-import { makeScrollTool } from "../../src/tools/linkedin/scroll.js";
-import { makePressTool } from "../../src/tools/linkedin/press.js";
+import { makeClickTool } from "../../src/tools/browser/click.js";
+import { makeTypeTool } from "../../src/tools/browser/type.js";
+import { makeScrollTool } from "../../src/tools/browser/scroll.js";
+import { makePressTool } from "../../src/tools/browser/press.js";
 
 // ─── Fake CdpClient ───────────────────────────────────────────────────────────
 

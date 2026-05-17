@@ -10,6 +10,7 @@ import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
 import { SERVER_PERSONAS_DIR } from "../persistence/serverPaths.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
+import { makeBrowserTools } from "./browser/index.js";
 import { echoTool } from "./control/echo.js";
 import { makeControlTools } from "./control/index.js";
 import type { ControlSignals } from "./control/stop.js";
@@ -121,10 +122,11 @@ export function makeAllTools(
       Object.assign(out, makeMethodologyTools({ identityPath: persistence.identityPath }));
     }
   }
-  // P-25: LinkedIn tools register ONLY in worker mode. Server mode overrides
-  // session presence — if caller misconfigures, emit a stderr warning and skip.
+  // P-33: Browser + LinkedIn tools register ONLY in worker mode. Server mode
+  // overrides session presence — if caller misconfigures, warn to stderr and skip.
   if (mode === "worker" && session) {
-    Object.assign(out, makeLinkedinTools(session));
+    Object.assign(out, makeBrowserTools(session)); // P-33: 11 generic browser tools
+    Object.assign(out, makeLinkedinTools(session)); // launch (LinkedIn destinations)
   } else if (mode === "server" && session) {
     process.stderr.write("[mai] makeAllTools: ignoring session in server mode\n");
   }

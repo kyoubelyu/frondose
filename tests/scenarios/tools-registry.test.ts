@@ -18,7 +18,7 @@ import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
 
-// Known LinkedIn primitives (10 tools) — matching makeLinkedinTools() in src/tools/linkedin/index.ts
+// Known browser + LinkedIn tool names (P-33: browser primitives in src/tools/browser/, launch in src/tools/linkedin/)
 const LINKEDIN_TOOL_NAMES = [
   "launch",
   "inspect",

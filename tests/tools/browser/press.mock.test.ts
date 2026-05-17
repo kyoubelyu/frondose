@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makePressTool } from "../../../src/tools/linkedin/press.js";
+import { makePressTool } from "../../../src/tools/browser/press.js";
 
 const abortSignal = new AbortController().signal;
 
