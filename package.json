@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.4.28",
+  "version": "0.4.29",
   "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",
@@ -12,13 +12,16 @@
   },
   "files": [
     "dist",
+    "native",
+    "binding.gyp",
     "references",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js && npm run build:web",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js && npm run build:web && npm run build:native",
     "build:web": "esbuild src/web/main.tsx --bundle --minify --jsx=automatic --external:/vendor/* --outfile=dist/web/app.js && tailwindcss -i src/web/style.css -o dist/web/style.css --minify && cp src/web/index.html dist/web/index.html && cp -r src/web/vendor dist/web/vendor",
+    "build:native": "node-gyp rebuild || echo '[mai] cgevent native addon build skipped (Xcode CLT missing) — hardware input mode unavailable; cdp mode unaffected'",
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -55,7 +58,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsx": "^4.20.6",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "node-addon-api": "^8.7.0"
   },
   "engines": {
     "node": ">=20"

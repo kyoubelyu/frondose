@@ -28,6 +28,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 }
 
 const mockSession: LinkedinSession = {
+  inputMode: "cdp" as const,
   getOrInitClient: async () => ({ ok: false as const, error: "chrome_unavailable" as const, message: "mock" }),
   getClient: () => undefined,
   heartbeat: async () => true,

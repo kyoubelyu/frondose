@@ -21,6 +21,10 @@ sessions/
 *.sqlite-shm
 *.db
 
+# P-32 native addon — compiled artifacts; the C source (native/) is the shipped artifact, never the .node binary.
+build/
+*.node
+
 # Claude Code local artifacts — not shipped.
 .claude/
 

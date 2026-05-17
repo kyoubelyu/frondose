@@ -62,6 +62,7 @@ function makeFakeSession(opts: { withLastCtx?: boolean } = {}) {
     : undefined;
 
   return {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},

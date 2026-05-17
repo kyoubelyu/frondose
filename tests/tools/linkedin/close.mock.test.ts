@@ -28,6 +28,7 @@ test("T-M74: close tool execute calls closeBrowser() and returns ok('close', {})
 
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},

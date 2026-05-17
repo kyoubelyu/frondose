@@ -45,6 +45,7 @@ function makeSuccessSession() {
   const { handle, clearBrowserCookiesCalls, clearOriginDataCalls } = makeFakeHandle();
   const client = CdpClient.fromHandle(handle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: async () => ({ ok: true as const, client }),
     getClient: () => client,
     heartbeat: async () => true,
@@ -56,6 +57,7 @@ function makeSuccessSession() {
 
 function makeFailSession() {
   return {
+    inputMode: "cdp" as const,
     getOrInitClient: async () => ({
       ok: false as const,
       error: "chrome_unavailable" as const,

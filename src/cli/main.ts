@@ -224,7 +224,12 @@ async function main(): Promise<void> {
       // v0.3-fix1: lazy LinkedinSession factory — captures launch options only; Chrome
       // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
       // Memory + identity tools work without Chrome.
-      const linkedinSession = createLinkedinSession({ port: cdpPort, profileDir });
+      // P-32: per-worker input mode (cdp default | hardware) from config.json.
+      const linkedinSession = createLinkedinSession({
+        port: cdpPort,
+        profileDir,
+        inputMode: readConfig(DEFAULT_CONFIG_PATH()).worker.input_mode,
+      });
 
       // P-18 D-2: periodic CDP health check — clears stale cache between idle periods
       const heartbeatInterval = setInterval(() => {

@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { hardwareClickAt } from "../../cdp/hardwareInput.js";
 import { applyPacing, failFromError, ok, resolveByLabel, withHint } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
@@ -36,7 +37,9 @@ export function makeClickTool(session: LinkedinSession) {
           const entry = resolveByLabel(ctx.entries, label!, { kind: "click", scope });
           target = entry.ref;
         }
-        await client.clickAt(target);
+        // P-32: hardware-path input branch; CDP arm unchanged.
+        if (session.inputMode === "hardware") await hardwareClickAt(client, target);
+        else await client.clickAt(target);
         const pacing = await applyPacing();
         // State-changing → emit data.hint per cli-primitives.md §click.
         return withHint(ok("click", { target, pacing }));

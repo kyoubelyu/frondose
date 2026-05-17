@@ -38,6 +38,7 @@ const workerSubSchema = z.object({
   id: z.string().min(1).nullable().default(null),
   hostname: z.string().min(1).nullable().default(null),
   label: z.string().min(1).nullable().default(null),
+  input_mode: z.enum(["cdp", "hardware"]).default("cdp"), // P-32: additive; existing configs get default "cdp"
 });
 
 const telegramSubSchema = z.object({
@@ -78,7 +79,7 @@ type ConfigJsonV1 = z.infer<typeof configJsonSchemaV1>;
 const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   schema_version: 2,
   server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22 },
-  worker: { id: null, hostname: null, label: null },
+  worker: { id: null, hostname: null, label: null, input_mode: "cdp" }, // P-32: input_mode added
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
   // identity intentionally omitted (optional).
@@ -131,7 +132,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     : {
         schema_version: 1,
         server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22 },
-        worker: { id: null, hostname: null, label: null },
+        worker: { id: null, hostname: null, label: null, input_mode: "cdp" as const },
         telegram: { enabled: false, boundUserId: null, proxyUrl: null },
       };
 
