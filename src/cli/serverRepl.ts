@@ -39,6 +39,7 @@ import {
   SERVER_PID_PATH,
   SERVER_SECRETS_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
+  SERVER_WORKERS_CONFIG_DIR,
   SERVER_WORKERS_DB_PATH,
 } from "../persistence/serverPaths.js";
 import { appendServerSession, loadServerSession, serverSessionFile } from "../persistence/serverSession.js";
@@ -144,6 +145,10 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       assetRoot: webAssetRoot,
+      // P-30: SSH/VNC WebSocket bridge config.
+      sshUser: serverCfg.server.ssh_user,
+      sshPort: serverCfg.server.ssh_port,
+      workersConfigDir: SERVER_WORKERS_CONFIG_DIR(),
     },
     serverCfg.server.web_port,
     serverCfg.server.bind_address ?? null,

@@ -83,6 +83,22 @@ mai (CLI/REPL)
         └── SQLite memory + JSONL audit + JSON identity
 ```
 
+## Server deployment (`mai server`)
+
+`mai server` serves its management web UI (fleet dashboard, provision form, per-worker
+SSH terminal + VNC viewer) as plain HTTP on `bind_address` (default port 8090). It ships
+**zero TLS code**. For public exposure, front it with a reverse proxy that terminates TLS
+and forwards both HTTP and WebSocket upgrades to `localhost:8090`:
+
+- **Caddy** — `reverse_proxy localhost:8090` (handles WebSocket upgrades automatically).
+- **nginx** — `proxy_pass http://localhost:8090;` plus `proxy_set_header Upgrade $http_upgrade;`
+  and `proxy_set_header Connection "upgrade";`.
+- **Tailscale** — `tailscale serve 8090`.
+
+The reverse proxy should not log the `Authorization` request header — the web UI's
+Basic-Auth credential (`mai server web-token`) rides in it, and credentials do not belong
+in access logs.
+
 ## License
 
 MIT
