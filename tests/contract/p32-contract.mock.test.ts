@@ -63,10 +63,10 @@ describe("no-bash boundary — P-32 new/edited files (G-P32.21)", () => {
         "src/persistence/config.ts",
         "src/linkedin/types.ts",
         "src/linkedin/session.ts",
-        "src/tools/linkedin/click.ts",
-        "src/tools/linkedin/type.ts",
-        "src/tools/linkedin/scroll.ts",
-        "src/tools/linkedin/press.ts",
+        "src/tools/browser/click.ts",
+        "src/tools/browser/type.ts",
+        "src/tools/browser/scroll.ts",
+        "src/tools/browser/press.ts",
         "src/cdp/stealth.ts",
       ];
 

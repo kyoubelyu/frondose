@@ -30,7 +30,7 @@ const uploadParams = z.object({
 export function makeUploadTool(session: LinkedinSession) {
   return tool({
     description:
-      "Upload a file to the current LinkedIn composer or messaging thread. " +
+      "Upload a file to a file input on the current page (e.g. a LinkedIn composer or messaging thread). " +
       "File path must be within MAI_UPLOAD_ALLOWLIST (default: ~/.mai/agent/uploads/).",
     parameters: uploadParams,
     execute: async ({ file, scope }) => {

@@ -17,7 +17,7 @@ const clickParams = z
 export function makeClickTool(session: LinkedinSession) {
   return tool({
     description:
-      "Click an element on the current LinkedIn page. Provide either a ref from the most-recent inspect (e.g. '@e14') " +
+      "Click an element on the current page. Provide either a ref from the most-recent inspect (e.g. '@e14') " +
       "or a label (accessible name). If both are provided, ref wins.",
     parameters: clickParams,
     execute: async ({ ref, label, scope }) => {

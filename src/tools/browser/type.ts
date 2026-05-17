@@ -14,7 +14,7 @@ const typeParams = z.object({
 export function makeTypeTool(session: LinkedinSession) {
   return tool({
     description:
-      "Type text into a LinkedIn input. Provide either a ref or a label. Existing value is cleared first " +
+      "Type text into a page input. Provide either a ref or a label. Existing value is cleared first " +
       "(select-all + insertText replacement).",
     parameters: typeParams,
     execute: async ({ text, ref, label, scope }) => {

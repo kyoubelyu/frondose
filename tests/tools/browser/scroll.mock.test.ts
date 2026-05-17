@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeScrollTool } from "../../../src/tools/linkedin/scroll.js";
+import { makeScrollTool } from "../../../src/tools/browser/scroll.js";
 
 const abortSignal = new AbortController().signal;
 
