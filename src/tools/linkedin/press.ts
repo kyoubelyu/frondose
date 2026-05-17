@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { hardwarePressKey } from "../../cdp/hardwareInput.js";
 import { applyPacing, failFromError, ok, withHint } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
@@ -103,10 +104,17 @@ export function makePressTool(session: LinkedinSession) {
           // biome-ignore lint/style/noNonNullAssertion: regex match guarantees groups 1 and 2.
           const baseKey = m[2]!;
           const bit = modifierBit(mod);
-          await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: baseKey, modifiers: bit });
-          await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: baseKey, modifiers: bit });
+          // P-32: hardware-path input branch; CDP arm unchanged.
+          if (session.inputMode === "hardware") {
+            hardwarePressKey(client, baseKey, bit);
+          } else {
+            await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: baseKey, modifiers: bit });
+            await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: baseKey, modifiers: bit });
+          }
         } else if (SPECIAL_KEYS.has(key)) {
-          await client.pressKey(key);
+          // P-32: hardware-path input branch; CDP arm unchanged.
+          if (session.inputMode === "hardware") hardwarePressKey(client, key, 0);
+          else await client.pressKey(key);
         } else {
           throw new Error(
             `press: invalid key '${key}'. Allowed: ${[...SPECIAL_KEYS].join(", ")}, or '<Modifier>+<key>'.`,

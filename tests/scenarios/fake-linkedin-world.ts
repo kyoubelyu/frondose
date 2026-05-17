@@ -401,6 +401,7 @@ export class FakeLinkedInWorld {
     let lastCtx: CurrentSurfaceContext | undefined;
 
     return {
+      inputMode: "cdp" as const,
       getOrInitClient: () => Promise.resolve(client),
       getClient: () => client,
       setLastContext: (ctx: CurrentSurfaceContext) => { lastCtx = ctx; },

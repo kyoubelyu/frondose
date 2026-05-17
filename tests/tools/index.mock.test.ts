@@ -43,6 +43,7 @@ test("T-M81: makeAllTools with no session returns 4 keys (echo+3 web); with sess
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve(client),
     getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
@@ -128,6 +129,7 @@ test("T-M122: makeAllTools(session, persistence) returns 19 keys — P-9 updated
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve(client),
     getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
@@ -178,6 +180,7 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 19 keys including 'q
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve(client),
     getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
@@ -213,6 +216,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 24 keys (P-
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve(client),
     getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
@@ -307,6 +311,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 19 keys — P
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve(client),
     getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},

@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { hardwareTypeAt } from "../../cdp/hardwareInput.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
@@ -56,13 +57,18 @@ export function makeTypeTool(session: LinkedinSession) {
             }
           }
         }
-        // Focus the input.
-        await client.clickAt(target);
-        // Select-all (Ctrl+A — modifiers bitmask 2).
-        await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: "a", modifiers: 2 });
-        await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: "a", modifiers: 2 });
-        // Replace with new text via insertText (preserves React onChange).
-        await client.handle.Input.insertText({ text });
+        // P-32: hardware-path input branch; CDP arm unchanged.
+        if (session.inputMode === "hardware") {
+          await hardwareTypeAt(client, target, text);
+        } else {
+          // Focus the input.
+          await client.clickAt(target);
+          // Select-all (Ctrl+A — modifiers bitmask 2).
+          await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: "a", modifiers: 2 });
+          await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: "a", modifiers: 2 });
+          // Replace with new text via insertText (preserves React onChange).
+          await client.handle.Input.insertText({ text });
+        }
         const pacing = await applyPacing();
         // type does NOT emit data.hint per cli-primitives.md §type (focus-and-fill is not surface-changing).
         return ok("type", { target, text, pacing });

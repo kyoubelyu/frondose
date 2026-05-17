@@ -38,6 +38,7 @@ function makeFakeSession(overrides: { currentUrl?: string }) {
   };
   const client = CdpClient.fromHandle(fakeHandle);
   return {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (ctx: CurrentSurfaceContext) => {

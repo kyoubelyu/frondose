@@ -67,6 +67,9 @@ export type ClientOrUnavailable =
 
 /** Session-scoped LinkedIn state; shared across all LinkedIn tools in one binary. */
 export interface LinkedinSession {
+  /** P-32: resolved input mode for this session (cdp | hardware). Set once at
+   *  session creation via resolveInputMode (graceful downgrade — D-4). */
+  readonly inputMode: "cdp" | "hardware";
   /**
    * Lazy-boot accessor. Returns the cached CdpClient via {ok:true,client} on
    * success; otherwise boots Chrome (ensureChrome + CdpClient.connect +

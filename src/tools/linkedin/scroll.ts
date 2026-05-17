@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { hardwareScroll } from "../../cdp/hardwareInput.js";
 import { applyPacing, failFromError, ok } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
@@ -17,7 +18,9 @@ export function makeScrollTool(session: LinkedinSession) {
         const r = await session.getOrInitClient();
         if (!r.ok) return r;
         const { client } = r;
-        await client.scroll(direction, amount);
+        // P-32: hardware-path input branch; CDP arm unchanged.
+        if (session.inputMode === "hardware") await hardwareScroll(client, direction, amount);
+        else await client.scroll(direction, amount);
         const pacing = await applyPacing();
         return ok("scroll", { direction, amount, pacing });
       } catch (e) {

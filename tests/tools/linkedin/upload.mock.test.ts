@@ -96,6 +96,7 @@ function makeFakeSession(opts: {
   };
 
   return {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
