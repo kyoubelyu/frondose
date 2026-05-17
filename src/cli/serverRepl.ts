@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import { resolveModel } from "../agent/modelResolver.js";
@@ -21,7 +22,9 @@ import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openInvitesDb } from "../persistence/invitesRegistry.js";
+import { openMemoryDatabase } from "../persistence/memory.js";
 import { isAlive, readPid } from "../persistence/processLock.js";
+import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
 import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
 import {
@@ -34,6 +37,7 @@ import {
   SERVER_MEMORY_DB_PATH,
   SERVER_PERSONAS_DIR,
   SERVER_PID_PATH,
+  SERVER_SECRETS_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
   SERVER_WORKERS_DB_PATH,
 } from "../persistence/serverPaths.js";
@@ -43,6 +47,7 @@ import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
+import { startWebHttp } from "./serverWeb.js";
 
 export interface ServerReplDeps {
   /** Override stdin (test injection). */
@@ -122,6 +127,31 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   process.once("exit", () => {
     try {
       httpServer.close();
+    } catch {
+      // already closed — ignore
+    }
+  });
+
+  // P-29: operator web dashboard on port web_port (default 8090).
+  const memoryDb = openMemoryDatabase(SERVER_MEMORY_DB_PATH());
+  const webToken = readSecrets(SERVER_SECRETS_PATH()).server?.webToken;
+  const webAssetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "web"); // dist/cli → dist/web
+  const webServer = startWebHttp(
+    {
+      workersDb,
+      memoryDb,
+      invitesDb,
+      personasDir: SERVER_PERSONAS_DIR(),
+      serverUrl: serverCfg.server.url ?? "",
+      assetRoot: webAssetRoot,
+    },
+    serverCfg.server.web_port,
+    serverCfg.server.bind_address ?? null,
+    webToken,
+  );
+  process.once("exit", () => {
+    try {
+      webServer.close();
     } catch {
       // already closed — ignore
     }

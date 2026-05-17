@@ -51,7 +51,13 @@ export const secretsJsonSchema = z.object({
   search: searchSubSchema.optional(),
   // Step-3b round-2 C-1: server.token lives here (chmod 600), NOT in config.json.
   // P-24 leaves this undefined; P-25 `mai server set` populates via writeSecrets.
-  server: z.object({ token: z.string().min(1).optional() }).optional(),
+  // P-29: webToken — Basic-Auth secret for the web dashboard (optional).
+  server: z
+    .object({
+      token: z.string().min(1).optional(),
+      webToken: z.string().min(1).optional(),
+    })
+    .optional(),
 });
 export type SecretsJson = z.infer<typeof secretsJsonSchema>;
 
