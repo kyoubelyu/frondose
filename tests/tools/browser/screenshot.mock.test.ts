@@ -13,7 +13,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeScreenshotTool } from "../../../src/tools/linkedin/screenshot.js";
+import { makeScreenshotTool } from "../../../src/tools/browser/screenshot.js";
 
 const abortSignal = new AbortController().signal;
 

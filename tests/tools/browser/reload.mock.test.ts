@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeReloadTool } from "../../../src/tools/linkedin/reload.js";
+import { makeReloadTool } from "../../../src/tools/browser/reload.js";
 
 const abortSignal = new AbortController().signal;
 

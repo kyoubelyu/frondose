@@ -14,7 +14,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeUploadTool } from "../../../src/tools/linkedin/upload.js";
+import { makeUploadTool } from "../../../src/tools/browser/upload.js";
 
 const abortSignal = new AbortController().signal;
 

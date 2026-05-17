@@ -20,7 +20,7 @@ const inspectParams = z.object({
 export function makeInspectTool(session: LinkedinSession) {
   return tool({
     description:
-      "Snapshot the current LinkedIn surface and return a compact InspectSummary " +
+      "Snapshot the current page surface and return a compact InspectSummary " +
       "{surface, availableScopes, text[], buttons[], inputs[]}. " +
       "Buttons and inputs each have ref strings (e.g. @e14) usable by `click` and `type`.",
     parameters: inspectParams,

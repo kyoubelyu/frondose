@@ -90,7 +90,7 @@ const pressParams = z.object({
 
 export function makePressTool(session: LinkedinSession) {
   return tool({
-    description: "Press a key on the focused element of the current LinkedIn page.",
+    description: "Press a key on the focused element of the current page.",
     parameters: pressParams,
     execute: async ({ key }) => {
       try {

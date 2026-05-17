@@ -22,7 +22,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
-import { makeNavigateToUrlTool } from "../../src/tools/linkedin/navigateToUrl.js";
+import { makeNavigateToUrlTool } from "../../src/tools/browser/navigateToUrl.js";
 
 // ─── Fake session helpers ──────────────────────────────────────────────────────
 
