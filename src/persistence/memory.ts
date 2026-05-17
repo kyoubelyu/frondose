@@ -195,3 +195,33 @@ export function getPersonMemory(query: MemoryQuery, db: DB): MemoryProjection | 
   }));
   return buildMemoryProjection(events);
 }
+
+/** P-29 STUB: paginated recent person_memory_events for the dashboard lead-memory browse.
+ *  builder implements at Step 4b — ORDER BY created_at DESC (plain lexical, C-1).
+ *  `created_at` is TEXT always written via .toISOString() (UTC Z) → lexical == time sort.
+ *  Returns [] on empty DB. */
+export function listRecentMemoryEvents(
+  db: DB,
+  limit: number,
+  offset: number,
+): Array<{
+  id: string;
+  profile_url: string;
+  person_name: string;
+  interaction: string;
+  summary: string;
+  next_action: string | null;
+  created_at: string;
+  source_worker_id: string | null;
+  source_persona: string | null;
+}> {
+  return db
+    .prepare(
+      `SELECT id, profile_url, person_name, interaction, summary,
+              next_action, created_at, source_worker_id, source_persona
+       FROM person_memory_events
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset) as ReturnType<typeof listRecentMemoryEvents>;
+}

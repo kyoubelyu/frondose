@@ -161,5 +161,18 @@ export function insertLeadAction(db: DB, personRef: string, actionType: string, 
   );
 }
 
+/** P-29 STUB: the single most-recent lead_action for a worker (dashboard "last action" column).
+ *  builder implements at Step 4b — SELECT action_type, ts FROM lead_actions
+ *  WHERE worker_id=? ORDER BY ts DESC LIMIT 1.  Returns null when no rows exist. */
+export function getLastLeadActionByWorker(db: DB, workerId: string): { action_type: string; ts: number } | null {
+  const row = db
+    .prepare(
+      `SELECT action_type, ts FROM lead_actions
+       WHERE worker_id = ? ORDER BY ts DESC LIMIT 1`,
+    )
+    .get(workerId) as { action_type: string; ts: number } | undefined;
+  return row ?? null;
+}
+
 // Re-export server-inbox helpers so callers can import everything via workersRegistry.
 export { drainPendingWorkerInbox, enqueueWorkerPending, pendingWorkerInboxCount } from "./serverInbox.js";

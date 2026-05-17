@@ -48,6 +48,7 @@ import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
 import { runServerCredentialSubcommand, type ServerCredentialOpts } from "./subcommands/serverCredential.js";
 import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
+import { runServerWebTokenSubcommand } from "./subcommands/serverWebToken.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
@@ -575,6 +576,21 @@ async function main(): Promise<void> {
   // P-28.5: dispatch a server-guided Google login task to a worker.
   serverWorker.command("login <worker_id>").action(async (workerId: string) => {
     await runServerWorkerSubcommand("login", { workerId });
+    process.exit(0);
+  });
+
+  // P-29: `mai server web-token set/show/remove` — web dashboard Basic-Auth secret.
+  const serverWebToken = server.command("web-token").description("Web dashboard Basic-Auth token");
+  serverWebToken.command("set [token]").action((token?: string) => {
+    runServerWebTokenSubcommand("set", { token });
+    process.exit(0);
+  });
+  serverWebToken.command("show").action(() => {
+    runServerWebTokenSubcommand("show");
+    process.exit(0);
+  });
+  serverWebToken.command("remove").action(() => {
+    runServerWebTokenSubcommand("remove");
     process.exit(0);
   });
 
