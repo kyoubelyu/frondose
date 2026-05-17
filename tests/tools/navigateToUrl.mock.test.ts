@@ -68,6 +68,7 @@ function makeSuccessSession() {
   const { handle, navigateCalls } = makeFakeHandle();
   const client = CdpClient.fromHandle(handle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: async () => ({ ok: true as const, client }),
     getClient: () => client,
     heartbeat: async () => true,
@@ -80,6 +81,7 @@ function makeSuccessSession() {
 /** Make a fake LinkedinSession whose getOrInitClient returns {ok:false, error}. */
 function makeFailSession() {
   return {
+    inputMode: "cdp" as const,
     getOrInitClient: async () => ({
       ok: false as const,
       error: "chrome_unavailable" as const,

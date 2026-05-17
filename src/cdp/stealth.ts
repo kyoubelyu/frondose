@@ -14,7 +14,13 @@ import type { CdpHandle } from "./types.js";
  */
 export const STEALTH_INIT_SCRIPT = `
 (() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true });
+  // P-32 (OQ-5): patch the getter's OWN toString so it reports native code.
+  const wd = () => undefined;
+  Object.defineProperty(wd, 'toString', {
+    value: () => 'function get webdriver() { [native code] }',
+    writable: true, configurable: true,
+  });
+  Object.defineProperty(navigator, 'webdriver', { get: wd, configurable: true });
   delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
   delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
   delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;

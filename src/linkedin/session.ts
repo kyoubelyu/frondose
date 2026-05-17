@@ -1,10 +1,14 @@
 import { CdpClient } from "../cdp/client.js";
+import { resolveInputMode } from "../cdp/hardwareInput.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
 
 export interface CreateLinkedinSessionOpts {
   port: number;
   profileDir: string;
+  /** P-32: requested input mode. Resolved once via `resolveInputMode` (graceful
+   *  downgrade to "cdp" if the native addon / Accessibility grant is absent). */
+  inputMode?: "cdp" | "hardware";
   /**
    * P-23 §6.5: daemon-mode Chrome guard. When provided and returns false at
    * the moment of a getOrInitClient() call, the session returns a
@@ -28,7 +32,13 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
   let initPromise: Promise<CdpClient> | undefined;
   let lastContext: CurrentSurfaceContext | undefined;
 
+  // P-32: resolve the effective input mode ONCE at session creation
+  // (graceful downgrade to "cdp" — D-4).
+  const inputMode = resolveInputMode(opts.inputMode ?? "cdp");
+
   return {
+    inputMode,
+
     async getOrInitClient(): Promise<ClientOrUnavailable> {
       // P-23 §6.5: refuse Chrome boot when daemon's guard denies ownership.
       if (opts.chromeAcquireGuard && !opts.chromeAcquireGuard()) {

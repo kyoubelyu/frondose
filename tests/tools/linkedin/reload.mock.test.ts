@@ -34,6 +34,7 @@ test("T-M75: reload tool execute calls Page.reload + waitFor load event, returns
 
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
+    inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},
