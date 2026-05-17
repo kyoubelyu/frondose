@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorState, Panel } from "./ui.js";
 
 interface Persona {
   id: string;
@@ -19,6 +20,7 @@ export function ProvisionPanel() {
   const [hostname, setHostname] = useState("");
   const [result, setResult] = useState<ProvisionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/web/personas")
@@ -33,6 +35,7 @@ export function ProvisionPanel() {
   const submit = async () => {
     setResult(null);
     setError(null);
+    setBusy(true);
     try {
       const body: { personaId: string; hostname?: string } = { personaId };
       if (hostname.trim()) body.hostname = hostname.trim();
@@ -44,51 +47,54 @@ export function ProvisionPanel() {
       setResult((await res.json()) as ProvisionResult);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div className="max-w-xl">
-      <h2 className="text-base font-semibold mb-3">Provision a worker</h2>
-      {error && <p className="text-red-600 mb-3">{error}</p>}
-      <label className="block mb-3 text-sm">
-        Persona
-        <select
-          value={personaId}
-          onChange={(e) => setPersonaId(e.target.value)}
-          className="block mt-1 w-full border border-slate-300 rounded px-2 py-1"
+    <Panel title="Provision a worker">
+      <div className="max-w-xl space-y-4">
+        {error && <ErrorState message={error} />}
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-slate-600">Persona</span>
+          <select
+            value={personaId}
+            onChange={(e) => setPersonaId(e.target.value)}
+            className="w-full rounded border border-slate-300 px-2 py-1"
+          >
+            {personas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.id} — {p.fullName ?? "?"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-slate-600">Hostname (optional)</span>
+          <input
+            type="text"
+            value={hostname}
+            onChange={(e) => setHostname(e.target.value)}
+            className="w-full rounded border border-slate-300 px-2 py-1"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!personaId || busy}
+          className="rounded bg-slate-800 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
-          {personas.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.id} — {p.fullName ?? "?"}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block mb-3 text-sm">
-        Hostname (optional)
-        <input
-          type="text"
-          value={hostname}
-          onChange={(e) => setHostname(e.target.value)}
-          className="block mt-1 w-full border border-slate-300 rounded px-2 py-1"
-        />
-      </label>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!personaId}
-        className="px-4 py-1.5 rounded bg-slate-800 text-white text-sm disabled:opacity-40"
-      >
-        Provision
-      </button>
-      {result?.ok && result.curlCommand && (
-        <div className="mt-4">
-          <p className="text-sm text-slate-600 mb-1">Run this on the new VM:</p>
-          <code className="block bg-slate-100 p-3 rounded text-xs break-all">{result.curlCommand}</code>
-        </div>
-      )}
-      {result && !result.ok && <p className="text-red-600 mt-3">Provision failed: {result.error ?? "unknown error"}</p>}
-    </div>
+          {busy ? "Provisioning…" : "Provision"}
+        </button>
+        {result?.ok && result.curlCommand && (
+          <div>
+            <p className="mb-1 text-sm text-slate-600">Run this on the new VM:</p>
+            <code className="block break-all rounded bg-slate-100 p-3 text-xs">{result.curlCommand}</code>
+          </div>
+        )}
+        {result && !result.ok && <ErrorState message={`Provision failed: ${result.error ?? "unknown error"}`} />}
+      </div>
+    </Panel>
   );
 }

@@ -25,3 +25,6 @@ export const SERVER_PERSONAS_DIR = (): string => join(SERVER_ROOT(), "personas")
 
 // P-28: credential library (LLM keys + Google accounts).
 export const SERVER_CREDENTIALS_DB_PATH = (): string => join(SERVER_ROOT(), "credentials.sqlite");
+
+// P-30: per-worker node config files (VNC port/password + SSH overrides).
+export const SERVER_WORKERS_CONFIG_DIR = (): string => join(SERVER_ROOT(), "workers");

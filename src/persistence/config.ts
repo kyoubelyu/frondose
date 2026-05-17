@@ -29,6 +29,9 @@ const serverSubSchema = z.object({
   poll_interval_s: z.number().int().min(5).max(120).default(30),
   // P-29: web dashboard listener port (additive; existing configs Zod-fill the default).
   web_port: z.number().int().min(1024).max(65535).default(8090),
+  // P-30: SSH terminal — user (null → OS user of the server process) + port.
+  ssh_user: z.string().min(1).nullable().default(null),
+  ssh_port: z.number().int().min(1).max(65535).default(22),
 });
 
 const workerSubSchema = z.object({
@@ -74,7 +77,7 @@ type ConfigJsonV1 = z.infer<typeof configJsonSchemaV1>;
 
 const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   schema_version: 2,
-  server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090 },
+  server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22 },
   worker: { id: null, hostname: null, label: null },
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
@@ -127,7 +130,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     ? v1.data
     : {
         schema_version: 1,
-        server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090 },
+        server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22 },
         worker: { id: null, hostname: null, label: null },
         telegram: { enabled: false, boundUserId: null, proxyUrl: null },
       };

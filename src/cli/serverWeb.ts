@@ -4,14 +4,20 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import os from "node:os";
 import { extname, resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import type { Database as DB } from "better-sqlite3";
+import { WebSocketServer } from "ws";
 import { z } from "zod";
 import { listInvitesByPersona } from "../persistence/invitesRegistry.js";
 import { listRecentMemoryEvents } from "../persistence/memory.js";
 import { listPersonaTemplates, readPersonaTemplate } from "../persistence/personaLibrary.js";
+import { readWorkerNodeConfig } from "../persistence/workerNodeConfig.js";
 import { getLastLeadActionByWorker, listWorkers } from "../persistence/workersRegistry.js";
 import { mintInvite } from "../tools/server/provisionWorker.js";
+import { handleSshWs } from "./serverSsh.js";
+import { handleVncWs } from "./serverVnc.js";
 
 export interface WebHttpDeps {
   workersDb: DB | null;
@@ -21,6 +27,10 @@ export interface WebHttpDeps {
   serverUrl: string;
   /** Absolute path to the static asset directory (dist/web/; injected for tests). */
   assetRoot: string;
+  // P-30 additions (additive; builder wires in at Step 4b):
+  sshUser?: string | null;
+  sshPort?: number;
+  workersConfigDir?: string;
 }
 
 const MIME: Record<string, string> = {
@@ -153,6 +163,59 @@ async function route(req: IncomingMessage, res: ServerResponse, deps: WebHttpDep
   sendJson(res, 404, { error: "not_found" });
 }
 
+/** P-30: WebSocket upgrade handler — Basic-Auth gate + /ws/ssh|vnc/<id> routing.
+ *  D-7 (Step-3b B-1 Option A): auth via the Authorization header the browser
+ *  replays on the same-origin WS upgrade — reuses P-29's `checkBasicAuth`. No
+ *  `?token=` query param. Log lines reference worker_id only, never req.url.
+ *
+ *  Ordering invariant (G-P30.7): auth → worker-active check → SSH/VNC dial. The
+ *  socket is destroyed BEFORE any dial for an unknown/non-active worker. */
+export function attachWebSockets(server: Server, deps: WebHttpDeps, webToken: string | undefined): void {
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const u = new URL(req.url ?? "/", "http://localhost");
+    // ── auth: same Basic-Auth gate as the HTTP routes (no-auth when webToken unset) ──
+    if (!checkBasicAuth(req, webToken)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="mai-server"\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    const sshM = u.pathname.match(/^\/ws\/ssh\/([\w.-]+)$/);
+    const vncM = u.pathname.match(/^\/ws\/vnc\/([\w.-]+)$/);
+    const workerId = sshM?.[1] ?? vncM?.[1];
+    if (!workerId) {
+      socket.destroy();
+      return;
+    }
+    const worker = deps.workersDb
+      ? listWorkers(deps.workersDb).find((w) => w.worker_id === workerId && w.status === "active")
+      : undefined;
+    if (!worker || !worker.hostname) {
+      socket.destroy(); // unknown/inactive/hostname-less worker — no dial
+      return;
+    }
+    const workerHost = worker.hostname;
+    const nodeCfg = readWorkerNodeConfig(deps.workersConfigDir ?? "", workerId);
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      if (sshM) {
+        handleSshWs(ws, {
+          workerId,
+          host: workerHost,
+          user: nodeCfg?.ssh_user ?? deps.sshUser ?? os.userInfo().username,
+          port: nodeCfg?.ssh_port ?? deps.sshPort ?? 22,
+        });
+      } else {
+        void handleVncWs(ws, {
+          workerId,
+          host: nodeCfg?.vnc_host ?? workerHost,
+          vncPort: nodeCfg?.vnc_port,
+          vncPassword: nodeCfg?.vnc_password,
+        });
+      }
+    });
+  });
+}
+
 export function startWebHttp(
   deps: WebHttpDeps,
   port: number,
@@ -169,6 +232,8 @@ export function startWebHttp(
       sendJson(res, 500, { error: "server error", detail: e instanceof Error ? e.message : String(e) });
     });
   });
+  // P-30: WebSocket upgrade handler (SSH/VNC) on the same http.Server.
+  attachWebSockets(server, deps, webToken);
   const host = bindAddress ?? "127.0.0.1";
   server.listen(port, host, () => {
     process.stdout.write(`[web] dashboard listening on ${host}:${port}${webToken ? " (Basic-Auth)" : " (no-auth)"}\n`);
