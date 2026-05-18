@@ -37,6 +37,7 @@ import {
   SERVER_MEMORY_DB_PATH,
   SERVER_PERSONAS_DIR,
   SERVER_PID_PATH,
+  SERVER_SCHEDULE_PATH,
   SERVER_SECRETS_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
   SERVER_WORKERS_CONFIG_DIR,
@@ -46,6 +47,7 @@ import { appendServerSession, loadServerSession, serverSessionFile } from "../pe
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
+import { drainDueJobs, type RunCronTurnDeps } from "./replCron.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
 import { startWebHttp } from "./serverWeb.js";
@@ -93,7 +95,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   const serverCfg = readConfig(SERVER_CONFIG_PATH());
   const maiVersion = (createRequire(import.meta.url)("../../package.json") as { version: string }).version;
 
-  // P-26/P-27 mode="server" — 18 tools.
+  // mode="server" — 20 tools (P-31+).
   const tools = makeAllTools(
     undefined,
     {
@@ -105,6 +107,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       credentialsDbPath: SERVER_CREDENTIALS_DB_PATH(),
+      schedulePath: SERVER_SCHEDULE_PATH(), // P-31: schedule_task tool + server cron tick
     },
     control,
     undefined,
@@ -185,6 +188,23 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   };
   // startDaemonPoller runs fire-and-forget; does not block readline.
   void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);
+
+  // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
+  const cronDeps: RunCronTurnDeps = {
+    model,
+    system,
+    messages,
+    tools,
+    sessionFile: sessionFile.path,
+    abortSignal: abortController.signal,
+    onStepFinish: auditWriter,
+    out: process.stdout,
+  };
+  await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+  const cronTick = setInterval(() => {
+    void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+  }, 60_000);
+  cronTick.unref();
 
   // Readline REPL.
   const rl = readline.createInterface({

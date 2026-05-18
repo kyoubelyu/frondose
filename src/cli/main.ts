@@ -285,10 +285,13 @@ async function main(): Promise<void> {
         }
       }
 
-      const tools = makeAllTools(linkedinSession, { memoryDbPath, identityPath }, control, hookRunner, {
-        mode: "worker",
-        workerId,
-      });
+      const tools = makeAllTools(
+        linkedinSession,
+        { memoryDbPath, identityPath, schedulePath }, // P-31: + schedulePath (schedule_task tool)
+        control,
+        hookRunner,
+        { mode: "worker", workerId },
+      );
 
       if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
         await runOneShot({
@@ -815,12 +818,28 @@ async function main(): Promise<void> {
     });
 
   // P-11 D-9: `mai cron list | remove <id>` — delegates to existing handleCronSlash for shape parity.
-  // `mai cron schedule` is intentionally REPL-only (interactive prompt body too awkward as CLI argv).
-  const cron = program.command("cron").description("Cron schedule management (create via REPL `/cron schedule`)");
+  // P-31 OQ-3: `mai cron schedule` was intentionally REPL-only; P-31 reverses that so the
+  // server can create a worker cron job over SSH (delegates to handleCronSlash).
+  const cron = program.command("cron").description("Cron schedule management");
   cron.command("list").action(async () => {
     await handleCronSlash("/cron list", schedulePath, process.stdout);
     process.exit(0);
   });
+  // P-31: `mai cron schedule <task> --cron <expr> | --at <time>`.
+  cron
+    .command("schedule <task>")
+    .option("--cron <expr>", "5-field cron expression (recurring)")
+    .option("--at <time>", "HH:MM or ISO datetime (one-shot)")
+    .action(async (task: string, opts: { cron?: string; at?: string }) => {
+      if (!opts.cron && !opts.at) {
+        process.stderr.write("mai cron schedule: --cron <expr> or --at <time> required\n");
+        process.exit(1);
+      }
+      const flag = opts.cron ? `--cron "${opts.cron}"` : `--at "${opts.at}"`;
+      const safeTask = task.replace(/"/g, ""); // handleCronSlash tokenizer is quote-delimited
+      await handleCronSlash(`/cron schedule "${safeTask}" ${flag}`, schedulePath, process.stdout);
+      process.exit(0);
+    });
   // P-13 D-10 + B-1: optional [id] — when omitted + TTY, delegate to
   // runCronRemoveInteractive (DI-injectable helper in subcommands/cronRemove.ts).
   cron.command("remove [id]").action(async (id: string | undefined) => {

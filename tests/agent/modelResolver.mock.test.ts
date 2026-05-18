@@ -566,16 +566,16 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: tool() count is 34 after P-28.5 (P-28.5 added navigate_to_url + clear_cookies + dispatch_google_login)", () => {
+  it("T-CONTRACT: tool() count is 35 after P-31 (P-31 added schedule_task)", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  34 — baseline 28 at P-26, +3 P-27 (provision/revoke/listPersonas), +3 P-28.5 (navigate/clear/dispatch)
+    // Then:  35 — baseline 28 at P-26, +3 P-27, +3 P-28.5, +1 P-31 (schedule_task)
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      34,
-      `Expected exactly 34 tool() calls in src/tools/, got ${count}. P-28.5 added navigate_to_url + clear_cookies + dispatch_google_login.`,
+      35,
+      `Expected exactly 35 tool() calls in src/tools/, got ${count}. P-31 added schedule_task.`,
     );
   });
 });

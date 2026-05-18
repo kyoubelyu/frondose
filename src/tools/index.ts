@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Tool, ToolSet } from "ai";
 import type { HookRunner } from "../agent/hooks.js";
 import { IDEMPOTENT_TOOLS, withRetry } from "../agent/retryWrapper.js";
@@ -8,12 +10,13 @@ import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
-import { SERVER_PERSONAS_DIR } from "../persistence/serverPaths.js";
+import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH } from "../persistence/serverPaths.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeBrowserTools } from "./browser/index.js";
 import { echoTool } from "./control/echo.js";
 import { makeControlTools } from "./control/index.js";
 import type { ControlSignals } from "./control/stop.js";
+import { makeCronTools } from "./cron/index.js";
 import { wrapWithHooks } from "./hookWrapper.js";
 import { makeIdentityTools } from "./identity/index.js";
 import { makeLinkedinTools } from "./linkedin/index.js";
@@ -64,6 +67,8 @@ export interface PersistencePaths {
   serverUrl?: string;
   // P-28.5: server credential store handle for dispatch_google_login.
   credentialsDbPath?: string;
+  // P-31 Step 4a STUB: schedule.jsonl path for schedule_task tool. Builder wires at Step 4b.
+  schedulePath?: string;
 }
 
 /**
@@ -199,6 +204,8 @@ export function makeAllTools(
         personasDir,
       }),
     });
+    // P-31: schedule_task — server agent self-scheduling.
+    Object.assign(out, makeCronTools(persistence?.schedulePath ?? SERVER_SCHEDULE_PATH()));
   } else {
     // worker-only: query_lead_globally + publish_event. Both always register;
     // both return a structured envelope when serverCoords===null.
@@ -206,6 +213,9 @@ export function makeAllTools(
       query_lead_globally: makeQueryLeadGloballyTool(serverCoords),
       publish_event: makePublishEventTool(serverCoords),
     });
+    // P-31: schedule_task — worker self-scheduling.
+    const workerSchedulePath = persistence?.schedulePath ?? join(homedir(), ".mai", "agent", "schedule.jsonl");
+    Object.assign(out, makeCronTools(workerSchedulePath));
   }
 
   // P-9 D-1 / D-11: retry-wrap idempotent tools.
