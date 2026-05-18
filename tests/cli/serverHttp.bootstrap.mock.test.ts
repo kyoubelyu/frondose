@@ -95,6 +95,9 @@ describe("GET /bootstrap/<token>.sh — pending invite (G-P27.1 + G-P27.20)", ()
     const plainToken = "a1b2c3d4".repeat(8); // 64-char hex
     const tokenSha = sha256(plainToken);
     insertInvite(invitesDb, tokenSha, "p1", null, Date.now() + 3_600_000);
+    // P-34: installToken must be set so handleBootstrapScript passes the CONCERN-1 guard
+    // and renders the real bootstrap script (not the bash error script).
+    // biome-ignore lint/suspicious/noExplicitAny: P-34 installToken added to handlers
     const { server, port } = await startAndWait({
       workersDb,
       serverInboxDb,
@@ -102,7 +105,8 @@ describe("GET /bootstrap/<token>.sh — pending invite (G-P27.1 + G-P27.20)", ()
       personasDir: dir,
       serverUrl: SERVER_URL,
       maiVersion: MAI_VERSION,
-    });
+      installToken: "ghp_PLACEHOLDER_not_real_T_REST_BOOT_1",
+    } as any);
     try {
       const res = await getScript(port, `/bootstrap/${plainToken}.sh`);
       assert.equal(res.status, 200, `expected 200; got ${res.status}; body: ${res.body.slice(0, 100)}`);

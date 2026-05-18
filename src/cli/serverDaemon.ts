@@ -134,6 +134,8 @@ export async function runServerDaemon(): Promise<void> {
   );
 
   // P-26: server-side HTTP listener (Tailscale-private; defaults to 127.0.0.1).
+  // P-34: installToken — GitHub PAT embedded into rendered /bootstrap scripts.
+  const installToken = readSecrets(SERVER_SECRETS_PATH()).server?.installToken;
   const httpServer = startServerHttp(
     {
       workersDb,
@@ -143,6 +145,7 @@ export async function runServerDaemon(): Promise<void> {
       serverUrl: serverCfg.server.url ?? "",
       maiVersion,
       credentialsDb,
+      installToken,
     },
     serverCfg.server.bind_address ?? null,
     SERVER_HTTP_PORT,
