@@ -886,17 +886,17 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool count is 35 after P-31 (autoUpdate is NOT a Vercel tool)", async () => {
+  it("T-CONTRACT: tool count is 38 after P-39 (autoUpdate is NOT a Vercel tool; P-39 adds 3 memory tools)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  grep tool() in src/tools/**
-    // Then:  35 tool() calls — was 28 at P-26; +3 P-27; +3 P-28.5; +1 P-31 (schedule_task).
+    // Then:  38 tool() calls — was 28 at P-26; +3 P-27; +3 P-28.5; +1 P-31 (schedule_task); +3 P-39 (search_memory/set_memory_note/get_memory_note).
     //        mai auto-update is a startup hook, not a Vercel tool.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
-      35,
-      `Expected exactly 35 tool() calls in src/tools/, got ${count}. P-31 added schedule_task.`,
+      38,
+      `Expected exactly 38 tool() calls in src/tools/, got ${count}. P-39 added 3 new memory tools.`,
     );
   });
 });

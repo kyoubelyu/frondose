@@ -43,7 +43,8 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Frozen P-38 tool name snapshots — identical to P-37 (P-38 adds NO new tools).
+// Frozen tool name snapshots — updated at P-39 Step 5 to include the 3 new memory tools.
+// P-38 added no tools (29/20); P-39 adds search_memory + set_memory_note + get_memory_note (32/23).
 const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "analyze_screenshot",
   "clear_cookies",
@@ -51,6 +52,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_memory_note",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -67,6 +69,8 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "schedule_task",
   "screenshot",
   "scroll",
+  "search_memory",
+  "set_memory_note",
   "sleep",
   "stop",
   "telegram_notify",
@@ -81,6 +85,7 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "dispatch_google_login",
   "echo",
   "escalate_for_capability",
+  "get_memory_note",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -91,7 +96,9 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "remember",
   "revoke_worker",
   "schedule_task",
+  "search_memory",
   "send_worker_message",
+  "set_memory_note",
   "sleep",
   "stop",
   "telegram_notify",
@@ -210,13 +217,13 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 29 / server 20 unchanged across P-38 (G-P38.8/.11)", () => {
+describe("tool counts: worker 32 / server 23 (G-P38.8/.11, updated at P-39 Step 5)", () => {
   it(
-    "T-CONTRACT.TOOLS: P-38 does not add or remove any tool from makeAllTools (worker 29 / server 20)",
+    "T-CONTRACT.TOOLS: tool set after P-39 is worker 32 / server 23 (P-38 added 0; P-39 adds 3 memory tools)",
     () => {
       // Given: makeAllTools called in worker mode and server mode with fake deps
       // When:  tool registrations counted and key-sets compared to frozen snapshots
-      // Then:  worker 29 / server 20 (mai uninstall is a CLI subcommand, NOT a Vercel tool)
+      // Then:  worker 32 / server 23 (P-39 added search_memory + set_memory_note + get_memory_note)
 
       const { dir, cleanup } = makeTmpDir();
       try {
@@ -231,10 +238,10 @@ describe("tool counts: worker 29 / server 20 unchanged across P-38 (G-P38.8/.11)
         const workerKeys = Object.keys(workerTools).sort();
         assert.equal(
           workerKeys.length,
-          29,
-          `worker tool count must be 29; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+          32,
+          `worker tool count must be 32; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
         );
-        assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen P-38 snapshot");
+        assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot");
 
         const serverTools = makeAllTools(
           undefined,
@@ -246,10 +253,10 @@ describe("tool counts: worker 29 / server 20 unchanged across P-38 (G-P38.8/.11)
         const serverKeys = Object.keys(serverTools).sort();
         assert.equal(
           serverKeys.length,
-          20,
-          `server tool count must be 20; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+          23,
+          `server tool count must be 23; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
         );
-        assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen P-38 snapshot");
+        assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
       } finally {
         cleanup();
       }
