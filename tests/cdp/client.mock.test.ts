@@ -242,15 +242,23 @@ test("T-M22: pressKey('Enter') issues keyDown then keyUp", async () => {
 
 // ─── T-M23..T-M27: P-3 CdpClient extensions ──────────────────────────────────
 
-// T-M23: scroll calls Page.getLayoutMetrics then Input.synthesizeScrollGesture
-test("T-M23: scroll('down', 300) calls Page.getLayoutMetrics then Input.synthesizeScrollGesture with yDistance:300", async () => {
-  let getLayoutMetricsCalls = 0;
-  let scrollGestureArgs: Record<string, unknown> | null = null;
+// T-M23: P-37 B3 — scroll uses window.scrollBy evaluate (replaces synthesizeScrollGesture)
+// Updated from the pre-P-37 version that asserted getLayoutMetrics + synthesizeScrollGesture.
+test("T-M23: scroll('down', 300) calls Runtime.evaluate('window.scrollBy(0, 300)') — no synthesizeScrollGesture, no getLayoutMetrics", async () => {
+  const evaluateCalls: string[] = [];
+  let synthesizeScrollGestureCalled = false;
+  let getLayoutMetricsCalled = false;
 
   const fakeHandle = {
+    Runtime: {
+      evaluate: async (args: { expression: string; returnByValue?: boolean; awaitPromise?: boolean }) => {
+        evaluateCalls.push(args.expression);
+        return { result: { value: undefined } };
+      },
+    },
     Page: {
       getLayoutMetrics: async () => {
-        getLayoutMetricsCalls++;
+        getLayoutMetricsCalled = true;
         return {
           visualViewport: { clientWidth: 1280, clientHeight: 800 },
           layoutViewport: { clientWidth: 1280, clientHeight: 800 },
@@ -258,8 +266,8 @@ test("T-M23: scroll('down', 300) calls Page.getLayoutMetrics then Input.synthesi
       },
     },
     Input: {
-      synthesizeScrollGesture: async (args: Record<string, unknown>) => {
-        scrollGestureArgs = args;
+      synthesizeScrollGesture: async (_args: unknown) => {
+        synthesizeScrollGestureCalled = true;
       },
     },
   };
@@ -267,13 +275,10 @@ test("T-M23: scroll('down', 300) calls Page.getLayoutMetrics then Input.synthesi
   const client = CdpClient.fromHandle(fakeHandle);
   await client.scroll("down", 300);
 
-  assert.equal(getLayoutMetricsCalls, 1, "Page.getLayoutMetrics must be called once");
-  assert.ok(scrollGestureArgs !== null, "Input.synthesizeScrollGesture must be called");
-  assert.equal(scrollGestureArgs?.yDistance, 300, "yDistance must be 300 for 'down'");
-  assert.equal(scrollGestureArgs?.xDistance, 0, "xDistance must be 0 for 'down'");
-  // Center of 1280x800 = (640, 400)
-  assert.equal(scrollGestureArgs?.x, 640, "scroll origin x must be viewport center");
-  assert.equal(scrollGestureArgs?.y, 400, "scroll origin y must be viewport center");
+  assert.equal(evaluateCalls.length, 1, "exactly one Runtime.evaluate call expected");
+  assert.equal(evaluateCalls[0], "window.scrollBy(0, 300)", "evaluate expression must be 'window.scrollBy(0, 300)'");
+  assert.equal(getLayoutMetricsCalled, false, "Page.getLayoutMetrics must NOT be called (no viewport coordinates needed)");
+  assert.equal(synthesizeScrollGestureCalled, false, "Input.synthesizeScrollGesture must NOT be called (replaced by evaluate)");
 });
 
 // T-M24: getCurrentUrl delegates to Runtime.evaluate('window.location.href')

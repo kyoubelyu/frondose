@@ -13,7 +13,8 @@ export const CLICKABLE_ROLES = new Set([
   "textarea",
 ]);
 export const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "textarea"]);
-export const TEXT_ROLES = new Set(["staticText", "text", "heading"]);
+// P-37 B4: feedPost — synthesized feed-post entries surface as inspect text.
+export const TEXT_ROLES = new Set(["staticText", "text", "heading", "feedPost"]);
 
 const MAX_BUTTONS = 12;
 const MAX_INPUTS = 12;

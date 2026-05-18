@@ -2,12 +2,18 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText, type LanguageModel, tool } from "ai";
 import { z } from "zod";
-import { resolveModel } from "../../agent/modelResolver.js";
+import { resolveModel, resolveModelSpec } from "../../agent/modelResolver.js";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { assertFileReadable } from "../../linkedin/uploadAllowlist.js";
 import { readAuth } from "../../persistence/auth.js";
 
 const DEFAULT_VISION_MODEL = "anthropic:claude-sonnet-4-5";
+
+/** P-37 B5: conservative name heuristic for vision-capable models. Used ONLY to
+ *  decide whether a fallback retry on the MAIN model is safe — an unknown model
+ *  does not match → no fallback → a clear error (never garbage from a text-only
+ *  model). NOT a capability registry. */
+const VISION_CAPABLE_MODEL_RE = /claude|gpt-4o|gpt-4\.1|gemini/i;
 const DEFAULT_PROMPT = "Describe what you see, focusing on UI elements, text content, and notable structure.";
 
 const analyzeScreenshotParams = z.object({
@@ -37,7 +43,8 @@ export function makeAnalyzeScreenshotTool() {
       "Analyze a screenshot file via a vision-capable LLM. " +
       "Pass an absolute path to a PNG/JPEG file (typically the path returned by the screenshot tool). " +
       "Returns a text description. Vision model defaults to anthropic:claude-sonnet-4-5 (override via MAI_VISION_MODEL env). " +
-      "Costs vision tokens billed against the vision provider's API key.",
+      "Costs vision tokens billed against the vision provider's API key. " +
+      "Requires Anthropic API access by default; set MAI_VISION_MODEL=<provider>:<modelId> to use a different vision-capable provider.",
     parameters: analyzeScreenshotParams,
     execute: async ({ path: filePath, prompt }, opts) => {
       try {
@@ -58,25 +65,71 @@ export function makeAnalyzeScreenshotTool() {
               `Set ANTHROPIC_API_KEY or change MAI_VISION_MODEL.`,
           );
         }
-        const result = await generateText({
-          model,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "image", image: buffer, mimeType },
-                { type: "text", text: prompt },
-              ],
-            },
-          ],
-          abortSignal: opts?.abortSignal,
-        });
-        return ok("analyze_screenshot", {
-          description: result.text,
-          visionModel: visionSpec,
-          mimeType,
-          bytes: buffer.length,
-        });
+        const runVision = (m: LanguageModel) =>
+          generateText({
+            model: m,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "image", image: buffer, mimeType },
+                  { type: "text", text: prompt },
+                ],
+              },
+            ],
+            abortSignal: opts?.abortSignal,
+          });
+        try {
+          const result = await runVision(model);
+          return ok("analyze_screenshot", {
+            description: result.text,
+            visionModel: visionSpec,
+            mimeType,
+            bytes: buffer.length,
+          });
+        } catch (visionErr) {
+          // P-37 B5: name-gated fallback to the main model.
+          const mainSpec = resolveModelSpec();
+          const mainModelId = mainSpec.includes(":") ? mainSpec.slice(mainSpec.indexOf(":") + 1) : "";
+          if (mainSpec === visionSpec || !VISION_CAPABLE_MODEL_RE.test(mainModelId)) {
+            return fail(
+              "analyze_screenshot",
+              "runtime_error",
+              `Vision call failed for '${visionSpec}': ${visionErr instanceof Error ? visionErr.message : String(visionErr)}. ` +
+                `Set MAI_VISION_MODEL=<provider>:<modelId> to a reachable vision-capable provider ` +
+                `(the main model '${mainSpec}' is not recognized as vision-capable, so no fallback was attempted).`,
+            );
+          }
+          // NIT-2: keep resolution failure distinct from the vision-call failure.
+          let mainModel: LanguageModel;
+          try {
+            mainModel = resolveModel({ factory: mainSpec });
+          } catch (resolveErr) {
+            return fail(
+              "analyze_screenshot",
+              "runtime_error",
+              `Vision call failed on '${visionSpec}' and the fallback model '${mainSpec}' could not be resolved: ` +
+                `${resolveErr instanceof Error ? resolveErr.message : String(resolveErr)}. ` +
+                `Set MAI_VISION_MODEL to a reachable vision-capable provider.`,
+            );
+          }
+          try {
+            const result = await runVision(mainModel);
+            return ok("analyze_screenshot", {
+              description: result.text,
+              visionModel: mainSpec,
+              mimeType,
+              bytes: buffer.length,
+            });
+          } catch {
+            return fail(
+              "analyze_screenshot",
+              "runtime_error",
+              `Vision call failed on '${visionSpec}' and the fallback '${mainSpec}'. ` +
+                `Set MAI_VISION_MODEL to a reachable vision-capable provider.`,
+            );
+          }
+        }
       } catch (e) {
         return failFromError("analyze_screenshot", e);
       }
