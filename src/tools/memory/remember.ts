@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
 import { interactionKindSchema } from "../../linkedin/memoryProjection.js";
-import { appendPersonInteraction, rememberInputSchema } from "../../persistence/memory.js";
+import { appendPersonInteraction, rememberInputSchema, setPersonScore } from "../../persistence/memory.js";
 import { getMemoryDb } from "./_dbHandle.js";
 
 const rememberToolParams = z.object({
@@ -13,6 +13,16 @@ const rememberToolParams = z.object({
   notes: z.string().trim().min(1).max(220).optional().describe("Context or observation (≤220 chars)."),
   avoid: z.string().trim().min(1).max(160).optional().describe("What to avoid (≤160 chars)."),
   nextAction: z.string().trim().min(1).max(160).optional().describe("Suggested next action (≤160 chars)."),
+  // P-39: optional 0–10 lead rating.
+  score: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .optional()
+    .describe(
+      "Optional 0–10 lead rating (0 = unqualified, 5 = warm, 10 = hot). Set it once you have qualified the person.",
+    ),
 });
 
 /** Build the `remember` Vercel tool for a given memory DB path.
@@ -30,6 +40,10 @@ export function makeRememberTool(memoryDbPath: string, serverCoords?: { serverUr
         const validated = rememberInputSchema.parse(input);
         const db = getMemoryDb(memoryDbPath);
         const event = appendPersonInteraction(validated, db);
+        // P-39: upsert score when provided.
+        if (validated.score !== undefined) {
+          setPersonScore(event.profileUrl, validated.score, db);
+        }
         // P-26: fire-and-forget POST /api/lead/touch when serverCoords supplied.
         // Local write already succeeded; server failure is silent per GQ-7.
         if (serverCoords) {
@@ -52,7 +66,7 @@ export function makeRememberTool(memoryDbPath: string, serverCoords?: { serverUr
             // Server unreachable; local insert succeeded — silent per GQ-7.
           });
         }
-        return ok("remember", { event });
+        return ok("remember", { event, score: validated.score ?? null });
       } catch (e) {
         return failFromError("remember", e);
       }

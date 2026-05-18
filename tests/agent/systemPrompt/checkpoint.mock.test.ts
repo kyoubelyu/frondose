@@ -51,14 +51,21 @@ test("T-Checkpoint.2: CHECKPOINT contains the literal substring 'CRON_RUN_ID=' (
   );
 });
 
-// ─── T-Checkpoint.3 — getMemory + remember substrings ────────────────────────
+// ─── T-Checkpoint.3 — get_memory_note + set_memory_note substrings (P-39 update) ────────────────
 
-test("T-Checkpoint.3: CHECKPOINT contains both 'getMemory' AND 'remember' (both idempotency tools named by name in the discipline)", () => {
-  // Given: CHECKPOINT constant post-Step-4b
-  // When: CHECKPOINT.includes("getMemory") AND CHECKPOINT.includes("remember")
-  // Then: both are true — the idempotency contract surfaces both tool names
-  assert.ok(CHECKPOINT.includes("getMemory"), 'CHECKPOINT must contain "getMemory"');
-  assert.ok(CHECKPOINT.includes("remember"), 'CHECKPOINT must contain "remember"');
+test("T-Checkpoint.3: CHECKPOINT contains 'get_memory_note' AND 'set_memory_note' (P-39 rewrote within-cron directives to use the real tool names)", () => {
+  // Given: CHECKPOINT constant (P-39 rewrote the within-cron idempotency directives:
+  //        getMemory({ key }) and remember({ key, value }) → get_memory_note / set_memory_note)
+  // When: CHECKPOINT.includes("get_memory_note") AND CHECKPOINT.includes("set_memory_note")
+  // Then: both are true — the idempotency contract surfaces the real P-39 tool names
+  assert.ok(
+    CHECKPOINT.includes("get_memory_note"),
+    `CHECKPOINT must contain "get_memory_note" (P-39 within-cron directive); len=${CHECKPOINT.length}`,
+  );
+  assert.ok(
+    CHECKPOINT.includes("set_memory_note"),
+    `CHECKPOINT must contain "set_memory_note" (P-39 within-cron directive); len=${CHECKPOINT.length}`,
+  );
 });
 
 // ─── T-Checkpoint.4 — telegram_notify substring ──────────────────────────────
@@ -92,15 +99,16 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
   );
 });
 
-// ─── T-Checkpoint.7 — character count budget ─────────────────────────────────
+// ─── T-Checkpoint.7 — character count budget (P-39 update) ──────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 1800 characters (P-12 D-2: budget raised from 1500 to 1800 to fit bidirectional-Telegram subsection; regression guard)", () => {
-  // Given: CHECKPOINT constant (1458 chars before P-12 D-3; ~1786 after D-3 subsection appended)
+test("T-Checkpoint.7: CHECKPOINT.length is <= 3000 characters (P-39 raised the budget: 2 new subsections added; regression guard updated)", () => {
+  // Given: CHECKPOINT constant (P-39 added 'Session-end persistence' + 'Daily memory organization'
+  //        subsections → grew from ~1786 chars to ~2620)
   // When: CHECKPOINT.length measured
-  // Then: <= 1800 — D-2 ceiling with 14-char headroom preserves meaningful regression guard
+  // Then: <= 3000 — generous ceiling preserving meaningful regression guard while allowing P-39 growth
   assert.ok(
-    CHECKPOINT.length <= 1800,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 1800-char budget (P-12 D-2 regression guard)`,
+    CHECKPOINT.length <= 3000,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 3000-char budget (P-39 regression guard)`,
   );
 });
 
