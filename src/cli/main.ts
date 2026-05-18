@@ -57,6 +57,7 @@ import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runTelegramDaemon } from "./subcommands/telegramDaemon.js";
+import { runUninstallSubcommand } from "./subcommands/uninstall.js";
 import { runUpdateSubcommand } from "./subcommands/update.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
 import { startWorkerHeartbeat } from "./workerHeartbeat.js";
@@ -817,6 +818,19 @@ async function main(): Promise<void> {
         process.exit(0);
       }
       await runUpdateSubcommand({ json: cliOpts.json ?? false });
+      process.exit(0);
+    });
+
+  // P-38: `mai uninstall` — remove the global install. fs-only; --purge wipes ~/.mai/.
+  program
+    .command("uninstall")
+    .description("Remove the global mai install (bin + package symlink + release dirs); --purge also removes ~/.mai/")
+    .option("--purge", "Also remove ~/.mai/ — credentials, sessions, Chrome-profile symlink (irreversible)", false)
+    .option("--yes", "Skip the interactive confirmation prompts", false)
+    .action(async (cliOpts: { purge?: boolean; yes?: boolean }) => {
+      await runWithExitGuard(async () => {
+        await runUninstallSubcommand({ purge: cliOpts.purge ?? false, yes: cliOpts.yes ?? false });
+      });
       process.exit(0);
     });
 

@@ -28,9 +28,6 @@ build/
 # Claude Code local artifacts — not shipped.
 .claude/
 
-# CI/CD workflows — local only, not shipped.
-.github/
-
 # Phase Gate Matrix process documents — local only, not shipped.
 docs/
 
