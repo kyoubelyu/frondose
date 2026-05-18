@@ -161,20 +161,14 @@ export class CdpClient {
     }
   }
 
-  /** Smooth scroll the page in a given direction. Window center is the gesture origin. */
+  /** P-37 B3: page scroll via window.scrollBy. Replaces Input.synthesizeScrollGesture,
+   *  which required the gesture origin inside the COMPOSITED viewport — it failed
+   *  when Chrome was backgrounded and on Retina DPR=2. window.scrollBy is pure JS:
+   *  no coordinates, no focus dependency, no DPR mismatch. */
   async scroll(direction: "up" | "down" | "left" | "right", amount: number): Promise<void> {
-    const xDistance = direction === "left" ? -amount : direction === "right" ? amount : 0;
-    const yDistance = direction === "up" ? -amount : direction === "down" ? amount : 0;
-    const metrics = await this.client.Page.getLayoutMetrics();
-    // visualViewport.{clientWidth,clientHeight} per Page.getLayoutMetrics shape (CDP v1).
-    const w = metrics?.visualViewport?.clientWidth ?? metrics?.layoutViewport?.clientWidth ?? 1280;
-    const h = metrics?.visualViewport?.clientHeight ?? metrics?.layoutViewport?.clientHeight ?? 800;
-    await this.client.Input.synthesizeScrollGesture({
-      x: Math.round(w / 2),
-      y: Math.round(h / 2),
-      xDistance,
-      yDistance,
-    });
+    const dx = direction === "left" ? -amount : direction === "right" ? amount : 0;
+    const dy = direction === "up" ? -amount : direction === "down" ? amount : 0;
+    await this.evaluate<void>(`window.scrollBy(${dx}, ${dy})`);
   }
 
   /** Get the current page URL via Runtime.evaluate. */
