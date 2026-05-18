@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
-import { resolveModel } from "../agent/modelResolver.js";
+import { resolveModelOrNull } from "../agent/modelResolver.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { SERVER_BOUNDARY } from "../agent/systemPrompt/serverBoundary.js";
@@ -44,7 +44,7 @@ import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { drainDueJobs, type RunCronTurnDeps } from "./replCron.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
-import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
+import { startServerHttp } from "./serverHttp.js";
 import { startWebHttp } from "./serverWeb.js";
 
 export async function runServerDaemon(): Promise<void> {
@@ -89,13 +89,6 @@ export async function runServerDaemon(): Promise<void> {
     cleanup();
     process.exit(1);
   }
-
-  const model = resolveModel({});
-  const system = composeSystemPrompt({
-    boundary: SERVER_BOUNDARY,
-    soul: composeServerSoulBand(identity),
-    checkpoint: CHECKPOINT,
-  });
 
   // Step-3b C-2: ONE AbortController drives both agent loop + Telegram poller.
   const abortController = new AbortController();
@@ -148,7 +141,7 @@ export async function runServerDaemon(): Promise<void> {
       installToken,
     },
     serverCfg.server.bind_address ?? null,
-    SERVER_HTTP_PORT,
+    serverCfg.server.rest_port, // P-36 F-D2: configurable REST port (default 3031)
   );
   // Best-effort HTTP teardown on shutdown (registered alongside pid cleanup).
   process.once("exit", () => {
@@ -192,49 +185,62 @@ export async function runServerDaemon(): Promise<void> {
   const messages: CoreMessage[] = [];
   // Step-3b C-3 fix: serverSessionFile() auto-creates ~/.mai/server/sessions/.
   const sessionFile = { path: serverSessionFile() };
-  const deps: TelegramTurnDeps = {
-    model,
-    system,
-    messages,
-    tools,
-    sessionFile,
-    abortSignal: abortController.signal,
-    onStepFinish: auditWriter,
-    out: process.stdout,
-    configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
-    // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
-    // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
-    inboxPrefix: () => drainServerInbox(serverInboxDb),
-  };
 
-  // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
-  // The boot drain runs before the hold-Promise below so a due job fires at startup.
-  const cronDeps: RunCronTurnDeps = {
-    model,
-    system,
-    messages,
-    tools,
-    sessionFile: sessionFile.path,
-    abortSignal: abortController.signal,
-    onStepFinish: auditWriter,
-    out: process.stdout,
-  };
-  await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
-  const cronTick = setInterval(() => {
-    void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
-  }, 60_000);
-  cronTick.unref();
+  // P-36 F-B (B2): resolve the LLM WITHOUT throwing — the REST + web listeners
+  // are already bound above, so a bad LLM config degrades the orchestrator agent
+  // rather than crashing the fleet-coordination plane.
+  const model = resolveModelOrNull();
+  if (model) {
+    const system = composeSystemPrompt({
+      boundary: SERVER_BOUNDARY,
+      soul: composeServerSoulBand(identity),
+      checkpoint: CHECKPOINT,
+    });
+    const deps: TelegramTurnDeps = {
+      model,
+      system,
+      messages,
+      tools,
+      sessionFile,
+      abortSignal: abortController.signal,
+      onStepFinish: auditWriter,
+      out: process.stdout,
+      configPath: SERVER_TELEGRAM_CONFIG_PATH(),
+      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
+      // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
+      // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
+      inboxPrefix: () => drainServerInbox(serverInboxDb),
+    };
 
-  process.stdout.write(`[server daemon] up, PID ${process.pid}, session ${sessionFile.path}\n`);
-  // Step-3b C-2: pass unified abortController to poller; SIGTERM path handles
-  // process.exit(0) directly (see handler above). startDaemonPoller returns the
-  // handle synchronously (kicks off a fire-and-forget loop internally), so this
-  // function would return immediately without the hold-Promise below — main.ts
-  // would then `process.exit(0)` and kill the daemon. The hold-Promise keeps
-  // the event loop alive until `stop` tool aborts the controller OR the SIGTERM
-  // handler exits the process directly.
-  await startDaemonPoller(cfg, deps, turnLock, abortController);
+    // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
+    // The boot drain runs before the hold-Promise below so a due job fires at startup.
+    const cronDeps: RunCronTurnDeps = {
+      model,
+      system,
+      messages,
+      tools,
+      sessionFile: sessionFile.path,
+      abortSignal: abortController.signal,
+      onStepFinish: auditWriter,
+      out: process.stdout,
+    };
+    await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+    const cronTick = setInterval(() => {
+      void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+    }, 60_000);
+    cronTick.unref();
+
+    process.stdout.write(`[server daemon] up, PID ${process.pid}, session ${sessionFile.path}\n`);
+    // Step-3b C-2: pass unified abortController to poller; SIGTERM path handles
+    // process.exit(0) directly (see handler above).
+    await startDaemonPoller(cfg, deps, turnLock, abortController);
+  } else {
+    process.stdout.write(
+      `[server daemon] up, PID ${process.pid} — orchestrator agent DISABLED (LLM auth error above). ` +
+        "REST + web listeners are up; workers can heartbeat/register/poll. " +
+        "Fix the LLM auth and restart `mai server`.\n",
+    );
+  }
   await new Promise<void>((resolve) => {
     abortController.signal.addEventListener("abort", () => resolve());
   });

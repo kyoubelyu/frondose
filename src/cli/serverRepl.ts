@@ -12,7 +12,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
-import { resolveModel } from "../agent/modelResolver.js";
+import { resolveModelOrNull } from "../agent/modelResolver.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { SERVER_BOUNDARY } from "../agent/systemPrompt/serverBoundary.js";
@@ -49,7 +49,7 @@ import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { drainDueJobs, type RunCronTurnDeps } from "./replCron.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
-import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
+import { startServerHttp } from "./serverHttp.js";
 import { startWebHttp } from "./serverWeb.js";
 
 export interface ServerReplDeps {
@@ -71,13 +71,6 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
     process.stderr.write("[server] server identity.json missing; run `mai server identity init` first\n");
     process.exit(1);
   }
-
-  const model = resolveModel({});
-  const system = composeSystemPrompt({
-    boundary: SERVER_BOUNDARY,
-    soul: composeServerSoulBand(identity),
-    checkpoint: CHECKPOINT,
-  });
 
   const abortController = new AbortController();
   const auditPath = SERVER_AUDIT_PATH();
@@ -129,7 +122,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       installToken,
     },
     serverCfg.server.bind_address ?? null,
-    SERVER_HTTP_PORT,
+    serverCfg.server.rest_port, // P-36 F-D2: configurable REST port (default 3031)
   );
   process.once("exit", () => {
     try {
@@ -172,77 +165,100 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   const sessionPath = serverSessionFile();
   const messages: CoreMessage[] = loadServerSession(sessionPath);
 
-  // Start Telegram poller if bound.
-  // Step-5a D-SRV.DAEMON.CONFIGPATH: pass SERVER_CONFIG_PATH() so boundUserId is
-  // read from ~/.mai/server/config.json (not the worker's ~/.mai/agent/config.json).
-  const cfg = readTelegramConfig(SERVER_TELEGRAM_CONFIG_PATH(), SERVER_CONFIG_PATH());
   const sessionFile = { path: sessionPath };
-  const telegramDeps: TelegramTurnDeps = {
-    model,
-    system,
-    messages,
-    tools,
-    sessionFile,
-    abortSignal: abortController.signal,
-    onStepFinish: auditWriter,
-    out: process.stdout,
-    configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
-  };
-  // startDaemonPoller runs fire-and-forget; does not block readline.
-  void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);
 
-  // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
-  const cronDeps: RunCronTurnDeps = {
-    model,
-    system,
-    messages,
-    tools,
-    sessionFile: sessionFile.path,
-    abortSignal: abortController.signal,
-    onStepFinish: auditWriter,
-    out: process.stdout,
-  };
-  await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
-  const cronTick = setInterval(() => {
-    void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
-  }, 60_000);
-  cronTick.unref();
+  // P-36 F-B (B2): resolve the LLM WITHOUT throwing — the REST + web listeners are
+  // already bound above. A bad LLM config degrades (no orchestrator agent, no
+  // readline turn loop) instead of crashing the fleet-coordination plane.
+  const model = resolveModelOrNull();
+  if (model) {
+    const system = composeSystemPrompt({
+      boundary: SERVER_BOUNDARY,
+      soul: composeServerSoulBand(identity),
+      checkpoint: CHECKPOINT,
+    });
 
-  // Readline REPL.
-  const rl = readline.createInterface({
-    input: deps.stdin ?? process.stdin,
-    output: process.stdout,
-    terminal: process.stdin.isTTY ?? false,
-  });
+    // Start Telegram poller if bound.
+    // Step-5a D-SRV.DAEMON.CONFIGPATH: pass SERVER_CONFIG_PATH() so boundUserId is
+    // read from ~/.mai/server/config.json (not the worker's ~/.mai/agent/config.json).
+    const cfg = readTelegramConfig(SERVER_TELEGRAM_CONFIG_PATH(), SERVER_CONFIG_PATH());
+    const telegramDeps: TelegramTurnDeps = {
+      model,
+      system,
+      messages,
+      tools,
+      sessionFile,
+      abortSignal: abortController.signal,
+      onStepFinish: auditWriter,
+      out: process.stdout,
+      configPath: SERVER_TELEGRAM_CONFIG_PATH(),
+      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
+    };
+    // startDaemonPoller runs fire-and-forget; does not block readline.
+    void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);
 
-  process.stdout.write("[server] mai-server ready. Type your message or /help\n");
+    // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
+    const cronDeps: RunCronTurnDeps = {
+      model,
+      system,
+      messages,
+      tools,
+      sessionFile: sessionFile.path,
+      abortSignal: abortController.signal,
+      onStepFinish: auditWriter,
+      out: process.stdout,
+    };
+    await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+    const cronTick = setInterval(() => {
+      void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+    }, 60_000);
+    cronTick.unref();
 
-  for await (const line of rl) {
-    const input = line.trim();
-    if (!input) continue;
-    if (input === "/exit" || input === "/quit") break;
+    // Readline REPL.
+    const rl = readline.createInterface({
+      input: deps.stdin ?? process.stdin,
+      output: process.stdout,
+      terminal: process.stdin.isTTY ?? false,
+    });
 
-    await turnLock.run(async () => {
-      // P-26 Step-5a B-26R-1: drain pending worker events from server_inbox and
-      // prepend to the operator's user message so the server LLM sees fleet
-      // activity as context BEFORE answering. Capped at MAX_PER_DRAIN=20 rows
-      // per call; remaining rows surface in the next turn.
-      const inboxPrefix = drainServerInbox(serverInboxDb);
-      const userContent = inboxPrefix ? `${inboxPrefix}\n\n---\n\n${input}` : input;
-      messages.push({ role: "user", content: userContent });
-      await runAgentLoop({
-        model,
-        system,
-        tools,
-        messages,
-        abortSignal: abortController.signal,
-        onStepFinish: auditWriter,
+    process.stdout.write("[server] mai-server ready. Type your message or /help\n");
+
+    for await (const line of rl) {
+      const input = line.trim();
+      if (!input) continue;
+      if (input === "/exit" || input === "/quit") break;
+
+      await turnLock.run(async () => {
+        // P-26 Step-5a B-26R-1: drain pending worker events from server_inbox and
+        // prepend to the operator's user message so the server LLM sees fleet
+        // activity as context BEFORE answering. Capped at MAX_PER_DRAIN=20 rows
+        // per call; remaining rows surface in the next turn.
+        const inboxPrefix = drainServerInbox(serverInboxDb);
+        const userContent = inboxPrefix ? `${inboxPrefix}\n\n---\n\n${input}` : input;
+        messages.push({ role: "user", content: userContent });
+        await runAgentLoop({
+          model,
+          system,
+          tools,
+          messages,
+          abortSignal: abortController.signal,
+          onStepFinish: auditWriter,
+        });
+        appendServerSession(sessionPath, messages);
       });
-      appendServerSession(sessionPath, messages);
+    }
+
+    rl.close();
+    process.stdout.write("[server] session closed.\n");
+  } else {
+    process.stdout.write(
+      "[server] orchestrator agent disabled (LLM auth error above). " +
+        "REST + web listeners are up — workers can heartbeat/register/poll. " +
+        "Fix the LLM auth and restart `mai server`.\n",
+    );
+    // Hold the process on the HTTP listeners until aborted.
+    await new Promise<void>((resolve) => {
+      abortController.signal.addEventListener("abort", () => resolve());
     });
   }
-
-  rl.close();
-  process.stdout.write("[server] session closed.\n");
 }

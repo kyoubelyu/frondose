@@ -37,6 +37,22 @@ export function resolveModel(opts: ResolveModelOpts = {}): LanguageModel {
   return buildModel(resolveModelSpec(opts));
 }
 
+/** P-36 F-B: resolve the model, but NEVER throw — on any resolution failure,
+ *  write one clear actionable stderr line and return null. The server callers
+ *  use this so a bad LLM config degrades (orchestrator agent off) instead of
+ *  crashing the whole fleet-coordination plane. */
+export function resolveModelOrNull(opts: ResolveModelOpts = {}): LanguageModel | null {
+  try {
+    return resolveModel(opts);
+  } catch (e) {
+    process.stderr.write(
+      `[mai] LLM model resolution failed: ${e instanceof Error ? e.message : String(e)}\n` +
+        "[mai] orchestrator agent is DISABLED until this is fixed; REST + web listeners stay up.\n",
+    );
+    return null;
+  }
+}
+
 /**
  * P-7: returns true if any LLM key is detected — env vars OR auth.json.
  * P-21: iterates ALL configured providers (not just 3 hardcoded names).
@@ -144,7 +160,27 @@ function buildModel(spec: string): LanguageModel {
   const auth = readAuth();
   const entry = auth?.providers?.[provider];
   if (!entry) {
-    throw new Error(`Provider '${provider}' not configured in auth.json. Run \`mai auth set\` to add it.`);
+    const configured = Object.keys(auth?.providers ?? {});
+    const list = configured.length > 0 ? configured.join(", ") : "(none)";
+    // OQ-2: name the spec's source by direct inspection (no signature change).
+    const source =
+      spec === process.env.MAI_MODEL
+        ? "the MAI_MODEL env var"
+        : spec === readAuthJsonDefault()
+          ? "the auth.json / secrets.json default"
+          : "a CLI flag or the built-in default";
+    // FA.3: pre-P-21 stale-spec detection — `openai` was the Vercel adapter name.
+    const preP21Hint =
+      provider === "openai"
+        ? "\n  This looks like a pre-P-21 model spec — 'openai' was the Vercel adapter name " +
+          "before P-21. The format is now '<your-provider-name>:<modelId>'."
+        : "";
+    throw new Error(
+      `Provider '${provider}' is not configured (model spec came from ${source}). ` +
+        `Configured providers: ${list}.${preP21Hint}\n` +
+        "  Configure a provider with: " +
+        "mai auth set <url> --key <key> --model-id <modelId>",
+    );
   }
 
   const key = resolveModelKey(provider, entry);
