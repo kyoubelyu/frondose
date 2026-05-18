@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # P-34: standalone mai-agent installer for a fresh macOS machine.
-# Usage:  GITHUB_TOKEN=<fine-grained-PAT> bash install.sh
-#         (or run without — it will prompt, masked, for the token)
-# Requires: macOS, Homebrew. Installs Chrome + Node@20 + mai-agent from the
-# latest GitHub Release. Attached to each Release as a downloadable asset.
+# P-40: gh-native release fetch (no GITHUB_TOKEN); MAI_PREFIX sandbox override.
+# Usage:  bash install.sh
+#         MAI_PREFIX=/tmp/test bash install.sh   # sandbox install — overrides $HOME + brew prefix
+# Requires: macOS, Homebrew, gh CLI (authenticated via `gh auth login`).
+# Installs Chrome + Node@20 + mai-agent from the latest GitHub Release.
 set -euo pipefail
+
+REPO="kyoubelyu/mai-agent"
 
 echo "=== mai-agent install ==="
 
@@ -20,13 +23,13 @@ if ! command -v brew &>/dev/null; then
   exit 1
 fi
 
-# 3. GitHub token — env var, else masked prompt (D-5)
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-  read -rsp "GitHub token (fine-grained, contents:read on kyoubelyu/mai-agent): " GITHUB_TOKEN
-  echo
+# 3. gh CLI — P-40: replaces the GITHUB_TOKEN/curl release fetch.
+if ! command -v gh &>/dev/null; then
+  echo "ERROR: gh CLI not found. Install from https://cli.github.com and run 'gh auth login'." >&2
+  exit 1
 fi
-if [[ -z "$GITHUB_TOKEN" ]]; then
-  echo "ERROR: a GitHub token is required." >&2
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: gh is not authenticated. Run 'gh auth login' first." >&2
   exit 1
 fi
 
@@ -48,33 +51,41 @@ fi
 
 # 6. Install mai-agent
 echo "Installing mai-agent from the latest GitHub Release..."
+# P-40 FINDING-I1: MAI_PREFIX overrides BOTH base paths → sandbox-testable installs.
+HOME_BASE="${MAI_PREFIX:-$HOME}"
+BREW_BASE="${MAI_PREFIX:-$(brew --prefix)}"
+
 # --- install-core: latest GitHub Release → tarball → build → npm-global symlink ---
-RELEASE_JSON=$(curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/kyoubelyu/mai-agent/releases/latest")
-TAG=$(printf '%s' "$RELEASE_JSON" | python3 -c "import json,sys;print(json.load(sys.stdin).get('tag_name',''))")
-TARBALL_URL=$(printf '%s' "$RELEASE_JSON" | python3 -c "import json,sys;print(json.load(sys.stdin).get('tarball_url',''))")
-if [[ -z "$TAG" || -z "$TARBALL_URL" ]]; then
-  echo "ERROR: could not read latest release (check the GitHub token's contents:read scope)." >&2
+TAG=$(gh release view --repo "$REPO" --json tagName --jq '.tagName')
+if [[ -z "$TAG" ]]; then
+  echo "ERROR: could not read the latest GitHub Release for $REPO." >&2
   exit 1
 fi
-INSTALL_DIR="$HOME/.mai/agent/releases/$TAG"
+INSTALL_DIR="$HOME_BASE/.mai/agent/releases/$TAG"
 mkdir -p "$INSTALL_DIR"
-# auth header is stripped by curl on the cross-origin 302 to codeload (signed URL) — correct.
-curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" "$TARBALL_URL" -o /tmp/mai-agent.tar.gz
+gh release download --repo "$REPO" --archive=tar.gz --output /tmp/mai-agent.tar.gz --clobber
 tar -xzf /tmp/mai-agent.tar.gz -C "$INSTALL_DIR" --strip-components=1
 rm -f /tmp/mai-agent.tar.gz
-( cd "$INSTALL_DIR" && npm install --prefer-offline 2>&1 | tail -3 && npm run build 2>&1 | tail -5 )
-BREW_PREFIX=$(brew --prefix)
-PKG_LINK="$BREW_PREFIX/lib/node_modules/@kyoube/mai-agent"
-mkdir -p "$(dirname "$PKG_LINK")"
+
+# P-40 FINDING-I3: non-fatal Xcode CLT check. The hardware-input addon needs the CLT,
+# but cdp mode is fully functional without it — warn, do NOT exit.
+if ! xcode-select -p &>/dev/null; then
+  echo "WARNING: Xcode Command Line Tools not found — the hardware-input addon will be skipped."
+  echo "         Run 'xcode-select --install', then rerun for full hardware-input support."
+fi
+
+# P-40 FINDING-I4: full output — set -euo pipefail surfaces the real failure point.
+( cd "$INSTALL_DIR" && npm install --prefer-offline && npm run build )
+
+PKG_LINK="$BREW_BASE/lib/node_modules/@kyoube/mai-agent"
+BIN_LINK="$BREW_BASE/bin/mai"
+mkdir -p "$(dirname "$PKG_LINK")" "$(dirname "$BIN_LINK")"
 ln -sfn "$INSTALL_DIR" "$PKG_LINK"
-ln -sfn "../lib/node_modules/@kyoube/mai-agent/dist/cli/main.js" "$BREW_PREFIX/bin/mai"
+ln -sfn "../lib/node_modules/@kyoube/mai-agent/dist/cli/main.js" "$BIN_LINK"
 chmod +x "$INSTALL_DIR/dist/cli/main.js"
 # --- end install-core ---
-unset GITHUB_TOKEN
 
 echo ""
 echo "=== Install complete ==="
-echo "mai-agent $TAG installed. 'mai' is on your PATH ($BREW_PREFIX/bin/mai)."
+echo "mai-agent $TAG installed. 'mai' is on your PATH ($BIN_LINK)."
 echo "Next: run 'mai auth set' to configure an LLM provider, then 'mai'."
