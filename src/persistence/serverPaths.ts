@@ -28,3 +28,6 @@ export const SERVER_CREDENTIALS_DB_PATH = (): string => join(SERVER_ROOT(), "cre
 
 // P-30: per-worker node config files (VNC port/password + SSH overrides).
 export const SERVER_WORKERS_CONFIG_DIR = (): string => join(SERVER_ROOT(), "workers");
+
+// P-31 Step 4a STUB: server agent's own cron schedule store. Builder wires at Step 4b.
+export const SERVER_SCHEDULE_PATH = (): string => join(SERVER_ROOT(), "schedule.jsonl");
