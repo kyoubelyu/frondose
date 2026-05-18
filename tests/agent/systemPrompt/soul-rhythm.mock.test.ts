@@ -24,6 +24,7 @@ import type { IdentityRecord } from "../../../src/persistence/identity.js";
 // ─── minimal identity fixture ─────────────────────────────────────────────────
 
 const MINIMAL_IDENTITY: IdentityRecord = {
+  updatedAt: "2026-01-01T00:00:00.000Z",
   fullName: "Test Operator",
   role: "BD",
   company: "TestCo",
@@ -98,14 +99,15 @@ describe("composeSoulBand — old 'Daily rhythm: Morning ...' sentence removed (
 // ─── T-SOUL.RHYTHM.4 ─────────────────────────────────────────────────────────
 
 describe("composeSoulBand — total character count within soul budget (G-P24.13)", () => {
-  it("T-SOUL.RHYTHM.4: when composeSoulBand called, result.length < 6000 characters (proxy for ~800-token Soul budget)", () => {
+  it("T-SOUL.RHYTHM.4: when composeSoulBand called, result.length < 8000 characters (P-39 raised budget: 3 new habits + extended Night slot; ~6790 actual)", () => {
     // Given: minimal identity
     // When:  composeSoulBand(MINIMAL_IDENTITY)
-    // Then:  result.length < 6000 (GQ-6 validator: +75 token day-rhythm block stays in budget)
+    // Then:  result.length < 8000 (P-39 added 3 trigger habits + extended Night slot → ~6790 chars;
+    //        budget updated from 6000 to 8000 to reflect P-39 growth while preserving regression guard)
     const result = composeSoulBand(MINIMAL_IDENTITY);
     assert.ok(
-      result.length < 6000,
-      `T-SOUL.RHYTHM.4: soul band must be < 6000 chars (token budget); got ${result.length}`,
+      result.length < 8000,
+      `T-SOUL.RHYTHM.4: soul band must be < 8000 chars (P-39 budget); got ${result.length}`,
     );
   });
 });

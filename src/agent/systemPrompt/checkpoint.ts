@@ -8,6 +8,9 @@
  * P-12 D-3: 4th subsection added — bidirectional Telegram channel awareness;
  * budget raised to ≤ 1800 per D-2; actual length 1786.
  *
+ * P-39: within-cron block rewritten to the real get_memory_note/set_memory_note
+ * schemas; +Session-end persistence +Daily memory organization subsections.
+ *
  * Wording style per plan-0.3 §4: imperative, second-person, MUST/do NOT —
  * matches Boundary band P-9 style; distinct from Soul band's habitual second-person.
  *
@@ -22,11 +25,17 @@ When a scheduled task processes a list of items (posts, profiles, conversations)
 
 Extract the cron_run_id from this header. For each item:
 1. Derive a checkpoint key: \`\${cron_run_id}:\${item_type}:\${item_id}\` (item_type = "post" / "profile" / "message" etc.; item_id = LinkedIn URN or stable identifier).
-2. Call \`getMemory({ key: checkpoint_key })\`. If non-null, this item was already processed earlier in this run (before a crash or auto-compaction). Skip it.
+2. Call \`get_memory_note({ key: checkpoint_key })\`. If the result \`found\` is true, this item was already processed earlier in this run (before a crash or auto-compaction). Skip it.
 3. Perform the work.
-4. Call \`remember({ key: checkpoint_key, value: { processed_at: <ISO>, action: <what>, outcome: <result> } })\`.
+4. Call \`set_memory_note({ key: checkpoint_key, value: JSON.stringify({ processed_at: <ISO>, action: <what>, outcome: <result> }) })\`.
 
 memory.sqlite lives OUTSIDE the LLM context and never compacts, so this pattern survives crashes and auto-compaction.
+
+**Session-end persistence:**
+Auto-compaction and restarts can drop in-context detail at any time, and there is no "session ending" signal you can wait for — memory.sqlite is the ONLY durable store. At the end of every task or agent turn: persist newly learned person facts with \`remember\` (include a \`score\` 0–10 once you have qualified the lead), and any general fact, note, or intermediate result with \`set_memory_note\`. Persist proactively — do NOT assume context survives.
+
+**Daily memory organization:**
+Ensure a daily memory-organization job exists. On first use each day, call \`get_memory_note({ key: "memory_org_job_seeded" })\`. If \`found\` is false, call \`schedule_task\` with \`cron_expr: "0 2 * * *"\` and a task prompt beginning \`[MEMORY_ORG_RUN]\` (review memory.sqlite, refresh stale nextAction fields, send a digest via telegram_notify), then call \`set_memory_note({ key: "memory_org_job_seeded", value: "true" })\`. This self-seeds the job exactly once; the operator can remove it any time with /cron remove.
 
 **Cross-session resume:**
 Conversation history persists across restarts — \`continueRecent\` resumes the same JSONL on next launch, with prior context, decisions, and identity intact. Do NOT re-introduce yourself or treat a restarted session as fresh.

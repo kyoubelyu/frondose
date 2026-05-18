@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { formatMemoryProjection } from "../../linkedin/memoryProjection.js";
-import { getPersonMemory, memoryQuerySchema } from "../../persistence/memory.js";
+import { getPersonMemory, getPersonScore, memoryQuerySchema } from "../../persistence/memory.js";
 import { getMemoryDb } from "./_dbHandle.js";
 
 const getMemoryToolParams = z
@@ -30,8 +30,10 @@ export function makeGetMemoryTool(memoryDbPath: string) {
             `No memory found for ${query.personName ?? query.profileUrl}. Use the remember tool to record interactions first.`,
           );
         }
+        const score = getPersonScore(memory.profileUrl, db);
         return ok("getMemory", {
           memory,
+          score,
           summary: memory.latestInteraction.summary,
           formatted: formatMemoryProjection(memory),
         });
