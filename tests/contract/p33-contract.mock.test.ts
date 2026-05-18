@@ -66,7 +66,8 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Frozen pre-P-33 worker tool name snapshot (28 tools — contract per CLAUDE.md §1)
+// Post-P-31 worker tool name snapshot (29 tools — P-31 adds schedule_task to the P-33 reorg baseline).
+// P-33 froze counts at 28/19; P-31 legitimately supersedes that freeze by adding schedule_task.
 const FROZEN_WORKER_TOOL_KEYS = [
   "analyze_screenshot",
   "clear_cookies",
@@ -87,6 +88,7 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "query_lead_globally",
   "reload",
   "remember",
+  "schedule_task",
   "screenshot",
   "scroll",
   "sleep",
@@ -98,7 +100,7 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "web_search",
 ].sort();
 
-// Frozen pre-P-33 server tool name snapshot (19 tools — contract per CLAUDE.md §1)
+// Post-P-31 server tool name snapshot (20 tools — P-31 adds schedule_task to the P-33 reorg baseline).
 const FROZEN_SERVER_TOOL_KEYS = [
   "analyze_screenshot",
   "dispatch_google_login",
@@ -113,6 +115,7 @@ const FROZEN_SERVER_TOOL_KEYS = [
   "provision_worker",
   "remember",
   "revoke_worker",
+  "schedule_task",
   "send_worker_message",
   "sleep",
   "stop",
@@ -215,11 +218,11 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode (G-P33.5)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 28 tool keys, same name set as pre-P-33", () => {
+describe("makeAllTools worker mode (G-P33.5 + P-31 supersedes count)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 29 tool keys (P-31 adds schedule_task to P-33 reorg baseline)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
-    // When:  worker mode tool set is built
-    // Then:  exactly 28 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    // When:  worker mode tool set is built (post-P-31 which adds schedule_task)
+    // Then:  exactly 29 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot (incl. schedule_task)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -234,8 +237,8 @@ describe("makeAllTools worker mode (G-P33.5)", () => {
 
       const keys = Object.keys(tools).sort();
 
-      assert.equal(keys.length, 28, `worker mode must have exactly 28 tools; got ${keys.length}: ${JSON.stringify(keys)}`);
-      assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match frozen pre-P-33 snapshot");
+      assert.equal(keys.length, 29, `worker mode must have exactly 29 tools post-P-31; got ${keys.length}: ${JSON.stringify(keys)}`);
+      assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match post-P-31 snapshot (pre-P-33 28 + schedule_task)");
     } finally {
       cleanup();
     }
@@ -244,11 +247,11 @@ describe("makeAllTools worker mode (G-P33.5)", () => {
 
 // ─── T-P33.COUNT.SERVER ──────────────────────────────────────────────────────
 
-describe("makeAllTools server mode (G-P33.6)", () => {
-  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 19 tool keys, unchanged from pre-P-33", () => {
+describe("makeAllTools server mode (G-P33.6 + P-31 supersedes count)", () => {
+  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 20 tool keys (P-31 adds schedule_task to P-33 reorg baseline)", () => {
     // Given: makeAllTools called in server mode with persistence + control (no session)
-    // When:  server mode tool set is built
-    // Then:  exactly 19 keys returned; no LinkedIn/browser primitives; key set matches snapshot
+    // When:  server mode tool set is built (post-P-31 which adds schedule_task)
+    // Then:  exactly 20 keys returned; no LinkedIn/browser primitives; key set matches snapshot (incl. schedule_task)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -262,8 +265,8 @@ describe("makeAllTools server mode (G-P33.6)", () => {
 
       const keys = Object.keys(tools).sort();
 
-      assert.equal(keys.length, 19, `server mode must have exactly 19 tools; got ${keys.length}: ${JSON.stringify(keys)}`);
-      assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match frozen pre-P-33 snapshot");
+      assert.equal(keys.length, 20, `server mode must have exactly 20 tools post-P-31; got ${keys.length}: ${JSON.stringify(keys)}`);
+      assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match post-P-31 snapshot (pre-P-33 19 + schedule_task)");
     } finally {
       cleanup();
     }

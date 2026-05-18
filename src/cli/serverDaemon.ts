@@ -31,6 +31,7 @@ import {
   SERVER_MEMORY_DB_PATH,
   SERVER_PERSONAS_DIR,
   SERVER_PID_PATH,
+  SERVER_SCHEDULE_PATH,
   SERVER_SECRETS_PATH,
   SERVER_TELEGRAM_CONFIG_PATH,
   SERVER_WORKERS_CONFIG_DIR,
@@ -41,6 +42,7 @@ import { serverSessionFile } from "../persistence/serverSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
+import { drainDueJobs, type RunCronTurnDeps } from "./replCron.js";
 import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { SERVER_HTTP_PORT, startServerHttp } from "./serverHttp.js";
 import { startWebHttp } from "./serverWeb.js";
@@ -112,7 +114,7 @@ export async function runServerDaemon(): Promise<void> {
   const serverCfg = readConfig(SERVER_CONFIG_PATH());
   const maiVersion = (createRequire(import.meta.url)("../../package.json") as { version: string }).version;
 
-  // P-26/P-27 mode="server" — 18 tools.
+  // mode="server" — 20 tools (P-31+).
   const tools = makeAllTools(
     undefined, // no session
     {
@@ -124,6 +126,7 @@ export async function runServerDaemon(): Promise<void> {
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       credentialsDbPath: SERVER_CREDENTIALS_DB_PATH(),
+      schedulePath: SERVER_SCHEDULE_PATH(), // P-31: schedule_task tool + server cron tick
     },
     control,
     undefined, // no hookRunner at P-26
@@ -201,6 +204,24 @@ export async function runServerDaemon(): Promise<void> {
     // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
     inboxPrefix: () => drainServerInbox(serverInboxDb),
   };
+
+  // P-31 (D-4): server cron tick — boot drain + 60 s interval, turnLock-serialized.
+  // The boot drain runs before the hold-Promise below so a due job fires at startup.
+  const cronDeps: RunCronTurnDeps = {
+    model,
+    system,
+    messages,
+    tools,
+    sessionFile: sessionFile.path,
+    abortSignal: abortController.signal,
+    onStepFinish: auditWriter,
+    out: process.stdout,
+  };
+  await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+  const cronTick = setInterval(() => {
+    void turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
+  }, 60_000);
+  cronTick.unref();
 
   process.stdout.write(`[server daemon] up, PID ${process.pid}, session ${sessionFile.path}\n`);
   // Step-3b C-2: pass unified abortController to poller; SIGTERM path handles
