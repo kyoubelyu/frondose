@@ -163,7 +163,7 @@ export async function runAuthSubcommand(
         printNoninteractiveGuidance(
           "auth set",
           "<url>",
-          "https://api.openai.com/v1 --key sk-xxx --model gpt-4o --name openai",
+          "https://api.openai.com/v1 --key sk-xxx --model-id gpt-4o --name openai",
         );
         process.exit(1);
       }
@@ -187,11 +187,11 @@ export async function runAuthSubcommand(
       }
 
       if (!key) {
-        printNoninteractiveGuidance("auth set", "--key <value>", `${url} --key sk-xxx --model gpt-4o`);
+        printNoninteractiveGuidance("auth set", "--key <value>", `${url} --key sk-xxx --model-id gpt-4o`);
         process.exit(1);
       }
       if (!model) {
-        printNoninteractiveGuidance("auth set", "--model <id>", `${url} --key sk-xxx --model gpt-4o`);
+        printNoninteractiveGuidance("auth set", "--model-id <id>", `${url} --key sk-xxx --model-id gpt-4o`);
         process.exit(1);
       }
 
@@ -222,10 +222,15 @@ export async function runAuthSubcommand(
       // P-24: data lives in secrets.json (via shim). Show empty-state message if
       // secrets.json is absent AND legacy auth.json has not been migrated yet.
       if (!existsSync(authPathToSecretsPath(path)) && !existsSync(path)) {
-        process.stdout.write("No auth.json found. Run `mai auth set <url> --key <value> --model <id>` to configure.\n");
+        // P-36 NIT-1: empty-state names no stale file ("No auth.json found" was wrong).
+        process.stdout.write(
+          "No providers configured. Run `mai auth set <url> --key <value> --model-id <id>` to configure.\n",
+        );
         return;
       }
-      process.stdout.write(`auth.json (${path})\n`);
+      // P-36 F-F: name the real backing file. readAuth() reads secrets.json; auth.json
+      // is only a legacy read-fallback.
+      process.stdout.write(`providers (from ${authPathToSecretsPath(path)})\n`);
       if (existing.default) process.stdout.write(`  default: ${existing.default}\n`);
       const providers = existing.providers ?? {};
       const names = Object.keys(providers).sort();
