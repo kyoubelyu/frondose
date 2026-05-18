@@ -47,6 +47,7 @@ import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
 import { runServerCredentialSubcommand, type ServerCredentialOpts } from "./subcommands/serverCredential.js";
+import { runServerInstallTokenSubcommand } from "./subcommands/serverInstallToken.js";
 import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
 import { runServerWebTokenSubcommand } from "./subcommands/serverWebToken.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
@@ -599,6 +600,21 @@ async function main(): Promise<void> {
   });
   serverWebToken.command("remove").action(() => {
     runServerWebTokenSubcommand("remove");
+    process.exit(0);
+  });
+
+  // P-34: `mai server install-token set/show/remove` — GitHub PAT for worker bootstrap install.
+  const serverInstallToken = server.command("install-token").description("GitHub PAT for worker bootstrap install");
+  serverInstallToken.command("set [token]").action(async (token?: string) => {
+    await runServerInstallTokenSubcommand("set", { token });
+    process.exit(0);
+  });
+  serverInstallToken.command("show").action(async () => {
+    await runServerInstallTokenSubcommand("show");
+    process.exit(0);
+  });
+  serverInstallToken.command("remove").action(async () => {
+    await runServerInstallTokenSubcommand("remove");
     process.exit(0);
   });
 

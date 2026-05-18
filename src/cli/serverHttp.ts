@@ -45,6 +45,10 @@ export interface ServerHttpHandlers {
   // P-28: credential library. Nullable — credential folding is skipped silently
   // when the DB handle is absent (graceful degradation; register still 200s).
   credentialsDb: import("better-sqlite3").Database | null;
+  // P-34: fine-grained GitHub PAT for the bootstrap tarball install (contents:read).
+  // When undefined, handleBootstrapScript returns a bash error script (HTTP 200).
+  // Optional at Step 4a stub — builder wires at Step 4b (serverDaemon.ts + serverRepl.ts).
+  installToken?: string | undefined;
 }
 
 // ─── Zod request schemas (mirror plan §4.4) ──────────────────────────────────
@@ -175,7 +179,19 @@ async function handleBootstrapScript(req: IncomingMessage, res: ServerResponse, 
     }
     return;
   }
-  const script = renderBootstrapScript(h.serverUrl, tokenPlain, h.maiVersion);
+  // P-34 / CONCERN-1: the operator runs `curl … | bash`. When the install token
+  // is unset, return a VALID bash error script (HTTP 200, text/x-sh) — NOT a
+  // plain-text 500 (bash would execute the prose → a `command not found` cascade).
+  if (!h.installToken) {
+    res.writeHead(200, { "Content-Type": "text/x-sh; charset=utf-8" });
+    res.end(
+      "#!/usr/bin/env bash\n" +
+        "echo 'ERROR: server install token not configured — run `mai server install-token set` on the server' >&2\n" +
+        "exit 1\n",
+    );
+    return;
+  }
+  const script = renderBootstrapScript(h.serverUrl, tokenPlain, h.maiVersion, h.installToken);
   res.writeHead(200, { "Content-Type": "text/x-sh; charset=utf-8" });
   res.end(script);
 }

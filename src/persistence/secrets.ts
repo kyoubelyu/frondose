@@ -52,10 +52,12 @@ export const secretsJsonSchema = z.object({
   // Step-3b round-2 C-1: server.token lives here (chmod 600), NOT in config.json.
   // P-24 leaves this undefined; P-25 `mai server set` populates via writeSecrets.
   // P-29: webToken — Basic-Auth secret for the web dashboard (optional).
+  // P-34: installToken — fine-grained GitHub PAT (contents:read) embedded by bootstrap script.
   server: z
     .object({
       token: z.string().min(1).optional(),
       webToken: z.string().min(1).optional(),
+      installToken: z.string().min(1).optional(),
     })
     .optional(),
 });
