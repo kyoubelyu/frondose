@@ -53,6 +53,13 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
       if (initPromise) return { ok: true, client: await initPromise };
       const bootPromise = (async (): Promise<CdpClient> => {
         const handle = await ensureChrome(opts);
+        // P-37 B7: a freshly-launched Chrome's new-tab page is still initializing
+        // its JS runtime — navigate() too soon → ERR_CONNECTION_CLOSED. A 300 ms
+        // settle absorbs it. Only on fresh launch (launched:false → Chrome already
+        // up → zero delay on every subsequent session).
+        if (handle.launched) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
         // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
         const client = await CdpClient.connect(handle.port);
         await injectStealth(client.handle);
