@@ -41,7 +41,9 @@ export function runServerWebTokenSubcommand(action: "set" | "show" | "remove", o
   const token = trimmed ? trimmed : randomBytes(24).toString("hex");
   secrets.server = { ...(secrets.server ?? {}), webToken: token };
   writeSecrets(secrets, path);
+  // P-36 F-C: mask the token in the confirmation output (OQ-3).
   process.stdout.write(
-    `[web-token] set. Token: ${token}\n  Use this as the password at the browser Basic-Auth prompt.\n`,
+    `[web-token] set. Token: ${mask(token)}\n` +
+      "  The full token is in ~/.mai/server/secrets.json (chmod 600) if you need to copy it.\n",
   );
 }

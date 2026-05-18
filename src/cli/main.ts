@@ -352,16 +352,19 @@ async function main(): Promise<void> {
   auth
     .command("set [url]")
     .option("--key <value>", "API key")
-    .option("--model <id>", "Model ID")
+    .option("--model-id <id>", "Model ID") // P-36 F-E: was --model (collided with the global --model)
     .option("--name <name>", "Provider name (default: derived from URL hostname)")
     .option("--default", "Set this provider:model as the new default model spec", false)
     .action(
-      async (url: string | undefined, cliOpts: { key?: string; model?: string; name?: string; default?: boolean }) => {
+      async (
+        url: string | undefined,
+        cliOpts: { key?: string; modelId?: string; name?: string; default?: boolean },
+      ) => {
         await runWithExitGuard(async () => {
           await runAuthSubcommand("set", {
             url,
             key: cliOpts.key,
-            model: cliOpts.model,
+            model: cliOpts.modelId, // P-36 F-E: --model-id → opts.model (internal field unchanged)
             name: cliOpts.name,
             asDefault: cliOpts.default ?? false,
           });

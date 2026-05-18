@@ -47,12 +47,13 @@ describe("runServerWebTokenSubcommand — set with explicit token (G-P29.21)", (
 
 // ─── T-WT.2 ───────────────────────────────────────────────────────────────────
 
-describe("runServerWebTokenSubcommand — set with no token → auto-generated hex (G-P29.21)", () => {
-  it("T-WT.2: when runServerWebTokenSubcommand('set', {secretsPath}) with no token arg, then a hex token is generated, written to secrets.json, and printed to stdout", () => {
-    // Given: tmp secrets.json; no token argument (G-P29.21)
+describe("runServerWebTokenSubcommand — set with no token → auto-generated hex written; stdout shows masked form (G-P29.21)", () => {
+  it("T-WT.2: when runServerWebTokenSubcommand('set', {secretsPath}) with no token arg, then a hex token is written to secrets.json; stdout shows the MASKED form (P-36 F-C); the full token is NOT in stdout", () => {
+    // Given: tmp secrets.json; no token argument (G-P29.21 + P-36 F-C)
     // When: runServerWebTokenSubcommand('set', {secretsPath}) — no token field
-    // Then: readSecrets(secretsPath).server?.webToken is a non-empty hex string;
-    //       stdout captured during call contains the token (printed once)
+    // Then A: readSecrets(secretsPath).server?.webToken is a non-empty hex string (token stored unmasked)
+    // Then B: stdout contains the MASKED form (first-3 + … + last-3), NOT the full 48-char token
+    //         (P-36 F-C: `set` action now prints mask(token), not raw token)
     const { secretsPath, cleanup } = makeTmpSecrets();
     const stdoutChunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
@@ -68,17 +69,25 @@ describe("runServerWebTokenSubcommand — set with no token → auto-generated h
       const secrets = readSecrets(secretsPath);
       const stdout = stdoutChunks.join("");
       const webToken = secrets.server?.webToken;
+      // Then A: token stored correctly in secrets.json
       assert.ok(
         typeof webToken === "string" && webToken.length > 0,
-        "T-WT.2: auto-generated token must be a non-empty string",
+        "T-WT.2: auto-generated token must be a non-empty string in secrets.json",
       );
       assert.ok(
         /^[0-9a-f]+$/.test(webToken!),
         `T-WT.2: auto-generated token must be lowercase hex; got: ${webToken}`,
       );
+      // Then B: P-36 F-C — stdout shows masked form, NOT the full token
       assert.ok(
-        stdout.includes(webToken!),
-        `T-WT.2: stdout must contain the generated token; stdout: ${stdout.slice(0, 200)}`,
+        !stdout.includes(webToken!),
+        `T-WT.2: stdout must NOT contain the full token (P-36 F-C masking); got stdout: ${stdout.slice(0, 200)}`,
+      );
+      // The masked form is first-3 chars + "…" (U+2026) + last-3 chars
+      const masked = `${webToken!.slice(0, 3)}…${webToken!.slice(-3)}`;
+      assert.ok(
+        stdout.includes(masked),
+        `T-WT.2: stdout must contain the masked form '${masked}'; got: ${stdout.slice(0, 200)}`,
       );
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
