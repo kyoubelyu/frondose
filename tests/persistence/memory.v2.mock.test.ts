@@ -64,7 +64,7 @@ describe("Memory V2 migration (G-P25.4, G-P25.5)", () => {
         | undefined;
       assert.ok(row, "schema_version table must have rows");
       assert.equal(row.version, CURRENT_SCHEMA_VERSION, `latest version must be ${CURRENT_SCHEMA_VERSION}`);
-      assert.equal(CURRENT_SCHEMA_VERSION, 2, "CURRENT_SCHEMA_VERSION must be 2 (P-25 V2 migration)");
+      assert.equal(CURRENT_SCHEMA_VERSION, 3, "CURRENT_SCHEMA_VERSION must be 3 (P-39 V3 migration)");
 
       const cols = db.prepare("PRAGMA table_info(person_memory_events)").all() as Array<{ name: string }>;
       const colNames = new Set(cols.map((c) => c.name));

@@ -33,7 +33,7 @@ describe("list_workers real impl (G-P26.22)", () => {
       workersDb.prepare("UPDATE workers SET status='revoked' WHERE worker_id='w3'").run();
       const tool = makeListWorkersTool(workersDb);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)({}, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)({}, {})) as {
         workers: Array<Record<string, unknown>>;
       };
       assert.ok(Array.isArray(result.workers), "T-LW.1: workers is array");
@@ -61,7 +61,7 @@ describe("list_workers real impl (G-P26.22)", () => {
       const workersDb = openWorkersDb(join(dir, "workers.sqlite"));
       const tool = makeListWorkersTool(workersDb);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)({}, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)({}, {})) as {
         workers: unknown[];
       };
       assert.deepEqual(result, { workers: [] }, "T-LW.2: empty workers array");
@@ -77,9 +77,13 @@ describe("list_workers real impl (G-P26.22)", () => {
     const tool = makeListWorkersTool(null);
     // biome-ignore lint/suspicious/noExplicitAny: test assertion
     const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)({}, {});
-    assert.deepEqual(result, {
-      workers: [],
-      note: "workers.sqlite not yet initialized",
-    }, "T-LW.3: graceful null-DB response");
+    assert.deepEqual(
+      result,
+      {
+        workers: [],
+        note: "workers.sqlite not yet initialized",
+      },
+      "T-LW.3: graceful null-DB response",
+    );
   });
 });

@@ -57,14 +57,33 @@ describe("readConfig — missing file → full default shape (G-P24.8)", () => {
       process.env.HOME = dir;
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 2, "T-CONFIG.1: schema_version must be 2 (P-28: DEFAULT_CONFIG_V2)"); // P-28 update: default is v2
-      assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22, rest_port: 3031 }, "T-CONFIG.1: server must be full default (P-30 ssh fields, P-36 rest_port:3031)");
-      assert.deepEqual(result.worker, { id: null, hostname: null, label: null, input_mode: "cdp" }, "T-CONFIG.1: worker must be all-null with input_mode default");
+      assert.deepEqual(
+        result.server,
+        {
+          url: null,
+          bind_address: null,
+          poll_interval_s: 30,
+          web_port: 8090,
+          ssh_user: null,
+          ssh_port: 22,
+          rest_port: 3031,
+        },
+        "T-CONFIG.1: server must be full default (P-30 ssh fields, P-36 rest_port:3031)",
+      );
+      assert.deepEqual(
+        result.worker,
+        { id: null, hostname: null, label: null, input_mode: "cdp" },
+        "T-CONFIG.1: worker must be all-null with input_mode default",
+      );
       assert.deepEqual(
         result.telegram,
         { enabled: false, boundUserId: null, proxyUrl: null },
         "T-CONFIG.1: telegram must be all-default",
       );
-      assert.ok(!existsSync(configPath), "T-CONFIG.1: no config.json must be written when all telegram fields are default");
+      assert.ok(
+        !existsSync(configPath),
+        "T-CONFIG.1: no config.json must be written when all telegram fields are default",
+      );
     } finally {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;
@@ -85,8 +104,24 @@ describe("readConfig — minimal {schema_version:1} → Zod fills defaults (G-P2
       writeFileSync(configPath, JSON.stringify({ schema_version: 1 }), "utf-8");
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 2, "T-CONFIG.2: schema_version must be 2 (P-28: v1 file migrated to v2)"); // P-28 update: v1 input → v2 output after migration
-      assert.deepEqual(result.server, { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22, rest_port: 3031 }, "T-CONFIG.2: server default must be full shape (P-30 ssh fields, P-36 rest_port:3031)");
-      assert.deepEqual(result.worker, { id: null, hostname: null, label: null, input_mode: "cdp" }, "T-CONFIG.2: worker default must be all-null with input_mode default");
+      assert.deepEqual(
+        result.server,
+        {
+          url: null,
+          bind_address: null,
+          poll_interval_s: 30,
+          web_port: 8090,
+          ssh_user: null,
+          ssh_port: 22,
+          rest_port: 3031,
+        },
+        "T-CONFIG.2: server default must be full shape (P-30 ssh fields, P-36 rest_port:3031)",
+      );
+      assert.deepEqual(
+        result.worker,
+        { id: null, hostname: null, label: null, input_mode: "cdp" },
+        "T-CONFIG.2: worker default must be all-null with input_mode default",
+      );
       assert.deepEqual(
         result.telegram,
         { enabled: false, boundUserId: null, proxyUrl: null },
@@ -115,7 +150,11 @@ describe("writeConfig — tmp+rename; no chmod (G-P24.5)", () => {
       assert.ok(existsSync(configPath), "T-CONFIG.3: config.json must exist after writeConfig");
       assert.ok(!existsSync(configPath + ".tmp"), "T-CONFIG.3: .tmp artifact must be gone");
       const mode = statSync(configPath).mode & 0o777;
-      assert.notEqual(mode, 0o600, `T-CONFIG.3: config.json mode must NOT be 0o600 (umask-derived); got ${mode.toString(8)}`);
+      assert.notEqual(
+        mode,
+        0o600,
+        `T-CONFIG.3: config.json mode must NOT be 0o600 (umask-derived); got ${mode.toString(8)}`,
+      );
       assert.deepEqual(
         JSON.parse(readFileSync(configPath, "utf-8")),
         JSON.parse(JSON.stringify(cfg)),
@@ -192,7 +231,13 @@ describe("writeTelegramConfigFields — writes config.json; telegram.json untouc
         }),
         "utf-8",
       );
-      const tcContent = JSON.stringify({ lastUpdateOffset: 3, stickyFallbackIp: null, pollTimeoutSec: 30, pollBackoffSec: 5, lastReceivedAt: null });
+      const tcContent = JSON.stringify({
+        lastUpdateOffset: 3,
+        stickyFallbackIp: null,
+        pollTimeoutSec: 30,
+        pollBackoffSec: 5,
+        lastReceivedAt: null,
+      });
       writeFileSync(tcPath, tcContent, "utf-8");
 
       writeTelegramConfigFields({ enabled: true }, configPath);
@@ -237,13 +282,25 @@ describe("writeTelegramConfig — writes runtime fields to telegram.json only; c
 
       // telegram.json must have the new offset
       const tcWritten = JSON.parse(readFileSync(tcPath, "utf-8")) as Record<string, unknown>;
-      assert.equal(tcWritten.lastUpdateOffset, 100, "T-TG.SPLIT.WRITE.2: lastUpdateOffset must be 100 in telegram.json");
+      assert.equal(
+        tcWritten.lastUpdateOffset,
+        100,
+        "T-TG.SPLIT.WRITE.2: lastUpdateOffset must be 100 in telegram.json",
+      );
       // telegram.json must NOT have config-level fields
       assert.equal(tcWritten.enabled, undefined, "T-TG.SPLIT.WRITE.2: telegram.json must NOT have enabled field");
-      assert.equal(tcWritten.boundUserId, undefined, "T-TG.SPLIT.WRITE.2: telegram.json must NOT have boundUserId field");
+      assert.equal(
+        tcWritten.boundUserId,
+        undefined,
+        "T-TG.SPLIT.WRITE.2: telegram.json must NOT have boundUserId field",
+      );
       assert.equal(tcWritten.proxyUrl, undefined, "T-TG.SPLIT.WRITE.2: telegram.json must NOT have proxyUrl field");
       // config.json must be untouched
-      assert.equal(readFileSync(configPath, "utf-8"), origCfgContent, "T-TG.SPLIT.WRITE.2: config.json must be unchanged");
+      assert.equal(
+        readFileSync(configPath, "utf-8"),
+        origCfgContent,
+        "T-TG.SPLIT.WRITE.2: config.json must be unchanged",
+      );
     } finally {
       cleanup();
     }

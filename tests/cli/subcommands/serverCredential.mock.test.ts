@@ -20,6 +20,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { runServerCredentialSubcommand } from "../../../src/cli/subcommands/serverCredential.js";
 import {
   addGoogleAccount,
   addLlmKey,
@@ -27,7 +28,6 @@ import {
   listLlmKeys,
   openCredentialsDb,
 } from "../../../src/persistence/credentialLibrary.js";
-import { runServerCredentialSubcommand } from "../../../src/cli/subcommands/serverCredential.js";
 
 // ─── T-CLI.LLM.ADD.1 ──────────────────────────────────────────────────────────
 
@@ -41,12 +41,18 @@ describe("runServerCredentialSubcommand llm-key add: stores row in DB (G-P28.33)
     const inject = (_path: string) => db;
     try {
       await assert.doesNotReject(
-        () => runServerCredentialSubcommand("llm-key", "add", {
-          id: "llm1",
-          type: "anthropic",
-          key: "sk-PLACEHOLDER",
-          label: "test",
-        }, inject),
+        () =>
+          runServerCredentialSubcommand(
+            "llm-key",
+            "add",
+            {
+              id: "llm1",
+              type: "anthropic",
+              key: "sk-PLACEHOLDER",
+              label: "test",
+            },
+            inject,
+          ),
         "T-CLI.LLM.ADD.1: llm-key add must not throw",
       );
       const rows = listLlmKeys(db);
@@ -71,15 +77,24 @@ describe("runServerCredentialSubcommand llm-key add: openai with base_url (G-P28
     const db = openCredentialsDb(":memory:");
     const inject = (_path: string) => db;
     try {
-      await runServerCredentialSubcommand("llm-key", "add", {
-        id: "oai1",
-        type: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        key: "sk-PLACEHOLDER",
-      }, inject);
+      await runServerCredentialSubcommand(
+        "llm-key",
+        "add",
+        {
+          id: "oai1",
+          type: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          key: "sk-PLACEHOLDER",
+        },
+        inject,
+      );
       const rows = listLlmKeys(db);
       assert.equal(rows.length, 1, "T-CLI.LLM.ADD.2: must have 1 row after add");
-      assert.equal(rows[0].base_url, "https://api.openai.com/v1", "T-CLI.LLM.ADD.2: base_url must be stored (G-P28.33)");
+      assert.equal(
+        rows[0].base_url,
+        "https://api.openai.com/v1",
+        "T-CLI.LLM.ADD.2: base_url must be stored (G-P28.33)",
+      );
       assert.equal(rows[0].provider_type, "openai", "T-CLI.LLM.ADD.2: provider_type must be 'openai'");
     } finally {
       db.close();
@@ -146,17 +161,27 @@ describe("runServerCredentialSubcommand google-account add: stores row (G-P28.36
     const inject = (_path: string) => db;
     try {
       await assert.doesNotReject(
-        () => runServerCredentialSubcommand("google-account", "add", {
-          id: "g1",
-          email: "test@example.com",
-          password: "PLACEHOLDER",
-          twofaLink: "https://2fa.show/PLACEHOLDER",
-        }, inject),
+        () =>
+          runServerCredentialSubcommand(
+            "google-account",
+            "add",
+            {
+              id: "g1",
+              email: "test@example.com",
+              password: "PLACEHOLDER",
+              twofaLink: "https://2fa.show/PLACEHOLDER",
+            },
+            inject,
+          ),
         "T-CLI.GOOG.ADD.1: google-account add must not throw",
       );
       const rows = listGoogleAccounts(db);
       assert.equal(rows.length, 1, "T-CLI.GOOG.ADD.1: must have 1 row after google-account add (G-P28.36)");
-      assert.equal(rows[0].twofa_link, "https://2fa.show/PLACEHOLDER", "T-CLI.GOOG.ADD.1: twofa_link must be stored (C-5 placeholder)");
+      assert.equal(
+        rows[0].twofa_link,
+        "https://2fa.show/PLACEHOLDER",
+        "T-CLI.GOOG.ADD.1: twofa_link must be stored (C-5 placeholder)",
+      );
       assert.equal(rows[0].email, "test@example.com", "T-CLI.GOOG.ADD.1: email must be 'test@example.com'");
     } finally {
       db.close();

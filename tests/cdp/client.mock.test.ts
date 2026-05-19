@@ -277,8 +277,16 @@ test("T-M23: scroll('down', 300) calls Runtime.evaluate('window.scrollBy(0, 300)
 
   assert.equal(evaluateCalls.length, 1, "exactly one Runtime.evaluate call expected");
   assert.equal(evaluateCalls[0], "window.scrollBy(0, 300)", "evaluate expression must be 'window.scrollBy(0, 300)'");
-  assert.equal(getLayoutMetricsCalled, false, "Page.getLayoutMetrics must NOT be called (no viewport coordinates needed)");
-  assert.equal(synthesizeScrollGestureCalled, false, "Input.synthesizeScrollGesture must NOT be called (replaced by evaluate)");
+  assert.equal(
+    getLayoutMetricsCalled,
+    false,
+    "Page.getLayoutMetrics must NOT be called (no viewport coordinates needed)",
+  );
+  assert.equal(
+    synthesizeScrollGestureCalled,
+    false,
+    "Input.synthesizeScrollGesture must NOT be called (replaced by evaluate)",
+  );
 });
 
 // T-M24: getCurrentUrl delegates to Runtime.evaluate('window.location.href')

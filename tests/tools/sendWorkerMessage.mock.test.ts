@@ -44,10 +44,10 @@ describe("send_worker_message tool (G-P26.21)", () => {
       const serverInboxDb = openServerInboxDb(join(dir, "inbox.sqlite"));
       const tool = makeSendWorkerMessageTool(workersDb, serverInboxDb);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)(
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)(
         { workerId: "w1", content: "STOP outreach for 24h" },
         {},
-      ) as { ok: boolean; queuedId: number };
+      )) as { ok: boolean; queuedId: number };
       assert.equal(result.ok, true, "T-SWM.1: ok=true");
       assert.ok(typeof result.queuedId === "number" && result.queuedId >= 1, "T-SWM.1: queuedId is number >= 1");
       const count = (
@@ -73,10 +73,10 @@ describe("send_worker_message tool (G-P26.21)", () => {
       const serverInboxDb = openServerInboxDb(join(dir, "inbox.sqlite"));
       const tool = makeSendWorkerMessageTool(workersDb, serverInboxDb);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)(
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)(
         { workerId: "w_unknown", content: "x" },
         {},
-      ) as { ok: boolean; error: string };
+      )) as { ok: boolean; error: string };
       assert.equal(result.ok, false, "T-SWM.2: ok=false for unknown worker");
       assert.ok(result.error.includes("unknown"), `T-SWM.2: error contains 'unknown'; got: ${result.error}`);
     } finally {

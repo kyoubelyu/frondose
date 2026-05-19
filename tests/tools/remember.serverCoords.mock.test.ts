@@ -42,7 +42,7 @@ describe("remember tool serverCoords extension (G-P26.23)", () => {
       const memoryDbPath = join(dir, "memory.sqlite");
       const tool = makeRememberTool(memoryDbPath); // no serverCoords
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {})) as {
         ok: boolean;
       };
       assert.equal(result.ok, true, "T-REM.1: ok=true on local-only save");
@@ -78,7 +78,7 @@ describe("remember tool serverCoords extension (G-P26.23)", () => {
       const serverCoords = { serverUrl: "http://s:3031", token: "tok" };
       const tool = makeRememberTool(memoryDbPath, serverCoords);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {})) as {
         ok: boolean;
       };
       assert.equal(result.ok, true, "T-REM.2: ok=true with serverCoords");
@@ -114,7 +114,7 @@ describe("remember tool serverCoords extension (G-P26.23)", () => {
       const serverCoords = { serverUrl: "http://dead-server:3031", token: "tok" };
       const tool = makeRememberTool(memoryDbPath, serverCoords);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)(REMEMBER_INPUT, {})) as {
         ok: boolean;
       };
       assert.equal(result.ok, true, "T-REM.3: ok=true despite server failure");

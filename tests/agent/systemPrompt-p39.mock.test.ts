@@ -117,10 +117,7 @@ describe("Soul band — P-39 trigger habits + Night slot (G-P39.10)", () => {
       !/\bmust\b/.test(habitsSection),
       `Trigger-habits section must not contain "must" (Soul wording rule); section: "${habitsSection.slice(0, 100)}"`,
     );
-    assert.ok(
-      !/\bMUST\b/.test(habitsSection),
-      'Trigger-habits section must not contain "MUST" (Soul wording rule)',
-    );
+    assert.ok(!/\bMUST\b/.test(habitsSection), 'Trigger-habits section must not contain "MUST" (Soul wording rule)');
     assert.ok(
       !/\bdo not\b/i.test(habitsSection),
       'Trigger-habits section must not contain "do not" (Soul wording rule)',

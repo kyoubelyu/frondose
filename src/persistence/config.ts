@@ -80,7 +80,15 @@ type ConfigJsonV1 = z.infer<typeof configJsonSchemaV1>;
 
 const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   schema_version: 2,
-  server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22, rest_port: 3031 },
+  server: {
+    url: null,
+    bind_address: null,
+    poll_interval_s: 30,
+    web_port: 8090,
+    ssh_user: null,
+    ssh_port: 22,
+    rest_port: 3031,
+  },
   worker: { id: null, hostname: null, label: null, input_mode: "cdp" }, // P-32: input_mode added
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
@@ -133,7 +141,15 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     ? v1.data
     : {
         schema_version: 1,
-        server: { url: null, bind_address: null, poll_interval_s: 30, web_port: 8090, ssh_user: null, ssh_port: 22, rest_port: 3031 },
+        server: {
+          url: null,
+          bind_address: null,
+          poll_interval_s: 30,
+          web_port: 8090,
+          ssh_user: null,
+          ssh_port: 22,
+          rest_port: 3031,
+        },
         worker: { id: null, hostname: null, label: null, input_mode: "cdp" as const },
         telegram: { enabled: false, boundUserId: null, proxyUrl: null },
       };

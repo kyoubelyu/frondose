@@ -18,8 +18,8 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
@@ -30,22 +30,19 @@ import { makeWebSearchTool } from "../../../src/tools/webTools/webSearch.js";
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "ws-1", messages: [] as CoreMessage[] };
 
 /**
- * Temporarily replace search.json at the default path with empty config ({})
- * so the tool doesn't find existing user keys via search.json fallback.
- * Restores original content in finally.
+ * BUG-2 fix: override HOME to a tmp dir so the tool's default search.json path
+ * resolves under the tmp dir (never reading/writing the operator's real ~/.mai/).
+ * `homedir()` reads `HOME` at call time — the override fully isolates it.
  */
 async function withCleanSearchJson(fn: () => Promise<void>): Promise<void> {
-  const defaultPath = join(homedir(), ".mai", "agent", "search.json");
-  const backup: string | null = existsSync(defaultPath) ? readFileSync(defaultPath, "utf-8") : null;
+  const tmp = mkdtempSync(join(tmpdir(), "mai-p44-search-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmp;
   try {
-    writeFileSync(defaultPath, "{}", "utf-8");
     await fn();
   } finally {
-    if (backup !== null) {
-      writeFileSync(defaultPath, backup, "utf-8");
-    } else {
-      rmSync(defaultPath, { force: true });
-    }
+    process.env.HOME = origHome;
+    rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -293,7 +290,7 @@ test("T-WebSearch.7: Tavily result shape — results[].content mapped to snippet
             assert.equal(result.data.results[0]?.snippet, "This is the Tavily content snippet");
             assert.equal(result.data.results[1]?.snippet, "Another snippet here");
             // The raw "content" key must not be present at top level
-            assert.ok(!("content" in result.data.results[0]!), "result must use 'snippet' not 'content'");
+            assert.ok(!("content" in (result.data.results[0] ?? {})), "result must use 'snippet' not 'content'");
           },
         ),
       ),
@@ -318,18 +315,18 @@ test("T-WebSearch.8: maxResults=2 → only 2 results returned even if provider r
               { title: "R4", url: "https://r4.com", content: "s4" },
             ]),
           async () => {
-          const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { results: unknown[] };
-          };
+            const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
+              ok: boolean;
+              data: { results: unknown[] };
+            };
 
-          assert.equal(result.ok, true);
-          assert.equal(result.data.results.length, 2, "must slice to maxResults=2");
-        },
+            assert.equal(result.ok, true);
+            assert.equal(result.data.results.length, 2, "must slice to maxResults=2");
+          },
+        ),
       ),
     ),
-  ),
-);
+  );
 });
 
 // ─── T-ConsumerSearch.1 — search.json fallback (P-15, G-P15.2) ────────────────

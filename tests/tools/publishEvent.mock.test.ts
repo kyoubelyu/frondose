@@ -20,10 +20,14 @@ describe("publish_event tool (G-P26.20)", () => {
     const tool = makePublishEventTool(null);
     // biome-ignore lint/suspicious/noExplicitAny: test assertion
     const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)({ type: "outreach_sent" }, {});
-    assert.deepEqual(result, {
-      ok: false,
-      error: "server.url not configured; publish_event is a no-op.",
-    }, "T-PE.1: expected null-coords error envelope");
+    assert.deepEqual(
+      result,
+      {
+        ok: false,
+        error: "server.url not configured; publish_event is a no-op.",
+      },
+      "T-PE.1: expected null-coords error envelope",
+    );
   });
 
   it("T-PE.2: with serverCoords + mocked fetch 200, execute returns {ok:true}", async () => {
@@ -61,7 +65,7 @@ describe("publish_event tool (G-P26.20)", () => {
     try {
       const tool = makePublishEventTool(COORDS);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as (a: unknown, o: object) => Promise<any>)({ type: "x" }, {}) as {
+      const result = (await (tool.execute as (a: unknown, o: object) => Promise<any>)({ type: "x" }, {})) as {
         ok: boolean;
         warning: string;
       };

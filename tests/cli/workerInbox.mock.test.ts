@@ -34,9 +34,7 @@ function makeImmediateModel(): MockLanguageModelV1 {
     doStream: async () => ({
       rawCall: { rawPrompt: null as unknown, rawSettings: {} as Record<string, unknown> },
       stream: Readable.toWeb(
-        Readable.from([
-          { type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } },
-        ]),
+        Readable.from([{ type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } }]),
         // biome-ignore lint/suspicious/noExplicitAny: cast for stream type
       ) as unknown as ReadableStream<any>,
     }),
@@ -82,8 +80,9 @@ describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
       const deps = makeDeps(dir, makeImmediateModel());
       await drainWorkerInbox(dbPath, undefined, deps);
       // Verify both rows consumed
-      const pending = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='pending'").get() as { c: number })
-        .c;
+      const pending = (
+        db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='pending'").get() as { c: number }
+      ).c;
       assert.equal(pending, 0, "T-WINBOX.1: 0 pending rows after drain");
       // P-28.5 D-6: rows DELETEd after drain (not flagged consumed)
       const allRows = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
@@ -114,7 +113,8 @@ describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
       const userMsgs = deps1.messages.filter((m) => m.role === "user");
       assert.equal(userMsgs.length, 1, "T-WINBOX.2: first drain injects 1 user message");
       // P-28.5 D-6: row DELETEd after drain (not flagged consumed); restructured per §11 C-3
-      const c = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE content='ONCE_ONLY'").get() as { c: number }).c;
+      const c = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE content='ONCE_ONLY'").get() as { c: number })
+        .c;
       assert.equal(c, 0, "T-WINBOX.2: row DELETEd after first drain (D-6)");
       // Second drain — DB is empty (all consumed); throwing model would fail IF it was called
       const deps2 = makeDeps(dir, makeThrowingModel());

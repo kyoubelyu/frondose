@@ -55,10 +55,7 @@ describe("web-token set — explicit token masked on stdout (G-P36.8)", () => {
         const stdout = captureStdout(() => {
           runServerWebTokenSubcommand("set", { token: "abcdef123456", secretsPath });
         });
-        assert.ok(
-          stdout.includes("abc…456"),
-          `T-FC.1: stdout must contain masked form 'abc…456'; got: ${stdout}`,
-        );
+        assert.ok(stdout.includes("abc…456"), `T-FC.1: stdout must contain masked form 'abc…456'; got: ${stdout}`);
         assert.ok(
           !stdout.includes("abcdef123456"),
           `T-FC.1: stdout must NOT contain the full token 'abcdef123456'; got: ${stdout}`,
@@ -91,14 +88,8 @@ describe("web-token set — auto-generated token masked on stdout (G-P36.8)", ()
         // Then A: token written unmasked to secrets.json
         const secrets = readSecrets(secretsPath);
         const webToken = secrets.server?.webToken ?? "";
-        assert.ok(
-          webToken.length > 0,
-          "T-FC.2: auto-generated token must be written to secrets.json",
-        );
-        assert.ok(
-          /^[0-9a-f]+$/.test(webToken),
-          `T-FC.2: auto-generated token must be lowercase hex; got: ${webToken}`,
-        );
+        assert.ok(webToken.length > 0, "T-FC.2: auto-generated token must be written to secrets.json");
+        assert.ok(/^[0-9a-f]+$/.test(webToken), `T-FC.2: auto-generated token must be lowercase hex; got: ${webToken}`);
 
         // Then B: full token NOT in stdout
         assert.ok(

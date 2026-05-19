@@ -1,8 +1,8 @@
 import { existsSync, unlinkSync } from "node:fs";
 import {
-  type SearchConfig,
   DEFAULT_SEARCH_CONFIG_PATH,
   readSearchConfig,
+  type SearchConfig,
   writeSearchConfig,
 } from "../../persistence/search.js";
 import { isInteractive, type Prompter, printNoninteractiveGuidance, realPrompter } from "./_prompts.js";

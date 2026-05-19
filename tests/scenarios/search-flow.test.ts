@@ -77,8 +77,10 @@ test("T-Search.1: agent calls expected tools in Search flow", { timeout: 600_000
   // Order assertion: launch before first inspect
   const launchIdx = toolNames.indexOf("launch");
   const firstInspectIdx = toolNames.indexOf("inspect");
-  assert.ok(launchIdx < firstInspectIdx,
-    `launch (idx=${launchIdx}) must precede first inspect (idx=${firstInspectIdx})`);
+  assert.ok(
+    launchIdx < firstInspectIdx,
+    `launch (idx=${launchIdx}) must precede first inspect (idx=${firstInspectIdx})`,
+  );
 });
 
 // ─── T-Search.2 ──────────────────────────────────────────────────
@@ -90,7 +92,7 @@ test("T-Search.2: methodology terms appear in text output", { timeout: 600_000 }
   const foundTerms = METHODOLOGY_TERMS.filter((t) => searchResult.textOutput.includes(t));
   assert.ok(
     foundTerms.length >= 3,
-    `Expected ≥3 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
+    `Expected ≥3 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`,
   );
 });
 
@@ -104,23 +106,21 @@ test("T-Search.3: agent remembers qualified leads, ignores non-ICP", { timeout: 
   const rememberCalls = searchResult.toolCalls.filter((tc: CapturedToolCall) => tc.toolName === "remember");
 
   // remember tool uses `personName` parameter (not `key`) — verified from src/tools/memory/remember.ts:8-16
-  const rememberPeople = rememberCalls.map((tc: CapturedToolCall) =>
-    String(tc.args.personName ?? "").toLowerCase());
+  const rememberPeople = rememberCalls.map((tc: CapturedToolCall) => String(tc.args.personName ?? "").toLowerCase());
 
   // Alex Chen should be remembered (VP Sales at Acme Corp = B2B SaaS ✓)
-  const alexRemembered = rememberPeople.some((n: string) =>
-    n.includes("alex") || n.includes("chen"));
+  const alexRemembered = rememberPeople.some((n: string) => n.includes("alex") || n.includes("chen"));
   assert.ok(alexRemembered, "Expected Alex Chen to be remembered (ICP match)");
 
   // Best-effort: Maria Santos should be remembered (CRO at DataSync = tech ✓)
-  const mariaRemembered = rememberPeople.some((n: string) =>
-    n.includes("maria") || n.includes("santos"));
+  const mariaRemembered = rememberPeople.some((n: string) => n.includes("maria") || n.includes("santos"));
   if (!mariaRemembered) {
-    process.stderr.write("[T-Search.3] Soft fail: Maria Santos not remembered (agent may not have visited all results)\n");
+    process.stderr.write(
+      "[T-Search.3] Soft fail: Maria Santos not remembered (agent may not have visited all results)\n",
+    );
   }
 
   // Kevin Huang should NOT be remembered (VP Engineering — wrong role ✗)
-  const kevinRemembered = rememberPeople.some((n: string) =>
-    n.includes("kevin") || n.includes("huang"));
+  const kevinRemembered = rememberPeople.some((n: string) => n.includes("kevin") || n.includes("huang"));
   assert.ok(!kevinRemembered, "Kevin Huang (VP Engineering) should NOT be remembered (non-ICP)");
 });

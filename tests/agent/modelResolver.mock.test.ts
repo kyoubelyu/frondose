@@ -170,8 +170,7 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
       // P-36 F-A: message changed again to "is not configured (model spec came from …)"
       assert.throws(
         () => resolveModel({ factory: "groq:llama-3" }),
-        (err: Error) =>
-          err.message.includes("not configured") || err.message.includes("Unknown provider"),
+        (err: Error) => err.message.includes("not configured") || err.message.includes("Unknown provider"),
       );
     } finally {
       restoreEnv(saved);

@@ -35,10 +35,10 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 28 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 32 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  28 (was 26 at P-26; P-28.5 adds navigate_to_url + clear_cookies)
+    // Then:  32 (P-44: updated from 28 — P-39 adds search_memory/set_memory_note/get_memory_note +3; P-26 +query_lead_globally/publish_event; P-31 +schedule_task)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -49,18 +49,18 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        28, // P-28.5: +navigate_to_url +clear_cookies (was 26 at P-26)
-        `T-CONTRACT.WORKER.TOOLS: expected 28 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        32, // P-44: correct current count (worker 32)
+        `T-CONTRACT.WORKER.TOOLS: expected 32 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 19 tools (P-28.5 updated: +dispatch_google_login)", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 23 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
-    // Then:  19 (was 18 at P-26/P-27; P-28.5 adds dispatch_google_login)
+    // Then:  23 (P-44: updated from 19 — P-39 adds search_memory/set_memory_note/get_memory_note +3; P-31 +schedule_task)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -71,8 +71,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        19, // P-28.5: +dispatch_google_login (was 18 at P-26/P-27)
-        `T-CONTRACT.SERVER.TOOLS: expected 19 server tools (P-28.5); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        23, // P-44: correct current count (server 23)
+        `T-CONTRACT.SERVER.TOOLS: expected 23 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
@@ -86,7 +86,6 @@ describe("no-bash boundary (G-P26.27)", () => {
     // When:  grep -r --include='*.ts' 'child_process' across the three dirs, excluding hooks.ts
     // Then:  zero matching lines
     const projectRoot = resolve(process.cwd());
-    // biome-ignore lint/correctness/noUnusedVariables: used at Step 5
     // Use extended regex to match only actual import/require statements — not comment text.
     // Matches: from "child_process", from 'node:child_process', require("child_process"), etc.
     // Does NOT match comment lines like "// No child_process import".

@@ -89,11 +89,7 @@ describe("processLock: acquireTurnLock / releaseTurnLock", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const lockPath = join(dir, "turn.lock");
-      writeFileSync(
-        lockPath,
-        JSON.stringify({ owner: "stale", pid: -999999, ts: new Date().toISOString() }),
-        "utf-8",
-      );
+      writeFileSync(lockPath, JSON.stringify({ owner: "stale", pid: -999999, ts: new Date().toISOString() }), "utf-8");
       const handle = await acquireTurnLock(lockPath, "new-owner");
       assert.ok(existsSync(lockPath));
       const meta = JSON.parse(readFileSync(lockPath, "utf-8"));

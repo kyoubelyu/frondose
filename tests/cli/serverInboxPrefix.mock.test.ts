@@ -37,12 +37,12 @@ function makeImmediateModel(): MockLanguageModelV1 {
     modelId: "test-sinbox-int",
     doStream: async () => ({
       rawCall: { rawPrompt: null as unknown, rawSettings: {} as Record<string, unknown> },
-      // biome-ignore lint/suspicious/noExplicitAny: cast for stream type
       stream: Readable.toWeb(
         Readable.from([
           { type: "text-delta", textDelta: "ok" },
           { type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } },
         ]),
+        // biome-ignore lint/suspicious/noExplicitAny: cast for stream type
       ) as unknown as ReadableStream<any>,
     }),
   });
@@ -132,9 +132,7 @@ describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
         await handleTelegramTurn(update, deps);
 
         // 1a — at least one message pushed
-        const userMsg = messages.find((m) => m.role === "user") as
-          | { role: "user"; content: string }
-          | undefined;
+        const userMsg = messages.find((m) => m.role === "user") as { role: "user"; content: string } | undefined;
         assert.ok(userMsg, "T-SINBOX.INT.1: a user-role message must be in deps.messages after the turn");
         const content = userMsg.content;
         assert.equal(typeof content, "string", "T-SINBOX.INT.1: user message content must be a string");
@@ -166,16 +164,12 @@ describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
 
         // 1e — all 3 rows drained
         const drained = (
-          serverInboxDb
-            .prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='drained'")
-            .get() as { c: number }
+          serverInboxDb.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='drained'").get() as { c: number }
         ).c;
         assert.equal(drained, 3, "T-SINBOX.INT.1: all 3 server_inbox rows must be status='drained' after turn");
 
         const pending = (
-          serverInboxDb
-            .prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'")
-            .get() as { c: number }
+          serverInboxDb.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'").get() as { c: number }
         ).c;
         assert.equal(pending, 0, "T-SINBOX.INT.1: 0 pending rows must remain after turn");
       } finally {
@@ -214,9 +208,7 @@ describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
         const update = { update_id: 2, message: { text: "hello", from: { id: 99, username: "testuser" } } } as any;
         await handleTelegramTurn(update, deps);
 
-        const userMsg = messages.find((m) => m.role === "user") as
-          | { role: "user"; content: string }
-          | undefined;
+        const userMsg = messages.find((m) => m.role === "user") as { role: "user"; content: string } | undefined;
         assert.ok(userMsg, "T-SINBOX.INT.2: a user-role message must be pushed");
         const content = userMsg.content;
 
@@ -239,9 +231,7 @@ describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
 
         // Server inbox rows untouched
         const stillPending = (
-          serverInboxDb
-            .prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'")
-            .get() as { c: number }
+          serverInboxDb.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'").get() as { c: number }
         ).c;
         assert.equal(
           stillPending,

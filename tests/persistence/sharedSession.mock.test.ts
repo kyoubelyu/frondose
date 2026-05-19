@@ -12,13 +12,9 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
-import {
-  appendMessagesShared,
-  loadMessagesShared,
-  sharedSessionPath,
-} from "../../src/persistence/sharedSession.js";
+import { appendMessagesShared, loadMessagesShared, sharedSessionPath } from "../../src/persistence/sharedSession.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

@@ -8,8 +8,8 @@
 
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   deletePersonaTemplate,
@@ -124,7 +124,10 @@ describe("readPersonaTemplate — malformed JSON (G-P27.28)", () => {
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);
       // biome-ignore lint/suspicious/noExplicitAny: stderr capture
-      process.stderr.write = (chunk: any) => { stderrChunks.push(String(chunk)); return true; };
+      process.stderr.write = (chunk: any) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      };
       let result: ReturnType<typeof readPersonaTemplate>;
       try {
         result = readPersonaTemplate(dir, "p1");
@@ -133,7 +136,10 @@ describe("readPersonaTemplate — malformed JSON (G-P27.28)", () => {
       }
       assert.equal(result, null, "must return null for malformed JSON");
       const stderr = stderrChunks.join("");
-      assert.ok(stderr.includes("[mai] persona template"), `stderr must contain [mai] persona template; got: ${stderr}`);
+      assert.ok(
+        stderr.includes("[mai] persona template"),
+        `stderr must contain [mai] persona template; got: ${stderr}`,
+      );
     } finally {
       cleanup();
     }
@@ -149,15 +155,14 @@ describe("readPersonaTemplate — invalid schema (G-P27.28)", () => {
     // Then:  returns null; stderr warning emitted
     const { dir, cleanup } = makeTmpDir();
     try {
-      writeFileSync(
-        join(dir, "p1.json"),
-        JSON.stringify({ role: "BD", updatedAt: new Date().toISOString() }),
-        "utf-8",
-      );
+      writeFileSync(join(dir, "p1.json"), JSON.stringify({ role: "BD", updatedAt: new Date().toISOString() }), "utf-8");
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);
       // biome-ignore lint/suspicious/noExplicitAny: stderr capture
-      process.stderr.write = (chunk: any) => { stderrChunks.push(String(chunk)); return true; };
+      process.stderr.write = (chunk: any) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      };
       let result: ReturnType<typeof readPersonaTemplate>;
       try {
         result = readPersonaTemplate(dir, "p1");

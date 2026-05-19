@@ -11,9 +11,8 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -41,10 +40,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 28 tools (P-28.5 adds navigate_to_url + clear_cookies)", () => {
+  it("T-CONTRACT.P28.WORKER: worker mode → exactly 32 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length
-    // Then:  28 (P-28.5: +navigate_to_url +clear_cookies; updated from 26 per §11)
+    // Then:  32 (P-44: updated from 28 — P-39 +3 memory; P-26 +2 coords; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -58,8 +57,8 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        28,
-        `T-CONTRACT.P28.WORKER: expected 28 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        32,
+        `T-CONTRACT.P28.WORKER: expected 32 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -70,10 +69,10 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
 // ─── T-CONTRACT.P28.SERVER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.SERVER: server mode → exactly 19 tools (P-28.5 adds dispatch_google_login)", () => {
+  it("T-CONTRACT.P28.SERVER: server mode → exactly 23 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
     // When:  Object.keys(tools).length
-    // Then:  19 (P-28.5: +dispatch_google_login; updated from 18 per §11)
+    // Then:  23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -86,8 +85,8 @@ describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        19,
-        `T-CONTRACT.P28.SERVER: expected 19 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        23,
+        `T-CONTRACT.P28.SERVER: expected 23 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -110,7 +109,7 @@ describe("no-bash boundary P-28 (G-P28.30)", () => {
       [
         "-rE",
         "--include=*.ts",
-        "--exclude=hooks.ts",    // hooks.ts is operator-approved CLI-layer spawn (CLAUDE.md §2 Hard Rule 8)
+        "--exclude=hooks.ts", // hooks.ts is operator-approved CLI-layer spawn (CLAUDE.md §2 Hard Rule 8)
         `(from|require)\\s*\\(?['"]((node:)?child_process)['"]`,
         "src/tools",
         "src/persistence",

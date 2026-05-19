@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -34,6 +34,12 @@ function cleanup(path: string): void {
 // ─── T-M_p5.14 — Envelope shape ──────────────────────────────────────────────
 
 test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/matched/missing/rationale", async () => {
+  // HOME override: makeQualifyProfileTool calls readIdentity(identityPath) which checks
+  // DEFAULT_CONFIG_PATH() (HOME-relative) first. Without override, operator's ICP would
+  // be used instead of the fixture ICP, making qualification assertions unpredictable.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const identityPath = makeTempPath("envelope");
   try {
     // Write identity with ICP
@@ -84,12 +90,20 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
     );
   } finally {
     cleanup(identityPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 // ─── T-M_p5.15 — Default ICP from identity.json; override works ──────────────
 
 test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp override takes precedence", async () => {
+  // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() (HOME-relative) first.
+  // Without override, operator's ICP shadows the fixture ICP, breaking T-M_p5.15a.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const identityPath = makeTempPath("default-icp");
   try {
     // Identity has ICP: targetRole = ["VP Engineering"]
@@ -166,5 +180,8 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
     console.log("T-M_p5.15: qualify_profile ICP default/override behavior verified ✓");
   } finally {
     cleanup(identityPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });

@@ -18,15 +18,14 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
-import { makeAllTools } from "../../src/tools/index.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
+import { makeAllTools } from "../../src/tools/index.js";
 
 const SRC_ROOT = resolve(new URL(".", import.meta.url).pathname, "../../src");
 
@@ -50,28 +49,73 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Pre-P-31 worker tool snapshot (28 keys) — P-31 adds `schedule_task` to make 29
+// Pre-P-31 worker tool snapshot (31 keys) — P-31 adds `schedule_task` to make 32.
+// P-44: updated from 28 to 31 to include P-39's search_memory/set_memory_note/get_memory_note.
 const PRE_P31_WORKER_KEYS = [
-  "analyze_screenshot", "clear_cookies", "click", "close", "echo",
-  "escalate_for_capability", "getIdentity", "getMemory", "gh_issue", "identity",
-  "inspect", "launch", "navigate_to_url", "press", "publish_event",
-  "qualify_profile", "query_lead_globally", "reload", "remember", "screenshot",
-  "scroll", "sleep", "stop", "telegram_notify", "type", "upload",
-  "web_fetch", "web_search",
+  "analyze_screenshot",
+  "clear_cookies",
+  "click",
+  "close",
+  "echo",
+  "escalate_for_capability",
+  "get_memory_note",
+  "getIdentity",
+  "getMemory",
+  "gh_issue",
+  "identity",
+  "inspect",
+  "launch",
+  "navigate_to_url",
+  "press",
+  "publish_event",
+  "qualify_profile",
+  "query_lead_globally",
+  "reload",
+  "remember",
+  "screenshot",
+  "scroll",
+  "search_memory",
+  "set_memory_note",
+  "sleep",
+  "stop",
+  "telegram_notify",
+  "type",
+  "upload",
+  "web_fetch",
+  "web_search",
 ].sort();
 
-// Post-P-31 worker tool snapshot (29 keys = pre-P-31 + schedule_task)
+// Post-P-31 worker tool snapshot (32 keys = pre-P-31 31 + schedule_task)
 const POST_P31_WORKER_KEYS = [...PRE_P31_WORKER_KEYS, "schedule_task"].sort();
 
-// Pre-P-31 server tool snapshot (19 keys)
+// Pre-P-31 server tool snapshot (22 keys).
+// P-44: updated from 19 to 22 to include P-39's search_memory/set_memory_note/get_memory_note.
 const PRE_P31_SERVER_KEYS = [
-  "analyze_screenshot", "dispatch_google_login", "echo", "escalate_for_capability",
-  "getIdentity", "getMemory", "gh_issue", "identity", "list_personas",
-  "list_workers", "provision_worker", "remember", "revoke_worker",
-  "send_worker_message", "sleep", "stop", "telegram_notify", "web_fetch", "web_search",
+  "analyze_screenshot",
+  "dispatch_google_login",
+  "echo",
+  "escalate_for_capability",
+  "get_memory_note",
+  "getIdentity",
+  "getMemory",
+  "gh_issue",
+  "identity",
+  "list_personas",
+  "list_workers",
+  "provision_worker",
+  "remember",
+  "revoke_worker",
+  "search_memory",
+  "send_worker_message",
+  "set_memory_note",
+  "sleep",
+  "stop",
+  "telegram_notify",
+  "web_fetch",
+  "web_search",
 ].sort();
 
-// Post-P-31 server tool snapshot (20 keys = pre-P-31 + schedule_task)
+// Post-P-31 server tool snapshot (23 keys = pre-P-31 22 + schedule_task)
 const POST_P31_SERVER_KEYS = [...PRE_P31_SERVER_KEYS, "schedule_task"].sort();
 
 // Pre-P-31 SHA-256 hashes of D-6 files (byte-identical constraint).
@@ -83,8 +127,8 @@ const PRE_P31_HASHES: Record<string, string> = {
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 29 tool keys (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 29 keys; set = pre-P-31 28 + schedule_task", () => {
+describe("makeAllTools worker mode → 32 tool keys (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 32 keys; set = pre-P-31 31 + schedule_task", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
     // Then:   29 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is exactly {schedule_task}
@@ -94,7 +138,11 @@ describe("makeAllTools worker mode → 29 tool keys (G-P31.12)", () => {
       const session = makeFakeSession();
       const tools = makeAllTools(
         session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json"), schedulePath: join(dir, "schedule.jsonl") },
+        {
+          memoryDbPath: join(dir, "memory.sqlite"),
+          identityPath: join(dir, "identity.json"),
+          schedulePath: join(dir, "schedule.jsonl"),
+        },
         mockControl,
         undefined,
         { mode: "worker", workerId: "w1" },
@@ -104,13 +152,13 @@ describe("makeAllTools worker mode → 29 tool keys (G-P31.12)", () => {
 
       assert.equal(
         keys.length,
-        29,
-        `worker mode must return exactly 29 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
+        32,
+        `worker mode must return exactly 32 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_WORKER_KEYS,
-        "worker tool names must match POST_P31_WORKER_KEYS (pre-P-31 28 + schedule_task)",
+        "worker tool names must match POST_P31_WORKER_KEYS (pre-P-31 31 + schedule_task)",
       );
     } finally {
       cleanup();
@@ -120,8 +168,8 @@ describe("makeAllTools worker mode → 29 tool keys (G-P31.12)", () => {
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
-describe("makeAllTools server mode → 20 tool keys (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 20 keys; set = pre-P-31 19 + schedule_task", () => {
+describe("makeAllTools server mode → 23 tool keys (G-P31.12)", () => {
+  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 23 keys; set = pre-P-31 22 + schedule_task", () => {
     // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
     // When:   server mode tool set is built post-P-31
     // Then:   20 keys; deepEqual to POST_P31_SERVER_KEYS; diff from PRE is exactly {schedule_task}
@@ -130,7 +178,11 @@ describe("makeAllTools server mode → 20 tool keys (G-P31.12)", () => {
     try {
       const tools = makeAllTools(
         undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json"), schedulePath: join(dir, "schedule.jsonl") },
+        {
+          memoryDbPath: join(dir, "memory.sqlite"),
+          identityPath: join(dir, "identity.json"),
+          schedulePath: join(dir, "schedule.jsonl"),
+        },
         mockControl,
         undefined,
         { mode: "server" },
@@ -140,13 +192,13 @@ describe("makeAllTools server mode → 20 tool keys (G-P31.12)", () => {
 
       assert.equal(
         keys.length,
-        20,
-        `server mode must return exactly 20 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
+        23,
+        `server mode must return exactly 23 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_SERVER_KEYS,
-        "server tool names must match POST_P31_SERVER_KEYS (pre-P-31 19 + schedule_task)",
+        "server tool names must match POST_P31_SERVER_KEYS (pre-P-31 22 + schedule_task)",
       );
     } finally {
       cleanup();

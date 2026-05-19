@@ -15,14 +15,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import {
-  acquireTurnLock,
-  isPidAlive,
-  LockBusy,
-  releaseTurnLock,
-  writePid,
-} from "../../src/persistence/processLock.js";
 import { runTelegramDaemon } from "../../src/cli/subcommands/telegramDaemon.js";
+import { acquireTurnLock, isPidAlive, LockBusy, releaseTurnLock, writePid } from "../../src/persistence/processLock.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -40,7 +34,12 @@ function mockProcessExit(): { captured: number | null; restore: () => void } {
     result.captured = code ?? 0;
     throw new Error(`process.exit(${code ?? 0})`);
   };
-  return { ...result, restore: () => { (process as any).exit = orig; } };
+  return {
+    ...result,
+    restore: () => {
+      (process as any).exit = orig;
+    },
+  };
 }
 
 /** Capture stderr output during a callback */
@@ -79,14 +78,8 @@ describe("telegramDaemon: PID mutex on boot", () => {
       mkdirSync(join(home, ".mai", "agent"), { recursive: true });
       // NO telegram.pid → daemon should proceed past mutex check
       const stderr = await captureStderr(() => runTelegramDaemon());
-      assert.ok(
-        stderr.includes("TELEGRAM_TOKEN unset"),
-        `expected 'TELEGRAM_TOKEN unset' in stderr, got: ${stderr}`,
-      );
-      assert.ok(
-        !stderr.includes("already running"),
-        `must NOT contain 'already running' when no prior daemon`,
-      );
+      assert.ok(stderr.includes("TELEGRAM_TOKEN unset"), `expected 'TELEGRAM_TOKEN unset' in stderr, got: ${stderr}`);
+      assert.ok(!stderr.includes("already running"), `must NOT contain 'already running' when no prior daemon`);
     } finally {
       process.env.HOME = origHome;
       if (origToken !== undefined) process.env.TELEGRAM_TOKEN = origToken;
@@ -109,10 +102,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
       mkdirSync(join(home, ".mai", "agent"), { recursive: true });
       writeFileSync(join(home, ".mai", "agent", "telegram.pid"), String(process.pid), "utf-8");
       const stderr = await captureStderr(() => runTelegramDaemon());
-      assert.ok(
-        stderr.includes("already running"),
-        `expected 'already running' in stderr, got: ${stderr}`,
-      );
+      assert.ok(stderr.includes("already running"), `expected 'already running' in stderr, got: ${stderr}`);
       assert.ok(stderr.includes(String(process.pid)), "stderr must include the live PID");
     } finally {
       process.env.HOME = origHome;
@@ -174,8 +164,16 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       const initialOffset = 42;
       writeFileSync(
         cfgPath,
-        JSON.stringify({ enabled: true, boundUserId: 12345, lastUpdateOffset: initialOffset,
-          stickyFallbackIp: null, proxyUrl: null, pollTimeoutSec: 1, pollBackoffSec: 1, lastReceivedAt: null }),
+        JSON.stringify({
+          enabled: true,
+          boundUserId: 12345,
+          lastUpdateOffset: initialOffset,
+          stickyFallbackIp: null,
+          proxyUrl: null,
+          pollTimeoutSec: 1,
+          pollBackoffSec: 1,
+          lastReceivedAt: null,
+        }),
         "utf-8",
       );
 
@@ -194,17 +192,27 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
         },
       } as unknown as NodeJS.WritableStream;
       const model = new MockLanguageModelV1({
-        provider: "openai", modelId: "test",
+        provider: "openai",
+        modelId: "test",
         doStream: async () => ({
-          stream: new ReadableStream({ start(c) { c.enqueue({ type: "finish", finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1 } }); c.close(); } }),
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: "finish", finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1 } });
+              c.close();
+            },
+          }),
           rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
       const messages: import("ai").CoreMessage[] = [];
       const deps = {
-        model, system: "test", messages, tools: {},
+        model,
+        system: "test",
+        messages,
+        tools: {},
         sessionFile: { path: join(home, "session.jsonl") },
-        out: outStream, configPath: cfgPath,
+        out: outStream,
+        configPath: cfgPath,
         uploadAllowlistRoot: home,
       };
       const turnLock = new TurnLock();
@@ -216,11 +224,16 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
         if (callCount === 1) {
           // First call: return 2 updates. Do NOT abort here — let the for-loop
           // process both updates (they'll be deferred by Gate 1). Abort on 2nd call.
-          return { ok: true, status: 200,
-            json: async () => ({ ok: true, result: [
-              { update_id: 42, message: { text: "hi", from: { id: 12345, username: "u" } } },
-              { update_id: 43, message: { text: "bye", from: { id: 12345, username: "u" } } },
-            ] }),
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              ok: true,
+              result: [
+                { update_id: 42, message: { text: "hi", from: { id: 12345, username: "u" } } },
+                { update_id: 43, message: { text: "bye", from: { id: 12345, username: "u" } } },
+              ],
+            }),
           } as unknown as Response;
         }
         // 2nd call: both updates were deferred (Gate 1); now abort + return empty
@@ -233,8 +246,14 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       await new Promise<void>((r) => setTimeout(r, 300));
 
       // Assertions: Gate 1 fired for both updates → deferred
-      assert.ok(outLines.some(l => l.includes("deferring update 42")), `missing deferral for 42 in: ${outLines.join("")}`);
-      assert.ok(outLines.some(l => l.includes("deferring update 43")), `missing deferral for 43 in: ${outLines.join("")}`);
+      assert.ok(
+        outLines.some((l) => l.includes("deferring update 42")),
+        `missing deferral for 42 in: ${outLines.join("")}`,
+      );
+      assert.ok(
+        outLines.some((l) => l.includes("deferring update 43")),
+        `missing deferral for 43 in: ${outLines.join("")}`,
+      );
       // offset NOT advanced
       assert.strictEqual(handle.offset, initialOffset, "handle.offset must NOT advance when deferred");
       // cfg on disk unchanged
@@ -270,8 +289,16 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       const cfgPath = join(home, ".mai", "agent", "telegram.json");
       writeFileSync(
         cfgPath,
-        JSON.stringify({ enabled: true, boundUserId: 12345, lastUpdateOffset: 42,
-          stickyFallbackIp: null, proxyUrl: null, pollTimeoutSec: 1, pollBackoffSec: 1, lastReceivedAt: null }),
+        JSON.stringify({
+          enabled: true,
+          boundUserId: 12345,
+          lastUpdateOffset: 42,
+          stickyFallbackIp: null,
+          proxyUrl: null,
+          pollTimeoutSec: 1,
+          pollBackoffSec: 1,
+          lastReceivedAt: null,
+        }),
         "utf-8",
       );
 
@@ -283,7 +310,8 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       const cfg = readTelegramConfig(cfgPath);
       const abort = new AbortController();
       const model = new MockLanguageModelV1({
-        provider: "openai", modelId: "test",
+        provider: "openai",
+        modelId: "test",
         doStream: async () => ({
           stream: new ReadableStream({
             start(c) {
@@ -296,7 +324,10 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
         }),
       });
       const deps = {
-        model, system: "test", messages: [] as import("ai").CoreMessage[], tools: {},
+        model,
+        system: "test",
+        messages: [] as import("ai").CoreMessage[],
+        tools: {},
         sessionFile: { path: join(home, "session.jsonl") },
         out: { write: () => true } as unknown as NodeJS.WritableStream,
         configPath: cfgPath,
@@ -312,10 +343,13 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
           getUpdatesCallCount++;
           if (getUpdatesCallCount === 1) {
             // Return one update on first call
-            return { ok: true, status: 200,
-              json: async () => ({ ok: true, result: [
-                { update_id: 42, message: { text: "hello", from: { id: 12345, username: "u" } } },
-              ] }),
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                ok: true,
+                result: [{ update_id: 42, message: { text: "hello", from: { id: 12345, username: "u" } } }],
+              }),
             } as unknown as Response;
           }
           // 2nd call → abort (offset already advanced after 1st update)
@@ -333,7 +367,11 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       await new Promise<void>((r) => setTimeout(r, 800));
 
       const cfgAfter = readTelegramConfig(cfgPath);
-      assert.strictEqual(cfgAfter.lastUpdateOffset, 43, `disk offset must advance to 43, got ${cfgAfter.lastUpdateOffset}`);
+      assert.strictEqual(
+        cfgAfter.lastUpdateOffset,
+        43,
+        `disk offset must advance to 43, got ${cfgAfter.lastUpdateOffset}`,
+      );
       assert.strictEqual(handle.offset, 43, `handle.offset must be 43, got ${handle.offset}`);
       // turn.lock must be released
       assert.ok(!existsSync(turnLockPath), "turn.lock must be released after turn completes");
@@ -358,11 +396,7 @@ describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", (
       mkdirSync(join(home, ".mai", "agent"), { recursive: true });
       const turnLockPath = join(home, ".mai", "agent", "turn.lock");
       const { writeFileSync: wf } = await import("node:fs");
-      wf(
-        turnLockPath,
-        JSON.stringify({ owner: "repl-op", pid: process.pid, ts: new Date().toISOString() }),
-        "utf-8",
-      );
+      wf(turnLockPath, JSON.stringify({ owner: "repl-op", pid: process.pid, ts: new Date().toISOString() }), "utf-8");
       // acquireTurnLock with short timeout should throw LockBusy
       await assert.rejects(
         () => acquireTurnLock(turnLockPath, "daemon-tg", { timeoutMs: 100, pollMs: 10 }),
