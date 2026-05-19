@@ -46,6 +46,8 @@ export interface TelegramTurnDeps {
   abortSignal?: AbortSignal;
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
   out: NodeJS.WritableStream;
+  /** P-46 D-1b: agent-loop step budget. Undefined → loop default (200). */
+  maxSteps?: number;
   configPath: string;
   uploadAllowlistRoot: string;
   /** P-23 §6.7: pluggable session-append writer.
@@ -246,6 +248,7 @@ export async function handleTelegramTurn(update: TelegramUpdate, deps: TelegramT
     system: deps.system,
     messages: deps.messages,
     tools: deps.tools,
+    maxSteps: deps.maxSteps, // P-46 D-1b
     abortSignal: deps.abortSignal,
     onStepFinish: deps.onStepFinish,
   });

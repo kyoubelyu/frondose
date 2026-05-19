@@ -7,6 +7,7 @@ import { ExitPromptError } from "@inquirer/core";
 import type { CoreMessage } from "ai";
 import { Command } from "commander";
 import { HookRunner } from "../agent/hooks.js";
+import { resolveMaxSteps } from "../agent/maxSteps.js";
 import { resolveModel } from "../agent/modelResolver.js";
 import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
@@ -81,6 +82,7 @@ interface CliOpts {
   newSession: boolean;
   cwd: string;
   resetIdentity: boolean;
+  maxSteps?: string; // P-46 D-1b — Commander delivers <n> as a string
 }
 
 /**
@@ -176,6 +178,7 @@ async function main(): Promise<void> {
     .option("--new-session", "start a fresh session (discard prior context)", false)
     .option("--cwd <dir>", "working directory for session storage", process.cwd())
     .option("--reset-identity", "delete identity.json and re-run first-run bootstrap", false)
+    .option("--max-steps <n>", "max agent-loop tool-call steps per turn (overrides MAI_MAX_STEPS; default 200)")
     // P-5 Step 5a (FAILURE-1 fix): Commander v12 requires a root .action() handler whenever
     // any subcommand is registered, otherwise root-level invocations like `mai --prompt "..."`
     // fall through to the usage screen and exit 1. The full REPL / one-shot body lives here.
@@ -204,6 +207,8 @@ async function main(): Promise<void> {
       }
 
       const model = resolveModel({ cli: opts.model });
+      // P-46 D-1b: resolve the step budget — flag > MAI_MAX_STEPS env > default 200.
+      const maxSteps = resolveMaxSteps(opts.maxSteps);
 
       // P-5 + P-28: Soul band — config.soul.override REPLACES the composed band when set.
       const finalIdentity: IdentityRecord | null = readIdentity(identityPath);
@@ -299,6 +304,7 @@ async function main(): Promise<void> {
           system,
           messages,
           tools,
+          maxSteps, // P-46 D-1b
           sessionFile,
           cwd: opts.cwd,
           prompt: opts.prompt,
@@ -315,6 +321,7 @@ async function main(): Promise<void> {
         system,
         messages,
         tools,
+        maxSteps, // P-46 D-1b
         sessionFile,
         cwd: opts.cwd,
         abortController,
