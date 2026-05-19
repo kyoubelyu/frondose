@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
-import { handleCronSlash, runCronTurn, type RunCronTurnDeps } from "../../src/cli/replCron.js";
+import { handleCronSlash, type RunCronTurnDeps, runCronTurn } from "../../src/cli/replCron.js";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -103,7 +103,10 @@ describe("runCronTurn — prompt format: [TIME HH:MM] + [CRON_RUN_ID] + task lin
       assert.ok(content, "T-CRON.FORMAT.1: messages[0] must be set synchronously before runAgentLoop");
       const lines = content.split("\n");
       assert.equal(lines[0], "[TIME 09:00]", "T-CRON.FORMAT.1: first line must be '[TIME 09:00]'");
-      assert.ok(lines[1]?.startsWith("[CRON_RUN_ID="), `T-CRON.FORMAT.1: second line must start with '[CRON_RUN_ID='; got: "${lines[1]}"`);
+      assert.ok(
+        lines[1]?.startsWith("[CRON_RUN_ID="),
+        `T-CRON.FORMAT.1: second line must start with '[CRON_RUN_ID='; got: "${lines[1]}"`,
+      );
       assert.equal(lines[2], '(scheduled task: "morning routine")', "T-CRON.FORMAT.1: third line must be task line");
     } finally {
       cleanup();
@@ -129,9 +132,16 @@ describe("runCronTurn — empty task omits (scheduled task: ...) line (G-P24.11)
       const content = messages[0]?.content as string;
       assert.ok(content, "T-CRON.FORMAT.2: messages[0] must be set");
       const lines = content.split("\n");
-      assert.equal(lines.length, 2, `T-CRON.FORMAT.2: empty task must produce exactly 2 lines; got ${lines.length}: ${JSON.stringify(lines)}`);
+      assert.equal(
+        lines.length,
+        2,
+        `T-CRON.FORMAT.2: empty task must produce exactly 2 lines; got ${lines.length}: ${JSON.stringify(lines)}`,
+      );
       assert.equal(lines[0], "[TIME 09:00]", "T-CRON.FORMAT.2: first line must be '[TIME 09:00]'");
-      assert.ok(lines[1]?.startsWith("[CRON_RUN_ID="), `T-CRON.FORMAT.2: second line must start with '[CRON_RUN_ID='; got: "${lines[1]}"`);
+      assert.ok(
+        lines[1]?.startsWith("[CRON_RUN_ID="),
+        `T-CRON.FORMAT.2: second line must start with '[CRON_RUN_ID='; got: "${lines[1]}"`,
+      );
     } finally {
       cleanup();
     }
@@ -178,13 +188,17 @@ describe("runCronTurn — task escape: backslash→\\\\, \\r→drop, \\n→space
       const { stream } = captureStream();
       const deps = makeCaptureDeps(messages, stream);
       // task string in memory: line1 + LF + line2"quoted"\path + CR + with CR
-      const record = makeRecord("line1\nline2\"quoted\"\\path\rwith CR");
+      const record = makeRecord('line1\nline2"quoted"\\path\rwith CR');
       const fireDate = new Date("2026-05-15T09:00:00");
       void runCronTurn(record, fireDate, schedulePath, deps).catch(() => {});
       const content = messages[0]?.content as string;
       assert.ok(content, "T-CRON.FORMAT.4: messages[0] must be set");
       const lines = content.split("\n");
-      assert.equal(lines.length, 3, `T-CRON.FORMAT.4: must be exactly 3 lines (embedded LF→space prevents extra lines); got ${lines.length}`);
+      assert.equal(
+        lines.length,
+        3,
+        `T-CRON.FORMAT.4: must be exactly 3 lines (embedded LF→space prevents extra lines); got ${lines.length}`,
+      );
       assert.equal(lines[0], "[TIME 09:00]", "T-CRON.FORMAT.4: first line must be [TIME 09:00]");
       assert.ok(lines[1]?.startsWith("[CRON_RUN_ID="), "T-CRON.FORMAT.4: second line must be CRON_RUN_ID");
       // escape chain: \ → \\, CR dropped, LF → space, " → \"
@@ -204,7 +218,7 @@ describe("runCronTurn — task escape: backslash→\\\\, \\r→drop, \\n→space
 // ─── T-CRON.HINT.1 ───────────────────────────────────────────────────────────
 
 describe("handleCronSlash schedule — OQ-2 advisory hint in confirmation output (G-P24.12)", () => {
-  it("T-CRON.HINT.1: when operator runs '/cron schedule \"test\" --cron \"0 9 * * *\"', confirmation output contains exactly the OQ-2 hint line", async () => {
+  it('T-CRON.HINT.1: when operator runs \'/cron schedule "test" --cron "0 9 * * *"\', confirmation output contains exactly the OQ-2 hint line', async () => {
     // Given: schedule.jsonl is empty; valid /cron schedule command
     // When:  handleCronSlash('/cron schedule "test" --cron "0 9 * * *"', schedulePath, out)
     // Then:  out contains OQ-2 hint text
@@ -213,7 +227,8 @@ describe("handleCronSlash schedule — OQ-2 advisory hint in confirmation output
       const { stream, get } = captureStream();
       await handleCronSlash('/cron schedule "test" --cron "0 9 * * *"', schedulePath, stream);
       const output = get();
-      const OQ2_HINT_TEXT = "Note: task text is informational. Soul-band day-rhythm drives the agent's primary behavior at scheduled times.";
+      const OQ2_HINT_TEXT =
+        "Note: task text is informational. Soul-band day-rhythm drives the agent's primary behavior at scheduled times.";
       assert.ok(output.includes(OQ2_HINT_TEXT), `T-CRON.HINT.1: output must contain OQ-2 hint; got: "${output}"`);
     } finally {
       cleanup();
@@ -237,10 +252,16 @@ describe("handleCronSlash list — OQ-2 advisory hint appears exactly once (G-P2
       const { stream: listStream, get } = captureStream();
       await handleCronSlash("/cron list", schedulePath, listStream);
       const output = get();
-      const OQ2_HINT_TEXT = "Note: task text is informational. Soul-band day-rhythm drives the agent's primary behavior at scheduled times.";
+      const OQ2_HINT_TEXT =
+        "Note: task text is informational. Soul-band day-rhythm drives the agent's primary behavior at scheduled times.";
       // Count occurrences
-      const occurrences = (output.match(new RegExp(OQ2_HINT_TEXT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
-      assert.equal(occurrences, 1, `T-CRON.HINT.2: OQ-2 hint must appear exactly once in list output; found ${occurrences} times. Output: "${output}"`);
+      const occurrences = (output.match(new RegExp(OQ2_HINT_TEXT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? [])
+        .length;
+      assert.equal(
+        occurrences,
+        1,
+        `T-CRON.HINT.2: OQ-2 hint must appear exactly once in list output; found ${occurrences} times. Output: "${output}"`,
+      );
     } finally {
       cleanup();
     }

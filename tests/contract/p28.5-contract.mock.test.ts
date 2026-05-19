@@ -14,16 +14,16 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import type { LinkedinSession } from "../../src/linkedin/types.js";
 import { addGoogleAccount, openCredentialsDb } from "../../src/persistence/credentialLibrary.js";
+import { personaTemplateSchema, writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
 import { openServerInboxDb } from "../../src/persistence/serverInbox.js";
 import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
-import { personaTemplateSchema, writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
-import type { LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import {
@@ -52,10 +52,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
 describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)", () => {
-  it("T-CONTRACT.WORKER: worker mode → exactly 28 tools; includes 'navigate_to_url' and 'clear_cookies'", () => {
+  it("T-CONTRACT.WORKER: worker mode → exactly 32 tools; includes 'navigate_to_url' and 'clear_cookies'", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length + includes check for new tool names
-    // Then:  28 (26 prior + navigate_to_url + clear_cookies); both new tool names present
+    // Then:  32 (P-44: updated from 28 — P-39 +3 memory; P-26 +2 coords; P-31 +1 cron); both new tool names present
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -68,7 +68,7 @@ describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)",
       });
       const keys = Object.keys(tools);
       const count = keys.length;
-      assert.equal(count, 28, "T-CONTRACT.WORKER: worker mode has exactly 28 tools");
+      assert.equal(count, 32, "T-CONTRACT.WORKER: worker mode has exactly 32 tools");
       assert.ok(keys.includes("navigate_to_url"), "T-CONTRACT.WORKER: navigate_to_url present (P-28.5 new)");
       assert.ok(keys.includes("clear_cookies"), "T-CONTRACT.WORKER: clear_cookies present (P-28.5 new)");
     } finally {
@@ -80,11 +80,11 @@ describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)",
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
 describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)", () => {
-  it("T-CONTRACT.SERVER: server mode → exactly 19 tools; includes 'dispatch_google_login'", () => {
+  it("T-CONTRACT.SERVER: server mode → exactly 23 tools; includes 'dispatch_google_login'", () => {
     // Given: makeAllTools(undefined, persistence {+credentialsDbPath}, control, undefined, {mode:'server'})
     //        credentialsDbPath supplied so the server block opens credentialsDb and registers the tool
     // When:  Object.keys(tools).length + includes check for 'dispatch_google_login'
-    // Then:  19 (18 prior + dispatch_google_login); 'dispatch_google_login' key present
+    // Then:  23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron); 'dispatch_google_login' key present
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -98,8 +98,11 @@ describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)",
       const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const keys = Object.keys(tools);
       const count = keys.length;
-      assert.equal(count, 19, "T-CONTRACT.SERVER: server mode has exactly 19 tools");
-      assert.ok(keys.includes("dispatch_google_login"), "T-CONTRACT.SERVER: dispatch_google_login present (P-28.5 new)");
+      assert.equal(count, 23, "T-CONTRACT.SERVER: server mode has exactly 23 tools");
+      assert.ok(
+        keys.includes("dispatch_google_login"),
+        "T-CONTRACT.SERVER: dispatch_google_login present (P-28.5 new)",
+      );
     } finally {
       cleanup();
     }
@@ -126,13 +129,7 @@ describe("no-bash boundary P-28.5 (G-P28.5.19)", () => {
     ];
     const result = spawnSync(
       "grep",
-      [
-        "-l",
-        "--include=*.ts",
-        "-E",
-        `(from|require)\\s*\\(?['"]((node:)?child_process)['"]`,
-        ...p285Files,
-      ],
+      ["-l", "--include=*.ts", "-E", `(from|require)\\s*\\(?['"]((node:)?child_process)['"]`, ...p285Files],
       { cwd: projectRoot, encoding: "utf-8" },
     );
     const output = (result.stdout ?? "").trim();

@@ -72,11 +72,7 @@ describe("query_lead_globally tool (G-P26.19)", () => {
         { personRef: "https://www.linkedin.com/in/alice/" },
         {},
       );
-      assert.deepEqual(
-        result,
-        { ok: false, error: "server returned HTTP 500" },
-        "T-QLG.3: returns 500 error envelope",
-      );
+      assert.deepEqual(result, { ok: false, error: "server returned HTTP 500" }, "T-QLG.3: returns 500 error envelope");
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (globalThis as any).fetch = origFetch;

@@ -39,10 +39,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P27.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () => {
-  it("T-CONTRACT.P27.WORKER: worker mode → exactly 28 tools (P-28.5 adds navigate_to_url + clear_cookies)", () => {
+  it("T-CONTRACT.P27.WORKER: worker mode → exactly 32 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'})
     // When:  Object.keys(tools).length
-    // Then:  28 (P-28.5: +navigate_to_url +clear_cookies; updated from 26 per P-28.5 §11)
+    // Then:  32 (P-44: updated from 28 — P-39 +3 memory; P-26 +2 coords; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -53,8 +53,8 @@ describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        28,
-        `T-CONTRACT.P27.WORKER: expected 28 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        32,
+        `T-CONTRACT.P27.WORKER: expected 32 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -65,11 +65,11 @@ describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () 
 // ─── T-CONTRACT.P27.SERVER ───────────────────────────────────────────────────
 
 describe("makeAllTools P-27 tool-count contract — server mode (G-P27.24)", () => {
-  it("T-CONTRACT.P27.SERVER: server mode → exactly 19 tools (P-28.5 adds dispatch_google_login)", () => {
+  it("T-CONTRACT.P27.SERVER: server mode → exactly 23 tools", () => {
     // Given: makeAllTools(undefined, persistence {+invitesDbPath +personasDir +serverUrl}, control, undefined, {mode:'server'})
     //        invitesDbPath omitted → invitesDb=null; provision_worker still registers with null DB
     // When:  Object.keys(tools).length
-    // Then:  19 (P-28.5: +dispatch_google_login; updated from 18 per P-28.5 §11)
+    // Then:  23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -83,8 +83,8 @@ describe("makeAllTools P-27 tool-count contract — server mode (G-P27.24)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        19,
-        `T-CONTRACT.P27.SERVER: expected 19 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        23,
+        `T-CONTRACT.P27.SERVER: expected 23 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -109,7 +109,10 @@ describe("makeAllTools P-27 new server tool names present (G-P27.24)", () => {
       };
       const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const keys = Object.keys(tools);
-      assert.ok(keys.includes("provision_worker"), `'provision_worker' must be in server tools; got: ${keys.join(", ")}`);
+      assert.ok(
+        keys.includes("provision_worker"),
+        `'provision_worker' must be in server tools; got: ${keys.join(", ")}`,
+      );
       assert.ok(keys.includes("revoke_worker"), `'revoke_worker' must be in server tools; got: ${keys.join(", ")}`);
       assert.ok(keys.includes("list_personas"), `'list_personas' must be in server tools; got: ${keys.join(", ")}`);
     } finally {

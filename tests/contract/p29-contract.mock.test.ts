@@ -10,15 +10,15 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import type { LinkedinSession } from "../../src/linkedin/types.js";
+import { readConfig } from "../../src/persistence/config.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
-import { readConfig } from "../../src/persistence/config.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -64,21 +64,17 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
     );
     // grep exit 1 = no matches = clean; exit 0 = matches found = violation
     const output = result.stdout ?? "";
-    assert.equal(
-      output.trim(),
-      "",
-      `T-CONTRACT.NO-BASH: child_process found in P-29 no-bash zones:\n${output}`,
-    );
+    assert.equal(output.trim(), "", `T-CONTRACT.NO-BASH: child_process found in P-29 no-bash zones:\n${output}`);
   });
 });
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 28 tools (D-9: P-29 adds HTTP routes, not Vercel tools)", () => {
+  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 32 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'}) (D-9 — no new tools)
     // When: Object.keys(tools).length
-    // Then: 28 — unchanged from P-28.5 (web endpoints are HTTP routes on port 8090, not Vercel tools)
+    // Then: 32 (P-44: updated from 28 — P-39 +3 memory; P-26 +2 coords; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -89,18 +85,18 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        28,
-        `T-CONTRACT.TOOLS worker: expected 28 tools (D-9 — unchanged at P-29); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        32,
+        `T-CONTRACT.TOOLS worker: expected 32 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 19 tools (D-9: P-29 adds HTTP routes, not Vercel tools)", () => {
+  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 23 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) (D-9)
     // When: Object.keys(tools).length
-    // Then: 19 — unchanged from P-28.5
+    // Then: 23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -111,8 +107,8 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        19,
-        `T-CONTRACT.TOOLS server: expected 19 tools (D-9 — unchanged at P-29); got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        23,
+        `T-CONTRACT.TOOLS server: expected 23 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
@@ -197,29 +193,19 @@ describe("package.json build script contains build:web (G-P29.25 static check)",
     // biome-ignore lint/suspicious/noExplicitAny: dynamic package.json read
     const pkg = (await import(`${projectRoot}/package.json`, { assert: { type: "json" } })) as any;
     // JSON imports expose the content as `default` in ESM
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic package.json read
     const scripts: Record<string, string> = (pkg.default ?? pkg).scripts ?? {};
     assert.ok(
       typeof scripts.build === "string" && scripts.build.includes("build:web"),
       `T-CONTRACT.BUILD: scripts.build must include 'build:web'; got: ${scripts.build}`,
     );
-    assert.ok(
-      typeof scripts["build:web"] === "string",
-      "T-CONTRACT.BUILD: scripts['build:web'] must exist",
-    );
+    assert.ok(typeof scripts["build:web"] === "string", "T-CONTRACT.BUILD: scripts['build:web'] must exist");
     const buildWeb = scripts["build:web"];
-    assert.ok(
-      buildWeb.includes("esbuild"),
-      `T-CONTRACT.BUILD: build:web must reference esbuild; got: ${buildWeb}`,
-    );
+    assert.ok(buildWeb.includes("esbuild"), `T-CONTRACT.BUILD: build:web must reference esbuild; got: ${buildWeb}`);
     assert.ok(
       buildWeb.includes("tailwindcss") || buildWeb.includes("tailwind"),
       `T-CONTRACT.BUILD: build:web must reference tailwindcss; got: ${buildWeb}`,
     );
-    assert.ok(
-      buildWeb.includes("src/web"),
-      `T-CONTRACT.BUILD: build:web must reference src/web; got: ${buildWeb}`,
-    );
+    assert.ok(buildWeb.includes("src/web"), `T-CONTRACT.BUILD: build:web must reference src/web; got: ${buildWeb}`);
     assert.ok(
       buildWeb.includes("dist/web"),
       `T-CONTRACT.BUILD: build:web must reference dist/web output; got: ${buildWeb}`,

@@ -14,7 +14,6 @@ import type { IdentityRecord } from "../../src/persistence/identity.js";
 
 // resolveSoulBand is exported from soul.ts (added at P-28 builder Step 4b).
 // Access via namespace for nominal typing; cast ensures compilation before export is confirmed.
-// biome-ignore lint/suspicious/noExplicitAny: resolveSoulBand access via module namespace
 const getResolveSoulBand = (): ((override: string | null, identity: IdentityRecord | null) => string) =>
   (soulModule as unknown as Record<string, unknown>).resolveSoulBand as (
     override: string | null,
@@ -35,7 +34,11 @@ describe("resolveSoulBand: non-null override returned verbatim (G-P28.12)", () =
     // Then:  returns exactly "CUSTOM SOUL TEXT" (identity not consulted)
     const resolveSoulBand = getResolveSoulBand();
     const result = resolveSoulBand("CUSTOM SOUL TEXT", MINIMAL_IDENTITY);
-    assert.equal(result, "CUSTOM SOUL TEXT", "T-SOUL.OVERRIDE.1: non-null override must be returned verbatim (G-P28.12)");
+    assert.equal(
+      result,
+      "CUSTOM SOUL TEXT",
+      "T-SOUL.OVERRIDE.1: non-null override must be returned verbatim (G-P28.12)",
+    );
   });
 });
 
@@ -81,7 +84,11 @@ describe("resolveSoulBand: null override + null identity → placeholder soul (G
       result = resolveSoulBand(null, null);
     }, "T-SOUL.OVERRIDE.3: resolveSoulBand(null, null) must not throw");
     const expected = soulModule.composeSoulBand(null);
-    assert.equal(result, expected, "T-SOUL.OVERRIDE.3: null override + null identity must return composeSoulBand(null) (G-P28.13 edge)");
+    assert.equal(
+      result,
+      expected,
+      "T-SOUL.OVERRIDE.3: null override + null identity must return composeSoulBand(null) (G-P28.13 edge)",
+    );
     assert.ok(typeof result === "string" && result.length > 0, "T-SOUL.OVERRIDE.3: result must be a non-empty string");
   });
 });

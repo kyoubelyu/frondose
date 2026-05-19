@@ -101,34 +101,31 @@ describe("B7: first-launch stabilization delay — launched:true path (G-P37.11)
 // ─── T-B7.2 ──────────────────────────────────────────────────────────────────
 
 describe("B7: first-launch stabilization delay — launched:false path (G-P37.11)", () => {
-  it(
-    "T-B7.2: when ensureChrome returns launched:false, the delay is skipped — source asserts delay is inside if (handle.launched) block",
-    () => {
-      // Given: session.ts source file containing the B7 implementation
-      // When:  source text is statically inspected
-      // Then:  the setTimeout/delay call appears INSIDE an if (handle.launched) conditional block;
-      //        the launched:false path (Chrome already running) does NOT await the delay
+  it("T-B7.2: when ensureChrome returns launched:false, the delay is skipped — source asserts delay is inside if (handle.launched) block", () => {
+    // Given: session.ts source file containing the B7 implementation
+    // When:  source text is statically inspected
+    // Then:  the setTimeout/delay call appears INSIDE an if (handle.launched) conditional block;
+    //        the launched:false path (Chrome already running) does NOT await the delay
 
-      const sessionSrc = readFileSync(resolve(ROOT, "src/linkedin/session.ts"), "utf-8");
+    const sessionSrc = readFileSync(resolve(ROOT, "src/linkedin/session.ts"), "utf-8");
 
-      // G-P37.11: the delay must be conditional — inside `if (handle.launched)` block
-      assert.ok(
-        sessionSrc.includes("handle.launched"),
-        "session.ts must contain 'handle.launched' conditional (delay is gated on fresh launch)",
-      );
-      // The setTimeout delay must be 300 ms
-      assert.ok(
-        sessionSrc.includes("setTimeout(r, 300)"),
-        "session.ts must contain 'setTimeout(r, 300)' (300 ms stabilization delay for fresh Chrome)",
-      );
-      // The delay must NOT be unconditional — CdpClient.connect must appear AFTER if (handle.launched)
-      // in the source (structural check: if block precedes connect call in text order)
-      const launchedIdx = sessionSrc.indexOf("handle.launched");
-      const connectIdx = sessionSrc.indexOf("CdpClient.connect");
-      assert.ok(
-        launchedIdx < connectIdx,
-        "if (handle.launched) block must appear before CdpClient.connect() in session.ts source",
-      );
-    },
-  );
+    // G-P37.11: the delay must be conditional — inside `if (handle.launched)` block
+    assert.ok(
+      sessionSrc.includes("handle.launched"),
+      "session.ts must contain 'handle.launched' conditional (delay is gated on fresh launch)",
+    );
+    // The setTimeout delay must be 300 ms
+    assert.ok(
+      sessionSrc.includes("setTimeout(r, 300)"),
+      "session.ts must contain 'setTimeout(r, 300)' (300 ms stabilization delay for fresh Chrome)",
+    );
+    // The delay must NOT be unconditional — CdpClient.connect must appear AFTER if (handle.launched)
+    // in the source (structural check: if block precedes connect call in text order)
+    const launchedIdx = sessionSrc.indexOf("handle.launched");
+    const connectIdx = sessionSrc.indexOf("CdpClient.connect");
+    assert.ok(
+      launchedIdx < connectIdx,
+      "if (handle.launched) block must appear before CdpClient.connect() in session.ts source",
+    );
+  });
 });

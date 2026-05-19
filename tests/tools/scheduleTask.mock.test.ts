@@ -17,9 +17,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { makeScheduleTaskTool } from "../../src/tools/cron/scheduleTask.js";
-import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
+import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
+import { makeScheduleTaskTool } from "../../src/tools/cron/scheduleTask.js";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p31-st-"));
@@ -27,10 +27,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 }
 
 /** Invoke tool.execute with the standard Vercel tool execution options shape. */
-async function exec(
-  tool: ReturnType<typeof makeScheduleTaskTool>,
-  args: { task: string; cron_expr: string },
-) {
+async function exec(tool: ReturnType<typeof makeScheduleTaskTool>, args: { task: string; cron_expr: string }) {
   return tool.execute(args, { toolCallId: "test-st", messages: [] });
 }
 
@@ -53,12 +50,14 @@ describe("schedule_task — valid cron_expr writes record (G-P31.1)", () => {
       // ok===true envelope
       assert.equal(result.ok, true, `result.ok must be true for valid cron_expr; got: ${JSON.stringify(result)}`);
       // TypeScript narrowing: double-cast after runtime assertion (as unknown required — union type)
-      // biome-ignore lint/suspicious/noExplicitAny: runtime-narrowed via assert.equal above
       const okResult = result as unknown as { ok: true; id: string; nextRunAt: string };
       // id is a UUID (36-char hex-and-dash)
       assert.match(okResult.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "id must be a UUID");
       // nextRunAt is a valid ISO 8601 date
-      assert.ok(!Number.isNaN(Date.parse(okResult.nextRunAt)), `nextRunAt must be valid ISO; got ${okResult.nextRunAt}`);
+      assert.ok(
+        !Number.isNaN(Date.parse(okResult.nextRunAt)),
+        `nextRunAt must be valid ISO; got ${okResult.nextRunAt}`,
+      );
       // nextRunAt must be in the future
       assert.ok(Date.parse(okResult.nextRunAt) > Date.now(), "nextRunAt must be a future time");
 
@@ -207,7 +206,7 @@ describe("schedule_task — appends to existing schedule.jsonl (G-P31.3)", () =>
 // ─── T-ST.5 ───────────────────────────────────────────────────────────────────
 
 describe("schedule_task — parameter schema + description (G-P31.1 + D-7)", () => {
-  it("T-ST.5: parameters schema is exactly {task, cron_expr} (both required strings); description names */*\/N/integer grammar and does NOT show a range example", () => {
+  it("T-ST.5: parameters schema is exactly {task, cron_expr} (both required strings); description names */*/N/integer grammar and does NOT show a range example", () => {
     // Given:  makeScheduleTaskTool(anyPath) returns a Vercel Tool
     // When:   inspect tool.parameters._def.shape() and tool.description
     // Then:   exactly 2 fields — task + cron_expr; description contains `*`, `*/N`,

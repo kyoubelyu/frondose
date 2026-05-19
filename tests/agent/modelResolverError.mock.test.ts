@@ -16,10 +16,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
+  type ResolveModelOpts,
   readAuthJsonDefault,
   resolveModel,
   resolveModelOrNull,
-  type ResolveModelOpts,
 } from "../../src/agent/modelResolver.js";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -49,11 +49,7 @@ function setupTmpHome(
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fa-"));
   const secretsDir = join(tmpHome, ".mai", "agent");
   mkdirSync(secretsDir, { recursive: true });
-  writeFileSync(
-    join(secretsDir, "secrets.json"),
-    JSON.stringify({ schema_version: 1, providers, ...extra }),
-    "utf-8",
-  );
+  writeFileSync(join(secretsDir, "secrets.json"), JSON.stringify({ schema_version: 1, providers, ...extra }), "utf-8");
   return {
     tmpHome,
     cleanup: () => rmSync(tmpHome, { recursive: true, force: true }),
@@ -271,110 +267,97 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
 // ─── T-FB.1 ───────────────────────────────────────────────────────────────────
 
 describe("resolveModelOrNull — returns null + stderr on resolution failure (G-P36.5)", () => {
-  it(
-    "T-FB.1: given no-auth state, resolveModelOrNull() returns null; one stderr line written; does not throw",
-    () => {
-      // Given: no auth state / broken provider config (no real API keys needed)
-      // When:  resolveModelOrNull() called
-      // Then:  returns null (type LanguageModel | null); one stderr line captured;
-      //        no thrown exception; no process.exit called
-      void (resolveModelOrNull as (o?: ResolveModelOpts) => unknown);
-      const saved = saveEnv(...MODEL_ENV_KEYS);
-      // Point HOME to empty tmp dir — no secrets.json → no providers
-      // → DEFAULT_MODEL_SPEC "anthropic:claude-sonnet-4-5" → no "anthropic" provider → throws
-      const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fb1-"));
-      process.env.HOME = tmpHome;
-      delete process.env.MAI_MODEL;
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.DEEPSEEK_API_KEY;
+  it("T-FB.1: given no-auth state, resolveModelOrNull() returns null; one stderr line written; does not throw", () => {
+    // Given: no auth state / broken provider config (no real API keys needed)
+    // When:  resolveModelOrNull() called
+    // Then:  returns null (type LanguageModel | null); one stderr line captured;
+    //        no thrown exception; no process.exit called
+    void (resolveModelOrNull as (o?: ResolveModelOpts) => unknown);
+    const saved = saveEnv(...MODEL_ENV_KEYS);
+    // Point HOME to empty tmp dir — no secrets.json → no providers
+    // → DEFAULT_MODEL_SPEC "anthropic:claude-sonnet-4-5" → no "anthropic" provider → throws
+    const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fb1-"));
+    process.env.HOME = tmpHome;
+    delete process.env.MAI_MODEL;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
 
-      const stderrChunks: string[] = [];
-      const origStderrWrite = process.stderr.write.bind(process.stderr);
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      (process.stderr as any).write = (chunk: string | Buffer) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return true;
-      };
+    const stderrChunks: string[] = [];
+    const origStderrWrite = process.stderr.write.bind(process.stderr);
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    (process.stderr as any).write = (chunk: string | Buffer) => {
+      stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    };
 
-      let result: unknown;
-      let threw = false;
-      try {
-        result = resolveModelOrNull({});
-      } catch {
-        threw = true;
-      } finally {
-        // biome-ignore lint/suspicious/noExplicitAny: restore
-        (process.stderr as any).write = origStderrWrite;
-        restoreEnv(saved);
-        rmSync(tmpHome, { recursive: true, force: true });
-      }
+    let result: unknown;
+    let threw = false;
+    try {
+      result = resolveModelOrNull({});
+    } catch {
+      threw = true;
+    } finally {
+      // biome-ignore lint/suspicious/noExplicitAny: restore
+      (process.stderr as any).write = origStderrWrite;
+      restoreEnv(saved);
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
 
-      assert.ok(!threw, "T-FB.1: resolveModelOrNull must NOT throw");
-      assert.equal(result, null, "T-FB.1: resolveModelOrNull must return null on failure");
-      const stderr = stderrChunks.join("");
-      assert.ok(stderrChunks.length > 0, "T-FB.1: at least one stderr chunk must be written");
-      assert.ok(
-        stderr.includes("[mai]"),
-        `T-FB.1: stderr must contain '[mai]' prefix; got: ${stderr}`,
-      );
-    },
-  );
+    assert.ok(!threw, "T-FB.1: resolveModelOrNull must NOT throw");
+    assert.equal(result, null, "T-FB.1: resolveModelOrNull must return null on failure");
+    const stderr = stderrChunks.join("");
+    assert.ok(stderrChunks.length > 0, "T-FB.1: at least one stderr chunk must be written");
+    assert.ok(stderr.includes("[mai]"), `T-FB.1: stderr must contain '[mai]' prefix; got: ${stderr}`);
+  });
 });
 
 // ─── T-FB.2 ───────────────────────────────────────────────────────────────────
 
 describe("resolveModelOrNull — returns LanguageModel on success (G-P36.5)", () => {
-  it(
-    "T-FB.2: given valid auth state, resolveModelOrNull() returns a non-null LanguageModel; no stderr written",
-    () => {
-      // Given: valid provider configured (tmp secrets.json with real provider shape)
-      // When:  resolveModelOrNull() called with factory pointing to configured provider
-      // Then:  returns a non-null LanguageModel object; stderr empty; no throw
-      const saved = saveEnv(...MODEL_ENV_KEYS);
-      const { tmpHome, cleanup } = setupTmpHome({
-        myprovider: {
-          key: "sk-test-key-placeholder",
-          type: "openai",
-          baseUrl: "https://api.openai.com/v1",
-        },
-      });
-      process.env.HOME = tmpHome;
-      delete process.env.MAI_MODEL;
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.DEEPSEEK_API_KEY;
+  it("T-FB.2: given valid auth state, resolveModelOrNull() returns a non-null LanguageModel; no stderr written", () => {
+    // Given: valid provider configured (tmp secrets.json with real provider shape)
+    // When:  resolveModelOrNull() called with factory pointing to configured provider
+    // Then:  returns a non-null LanguageModel object; stderr empty; no throw
+    const saved = saveEnv(...MODEL_ENV_KEYS);
+    const { tmpHome, cleanup } = setupTmpHome({
+      myprovider: {
+        key: "sk-test-key-placeholder",
+        type: "openai",
+        baseUrl: "https://api.openai.com/v1",
+      },
+    });
+    process.env.HOME = tmpHome;
+    delete process.env.MAI_MODEL;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
 
-      const stderrChunks: string[] = [];
-      const origStderrWrite = process.stderr.write.bind(process.stderr);
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      (process.stderr as any).write = (chunk: string | Buffer) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return true;
-      };
+    const stderrChunks: string[] = [];
+    const origStderrWrite = process.stderr.write.bind(process.stderr);
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    (process.stderr as any).write = (chunk: string | Buffer) => {
+      stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    };
 
-      let result: unknown;
-      let threw = false;
-      try {
-        // factory overrides the default spec so it resolves "myprovider"
-        result = resolveModelOrNull({ factory: "myprovider:gpt-4o" });
-      } catch {
-        threw = true;
-      } finally {
-        // biome-ignore lint/suspicious/noExplicitAny: restore
-        (process.stderr as any).write = origStderrWrite;
-        restoreEnv(saved);
-        cleanup();
-      }
+    let result: unknown;
+    let threw = false;
+    try {
+      // factory overrides the default spec so it resolves "myprovider"
+      result = resolveModelOrNull({ factory: "myprovider:gpt-4o" });
+    } catch {
+      threw = true;
+    } finally {
+      // biome-ignore lint/suspicious/noExplicitAny: restore
+      (process.stderr as any).write = origStderrWrite;
+      restoreEnv(saved);
+      cleanup();
+    }
 
-      assert.ok(!threw, "T-FB.2: resolveModelOrNull must NOT throw even on success path");
-      assert.ok(result !== null && result !== undefined, "T-FB.2: resolveModelOrNull must return non-null LanguageModel");
-      assert.equal(typeof result, "object", "T-FB.2: returned value must be an object (LanguageModel)");
-      assert.equal(
-        stderrChunks.join(""),
-        "",
-        "T-FB.2: no stderr must be written on successful model resolution",
-      );
-    },
-  );
+    assert.ok(!threw, "T-FB.2: resolveModelOrNull must NOT throw even on success path");
+    assert.ok(result !== null && result !== undefined, "T-FB.2: resolveModelOrNull must return non-null LanguageModel");
+    assert.equal(typeof result, "object", "T-FB.2: returned value must be an object (LanguageModel)");
+    assert.equal(stderrChunks.join(""), "", "T-FB.2: no stderr must be written on successful model resolution");
+  });
 });

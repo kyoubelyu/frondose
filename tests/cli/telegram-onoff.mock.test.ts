@@ -16,9 +16,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { plistPath } from "../../src/cli/subcommands/launchd.js";
-import { writePid } from "../../src/persistence/processLock.js";
-import { readTelegramConfig, DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
 import { runTelegramSubcommand } from "../../src/cli/subcommands/telegram.js";
+import { writePid } from "../../src/persistence/processLock.js";
+import { DEFAULT_TELEGRAM_CONFIG, readTelegramConfig } from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -31,11 +31,7 @@ function writeTelegramCfg(home: string, overrides: Record<string, unknown> = {})
   const dir = join(home, ".mai", "agent");
   mkdirSync(dir, { recursive: true });
   const cfgPath = join(dir, "telegram.json");
-  writeFileSync(
-    cfgPath,
-    JSON.stringify({ ...DEFAULT_TELEGRAM_CONFIG, boundUserId: 12345, ...overrides }),
-    "utf-8",
-  );
+  writeFileSync(cfgPath, JSON.stringify({ ...DEFAULT_TELEGRAM_CONFIG, boundUserId: 12345, ...overrides }), "utf-8");
   return cfgPath;
 }
 
@@ -80,7 +76,12 @@ function mockProcessExit(): { captured: number | null; restore: () => void } {
     result.captured = code ?? 0;
     throw new Error(`process.exit(${code ?? 0})`);
   };
-  return { ...result, restore: () => { (process as any).exit = orig; } };
+  return {
+    ...result,
+    restore: () => {
+      (process as any).exit = orig;
+    },
+  };
 }
 
 // ─── T-TGON: telegram on/off/status ──────────────────────────────────────────
@@ -104,9 +105,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
 
       // repl.pid absent → guard passes; consent bypassed via yes=true
       try {
-        await captureStdout(() =>
-          runTelegramSubcommand("on", { tcPath: cfgPath, yes: true }),
-        );
+        await captureStdout(() => runTelegramSubcommand("on", { tcPath: cfgPath, yes: true }));
       } catch {
         // launchctl bootstrap may fail (fake paths in test env) — expected
       }
@@ -176,14 +175,9 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       process.env.HOME = home;
       const cfgPath = writeTelegramCfg(home, { enabled: true });
 
-      const stdoutOutput = await captureStdout(() =>
-        runTelegramSubcommand("off", { tcPath: cfgPath }),
-      );
+      const stdoutOutput = await captureStdout(() => runTelegramSubcommand("off", { tcPath: cfgPath }));
 
-      assert.ok(
-        stdoutOutput.includes("[telegram off]"),
-        `expected '[telegram off]' in stdout, got: ${stdoutOutput}`,
-      );
+      assert.ok(stdoutOutput.includes("[telegram off]"), `expected '[telegram off]' in stdout, got: ${stdoutOutput}`);
 
       // Verify cfg.enabled written as false
       const cfgAfter = readTelegramConfig(cfgPath);
@@ -212,9 +206,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       writeFileSync(join(agentDir, "logs", "telegram-daemon.err.log"), "prior-line\ntest-log-line\n", "utf-8");
       const cfgPath = writeTelegramCfg(home, { enabled: true });
 
-      const stdoutOutput = await captureStdout(() =>
-        runTelegramSubcommand("status", { tcPath: cfgPath }),
-      );
+      const stdoutOutput = await captureStdout(() => runTelegramSubcommand("status", { tcPath: cfgPath }));
 
       // Must show alive daemon PID
       assert.ok(
@@ -222,10 +214,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
         `expected 'daemon pid: ${process.pid} (alive=true)' in stdout, got: ${stdoutOutput}`,
       );
       // Must show last log line
-      assert.ok(
-        stdoutOutput.includes("test-log-line"),
-        `expected last log line in stdout, got: ${stdoutOutput}`,
-      );
+      assert.ok(stdoutOutput.includes("test-log-line"), `expected last log line in stdout, got: ${stdoutOutput}`);
     } finally {
       process.env.HOME = origHome;
       cleanup();

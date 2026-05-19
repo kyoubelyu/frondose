@@ -43,7 +43,7 @@ test("T-M91: readIdentity returns null when file does not exist", () => {
   // P-28 B-1: pass a non-existent configPath so readConfig returns DEFAULT_CONFIG_V2
   // (no identity), and the legacy-file path is tested in isolation.
   const dir = join(tmpdir(), `mai-p4-m91-${Date.now()}`);
-  const path = join(dir, "identity.json");   // does not exist
+  const path = join(dir, "identity.json"); // does not exist
   const configPath = join(dir, "config.json"); // does not exist
   const result = readIdentity(path, configPath);
   assert.equal(result, null, "readIdentity on missing file must return null");

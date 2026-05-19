@@ -17,16 +17,16 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { MockLanguageModelV1 } from "ai/test";
-import { simulateReadableStream } from "ai";
 import type { CoreMessage, ToolSet } from "ai";
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV1 } from "ai/test";
 import { drainDueJobs, type RunCronTurnDeps } from "../../src/cli/replCron.js";
-import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
+import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
 import { SERVER_SCHEDULE_PATH } from "../../src/persistence/serverPaths.js";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
@@ -46,11 +46,7 @@ describe("SERVER_SCHEDULE_PATH resolves correctly (G-P31.9)", () => {
 
     const p = SERVER_SCHEDULE_PATH();
     const expected = join(homedir(), ".mai", "server", "schedule.jsonl");
-    assert.equal(
-      p,
-      expected,
-      `SERVER_SCHEDULE_PATH() must equal '${expected}'; got '${p}'`,
-    );
+    assert.equal(p, expected, `SERVER_SCHEDULE_PATH() must equal '${expected}'; got '${p}'`);
   });
 });
 
@@ -92,7 +88,11 @@ describe("drainDueJobs fires runCronTurn for a due job (G-P31.10)", () => {
             stream: simulateReadableStream({
               chunks: [
                 { type: "text-delta" as const, textDelta: "checked fleet" },
-                { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 10, completionTokens: 5 } },
+                {
+                  type: "finish" as const,
+                  finishReason: "stop" as const,
+                  usage: { promptTokens: 10, completionTokens: 5 },
+                },
               ],
             }),
             rawCall: { rawPrompt: null, rawSettings: {} },

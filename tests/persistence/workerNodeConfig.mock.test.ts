@@ -36,123 +36,115 @@ function writeWorkerJson(dir: string, workerId: string, content: string): void {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("T-WNC: readWorkerNodeConfig (G-P30.3)", () => {
-  it(
-    "T-WNC.1: when a valid <id>.json exists with correct schema, readWorkerNodeConfig returns the parsed object",
-    () => {
-      // Given: tmp dir containing 'w1.json' = {vnc_host:'10.0.0.1', vnc_port:5900, vnc_password:'pw', ssh_user:'op', ssh_port:22}
-      // When:  readWorkerNodeConfig(dir, 'w1')
-      // Then:  result.vnc_port===5900; result.vnc_password==='pw'; result.ssh_user==='op'; result.ssh_port===22
+  it("T-WNC.1: when a valid <id>.json exists with correct schema, readWorkerNodeConfig returns the parsed object", () => {
+    // Given: tmp dir containing 'w1.json' = {vnc_host:'10.0.0.1', vnc_port:5900, vnc_password:'pw', ssh_user:'op', ssh_port:22}
+    // When:  readWorkerNodeConfig(dir, 'w1')
+    // Then:  result.vnc_port===5900; result.vnc_password==='pw'; result.ssh_user==='op'; result.ssh_port===22
 
-      const { dir, cleanup } = makeTmpDir();
-      try {
-        writeWorkerJson(dir, "w1", JSON.stringify({
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      writeWorkerJson(
+        dir,
+        "w1",
+        JSON.stringify({
           vnc_host: "10.0.0.1",
           vnc_port: 5900,
           vnc_password: "secret",
           ssh_user: "op",
           ssh_port: 22,
-        }));
+        }),
+      );
 
-        const result = readWorkerNodeConfig(dir, "w1");
-        assert.ok(result !== null, "T-WNC.1: must return a non-null object");
-        assert.equal(result.vnc_host, "10.0.0.1", "T-WNC.1: vnc_host must match");
-        assert.equal(result.vnc_port, 5900, "T-WNC.1: vnc_port must match");
-        assert.equal(result.vnc_password, "secret", "T-WNC.1: vnc_password must match");
-        assert.equal(result.ssh_user, "op", "T-WNC.1: ssh_user must match");
-        assert.equal(result.ssh_port, 22, "T-WNC.1: ssh_port must match");
-      } finally {
-        cleanup();
-      }
-    },
-  );
+      const result = readWorkerNodeConfig(dir, "w1");
+      assert.ok(result !== null, "T-WNC.1: must return a non-null object");
+      assert.equal(result.vnc_host, "10.0.0.1", "T-WNC.1: vnc_host must match");
+      assert.equal(result.vnc_port, 5900, "T-WNC.1: vnc_port must match");
+      assert.equal(result.vnc_password, "secret", "T-WNC.1: vnc_password must match");
+      assert.equal(result.ssh_user, "op", "T-WNC.1: ssh_user must match");
+      assert.equal(result.ssh_port, 22, "T-WNC.1: ssh_port must match");
+    } finally {
+      cleanup();
+    }
+  });
 
-  it(
-    "T-WNC.2: when <id>.json does not exist, readWorkerNodeConfig returns null without throwing",
-    () => {
-      // Given: tmp dir with no 'w99.json' file
-      // When:  readWorkerNodeConfig(dir, 'w99')
-      // Then:  result === null; no exception thrown
+  it("T-WNC.2: when <id>.json does not exist, readWorkerNodeConfig returns null without throwing", () => {
+    // Given: tmp dir with no 'w99.json' file
+    // When:  readWorkerNodeConfig(dir, 'w99')
+    // Then:  result === null; no exception thrown
 
-      const { dir, cleanup } = makeTmpDir();
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const result = readWorkerNodeConfig(dir, "w99");
+      assert.equal(result, null, "T-WNC.2: missing file must return null");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-WNC.3: when <id>.json exists but contains malformed JSON (not parseable), returns null and writes stderr warning", () => {
+    // Given: tmp dir containing 'w2.json' = 'not valid json!!{'
+    // When:  readWorkerNodeConfig(dir, 'w2')
+    // Then:  result === null; process.stderr received a warning message (no throw)
+
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      writeWorkerJson(dir, "w2", "not valid json!!{");
+
+      // Capture stderr
+      const stderrLines: string[] = [];
+      const origWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (s: string | Uint8Array, ...args: unknown[]) => {
+        stderrLines.push(typeof s === "string" ? s : s.toString());
+        // biome-ignore lint/suspicious/noExplicitAny: compat
+        return (origWrite as (...a: unknown[]) => boolean)(s, ...(args as any));
+      };
+      let result: ReturnType<typeof readWorkerNodeConfig> = null;
       try {
-        const result = readWorkerNodeConfig(dir, "w99");
-        assert.equal(result, null, "T-WNC.2: missing file must return null");
+        result = readWorkerNodeConfig(dir, "w2");
       } finally {
-        cleanup();
+        process.stderr.write = origWrite;
       }
-    },
-  );
 
-  it(
-    "T-WNC.3: when <id>.json exists but contains malformed JSON (not parseable), returns null and writes stderr warning",
-    () => {
-      // Given: tmp dir containing 'w2.json' = 'not valid json!!{'
-      // When:  readWorkerNodeConfig(dir, 'w2')
-      // Then:  result === null; process.stderr received a warning message (no throw)
+      assert.equal(result, null, "T-WNC.3: malformed JSON must return null");
+      assert.ok(
+        stderrLines.some((l) => l.includes("w2.json") && l.includes("invalid")),
+        `T-WNC.3: stderr must contain a warning about w2.json; got: ${JSON.stringify(stderrLines)}`,
+      );
+    } finally {
+      cleanup();
+    }
+  });
 
-      const { dir, cleanup } = makeTmpDir();
+  it("T-WNC.4: when <id>.json has a schema-invalid field (vnc_port: 99999 exceeds max 65535), returns null and writes stderr warning", () => {
+    // Given: tmp dir containing 'w3.json' = {vnc_port: 99999} (exceeds max)
+    // When:  readWorkerNodeConfig(dir, 'w3')
+    // Then:  result === null (Zod parse fails); stderr contains a warning
+
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      writeWorkerJson(dir, "w3", JSON.stringify({ vnc_port: 99999 }));
+
+      const stderrLines: string[] = [];
+      const origWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (s: string | Uint8Array, ...args: unknown[]) => {
+        stderrLines.push(typeof s === "string" ? s : s.toString());
+        // biome-ignore lint/suspicious/noExplicitAny: compat
+        return (origWrite as (...a: unknown[]) => boolean)(s, ...(args as any));
+      };
+      let result: ReturnType<typeof readWorkerNodeConfig> = null;
       try {
-        writeWorkerJson(dir, "w2", "not valid json!!{");
-
-        // Capture stderr
-        const stderrLines: string[] = [];
-        const origWrite = process.stderr.write.bind(process.stderr);
-        process.stderr.write = (s: string | Uint8Array, ...args: unknown[]) => {
-          stderrLines.push(typeof s === "string" ? s : s.toString());
-          // biome-ignore lint/suspicious/noExplicitAny: compat
-          return (origWrite as (...a: unknown[]) => boolean)(s, ...args as any);
-        };
-        let result: ReturnType<typeof readWorkerNodeConfig> = null;
-        try {
-          result = readWorkerNodeConfig(dir, "w2");
-        } finally {
-          process.stderr.write = origWrite;
-        }
-
-        assert.equal(result, null, "T-WNC.3: malformed JSON must return null");
-        assert.ok(
-          stderrLines.some((l) => l.includes("w2.json") && l.includes("invalid")),
-          `T-WNC.3: stderr must contain a warning about w2.json; got: ${JSON.stringify(stderrLines)}`,
-        );
+        result = readWorkerNodeConfig(dir, "w3");
       } finally {
-        cleanup();
+        process.stderr.write = origWrite;
       }
-    },
-  );
 
-  it(
-    "T-WNC.4: when <id>.json has a schema-invalid field (vnc_port: 99999 exceeds max 65535), returns null and writes stderr warning",
-    () => {
-      // Given: tmp dir containing 'w3.json' = {vnc_port: 99999} (exceeds max)
-      // When:  readWorkerNodeConfig(dir, 'w3')
-      // Then:  result === null (Zod parse fails); stderr contains a warning
-
-      const { dir, cleanup } = makeTmpDir();
-      try {
-        writeWorkerJson(dir, "w3", JSON.stringify({ vnc_port: 99999 }));
-
-        const stderrLines: string[] = [];
-        const origWrite = process.stderr.write.bind(process.stderr);
-        process.stderr.write = (s: string | Uint8Array, ...args: unknown[]) => {
-          stderrLines.push(typeof s === "string" ? s : s.toString());
-          // biome-ignore lint/suspicious/noExplicitAny: compat
-          return (origWrite as (...a: unknown[]) => boolean)(s, ...args as any);
-        };
-        let result: ReturnType<typeof readWorkerNodeConfig> = null;
-        try {
-          result = readWorkerNodeConfig(dir, "w3");
-        } finally {
-          process.stderr.write = origWrite;
-        }
-
-        assert.equal(result, null, "T-WNC.4: schema-invalid JSON must return null");
-        assert.ok(
-          stderrLines.some((l) => l.includes("w3.json") && l.includes("invalid")),
-          `T-WNC.4: stderr must contain a warning about w3.json; got: ${JSON.stringify(stderrLines)}`,
-        );
-      } finally {
-        cleanup();
-      }
-    },
-  );
+      assert.equal(result, null, "T-WNC.4: schema-invalid JSON must return null");
+      assert.ok(
+        stderrLines.some((l) => l.includes("w3.json") && l.includes("invalid")),
+        `T-WNC.4: stderr must contain a warning about w3.json; got: ${JSON.stringify(stderrLines)}`,
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });

@@ -19,15 +19,15 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 import { runSearchSubcommand } from "../../src/cli/subcommands/search.js";
-import { readSearchConfig } from "../../src/persistence/search.js";
 import { runTelegramSubcommand } from "../../src/cli/subcommands/telegram.js";
+import { readSearchConfig } from "../../src/persistence/search.js";
 import {
   DEFAULT_TELEGRAM_CONFIG,
   readTelegramConfig,
   writeTelegramConfig,
 } from "../../src/persistence/telegramConfig.js";
-import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 
 // NOTE: search.ts does NOT exist until builder Step 4b.
 
@@ -111,9 +111,7 @@ describe("runSearchSubcommand (G-P15.6)", () => {
     const cfgPath = join(dir, "search.json");
     try {
       writeFileSync(cfgPath, JSON.stringify({ braveApiKey: "bsa-xxx1234" }), "utf-8");
-      const stdout = await captureStdout(() =>
-        runSearchSubcommand("status", { cfgPath }, makeMockPrompter()),
-      );
+      const stdout = await captureStdout(() => runSearchSubcommand("status", { cfgPath }, makeMockPrompter()));
       assert.ok(stdout.includes("***1234"), `stdout must contain masked key; got: "${stdout}"`);
       assert.ok(stdout.includes("tavily=(unset)"), `stdout must show tavily unset; got: "${stdout}"`);
       assert.ok(!stdout.includes("bsa-xxx1234"), `stdout must NOT contain plaintext key; got: "${stdout}"`);
@@ -131,9 +129,7 @@ describe("runSearchSubcommand (G-P15.6)", () => {
     const cfgPath = join(dir, "search.json");
     try {
       writeFileSync(cfgPath, JSON.stringify({ tavilyApiKey: "tvly-old" }), "utf-8");
-      await captureStdout(() =>
-        runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, makeMockPrompter()),
-      );
+      await captureStdout(() => runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, makeMockPrompter()));
       // P-24 path-shift: writeSearchConfig routes to secrets.json; use readSearchConfig to verify merge
       const content = readSearchConfig(cfgPath);
       assert.equal(content.braveApiKey, "bsa-new", "braveApiKey must be bsa-new");
@@ -174,9 +170,7 @@ describe("runTelegramSubcommand — proxy action (G-P15.7)", () => {
     try {
       writeTelegramConfig(DEFAULT_TELEGRAM_CONFIG, tcPath);
 
-      await captureStdout(() =>
-        runTelegramSubcommand("proxy", { tcPath, proxyUrl: "http://p:7890" }),
-      );
+      await captureStdout(() => runTelegramSubcommand("proxy", { tcPath, proxyUrl: "http://p:7890" }));
       const cfg = readTelegramConfig(tcPath);
       assert.equal(cfg.proxyUrl, "http://p:7890", "proxyUrl must be written to telegram.json");
     } finally {
@@ -194,9 +188,7 @@ describe("runTelegramSubcommand — proxy action (G-P15.7)", () => {
     try {
       writeTelegramConfig({ ...DEFAULT_TELEGRAM_CONFIG, proxyUrl: "http://old:7890" }, tcPath);
 
-      await captureStdout(() =>
-        runTelegramSubcommand("proxy", { tcPath, unsetProxy: true }),
-      );
+      await captureStdout(() => runTelegramSubcommand("proxy", { tcPath, unsetProxy: true }));
       const cfg = readTelegramConfig(tcPath);
       assert.equal(cfg.proxyUrl, null, "proxyUrl must be null after unset");
     } finally {

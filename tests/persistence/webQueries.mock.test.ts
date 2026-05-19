@@ -11,7 +11,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { listRecentMemoryEvents, openMemoryDatabase } from "../../src/persistence/memory.js";
-import { addWorker, getLastLeadActionByWorker, insertLeadAction, openWorkersDb } from "../../src/persistence/workersRegistry.js";
+import {
+  addWorker,
+  getLastLeadActionByWorker,
+  insertLeadAction,
+  openWorkersDb,
+} from "../../src/persistence/workersRegistry.js";
 
 // ─── T-Q.LASTACTION ───────────────────────────────────────────────────────────
 

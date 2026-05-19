@@ -35,7 +35,9 @@ describe("list_workers tool (G-P25.6, updated P-26)", () => {
     // When:  result inspected
     // Then:  result has an execute function (P-26 returns Tool, not ToolSet)
     const tool = makeListWorkersTool(null);
-    assert.ok(typeof (tool as { execute?: unknown }).execute === "function",
-      "makeListWorkersTool(null) must return a tool with execute function");
+    assert.ok(
+      typeof (tool as { execute?: unknown }).execute === "function",
+      "makeListWorkersTool(null) must return a tool with execute function",
+    );
   });
 });

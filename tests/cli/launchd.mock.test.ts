@@ -78,7 +78,7 @@ describe("launchd: renderPlist", () => {
     // When:   renderPlist(args) is called
     // Then:   output contains &lt;script&gt;&amp;&quot;token&apos; (fully escaped);
     //         raw unescaped chars NOT present in the token value context
-    const args = makePlistArgs({ env: { TELEGRAM_TOKEN: '<script>&"token\'' } });
+    const args = makePlistArgs({ env: { TELEGRAM_TOKEN: "<script>&\"token'" } });
     const xml = renderPlist(args);
     assert.ok(xml.includes("&lt;script&gt;&amp;&quot;token&apos;"), `expected escaped chars in: ${xml.slice(0, 300)}`);
     // Raw < or > or & from the token value must NOT appear unescaped in the env section
@@ -100,7 +100,6 @@ describe("launchd: installLaunchAgent + uninstallLaunchAgent", () => {
     const origPlatform = process.platform;
     const { home, cleanup } = makeTmpHome();
     try {
-      // biome-ignore lint/suspicious/noExplicitAny: test platform override
       Object.defineProperty(process, "platform", { value: "linux", configurable: true });
       const args = makePlistArgs({ home });
       await assert.rejects(
@@ -214,26 +213,22 @@ describe("P-23 contract: Hard Rule 8 + tool count", () => {
     // Then:   zero matches (launchd.ts is under src/cli/subcommands/, not src/tools/)
     // NOTE:   CI biome lint enforces this rule; this test provides a deterministic signal.
     const projectRoot = new URL("../../../", import.meta.url).pathname;
-    const result = execSync(
-      "grep -rl 'child_process' src/tools/ 2>/dev/null || true",
-      { cwd: projectRoot, encoding: "utf-8" },
-    );
-    assert.strictEqual(
-      result.trim(),
-      "",
-      `child_process found in src/tools/: ${result.trim()}`,
-    );
+    const result = execSync("grep -rl 'child_process' src/tools/ 2>/dev/null || true", {
+      cwd: projectRoot,
+      encoding: "utf-8",
+    });
+    assert.strictEqual(result.trim(), "", `child_process found in src/tools/: ${result.trim()}`);
   });
 
-  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) still returns exactly 24 tools", () => {
-    // Given:  full tool inventory post-Step-4b (no new tools added by P-23)
+  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) still returns exactly 32 tools", () => {
+    // Given:  full tool inventory (worker mode: session + persistence + control)
     // When:   Object.keys(makeAllTools(session, persistence, control)) counted
-    // Then:   count === 24 (P-23 adds no new tools, only changes session internals)
+    // Then:   count === 32 (P-44 stale-count update: was 24 when written at P-23)
     const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
     const persistence = { memoryDbPath: ":memory:", identityPath: "/tmp/fake-identity.json" };
     const control = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" };
     const toolSet = makeAllTools(session, persistence, control);
     const count = Object.keys(toolSet).length;
-    assert.strictEqual(count, 24, `expected 24 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
+    assert.strictEqual(count, 32, `expected 32 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
   });
 });

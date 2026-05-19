@@ -25,61 +25,55 @@ function makeTmpConfig(obj: Record<string, unknown>): { configPath: string; clea
 // ─── T-FD2.1 ──────────────────────────────────────────────────────────────────
 
 describe("readConfig — explicit server.rest_port parsed correctly (G-P36.10)", () => {
-  it(
-    "T-FD2.1: given config.json with server.rest_port:4040, readConfig().server.rest_port === 4040",
-    () => {
-      // Given: config.json v2 with server.rest_port:4040 (within 1024-65535 range)
-      // When:  readConfig(configPath) called
-      // Then:  result.server.rest_port === 4040
-      const { configPath, cleanup } = makeTmpConfig({
-        schema_version: 2,
-        server: { url: null, rest_port: 4040 },
-        worker: {},
-        telegram: {},
-        soul: {},
-      });
-      try {
-        const cfg = readConfig(configPath);
-        assert.equal(
-          cfg.server.rest_port,
-          4040,
-          "T-FD2.1: server.rest_port must be 4040 (explicit value from config.json)",
-        );
-      } finally {
-        cleanup();
-      }
-    },
-  );
+  it("T-FD2.1: given config.json with server.rest_port:4040, readConfig().server.rest_port === 4040", () => {
+    // Given: config.json v2 with server.rest_port:4040 (within 1024-65535 range)
+    // When:  readConfig(configPath) called
+    // Then:  result.server.rest_port === 4040
+    const { configPath, cleanup } = makeTmpConfig({
+      schema_version: 2,
+      server: { url: null, rest_port: 4040 },
+      worker: {},
+      telegram: {},
+      soul: {},
+    });
+    try {
+      const cfg = readConfig(configPath);
+      assert.equal(
+        cfg.server.rest_port,
+        4040,
+        "T-FD2.1: server.rest_port must be 4040 (explicit value from config.json)",
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── T-FD2.2 ──────────────────────────────────────────────────────────────────
 
 describe("readConfig — missing server.rest_port Zod-filled with default 3031 (G-P36.10)", () => {
-  it(
-    "T-FD2.2: given config.json with no rest_port field, readConfig().server.rest_port === 3031",
-    () => {
-      // Given: config.json v2 without a rest_port field in server sub-object
-      // When:  readConfig(configPath) called
-      // Then:  result.server.rest_port === 3031 (Zod .default(3031) fills it)
-      const { configPath, cleanup } = makeTmpConfig({
-        schema_version: 2,
-        server: { url: null },
-        worker: {},
-        telegram: {},
-        soul: {},
-      });
-      try {
-        const cfg = readConfig(configPath);
-        assert.equal(
-          cfg.server.rest_port,
-          3031,
-          "T-FD2.2: server.rest_port must default to 3031 when not in config.json",
-        );
-      } finally {
-        cleanup();
-      }
-    },
-  );
+  it("T-FD2.2: given config.json with no rest_port field, readConfig().server.rest_port === 3031", () => {
+    // Given: config.json v2 without a rest_port field in server sub-object
+    // When:  readConfig(configPath) called
+    // Then:  result.server.rest_port === 3031 (Zod .default(3031) fills it)
+    const { configPath, cleanup } = makeTmpConfig({
+      schema_version: 2,
+      server: { url: null },
+      worker: {},
+      telegram: {},
+      soul: {},
+    });
+    try {
+      const cfg = readConfig(configPath);
+      assert.equal(
+        cfg.server.rest_port,
+        3031,
+        "T-FD2.2: server.rest_port must default to 3031 when not in config.json",
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── T-FD2.3 ──────────────────────────────────────────────────────────────────

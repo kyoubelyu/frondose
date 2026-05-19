@@ -15,9 +15,9 @@
 
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
-import { Writable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import { describe, it } from "node:test";
 import { handleCronSlash } from "../../src/cli/replCron.js";
 import { readSchedule } from "../../src/persistence/schedule.js";
@@ -42,7 +42,7 @@ function makeCapture(): { stream: Writable; lines: string[] } {
 // ─── T-CLI.1 ──────────────────────────────────────────────────────────────────
 
 describe("mai cron schedule --cron (G-P31.6)", () => {
-  it("T-CLI.1: handleCronSlash('/cron schedule \"post update\" --cron \"30 8 * * *\"', schedulePath, out) writes a recurring ScheduleRecord to schedulePath", async () => {
+  it('T-CLI.1: handleCronSlash(\'/cron schedule "post update" --cron "30 8 * * *"\', schedulePath, out) writes a recurring ScheduleRecord to schedulePath', async () => {
     // Given:  empty tmp schedulePath; capture stream
     // When:   handleCronSlash('/cron schedule "post update" --cron "30 8 * * *"', schedulePath, out)
     // Then:   readSchedule(schedulePath) has 1 record with type:"recurring", cronExpr:"30 8 * * *", task:"post update"
@@ -73,7 +73,7 @@ describe("mai cron schedule --cron (G-P31.6)", () => {
 // ─── T-CLI.2 ──────────────────────────────────────────────────────────────────
 
 describe("mai cron schedule --at (G-P31.7)", () => {
-  it("T-CLI.2: handleCronSlash('/cron schedule \"ping\" --at \"14:30\"', schedulePath, out) writes a oneshot ScheduleRecord", async () => {
+  it('T-CLI.2: handleCronSlash(\'/cron schedule "ping" --at "14:30"\', schedulePath, out) writes a oneshot ScheduleRecord', async () => {
     // Given:  empty tmp schedulePath; capture stream
     // When:   handleCronSlash('/cron schedule "ping" --at "14:30"', schedulePath, out)
     // Then:   readSchedule has 1 record with type:"oneshot"
@@ -134,7 +134,7 @@ describe("mai cron schedule — no flag → error (G-P31.8)", () => {
 // ─── T-CLI.4 ──────────────────────────────────────────────────────────────────
 
 describe("mai cron schedule --cron <bad_expr> → parser error (G-P31.8 sibling)", () => {
-  it("T-CLI.4: handleCronSlash('/cron schedule \"x\" --cron \"bad_expr\"', schedulePath, out) surfaces parseCronExpr error; no record written", async () => {
+  it('T-CLI.4: handleCronSlash(\'/cron schedule "x" --cron "bad_expr"\', schedulePath, out) surfaces parseCronExpr error; no record written', async () => {
     // Given:  empty tmp schedulePath; capture stream
     // When:   handleCronSlash('/cron schedule "x" --cron "bad_expr"', schedulePath, out)
     // Then:   error (parseCronExpr message) written to stream; readSchedule returns []

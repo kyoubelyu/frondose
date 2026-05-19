@@ -141,7 +141,11 @@ describe("writeConfig — no chmod 0o600; tmp artifact gone after write (G-P24.5
       assert.ok(existsSync(configPath), "T-ATOMIC.4: config.json must exist after writeConfig");
       assert.ok(!existsSync(configPath + ".tmp"), "T-ATOMIC.4: .tmp artifact must not exist after write");
       const mode = statSync(configPath).mode & 0o777;
-      assert.notEqual(mode, 0o600, `T-ATOMIC.4: config.json must NOT have 0o600 mode (no secrets); got ${mode.toString(8)}`);
+      assert.notEqual(
+        mode,
+        0o600,
+        `T-ATOMIC.4: config.json must NOT have 0o600 mode (no secrets); got ${mode.toString(8)}`,
+      );
     } finally {
       cleanup();
     }

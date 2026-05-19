@@ -25,22 +25,21 @@
  */
 
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { CdpClient } from "../../src/cdp/client.js";
-import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
+import { IDEMPOTENT_TOOLS } from "../../src/agent/retryWrapper.js";
+import { OUTREACH_TOOL_NAMES } from "../../src/agent/safeMode.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
 import { composeSoulBand } from "../../src/agent/systemPrompt/soul.js";
-import { IDEMPOTENT_TOOLS } from "../../src/agent/retryWrapper.js";
-import { OUTREACH_TOOL_NAMES } from "../../src/agent/safeMode.js";
+import { CdpClient } from "../../src/cdp/client.js";
+import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import { makeBrowserTools } from "../../src/tools/browser/index.js"; // ← red until Step 4b
-import { makeLinkedinTools } from "../../src/tools/linkedin/index.js";
-import { makeAllTools } from "../../src/tools/index.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
+import { makeAllTools } from "../../src/tools/index.js";
+import { makeLinkedinTools } from "../../src/tools/linkedin/index.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,8 +65,9 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Post-P-31 worker tool name snapshot (29 tools — P-31 adds schedule_task to the P-33 reorg baseline).
-// P-33 froze counts at 28/19; P-31 legitimately supersedes that freeze by adding schedule_task.
+// Post-P-31 worker tool name snapshot (32 tools — P-31 adds schedule_task to the P-33 reorg baseline).
+// P-33 froze counts at 28/19; P-31 supersedes (adds schedule_task); P-39 supersedes (adds 3 memory tools).
+// P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 const FROZEN_WORKER_TOOL_KEYS = [
   "analyze_screenshot",
   "clear_cookies",
@@ -75,6 +75,7 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_memory_note",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -91,6 +92,8 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "schedule_task",
   "screenshot",
   "scroll",
+  "search_memory",
+  "set_memory_note",
   "sleep",
   "stop",
   "telegram_notify",
@@ -100,12 +103,14 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "web_search",
 ].sort();
 
-// Post-P-31 server tool name snapshot (20 tools — P-31 adds schedule_task to the P-33 reorg baseline).
+// Post-P-31 server tool name snapshot (23 tools — P-31 adds schedule_task to the P-33 reorg baseline).
+// P-44: updated from 20 to 23 to include P-39's search_memory/set_memory_note/get_memory_note.
 const FROZEN_SERVER_TOOL_KEYS = [
   "analyze_screenshot",
   "dispatch_google_login",
   "echo",
   "escalate_for_capability",
+  "get_memory_note",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -116,7 +121,9 @@ const FROZEN_SERVER_TOOL_KEYS = [
   "remember",
   "revoke_worker",
   "schedule_task",
+  "search_memory",
   "send_worker_message",
+  "set_memory_note",
   "sleep",
   "stop",
   "telegram_notify",
@@ -135,8 +142,12 @@ describe("P-33 source tree structure (G-P33.1)", () => {
     const browserDir = join(SRC_ROOT, "tools", "browser");
     const linkedinDir = join(SRC_ROOT, "tools", "linkedin");
 
-    const browserFiles = readdirSync(browserDir).filter((f) => f.endsWith(".ts")).sort();
-    const linkedinFiles = readdirSync(linkedinDir).filter((f) => f.endsWith(".ts")).sort();
+    const browserFiles = readdirSync(browserDir)
+      .filter((f) => f.endsWith(".ts"))
+      .sort();
+    const linkedinFiles = readdirSync(linkedinDir)
+      .filter((f) => f.endsWith(".ts"))
+      .sort();
 
     const expectedBrowserFiles = [
       "clearCookies.ts",
@@ -194,7 +205,11 @@ describe("makeBrowserTools registry (G-P33.3)", () => {
       "upload",
     ].sort();
 
-    assert.equal(keys.length, 11, `makeBrowserTools must return exactly 11 tools; got ${keys.length}: ${JSON.stringify(keys)}`);
+    assert.equal(
+      keys.length,
+      11,
+      `makeBrowserTools must return exactly 11 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+    );
     assert.deepEqual(keys, expectedKeys, "makeBrowserTools must return exactly the 11 browser tool keys");
   });
 });
@@ -218,11 +233,11 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode (G-P33.5 + P-31 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 29 tool keys (P-31 adds schedule_task to P-33 reorg baseline)", () => {
+describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 32 tool keys (P-31 adds schedule_task; P-39 adds 3 memory tools; P-44 updates count)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
-    // When:  worker mode tool set is built (post-P-31 which adds schedule_task)
-    // Then:  exactly 29 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot (incl. schedule_task)
+    // When:  worker mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
+    // Then:  exactly 32 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -237,8 +252,16 @@ describe("makeAllTools worker mode (G-P33.5 + P-31 supersedes count)", () => {
 
       const keys = Object.keys(tools).sort();
 
-      assert.equal(keys.length, 29, `worker mode must have exactly 29 tools post-P-31; got ${keys.length}: ${JSON.stringify(keys)}`);
-      assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match post-P-31 snapshot (pre-P-33 28 + schedule_task)");
+      assert.equal(
+        keys.length,
+        32,
+        `worker mode must have exactly 32 tools post-P-39; got ${keys.length}: ${JSON.stringify(keys)}`,
+      );
+      assert.deepEqual(
+        keys,
+        FROZEN_WORKER_TOOL_KEYS,
+        "worker tool names must match post-P-39 snapshot (P-44: 29 + 3 memory tools)",
+      );
     } finally {
       cleanup();
     }
@@ -247,11 +270,11 @@ describe("makeAllTools worker mode (G-P33.5 + P-31 supersedes count)", () => {
 
 // ─── T-P33.COUNT.SERVER ──────────────────────────────────────────────────────
 
-describe("makeAllTools server mode (G-P33.6 + P-31 supersedes count)", () => {
-  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 20 tool keys (P-31 adds schedule_task to P-33 reorg baseline)", () => {
+describe("makeAllTools server mode (G-P33.6 + P-31/P-39 supersedes count)", () => {
+  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 23 tool keys (P-31 adds schedule_task; P-39 adds 3 memory tools; P-44 updates count)", () => {
     // Given: makeAllTools called in server mode with persistence + control (no session)
-    // When:  server mode tool set is built (post-P-31 which adds schedule_task)
-    // Then:  exactly 20 keys returned; no LinkedIn/browser primitives; key set matches snapshot (incl. schedule_task)
+    // When:  server mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
+    // Then:  exactly 23 keys returned; no LinkedIn/browser primitives; key set matches snapshot
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -265,8 +288,16 @@ describe("makeAllTools server mode (G-P33.6 + P-31 supersedes count)", () => {
 
       const keys = Object.keys(tools).sort();
 
-      assert.equal(keys.length, 20, `server mode must have exactly 20 tools post-P-31; got ${keys.length}: ${JSON.stringify(keys)}`);
-      assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match post-P-31 snapshot (pre-P-33 19 + schedule_task)");
+      assert.equal(
+        keys.length,
+        23,
+        `server mode must have exactly 23 tools post-P-39; got ${keys.length}: ${JSON.stringify(keys)}`,
+      );
+      assert.deepEqual(
+        keys,
+        FROZEN_SERVER_TOOL_KEYS,
+        "server tool names must match post-P-39 snapshot (P-44: 20 + 3 memory tools)",
+      );
     } finally {
       cleanup();
     }
@@ -276,7 +307,9 @@ describe("makeAllTools server mode (G-P33.6 + P-31 supersedes count)", () => {
 // ─── T-P33.SCHEMA.1 ──────────────────────────────────────────────────────────
 
 /** Extract sorted field names from a Zod schema, unwrapping ZodEffects (refine/transform). */
-function getZodFieldNames(schema: { _def: { typeName: string; schema?: unknown; shape?: (() => Record<string, unknown>) | Record<string, unknown> } }): string[] {
+function getZodFieldNames(schema: {
+  _def: { typeName: string; schema?: unknown; shape?: (() => Record<string, unknown>) | Record<string, unknown> };
+}): string[] {
   let s = schema;
   // Unwrap ZodEffects (e.g. .refine()) wrappers
   while (s._def.typeName === "ZodEffects" && s._def.schema) {
@@ -299,18 +332,18 @@ describe("Tool parameter schemas frozen (G-P33.7)", () => {
 
     // Frozen pre-P-33 schema snapshots (field names only — contract per CLAUDE.md §1 "parameter schema is part of the contract")
     const FROZEN_SCHEMAS: Record<string, string[]> = {
-      inspect:          ["full", "scope"],
-      click:            ["label", "ref", "scope"],
-      type:             ["label", "ref", "scope", "text"],
-      press:            ["key"],
-      upload:           ["file", "scope"],
-      close:            [],
-      reload:           [],
-      scroll:           ["amount", "direction"],
-      screenshot:       ["out"],
-      navigate_to_url:  ["url", "waitUntil"],
-      clear_cookies:    ["origins"],
-      launch:           ["args", "destination"],
+      inspect: ["full", "scope"],
+      click: ["label", "ref", "scope"],
+      type: ["label", "ref", "scope", "text"],
+      press: ["key"],
+      upload: ["file", "scope"],
+      close: [],
+      reload: [],
+      scroll: ["amount", "direction"],
+      screenshot: ["out"],
+      navigate_to_url: ["url", "waitUntil"],
+      clear_cookies: ["origins"],
+      launch: ["args", "destination"],
     };
 
     assert.equal(Object.keys(allTools).length, 12, "must have exactly 12 browser+LinkedIn tools");
@@ -368,10 +401,7 @@ describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () =
       BOUNDARY.includes("single Chrome browser"),
       "BOUNDARY opening sentence must include 'single Chrome browser'",
     );
-    assert.ok(
-      BOUNDARY.includes("LinkedIn account"),
-      "BOUNDARY opening sentence must retain 'LinkedIn account'",
-    );
+    assert.ok(BOUNDARY.includes("LinkedIn account"), "BOUNDARY opening sentence must retain 'LinkedIn account'");
 
     // launch carve-out: "The `launch` tool remains LinkedIn-specific"
     assert.ok(
@@ -421,7 +451,8 @@ describe("Soul band + CHECKPOINT byte-identical (G-P33.10)", () => {
     const soul = composeSoulBand(null);
 
     // Length freeze (catches any accidental addition or removal)
-    assert.equal(soul.length, 6054, `composeSoulBand(null) length must be 6054 (pre-P-33); got ${soul.length}`);
+    // P-44/OQ-1: updated from 6054 to 6790 (measured post-P-39/P-43 actual value)
+    assert.equal(soul.length, 6790, `composeSoulBand(null) length must be 6790; got ${soul.length}`);
 
     // Section 1: identity sentence (placeholder defaults)
     assert.ok(
@@ -448,14 +479,21 @@ describe("Soul band + CHECKPOINT byte-identical (G-P33.10)", () => {
     );
 
     // Section 6: mission + day rhythm (last line)
+    // P-44: uses includes() instead of endsWith() to avoid smart-quote encoding fragility.
+    // Soul band's Night cadence was expanded in P-43 (now ends with memory.sqlite consolidation text).
     assert.ok(
-      soul.endsWith("Night — quiet mode; only run explicitly scheduled tasks, avoid outreach."),
-      "composeSoulBand(null) must end with the Night cadence line",
+      soul.includes("Night") && soul.includes("you avoid outreach, run only scheduled tasks"),
+      "composeSoulBand(null) must contain Night cadence with 'you avoid outreach, run only scheduled tasks'",
+    );
+    assert.ok(
+      soul.includes("consolidating what you have learned."),
+      "composeSoulBand(null) must end with the Night cadence 'consolidating what you have learned.' sentence",
     );
 
     // ── CHECKPOINT snapshot ─────────────────────────────────────────────────
     // Length freeze
-    assert.equal(CHECKPOINT.length, 1786, `CHECKPOINT length must be 1786 (pre-P-33); got ${CHECKPOINT.length}`);
+    // P-44/OQ-1: updated from 1786 to 2853 (measured post-P-39/P-43 actual value)
+    assert.equal(CHECKPOINT.length, 2853, `CHECKPOINT length must be 2853; got ${CHECKPOINT.length}`);
 
     // Opening
     assert.ok(
@@ -517,12 +555,18 @@ describe("IDEMPOTENT_TOOLS + OUTREACH_TOOL_NAMES name-sets (G-P33.14)", () => {
 
     // Retry-wrapped (idempotent) browser tools — these moved but names are unchanged
     for (const name of ["inspect", "scroll", "screenshot", "reload", "close", "navigate_to_url", "clear_cookies"]) {
-      assert.ok(IDEMPOTENT_TOOLS.has(name), `${name} must be in IDEMPOTENT_TOOLS (retry-wrapped); check retryWrapper.ts`);
+      assert.ok(
+        IDEMPOTENT_TOOLS.has(name),
+        `${name} must be in IDEMPOTENT_TOOLS (retry-wrapped); check retryWrapper.ts`,
+      );
     }
 
     // Safe-mode-wrapped (outreach) browser tools
     for (const name of ["click", "type", "press", "upload"]) {
-      assert.ok(OUTREACH_TOOL_NAMES.has(name), `${name} must be in OUTREACH_TOOL_NAMES (safe-mode-wrapped); check safeMode.ts`);
+      assert.ok(
+        OUTREACH_TOOL_NAMES.has(name),
+        `${name} must be in OUTREACH_TOOL_NAMES (safe-mode-wrapped); check safeMode.ts`,
+      );
     }
 
     // Confirm OUTREACH_TOOL_NAMES size unchanged (no accidental additions)

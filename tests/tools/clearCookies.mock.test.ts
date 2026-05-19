@@ -85,11 +85,7 @@ describe("clear_cookies: no origins → clearBrowserCookies called once (G-P28.5
     assert.equal(clearBrowserCookiesCalls.length, 1, "T-CC.1: clearBrowserCookies called once");
     assert.equal(clearOriginDataCalls.length, 0, "T-CC.1: clearOriginData not called");
     assert.ok((result as { ok: boolean }).ok === true, "T-CC.1: result.ok===true");
-    assert.equal(
-      (result as { data?: { cleared?: unknown } }).data?.cleared,
-      "all",
-      "T-CC.1: cleared==='all'",
-    );
+    assert.equal((result as { data?: { cleared?: unknown } }).data?.cleared, "all", "T-CC.1: cleared==='all'");
   });
 });
 

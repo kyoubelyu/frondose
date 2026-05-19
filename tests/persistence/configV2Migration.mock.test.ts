@@ -60,7 +60,11 @@ describe("readConfig v1→v2: folds sibling identity.json (G-P28.1, G-P28.6)", (
       assert.equal(result.schema_version, 2, "T-MIGRATE.V1V2.1: schema_version must be 2 after migration");
       assert.ok(result.identity !== undefined && result.identity !== null, "T-MIGRATE.V1V2.1: identity must be folded");
       assert.equal(result.identity?.fullName, "BD Alice", "T-MIGRATE.V1V2.1: identity.fullName must be 'BD Alice'");
-      assert.equal(result.server.url, "http://100.64.0.5:3031", "T-MIGRATE.V1V2.1: server.url must be preserved (G-P28.6)");
+      assert.equal(
+        result.server.url,
+        "http://100.64.0.5:3031",
+        "T-MIGRATE.V1V2.1: server.url must be preserved (G-P28.6)",
+      );
     } finally {
       cleanup();
     }
@@ -79,7 +83,11 @@ describe("readConfig v1→v2: no identity.json → identity undefined (G-P28.2)"
       writeFileSync(configPath, v1Json(), "utf-8");
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 2, "T-MIGRATE.V1V2.2: schema_version must be 2");
-      assert.equal(result.identity, undefined, "T-MIGRATE.V1V2.2: identity must be undefined when no identity.json sibling");
+      assert.equal(
+        result.identity,
+        undefined,
+        "T-MIGRATE.V1V2.2: identity must be undefined when no identity.json sibling",
+      );
     } finally {
       cleanup();
     }
@@ -100,7 +108,11 @@ describe("readConfig v1→v2: folds soul_band_override.txt (G-P28.3)", () => {
       writeFileSync(join(dir, "soul_band_override.txt"), "CUSTOM\nSOUL\nTEXT\n", "utf-8");
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 2, "T-MIGRATE.V1V2.3: schema_version must be 2");
-      assert.equal(result.soul.override, "CUSTOM\nSOUL\nTEXT", "T-MIGRATE.V1V2.3: soul.override must be trimmed soul_band_override.txt content");
+      assert.equal(
+        result.soul.override,
+        "CUSTOM\nSOUL\nTEXT",
+        "T-MIGRATE.V1V2.3: soul.override must be trimmed soul_band_override.txt content",
+      );
     } finally {
       cleanup();
     }
@@ -151,7 +163,11 @@ describe("readConfig v1→v2: migration persisted on disk (G-P28.5)", () => {
       const r2 = readConfig(configPath); // reads v2 directly — no re-migration
       assert.equal(r1.schema_version, 2, "T-MIGRATE.V1V2.5: first readConfig must return schema_version 2");
       assert.equal(diskAfter.schema_version, 2, "T-MIGRATE.V1V2.5: on-disk schema_version must be 2 after migration");
-      assert.equal(r2.schema_version, 2, "T-MIGRATE.V1V2.5: second readConfig must return schema_version 2 (idempotent)");
+      assert.equal(
+        r2.schema_version,
+        2,
+        "T-MIGRATE.V1V2.5: second readConfig must return schema_version 2 (idempotent)",
+      );
     } finally {
       cleanup();
     }
@@ -172,7 +188,11 @@ describe("readConfig v1→v2: server-style identity.json shape mismatch (G-P28.7
       writeFileSync(join(dir, "identity.json"), serverIdentityJson(), "utf-8");
       const result = readConfig(configPath);
       assert.equal(result.schema_version, 2, "T-MIGRATE.V1V2.6: schema_version must be 2");
-      assert.equal(result.identity, undefined, "T-MIGRATE.V1V2.6: identity must be undefined when shape fails identityRecordSchema (G-P28.7)");
+      assert.equal(
+        result.identity,
+        undefined,
+        "T-MIGRATE.V1V2.6: identity must be undefined when shape fails identityRecordSchema (G-P28.7)",
+      );
     } finally {
       cleanup();
     }
@@ -194,7 +214,11 @@ describe("readConfig: corrupt config.json → DEFAULT_CONFIG_V2 (G-P28.4 sibling
         result = readConfig(configPath);
       }, "T-MIGRATE.V1V2.7: readConfig must not throw on corrupt JSON");
       assert.ok(result !== undefined, "result must not be undefined");
-      assert.equal(result?.schema_version, 2, "T-MIGRATE.V1V2.7: corrupt config → DEFAULT_CONFIG_V2 with schema_version:2");
+      assert.equal(
+        result?.schema_version,
+        2,
+        "T-MIGRATE.V1V2.7: corrupt config → DEFAULT_CONFIG_V2 with schema_version:2",
+      );
       assert.equal(result?.server.url, null, "T-MIGRATE.V1V2.7: server.url must be null (DEFAULT_CONFIG_V2)");
     } finally {
       cleanup();

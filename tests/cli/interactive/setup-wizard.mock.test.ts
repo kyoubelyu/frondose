@@ -170,7 +170,10 @@ describe("runSetupSubcommand — checkbox pre-check defaults", () => {
       assert.ok(identityChoice?.checked === false, "T-Setup.2: identity must be unchecked (already configured)");
       assert.ok(telegramChoice?.checked === true, "T-Setup.2: telegram must be pre-checked (not configured)");
       assert.ok(soulChoice?.checked === true, "T-Setup.2: soul must be pre-checked (not configured)");
-      assert.ok(integrationsChoice !== undefined, "T-Setup.2: integrations choice must be present in checkbox sections");
+      assert.ok(
+        integrationsChoice !== undefined,
+        "T-Setup.2: integrations choice must be present in checkbox sections",
+      );
       assert.ok(
         integrationsChoice?.name.includes("GitHub") && integrationsChoice?.name.includes("search"),
         `T-Setup.2: integrations name must reference GitHub + search; got: "${integrationsChoice?.name}"`,

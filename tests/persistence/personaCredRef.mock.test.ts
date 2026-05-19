@@ -19,12 +19,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { runServerPersonaSubcommand } from "../../src/cli/subcommands/serverPersona.js";
 import {
   personaTemplateSchema,
   readPersonaTemplate,
   writePersonaTemplate,
 } from "../../src/persistence/personaLibrary.js";
-import { runServerPersonaSubcommand } from "../../src/cli/subcommands/serverPersona.js";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p28-persona-"));
@@ -50,15 +50,27 @@ describe("personaTemplateSchema: accepts llmKeyRef + googleAccountRef (G-P28.27)
         googleAccountRef: "g1",
         updatedAt: new Date().toISOString(),
       });
-      assert.equal(parsed.llmKeyRef, "k1", "T-PERS.CRED.1: personaTemplateSchema.parse must accept llmKeyRef='k1' (G-P28.27)");
-      assert.equal(parsed.googleAccountRef, "g1", "T-PERS.CRED.1: personaTemplateSchema.parse must accept googleAccountRef='g1'");
+      assert.equal(
+        parsed.llmKeyRef,
+        "k1",
+        "T-PERS.CRED.1: personaTemplateSchema.parse must accept llmKeyRef='k1' (G-P28.27)",
+      );
+      assert.equal(
+        parsed.googleAccountRef,
+        "g1",
+        "T-PERS.CRED.1: personaTemplateSchema.parse must accept googleAccountRef='g1'",
+      );
 
       // Round-trip via writePersonaTemplate + readPersonaTemplate
       writePersonaTemplate(dir, "p1", parsed);
       const readBack = readPersonaTemplate(dir, "p1");
       assert.ok(readBack !== null, "T-PERS.CRED.1: readPersonaTemplate must return non-null after write");
       assert.equal(readBack.llmKeyRef, "k1", "T-PERS.CRED.1: readPersonaTemplate must preserve llmKeyRef='k1'");
-      assert.equal(readBack.googleAccountRef, "g1", "T-PERS.CRED.1: readPersonaTemplate must preserve googleAccountRef='g1'");
+      assert.equal(
+        readBack.googleAccountRef,
+        "g1",
+        "T-PERS.CRED.1: readPersonaTemplate must preserve googleAccountRef='g1'",
+      );
     } finally {
       cleanup();
     }
@@ -83,8 +95,16 @@ describe("personaTemplateSchema: P-27-era persona (no refs) still parses (G-P28.
         updatedAt: new Date().toISOString(),
       });
     }, "T-PERS.CRED.2: P-27-era persona (no refs) must parse without throw");
-    assert.equal(parsed?.llmKeyRef, undefined, "T-PERS.CRED.2: llmKeyRef must be undefined when not provided (backward compat G-P28.27)");
-    assert.equal(parsed?.googleAccountRef, undefined, "T-PERS.CRED.2: googleAccountRef must be undefined when not provided");
+    assert.equal(
+      parsed?.llmKeyRef,
+      undefined,
+      "T-PERS.CRED.2: llmKeyRef must be undefined when not provided (backward compat G-P28.27)",
+    );
+    assert.equal(
+      parsed?.googleAccountRef,
+      undefined,
+      "T-PERS.CRED.2: googleAccountRef must be undefined when not provided",
+    );
   });
 });
 
@@ -125,9 +145,16 @@ describe("runServerPersonaSubcommand add: fromTemplate path writes llmKeyRef + g
       // SERVER_PERSONAS_DIR() = join(homedir(), ".mai", "server", "personas") → join(dir, ".mai", "server", "personas")
       const personasDir = join(dir, ".mai", "server", "personas");
       const readBack = readPersonaTemplate(personasDir, "p1");
-      assert.ok(readBack !== null, "T-PERS.CRED.3: readPersonaTemplate must return non-null after runServerPersonaSubcommand add");
+      assert.ok(
+        readBack !== null,
+        "T-PERS.CRED.3: readPersonaTemplate must return non-null after runServerPersonaSubcommand add",
+      );
       assert.equal(readBack.llmKeyRef, "k1", "T-PERS.CRED.3: written persona must preserve llmKeyRef='k1' (G-P28.28)");
-      assert.equal(readBack.googleAccountRef, "g1", "T-PERS.CRED.3: written persona must preserve googleAccountRef='g1'");
+      assert.equal(
+        readBack.googleAccountRef,
+        "g1",
+        "T-PERS.CRED.3: written persona must preserve googleAccountRef='g1'",
+      );
     } finally {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;

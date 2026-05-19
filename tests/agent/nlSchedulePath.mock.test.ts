@@ -24,9 +24,9 @@ import type { CoreMessage } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { runAgentLoop } from "../../src/agent/loop.js";
-import { makeAllTools } from "../../src/tools/index.js";
 import { readSchedule } from "../../src/persistence/schedule.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
+import { makeAllTools } from "../../src/tools/index.js";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p31-nl-"));
@@ -74,7 +74,11 @@ describe("NL inbox → schedule_task end-to-end (G-P31.5)", () => {
                     toolName: "schedule_task",
                     args: JSON.stringify({ task: "daily 9am check", cron_expr: "0 9 * * *" }),
                   },
-                  { type: "finish" as const, finishReason: "tool-calls" as const, usage: { promptTokens: 10, completionTokens: 5 } },
+                  {
+                    type: "finish" as const,
+                    finishReason: "tool-calls" as const,
+                    usage: { promptTokens: 10, completionTokens: 5 },
+                  },
                 ],
               }),
               rawCall: { rawPrompt: null, rawSettings: {} },
@@ -85,7 +89,11 @@ describe("NL inbox → schedule_task end-to-end (G-P31.5)", () => {
             stream: simulateReadableStream({
               chunks: [
                 { type: "text-delta" as const, textDelta: "Done — scheduled daily 9am check." },
-                { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 20, completionTokens: 10 } },
+                {
+                  type: "finish" as const,
+                  finishReason: "stop" as const,
+                  usage: { promptTokens: 20, completionTokens: 10 },
+                },
               ],
             }),
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -93,9 +101,7 @@ describe("NL inbox → schedule_task end-to-end (G-P31.5)", () => {
         },
       });
 
-      const messages: CoreMessage[] = [
-        { role: "user", content: "please schedule a daily 9am check" },
-      ];
+      const messages: CoreMessage[] = [{ role: "user", content: "please schedule a daily 9am check" }];
 
       await runAgentLoop({ model, system: "test", messages, tools, maxSteps: 3 });
 

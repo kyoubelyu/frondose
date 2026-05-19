@@ -72,7 +72,11 @@ describe("readIdentity: v2 config.identity is authoritative (G-P28.8)", () => {
       writeFileSync(legacyPath, makeLegacyIdentity("Legacy Alice"), "utf-8");
       const result = readIdentity(legacyPath, configPath);
       assert.ok(result !== null, "T-SHIM.IDENTITY.1: readIdentity must return non-null when config has identity");
-      assert.equal(result.fullName, "BD Alice", "T-SHIM.IDENTITY.1: must return config.identity (not legacy file) — config is authoritative (G-P28.8)");
+      assert.equal(
+        result.fullName,
+        "BD Alice",
+        "T-SHIM.IDENTITY.1: must return config.identity (not legacy file) — config is authoritative (G-P28.8)",
+      );
     } finally {
       cleanup();
     }
@@ -92,7 +96,11 @@ describe("readIdentity: legacy fallback when config.json absent (G-P28.9)", () =
       // configPath intentionally NOT written (absent)
       const result = readIdentity(legacyPath, configPath);
       assert.ok(result !== null, "T-SHIM.IDENTITY.2: readIdentity must return non-null when legacy file exists");
-      assert.equal(result.fullName, "Legacy Alice", "T-SHIM.IDENTITY.2: must return legacy record when config.json absent (G-P28.9)");
+      assert.equal(
+        result.fullName,
+        "Legacy Alice",
+        "T-SHIM.IDENTITY.2: must return legacy record when config.json absent (G-P28.9)",
+      );
     } finally {
       cleanup();
     }
@@ -113,7 +121,11 @@ describe("readIdentity: legacy fallback when config.identity absent (G-P28.9)", 
       writeFileSync(legacyPath, makeLegacyIdentity("Legacy Alice"), "utf-8");
       const result = readIdentity(legacyPath, configPath);
       assert.ok(result !== null, "T-SHIM.IDENTITY.3: readIdentity must return non-null when legacy file exists");
-      assert.equal(result.fullName, "Legacy Alice", "T-SHIM.IDENTITY.3: must fall back to legacy when config.identity absent (G-P28.9)");
+      assert.equal(
+        result.fullName,
+        "Legacy Alice",
+        "T-SHIM.IDENTITY.3: must fall back to legacy when config.identity absent (G-P28.9)",
+      );
     } finally {
       cleanup();
     }
@@ -135,12 +147,23 @@ describe("writeIdentity: updates config.json AND legacy identity.json (G-P28.10)
 
       // Verify config.json updated
       const updatedCfg = readConfig(configPath);
-      assert.ok(updatedCfg.identity !== undefined, "T-SHIM.IDENTITY.4: config.json.identity must be set after writeIdentity");
-      assert.equal(updatedCfg.identity?.fullName, "New Alice", "T-SHIM.IDENTITY.4: config.json.identity.fullName must be 'New Alice' (G-P28.10)");
+      assert.ok(
+        updatedCfg.identity !== undefined,
+        "T-SHIM.IDENTITY.4: config.json.identity must be set after writeIdentity",
+      );
+      assert.equal(
+        updatedCfg.identity?.fullName,
+        "New Alice",
+        "T-SHIM.IDENTITY.4: config.json.identity.fullName must be 'New Alice' (G-P28.10)",
+      );
 
       // Verify legacy identity.json written
       const legacyContent = JSON.parse(readFileSync(legacyPath, "utf-8")) as { fullName: string };
-      assert.equal(legacyContent.fullName, "New Alice", "T-SHIM.IDENTITY.4: legacy identity.json must also be written (G-P28.10)");
+      assert.equal(
+        legacyContent.fullName,
+        "New Alice",
+        "T-SHIM.IDENTITY.4: legacy identity.json must also be written (G-P28.10)",
+      );
     } finally {
       cleanup();
     }
@@ -161,7 +184,11 @@ describe("readIdentity/writeIdentity: standalone mode regression (G-P28.32)", ()
 
       const read1 = readIdentity(legacyPath, configPath);
       assert.ok(read1 !== null, "T-SHIM.IDENTITY.5: readIdentity must return non-null (legacy fallback)");
-      assert.equal(read1.fullName, "Standalone Alice", "T-SHIM.IDENTITY.5: must return legacy identity when no config.json (G-P28.32)");
+      assert.equal(
+        read1.fullName,
+        "Standalone Alice",
+        "T-SHIM.IDENTITY.5: must return legacy identity when no config.json (G-P28.32)",
+      );
 
       // writeIdentity must not throw (creates config.json as side effect, but legacy is always written)
       assert.doesNotThrow(
@@ -169,7 +196,11 @@ describe("readIdentity/writeIdentity: standalone mode regression (G-P28.32)", ()
         "T-SHIM.IDENTITY.5: writeIdentity must not throw in standalone mode",
       );
       const legacyContent = JSON.parse(readFileSync(legacyPath, "utf-8")) as { fullName: string };
-      assert.equal(legacyContent.fullName, "New Alice", "T-SHIM.IDENTITY.5: legacy identity.json must be updated after write");
+      assert.equal(
+        legacyContent.fullName,
+        "New Alice",
+        "T-SHIM.IDENTITY.5: legacy identity.json must be updated after write",
+      );
     } finally {
       cleanup();
     }

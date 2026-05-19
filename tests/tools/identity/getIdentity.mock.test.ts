@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -34,6 +34,11 @@ function cleanupDir(path: string): void {
 // ─── T-M115 ──────────────────────────────────────────────────────────────────
 
 test("T-M115: getIdentity execute returns record:null and all 7 fields missing when file does not exist", async () => {
+  // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() (HOME-relative).
+  // Without override, operator's real identity is returned instead of null.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   // Do NOT write the file — it must be absent
   try {
@@ -55,12 +60,20 @@ test("T-M115: getIdentity execute returns record:null and all 7 fields missing w
     }
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 // ─── T-M116 ──────────────────────────────────────────────────────────────────
 
 test("T-M116: getIdentity execute returns parsed record when identity.json is valid", async () => {
+  // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() first.
+  // Without override, operator's real identity is returned (wrong record values).
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   try {
     const record = {
@@ -91,12 +104,20 @@ test("T-M116: getIdentity execute returns parsed record when identity.json is va
     assert.ok(missing.includes("persona"), "persona must be missing");
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 // ─── T-M117 ──────────────────────────────────────────────────────────────────
 
 test("T-M117: getIdentity execute returns record:null when identity.json is corrupt", async () => {
+  // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() first.
+  // Without override, operator's real identity is returned instead of null for corrupt file.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   try {
     writeFileSync(idPath, "not valid json {{{", "utf-8");
@@ -120,5 +141,8 @@ test("T-M117: getIdentity execute returns record:null when identity.json is corr
     assert.equal(data.record, null, "record must be null when JSON is corrupt");
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });

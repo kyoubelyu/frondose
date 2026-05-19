@@ -16,11 +16,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import Database from "better-sqlite3";
 import type { Database as DB } from "better-sqlite3";
+import Database from "better-sqlite3";
 import {
-  CURRENT_SCHEMA_VERSION,
   appendPersonInteraction,
+  CURRENT_SCHEMA_VERSION,
   getMemoryNote,
   getPersonScore,
   openMemoryDatabase,
@@ -71,8 +71,7 @@ function buildV2Db(tmpPath: string): void {
   rawDb.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
   // 3 rows, row-2 has the unique backfill token
   for (let i = 1; i <= 3; i++) {
-    const summary =
-      i === 2 ? "FINTECH_TEST_TOKEN enterprise pitch deck" : `row${i} generic content here`;
+    const summary = i === 2 ? "FINTECH_TEST_TOKEN enterprise pitch deck" : `row${i} generic content here`;
     rawDb
       .prepare(
         "INSERT INTO person_memory_events (id, profile_url, person_name, interaction, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -105,9 +104,9 @@ describe("V3 migration — fresh DB schema (G-P39.1/.3)", () => {
     // Then:  schema_version=3; sqlite_master contains all 6 V3 objects
     const db = freshDb();
 
-    const vrow = db
-      .prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
-      .get() as { version: number };
+    const vrow = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as {
+      version: number;
+    };
     assert.equal(vrow.version, 3, "schema_version top row must be 3");
 
     const tables = (
@@ -144,9 +143,9 @@ describe("V3 migration — fresh DB schema (G-P39.1/.3)", () => {
 
       const db = openMemoryDatabase(tmpPath);
 
-      const vrow = db
-        .prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
-        .get() as { version: number };
+      const vrow = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as {
+        version: number;
+      };
       assert.equal(vrow.version, 3, "V2→V3 migration must have run");
 
       const hits = searchMemory("FINTECH_TEST_TOKEN", 10, db);
@@ -168,8 +167,14 @@ describe("V3 migration — fresh DB schema (G-P39.1/.3)", () => {
     const { tmpPath, cleanup } = makeTmpDb();
     try {
       const db1 = openMemoryDatabase(tmpPath);
-      appendPersonInteraction({ ...ALICE_INPUT, personName: "Alice1", profileUrl: "https://www.linkedin.com/in/alice1v3/" }, db1);
-      appendPersonInteraction({ ...ALICE_INPUT, personName: "Alice2", profileUrl: "https://www.linkedin.com/in/alice2v3/" }, db1);
+      appendPersonInteraction(
+        { ...ALICE_INPUT, personName: "Alice1", profileUrl: "https://www.linkedin.com/in/alice1v3/" },
+        db1,
+      );
+      appendPersonInteraction(
+        { ...ALICE_INPUT, personName: "Alice2", profileUrl: "https://www.linkedin.com/in/alice2v3/" },
+        db1,
+      );
 
       const countBefore = (db1.prepare("SELECT count(*) AS n FROM memory_fts").get() as { n: number }).n;
       db1.close();
@@ -281,19 +286,25 @@ describe("searchMemory — FTS5 relevance ordering + MemorySearchHit shape (G-P3
     const db = freshDb();
 
     // High relevance (mentions B2B sales 3 times)
-    appendPersonInteraction({
-      personName: "Eve High",
-      profileUrl: "https://www.linkedin.com/in/eve-high/",
-      interaction: "message",
-      summary: "B2B sales B2B sales B2B sales enterprise pitch",
-    }, db);
+    appendPersonInteraction(
+      {
+        personName: "Eve High",
+        profileUrl: "https://www.linkedin.com/in/eve-high/",
+        interaction: "message",
+        summary: "B2B sales B2B sales B2B sales enterprise pitch",
+      },
+      db,
+    );
     // Lower relevance (mentions once)
-    appendPersonInteraction({
-      personName: "Frank Low",
-      profileUrl: "https://www.linkedin.com/in/frank-low/",
-      interaction: "connect",
-      summary: "B2B sales context here otherwise unrelated content",
-    }, db);
+    appendPersonInteraction(
+      {
+        personName: "Frank Low",
+        profileUrl: "https://www.linkedin.com/in/frank-low/",
+        interaction: "connect",
+        summary: "B2B sales context here otherwise unrelated content",
+      },
+      db,
+    );
 
     const hits = searchMemory("B2B sales", 10, db);
     assert.ok(hits.length >= 2, `must return ≥2 hits; got ${hits.length}`);

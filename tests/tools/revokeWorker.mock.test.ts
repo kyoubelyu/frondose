@@ -74,7 +74,10 @@ describe("revoke_worker — workerId not found (G-P27.13)", () => {
       const workersDb = openWorkersDb(join(dir, "workers.sqlite"));
       const tool = makeRevokeWorkerTool(workersDb);
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const result = await (tool.execute as unknown as (a: unknown, o: object) => Promise<any>)({ workerId: "ghost_worker" }, {});
+      const result = await (tool.execute as unknown as (a: unknown, o: object) => Promise<any>)(
+        { workerId: "ghost_worker" },
+        {},
+      );
       assert.equal(result.ok, false);
       assert.ok(
         typeof result.error === "string" && result.error.includes("worker_id not found"),

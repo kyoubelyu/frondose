@@ -17,11 +17,11 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  githubConfigSchema,
   DEFAULT_GITHUB_CONFIG,
+  githubConfigSchema,
   readGithubConfig,
   writeGithubConfig,
 } from "../../src/persistence/github.js";
@@ -82,35 +82,56 @@ describe("github.json persistence (G-P15.1)", () => {
   // ─── T-GitHub.2 — Write→read round-trip ───────────────────────────────────
 
   it("T-GitHub.2: writeGithubConfig then readGithubConfig round-trips all fields", () => {
-    // Given: temp file path
+    // Given: temp file path with HOME-isolated environment (P-24 shim writes to co-located secrets.json)
     // When:  writeGithubConfig({ token: "abc", repo: "own/repo" }, tmpPath) then readGithubConfig(tmpPath)
-    // Then:  returns { token: "abc", repo: "own/repo" }; file is valid JSON
+    // Then:  returns { token: "abc", repo: "own/repo" }; secrets.json is valid JSON with github sub-key
 
+    // HOME override: prevents legacyMerged from reading the real operator auth.json.
+    const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+    const origHome = process.env.HOME;
+    process.env.HOME = tmpHome;
     const { path, cleanup } = makeTmpDir();
     try {
       writeGithubConfig({ token: "abc", repo: "own/repo" }, path);
       const result = readGithubConfig(path);
       assert.deepEqual(result, { token: "abc", repo: "own/repo" }, "must round-trip all fields");
 
-      // Raw file must be valid JSON
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
-      assert.equal(raw.token, "abc", "raw JSON token must match");
-      assert.equal(raw.repo, "own/repo", "raw JSON repo must match");
+      // P-24 shim: data lives in co-located secrets.json, NOT in github.json (github.json is never created).
+      // Raw file must be valid JSON with github sub-key.
+      const secretsPath = join(dirname(path), "secrets.json");
+      const raw = JSON.parse(readFileSync(secretsPath, "utf-8")) as Record<string, unknown>;
+      const gh = raw.github as Record<string, unknown>;
+      assert.equal(gh.token, "abc", "raw JSON github.token must match");
+      assert.equal(gh.repo, "own/repo", "raw JSON github.repo must match");
     } finally {
       cleanup();
+      if (origHome !== undefined) process.env.HOME = origHome;
+      else delete process.env.HOME;
+      rmSync(tmpHome, { recursive: true, force: true });
     }
   });
 
   // ─── T-GitHub.3 — Missing file → default ──────────────────────────────────
 
   it("T-GitHub.3: readGithubConfig returns DEFAULT_GITHUB_CONFIG for missing file without throw", () => {
-    // Given: path that does not exist
+    // Given: path that does not exist with HOME-isolated environment
     // When:  readGithubConfig("/nonexistent/path.json")
     // Then:  returns DEFAULT_GITHUB_CONFIG (empty object); no throw
 
-    const result = readGithubConfig("/nonexistent/mai-test-github.json");
-    assert.deepEqual(result, DEFAULT_GITHUB_CONFIG, "missing file must return DEFAULT_GITHUB_CONFIG");
-    assert.equal(Object.keys(result).length, 0, "default config must be empty object");
+    // HOME override: without this, legacyMerged reads real auth.json → tries to write
+    // secrets.json to /nonexistent/ → mkdirSync("/nonexistent") → EACCES.
+    const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+    const origHome = process.env.HOME;
+    process.env.HOME = tmpHome;
+    try {
+      const result = readGithubConfig("/nonexistent/mai-test-github.json");
+      assert.deepEqual(result, DEFAULT_GITHUB_CONFIG, "missing file must return DEFAULT_GITHUB_CONFIG");
+      assert.equal(Object.keys(result).length, 0, "default config must be empty object");
+    } finally {
+      if (origHome !== undefined) process.env.HOME = origHome;
+      else delete process.env.HOME;
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
   });
 
   // ─── T-GitHub.4 — Corrupt file → default ──────────────────────────────────

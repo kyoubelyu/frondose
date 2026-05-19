@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -65,6 +65,11 @@ test("T-M111: identity tool Zod schema accepts all-optional input (empty patch i
 // ─── T-M112 ──────────────────────────────────────────────────────────────────
 
 test("T-M112: identity tool execute merges patch over existing identity and writes to disk", async () => {
+  // HOME override: readIdentity() first checks readConfig(DEFAULT_CONFIG_PATH()) which
+  // resolves to HOME-relative path. Without override, operator's real identity leaks in.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   try {
     // Pre-seed an existing identity
@@ -95,12 +100,19 @@ test("T-M112: identity tool execute merges patch over existing identity and writ
     assert.equal(record.persona, "Technical founder", "persona must be merged in");
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 // ─── T-M113 ──────────────────────────────────────────────────────────────────
 
 test("T-M113: identity tool execute refreshes updatedAt on every save", async () => {
+  // HOME override: prevents writeIdentity from mutating the operator's real config.json.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   try {
     const past = new Date("2024-01-01T00:00:00.000Z").toISOString();
@@ -119,12 +131,20 @@ test("T-M113: identity tool execute refreshes updatedAt on every save", async ()
     assert.notEqual(record.updatedAt, past, "updatedAt must not equal the old value");
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 // ─── T-M114 ──────────────────────────────────────────────────────────────────
 
 test("T-M114: identity tool execute does NOT include data.hint (identity is not a LinkedIn surface change)", async () => {
+  // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() (HOME-relative). Without override,
+  // operator's real identity would be returned, making missing-field assertions unpredictable.
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
   const idPath = uniqueIdPath();
   try {
     const tool = makeIdentityTool(idPath);
@@ -150,5 +170,8 @@ test("T-M114: identity tool execute does NOT include data.hint (identity is not 
     assert.ok(!missing.includes("company"), "company must not be missing after set");
   } finally {
     cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });

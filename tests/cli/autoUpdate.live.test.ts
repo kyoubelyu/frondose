@@ -64,7 +64,6 @@ describe(
       //        NOTE: This test is intentionally skip'd unless T-LIVE.4 env flag explicitly set
       //        by operator (MAI_LIVE_COLDCACHE=1). Cold-cache timing is forensic data only.
       if (process.env.MAI_LIVE_COLDCACHE !== "1") {
-        // biome-ignore lint/suspicious/noConsoleLog: test observer note
         console.log("T-LIVE.4: cold-cache timing test; set MAI_LIVE_COLDCACHE=1 to enable");
         return; // soft skip; operator opts in explicitly
       }

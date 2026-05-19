@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -161,7 +161,10 @@ describe("mai server persona list — json flag (G-P27.15)", () => {
     const chunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
     // biome-ignore lint/suspicious/noExplicitAny: stdout capture
-    process.stdout.write = (chunk: any) => { chunks.push(String(chunk)); return true; };
+    process.stdout.write = (chunk: any) => {
+      chunks.push(String(chunk));
+      return true;
+    };
     try {
       await runServerPersonaSubcommand(
         "add",
@@ -199,7 +202,10 @@ describe("mai server persona show — persona exists (G-P27.15)", () => {
     const chunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
     // biome-ignore lint/suspicious/noExplicitAny: stdout capture
-    process.stdout.write = (chunk: any) => { chunks.push(String(chunk)); return true; };
+    process.stdout.write = (chunk: any) => {
+      chunks.push(String(chunk));
+      return true;
+    };
     try {
       await runServerPersonaSubcommand(
         "add",
