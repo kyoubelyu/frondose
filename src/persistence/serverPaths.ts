@@ -19,8 +19,7 @@ export const SERVER_LOGS_DIR = (): string => join(SERVER_ROOT(), "logs");
 export const SERVER_WORKERS_DB_PATH = (): string => join(SERVER_ROOT(), "workers.sqlite");
 export const SERVER_INBOX_DB_PATH = (): string => join(SERVER_ROOT(), "inbox.sqlite");
 
-// P-27: invite token store + persona template library.
-export const SERVER_INVITES_DB_PATH = (): string => join(SERVER_ROOT(), "invites.sqlite");
+// P-27: persona template library.
 export const SERVER_PERSONAS_DIR = (): string => join(SERVER_ROOT(), "personas");
 
 // P-28: credential library (LLM keys + Google accounts).

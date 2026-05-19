@@ -1,15 +1,18 @@
 /**
  * P-29 Step 5 — T-WEB.AUTH.1-5, T-WEB.STATIC.1-3, T-WEB.WORKERS.1,
- *               T-WEB.LEADS.1, T-WEB.PERSONAS.1, T-WEB.INVITES.1,
- *               T-WEB.PROV.1-4, T-WEB.404
+ *               T-WEB.LEADS.1, T-WEB.PERSONAS.1, T-WEB.404
+ *
+ * P-41 pruning: T-WEB.INVITES.1 (GET /api/web/invites — route retired) and
+ * T-WEB.PROV.1-4 (POST /api/web/provision — old invite-based flow retired;
+ * SSH-based provision tested in tests/tools/provisionWorkerSsh.mock.test.ts)
+ * are removed. The invitesRegistry import is also removed.
  *
  * Tests for src/cli/serverWeb.ts — startWebHttp HTTP server.
  * Strategy: start server on ephemeral port (port=0) with :memory: DB handles
  * + tmp assetRoot fixture dir; issue real fetch() calls; assert responses.
  *
  * Gate coverage: G-P29.1, G-P29.2, G-P29.3, G-P29.4, G-P29.5, G-P29.6,
- *                G-P29.7, G-P29.8, G-P29.9, G-P29.10, G-P29.12, G-P29.14,
- *                G-P29.15, G-P29.16, G-P29.17, G-P29.18, G-P29.19
+ *                G-P29.7, G-P29.8, G-P29.9, G-P29.10, G-P29.12, G-P29.14
  */
 
 import assert from "node:assert/strict";
@@ -20,7 +23,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { checkBasicAuth, startWebHttp, type WebHttpDeps } from "../../src/cli/serverWeb.js";
-import { insertInvite, openInvitesDb } from "../../src/persistence/invitesRegistry.js";
 import { appendPersonInteraction, openMemoryDatabase } from "../../src/persistence/memory.js";
 import { writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
 import { addWorker, insertLeadAction, openWorkersDb } from "../../src/persistence/workersRegistry.js";
@@ -45,17 +47,20 @@ function makeFixture(overrides: Partial<WebHttpDeps> = {}): TestFixture {
 
   const workersDb = openWorkersDb(":memory:");
   const memoryDb = openMemoryDatabase(":memory:");
-  const invitesDb = openInvitesDb(":memory:");
 
+  // P-41: WebHttpDeps drops invitesDb, adds credentialsDb.
+  // Use `as any` to bridge pre/post Step-4b source states.
   const deps: WebHttpDeps = {
     workersDb,
     memoryDb,
-    invitesDb,
+    // invitesDb removed in P-41; credentialsDb added — null until builder lands E-6
+    // biome-ignore lint/suspicious/noExplicitAny: P-41 transition — spread unknown fields
+    ...({ invitesDb: null, credentialsDb: null } as any),
     personasDir,
     serverUrl: "http://127.0.0.1:3031",
     assetRoot: assetDir,
     ...overrides,
-  };
+  } as WebHttpDeps;
 
   return {
     deps,
@@ -64,11 +69,6 @@ function makeFixture(overrides: Partial<WebHttpDeps> = {}): TestFixture {
     cleanup: () => {
       workersDb.close();
       memoryDb.close();
-      if (deps.invitesDb && deps.invitesDb !== invitesDb) {
-        // overridden invitesDb — original is already closed or null
-      } else {
-        invitesDb.close();
-      }
       rmSync(assetDir, { recursive: true, force: true });
       rmSync(personasDir, { recursive: true, force: true });
     },
@@ -125,10 +125,7 @@ describe("startWebHttp — Basic-Auth gate (G-P29.2, G-P29.3, G-P29.4, G-P29.5, 
       const res = await fetch(`http://127.0.0.1:${port}/`);
       assert.equal(res.status, 401, "T-WEB.AUTH.2: no-auth request must return 401 when webToken is set");
       const wwwAuth = res.headers.get("WWW-Authenticate");
-      assert.ok(
-        wwwAuth?.includes("Basic"),
-        `T-WEB.AUTH.2: WWW-Authenticate must include 'Basic'; got: ${wwwAuth}`,
-      );
+      assert.ok(wwwAuth?.includes("Basic"), `T-WEB.AUTH.2: WWW-Authenticate must include 'Basic'; got: ${wwwAuth}`);
       assert.ok(
         wwwAuth?.includes("mai-server"),
         `T-WEB.AUTH.2: WWW-Authenticate realm must include 'mai-server'; got: ${wwwAuth}`,
@@ -263,8 +260,11 @@ describe("startWebHttp — GET /api/web/workers (G-P29.10)", () => {
     // Then: response.workers.length===2; w1.last_action !== null with action_type+ts;
     //       w2.last_action===null; JSON body does NOT contain the string 'token_hash'
     const { deps, cleanup } = makeFixture();
+    // biome-ignore lint/style/noNonNullAssertion: fixture always initializes workersDb
     addWorker(deps.workersDb!, "w1", "token-w1", "host-a", "persona-a");
+    // biome-ignore lint/style/noNonNullAssertion: fixture always initializes workersDb
     addWorker(deps.workersDb!, "w2", "token-w2", "host-b", "persona-b");
+    // biome-ignore lint/style/noNonNullAssertion: fixture always initializes workersDb
     insertLeadAction(deps.workersDb!, "https://linkedin.com/in/alice/", "connect", "w1", Date.now());
     const { server, port } = await startTestServer(deps, undefined);
     try {
@@ -279,10 +279,7 @@ describe("startWebHttp — GET /api/web/workers (G-P29.10)", () => {
       const w2 = body.workers.find((w: any) => w.worker_id === "w2");
       assert.ok(w1, "T-WEB.WORKERS.1: w1 must be present in workers array");
       assert.ok(w1.last_action !== null, "T-WEB.WORKERS.1: w1.last_action must not be null (has lead_actions)");
-      assert.ok(
-        typeof w1.last_action.ts === "number",
-        "T-WEB.WORKERS.1: w1.last_action.ts must be a number",
-      );
+      assert.ok(typeof w1.last_action.ts === "number", "T-WEB.WORKERS.1: w1.last_action.ts must be a number");
       assert.ok(
         typeof w1.last_action.action_type === "string",
         "T-WEB.WORKERS.1: w1.last_action.action_type must be a string",
@@ -316,6 +313,7 @@ describe("startWebHttp — GET /api/web/leads pagination (G-P29.12)", () => {
           summary: `Summary ${i}`,
           ts: base.getTime() + i * 60_000,
         },
+        // biome-ignore lint/style/noNonNullAssertion: fixture always initializes memoryDb
         deps.memoryDb!,
       );
     }
@@ -381,170 +379,12 @@ describe("startWebHttp — GET /api/web/personas (G-P29.14)", () => {
       // biome-ignore lint/suspicious/noExplicitAny: test assertion
       const body = (await res.json()) as { personas: any[] };
       assert.equal(body.personas.length, 2, "T-WEB.PERSONAS.1: must return 2 personas");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
       for (const p of body.personas) {
         assert.ok("id" in p, "T-WEB.PERSONAS.1: each persona must have id field");
         assert.ok("fullName" in p, "T-WEB.PERSONAS.1: each persona must have fullName field");
         assert.ok("role" in p, "T-WEB.PERSONAS.1: each persona must have role field");
         assert.ok("company" in p, "T-WEB.PERSONAS.1: each persona must have company field");
       }
-    } finally {
-      await stopServer(server);
-      cleanup();
-    }
-  });
-});
-
-// ─── T-WEB.INVITES ────────────────────────────────────────────────────────────
-
-describe("startWebHttp — GET /api/web/invites (G-P29.15)", () => {
-  it("T-WEB.INVITES.1: given invitesDb with a row for persona p1, when GET /api/web/invites?personaId=p1 → invite rows; when GET /api/web/invites (no param) → 400", async () => {
-    // Given: invitesDb has 1 invite row for persona 'p1' (G-P29.15)
-    // When A: GET /api/web/invites?personaId=p1 → invite array
-    // When B: GET /api/web/invites (no personaId param) → 400 validation error
-    const { deps, cleanup } = makeFixture();
-    insertInvite(deps.invitesDb!, "a".repeat(64), "p1", null, Date.now() + 60_000);
-    const { server, port } = await startTestServer(deps, undefined);
-    try {
-      const resOk = await fetch(`http://127.0.0.1:${port}/api/web/invites?personaId=p1`);
-      const resBad = await fetch(`http://127.0.0.1:${port}/api/web/invites`);
-      assert.equal(resOk.status, 200, "T-WEB.INVITES.1: GET /api/web/invites?personaId=p1 must return 200");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const bodyOk = (await resOk.json()) as { invites: any[] };
-      assert.ok(Array.isArray(bodyOk.invites), "T-WEB.INVITES.1: invites must be an array");
-      assert.equal(bodyOk.invites.length, 1, "T-WEB.INVITES.1: must return 1 invite row for p1");
-      assert.equal(resBad.status, 400, "T-WEB.INVITES.1: GET /api/web/invites with no personaId must return 400");
-    } finally {
-      await stopServer(server);
-      cleanup();
-    }
-  });
-});
-
-// ─── T-WEB.PROV ───────────────────────────────────────────────────────────────
-
-describe("startWebHttp — POST /api/web/provision (G-P29.16, G-P29.17, G-P29.18, G-P29.19)", () => {
-  it("T-WEB.PROV.1: given persona p1 + open invitesDb + serverUrl, when POST /api/web/provision {personaId:'p1'}, then 200 {ok:true, curlCommand, expiresAt, personaId}; 1 invite row inserted", async () => {
-    // Given: persona 'p1' in personasDir; invitesDb open; serverUrl non-empty (G-P29.16)
-    // When: POST /api/web/provision with {personaId:'p1'}
-    // Then: 200 {ok:true, curlCommand matching /bootstrap\/[0-9a-f]{64}\.sh/, expiresAt, personaId:'p1'};
-    //       invitesDb.prepare("SELECT COUNT(*)...").get() shows 1 inserted row
-    const { deps, personasDir, cleanup } = makeFixture();
-    writePersonaTemplate(personasDir, "p1", {
-      fullName: "Alice BD",
-      role: "BD",
-      company: "Acme",
-      priorities: [],
-      traits: [],
-      updatedAt: new Date().toISOString(),
-    });
-    const { server, port } = await startTestServer(deps, undefined);
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/web/provision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId: "p1" }),
-      });
-      assert.equal(res.status, 200, "T-WEB.PROV.1: POST /api/web/provision with valid persona must return 200");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const body = (await res.json()) as any;
-      assert.equal(body.ok, true, "T-WEB.PROV.1: response body must have ok:true");
-      assert.ok(typeof body.curlCommand === "string", "T-WEB.PROV.1: curlCommand must be a string");
-      assert.ok(
-        /\/bootstrap\/[0-9a-f]{64}\.sh/.test(body.curlCommand),
-        `T-WEB.PROV.1: curlCommand must contain 64-char hex token; got: ${body.curlCommand}`,
-      );
-      assert.ok(typeof body.expiresAt === "string", "T-WEB.PROV.1: expiresAt must be a string");
-      assert.equal(body.personaId, "p1", "T-WEB.PROV.1: personaId must be 'p1'");
-      // Verify invite row was inserted
-      const row = deps.invitesDb!
-        .prepare("SELECT COUNT(*) as cnt FROM invites WHERE persona_id='p1'")
-        .get() as { cnt: number };
-      assert.equal(row.cnt, 1, "T-WEB.PROV.1: exactly 1 invite row must be inserted for p1");
-    } finally {
-      await stopServer(server);
-      cleanup();
-    }
-  });
-
-  it("T-WEB.PROV.2: when POST /api/web/provision {personaId:'ghost'} (persona absent), then 422 {ok:false, error:'persona_not_found'}; zero invite rows", async () => {
-    // Given: empty personasDir (persona 'ghost' does not exist) (G-P29.17)
-    // When: POST /api/web/provision with {personaId:'ghost'}
-    // Then: 422 {ok:false, error:'persona_not_found'}; invitesDb has 0 rows
-    const { deps, cleanup } = makeFixture();
-    const { server, port } = await startTestServer(deps, undefined);
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/web/provision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId: "ghost" }),
-      });
-      assert.equal(res.status, 422, "T-WEB.PROV.2: absent persona must return 422");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const body = (await res.json()) as any;
-      assert.equal(body.ok, false, "T-WEB.PROV.2: response body must have ok:false");
-      assert.equal(body.error, "persona_not_found", "T-WEB.PROV.2: error must be 'persona_not_found'");
-      // Zero invite rows
-      const row = deps.invitesDb!.prepare("SELECT COUNT(*) as cnt FROM invites").get() as { cnt: number };
-      assert.equal(row.cnt, 0, "T-WEB.PROV.2: no invite rows must be inserted for absent persona");
-    } finally {
-      await stopServer(server);
-      cleanup();
-    }
-  });
-
-  it("T-WEB.PROV.3: when POST /api/web/provision {} (missing personaId field), then 400 {ok:false, error:'validation'}", async () => {
-    // Given: valid server (G-P29.18)
-    // When: POST /api/web/provision with body={} (no personaId)
-    // Then: 400 {ok:false, error:'validation'}
-    const { deps, cleanup } = makeFixture();
-    const { server, port } = await startTestServer(deps, undefined);
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/web/provision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      assert.equal(res.status, 400, "T-WEB.PROV.3: missing personaId must return 400");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const body = (await res.json()) as any;
-      assert.equal(body.ok, false, "T-WEB.PROV.3: response body must have ok:false");
-      assert.equal(body.error, "validation", "T-WEB.PROV.3: error must be 'validation'");
-    } finally {
-      await stopServer(server);
-      cleanup();
-    }
-  });
-
-  it("T-WEB.PROV.4: given invitesDb=null, when POST /api/web/provision {personaId:'p1'}, then 503 {ok:false, error:'invites_db_unavailable'}", async () => {
-    // Given: invitesDb is null (DB not available) (G-P29.19)
-    // When: POST /api/web/provision with valid personaId
-    // Then: 503 {ok:false, error:'invites_db_unavailable'}
-    const { deps, personasDir, cleanup } = makeFixture({ invitesDb: null });
-    writePersonaTemplate(personasDir, "p1", {
-      fullName: "Alice BD",
-      role: "BD",
-      company: "Acme",
-      priorities: [],
-      traits: [],
-      updatedAt: new Date().toISOString(),
-    });
-    const { server, port } = await startTestServer(deps, undefined);
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/web/provision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId: "p1" }),
-      });
-      assert.equal(res.status, 503, "T-WEB.PROV.4: null invitesDb must return 503");
-      // biome-ignore lint/suspicious/noExplicitAny: test assertion
-      const body = (await res.json()) as any;
-      assert.equal(body.ok, false, "T-WEB.PROV.4: response body must have ok:false");
-      assert.equal(
-        body.error,
-        "invites_db_unavailable",
-        "T-WEB.PROV.4: error must be 'invites_db_unavailable'",
-      );
     } finally {
       await stopServer(server);
       cleanup();

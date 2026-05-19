@@ -10,7 +10,9 @@ interface Persona {
 
 interface ProvisionResult {
   ok: boolean;
-  curlCommand?: string;
+  workerId?: string;
+  hostname?: string;
+  nextSteps?: string[];
   error?: string;
 }
 
@@ -71,7 +73,7 @@ export function ProvisionPanel() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-slate-600">Hostname (optional)</span>
+          <span className="mb-1 block font-medium text-slate-600">Hostname (SSH host — required)</span>
           <input
             type="text"
             value={hostname}
@@ -85,12 +87,23 @@ export function ProvisionPanel() {
           disabled={!personaId || busy}
           className="rounded bg-slate-800 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
-          {busy ? "Provisioning…" : "Provision"}
+          {busy ? "Provisioning… (~2 min)" : "Provision"}
         </button>
-        {result?.ok && result.curlCommand && (
+        {busy && (
+          <p className="text-xs text-slate-500">
+            SSH provisioning installs + builds mai on the worker — this takes about 2 minutes.
+          </p>
+        )}
+        {result?.ok && result.nextSteps && (
           <div>
-            <p className="mb-1 text-sm text-slate-600">Run this on the new VM:</p>
-            <code className="block break-all rounded bg-slate-100 p-3 text-xs">{result.curlCommand}</code>
+            <p className="mb-1 text-sm text-slate-600">
+              Worker {result.workerId} provisioned on {result.hostname}. Next steps:
+            </p>
+            <ul className="list-disc space-y-1 rounded bg-slate-100 p-3 pl-7 text-xs">
+              {result.nextSteps.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
           </div>
         )}
         {result && !result.ok && <ErrorState message={`Provision failed: ${result.error ?? "unknown error"}`} />}

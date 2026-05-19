@@ -111,3 +111,75 @@ export function handleSshWs(ws: WebSocket, target: SshTarget, deps: SshWsDeps = 
     readyTimeout: 15_000,
   });
 }
+
+export interface SshExecResult {
+  stdout: string;
+  stderr: string;
+  code: number; // remote exit code; 0 = success
+}
+
+/** P-41: Promise-based non-interactive SSH exec. ssh-agent passthrough (same as
+ *  handleSshWs). A non-zero remote exit code RESOLVES (with code !== 0); only a
+ *  connection/channel error rejects. `stdinData`, when given, is written to the
+ *  channel and the write-side is closed (EOF) — so `bash -s` / `cat > file` work. */
+export function runSshExec(
+  target: SshTarget,
+  command: string,
+  stdinData?: Buffer | string,
+  deps: SshWsDeps = {},
+): Promise<SshExecResult> {
+  const ClientCtor = deps.ClientCtor ?? Client;
+  return new Promise<SshExecResult>((resolve, reject) => {
+    const client = new ClientCtor();
+    let settled = false;
+    const fail = (e: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(e);
+      }
+      try {
+        client.end();
+      } catch {
+        /* */
+      }
+    };
+    client.on("ready", () => {
+      client.exec(command, (err, channel) => {
+        if (err || !channel) {
+          fail(err ?? new Error("ssh exec failed"));
+          return;
+        }
+        let stdout = "";
+        let stderr = "";
+        let code = 0;
+        channel.on("data", (c: Buffer) => {
+          stdout += c.toString("utf-8");
+        });
+        channel.stderr.on("data", (c: Buffer) => {
+          stderr += c.toString("utf-8");
+        });
+        channel.on("exit", (exitCode: number | null) => {
+          code = exitCode ?? 0;
+        });
+        // ssh2's `close` fires with no args — the exit code came from `exit` above.
+        channel.on("close", () => {
+          if (!settled) {
+            settled = true;
+            resolve({ stdout, stderr, code });
+          }
+          client.end();
+        });
+        // Write stdin (if any) and close the write-side so the remote sees EOF.
+        channel.end(stdinData ?? undefined);
+      });
+    });
+    client.on("error", (e) => fail(e));
+    client.connect({
+      host: target.host,
+      port: target.port,
+      username: target.user,
+      agent: process.env.SSH_AUTH_SOCK,
+      readyTimeout: 15_000,
+    });
+  });
+}

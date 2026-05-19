@@ -7,10 +7,9 @@ import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
-import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
-import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH } from "../persistence/serverPaths.js";
+import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH, SERVER_WORKERS_CONFIG_DIR } from "../persistence/serverPaths.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeBrowserTools } from "./browser/index.js";
 import { echoTool } from "./control/echo.js";
@@ -61,8 +60,7 @@ export interface PersistencePaths {
   secretsPath?: string;
   workersDbPath?: string;
   serverInboxDbPath?: string;
-  // P-27: invite store + persona library + server URL (server mode).
-  invitesDbPath?: string;
+  // P-27: persona library + server URL (server mode).
   personasDir?: string;
   serverUrl?: string;
   // P-28.5: server credential store handle for dispatch_google_login.
@@ -169,19 +167,9 @@ export function makeAllTools(
       workersDb = openWorkersDb(persistence.workersDbPath);
       serverInboxDb = openServerInboxDb(persistence.serverInboxDbPath);
     }
-    // P-27: invite store + persona library. invitesDb may stay null (graceful
-    // envelope at execute time); personasDir falls back to the default.
-    let invitesDb: import("better-sqlite3").Database | null = null;
-    if (persistence?.invitesDbPath) {
-      try {
-        invitesDb = openInvitesDb(persistence.invitesDbPath);
-      } catch (e) {
-        process.stderr.write(`[mai] cannot open invites.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
-      }
-    }
     const personasDir = persistence?.personasDir ?? SERVER_PERSONAS_DIR();
-    const serverUrl =
-      persistence?.serverUrl ?? (persistence?.configPath ? (readConfig(persistence.configPath).server.url ?? "") : "");
+    const serverCfg = persistence?.configPath ? readConfig(persistence.configPath) : null;
+    const serverUrl = persistence?.serverUrl ?? serverCfg?.server.url ?? "";
     // P-28.5: credential store for dispatch_google_login (LLM passes only workerId).
     let credentialsDb: import("better-sqlite3").Database | null = null;
     if (persistence?.credentialsDbPath) {
@@ -194,7 +182,15 @@ export function makeAllTools(
     Object.assign(out, {
       list_workers: makeListWorkersTool(workersDb),
       send_worker_message: makeSendWorkerMessageTool(workersDb, serverInboxDb),
-      provision_worker: makeProvisionWorkerTool(invitesDb, personasDir, serverUrl),
+      provision_worker: makeProvisionWorkerTool({
+        workersDb,
+        credentialsDb,
+        personasDir,
+        serverUrl,
+        sshUser: serverCfg?.server.ssh_user ?? null,
+        sshPort: serverCfg?.server.ssh_port ?? 22,
+        workersConfigDir: SERVER_WORKERS_CONFIG_DIR(),
+      }),
       revoke_worker: makeRevokeWorkerTool(workersDb),
       list_personas: makeListPersonasTool(personasDir),
       dispatch_google_login: makeDispatchGoogleLoginTool({
