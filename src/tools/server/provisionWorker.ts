@@ -40,6 +40,23 @@ export type ProvisionResult =
 export interface ProvisionDeps {
   execImpl?: typeof runSshExec;
   installShPath?: string;
+  /** P-42: test-only sandbox-prefix DI. When set, the install.sh exec gets
+   *  `MAI_PREFIX=<prefix>` and config/secrets are written under `<prefix>/.mai/agent`
+   *  instead of `~/.mai/agent`. NOT on the provision_worker Zod schema — undefined
+   *  for every real operator provision (zero production behavior change). */
+  maiPrefix?: string;
+}
+
+/** P-42: validate the test-only `maiPrefix` DI value — it is interpolated UNQUOTED
+ *  into `MAI_PREFIX=<value> bash -s`, so an ALLOWLIST is used (a denylist would miss
+ *  `;|&><()` etc. and let `/tmp/x;echo INJECTED` through). Only `a-z A-Z 0-9 . _ - /`
+ *  are permitted — that subsumes every shell-injection vector. Never operator-facing
+ *  → a hard throw is sufficient; plain `/tmp/mai-p42-XXXX` paths pass cleanly. */
+function simplePathEscape(p: string): string {
+  if (!/^[a-zA-Z0-9._\-/]+$/.test(p)) {
+    throw new Error(`maiPrefix contains shell-unsafe characters (only a-z, A-Z, 0-9, ., _, -, / allowed): ${p}`);
+  }
+  return p;
 }
 
 /** P-41: SSH-driven worker provisioning. Shared core for the provision_worker
@@ -68,6 +85,9 @@ export async function runSshProvision(
       error: `worker_id ${workerId} already exists; pass a different workerId or revoke the existing worker.`,
     };
   }
+  // P-42: validate the test-only maiPrefix BEFORE any side effect (addWorker) so a
+  // bad prefix throws clean — no leaked workers.sqlite row outside the SSH try/catch.
+  const safePrefix = deps.maiPrefix !== undefined ? simplePathEscape(deps.maiPrefix) : null;
   const installShPath = deps.installShPath ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../../install.sh");
   if (!existsSync(installShPath)) {
     return { ok: false, error: `install.sh not found at ${installShPath}` };
@@ -126,18 +146,23 @@ export async function runSshProvision(
   };
 
   const exec = deps.execImpl ?? runSshExec;
+  // P-42: when maiPrefix is set, redirect BOTH the install.sh prefix env var AND the
+  // config/secrets target dir into the sandbox — otherwise a localhost provision test
+  // clobbers the operator's real ~/.mai. safePrefix is validated up-front (early guard).
+  const installCmd = safePrefix !== null ? `MAI_PREFIX=${safePrefix} bash -s` : "bash -s";
+  const maiHome = safePrefix !== null ? `${safePrefix}/.mai/agent` : "~/.mai/agent";
   try {
-    const r1 = await exec(target, "bash -s", installSh);
+    const r1 = await exec(target, installCmd, installSh);
     if (r1.code !== 0) throw new Error(`install.sh failed (exit ${r1.code}): ${r1.stderr.slice(-500)}`);
     const r2 = await exec(
       target,
-      "mkdir -p ~/.mai/agent && cat > ~/.mai/agent/config.json",
+      `mkdir -p ${maiHome} && cat > ${maiHome}/config.json`,
       JSON.stringify(config, null, 2),
     );
     if (r2.code !== 0) throw new Error(`config.json write failed (exit ${r2.code}): ${r2.stderr.slice(-300)}`);
     const r3 = await exec(
       target,
-      "cat > ~/.mai/agent/secrets.json && chmod 600 ~/.mai/agent/secrets.json",
+      `cat > ${maiHome}/secrets.json && chmod 600 ${maiHome}/secrets.json`,
       JSON.stringify(secrets, null, 2),
     );
     if (r3.code !== 0) throw new Error(`secrets.json write failed (exit ${r3.code}): ${r3.stderr.slice(-300)}`);
