@@ -14,12 +14,57 @@ export const CLICKABLE_ROLES = new Set([
 ]);
 export const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "textarea"]);
 // P-37 B4: feedPost — synthesized feed-post entries surface as inspect text.
-export const TEXT_ROLES = new Set(["staticText", "text", "heading", "feedPost"]);
+// Chrome AX tree returns "StaticText" (capital S); include both forms for safety.
+export const TEXT_ROLES = new Set(["staticText", "StaticText", "text", "heading", "feedPost"]);
 
 const MAX_BUTTONS = 12;
 const MAX_INPUTS = 12;
-const MAX_TEXT = 10;
+const MAX_TEXT = 40;
 const TEXT_TRUNCATE = 180;
+
+// P-46 D-3: composer-surface detection. Predicates ported from
+// mai-linkedin/src/runtime/predicates/composer.ts — match the post-composer
+// modal's buttons + text-editor input by accessible-name signal (NOT by URL
+// surface, which stays "feed" while the modal is open).
+const COMPOSER_BUTTON_RE =
+  /(post to anyone|edit media preview|remove media|open emoji keyboard|open grammarly\.?|add media|schedule post|create a post|create an event|celebrate an occasion|^post$)/i;
+const COMPOSER_INPUT_RE = /creating content|what do you want to talk about/i;
+// The composer's publish control — accessible name exactly "Post" (anchored,
+// so it does NOT match "Repost"). This is the strongest single composer signal.
+const COMPOSER_PUBLISH_RE = /^post$/i;
+
+function isComposerButtonEntry(e: SnapshotEntry): boolean {
+  return e.role === "button" && COMPOSER_BUTTON_RE.test(e.name);
+}
+
+function isComposerInputEntry(e: SnapshotEntry): boolean {
+  return INPUT_ROLES.has(e.role) && COMPOSER_INPUT_RE.test(e.name);
+}
+
+function isComposerPublishEntry(e: SnapshotEntry): boolean {
+  return e.role === "button" && COMPOSER_PUBLISH_RE.test(e.name);
+}
+
+/**
+ * True when the captured AX entries contain a STRONG post-composer signal.
+ * C-5: a single weak composer-adjacent button (e.g. "create a post" — the feed
+ * entry-point button, present even when no modal is open) must NOT advertise
+ * the `composerModal` scope (per `references/inspect-contract.md` — a scope is
+ * omitted when not actually visible). Require EITHER a confirmed publish
+ * ("Post") button, OR the composer text editor input together with at least
+ * one composer action button — those co-occur only inside the open modal.
+ */
+function hasComposerSignals(entries: SnapshotEntry[]): boolean {
+  let hasPublish = false;
+  let hasActionButton = false;
+  let hasInput = false;
+  for (const e of entries) {
+    if (isComposerPublishEntry(e)) hasPublish = true;
+    else if (isComposerButtonEntry(e)) hasActionButton = true;
+    if (isComposerInputEntry(e)) hasInput = true;
+  }
+  return hasPublish || (hasInput && hasActionButton);
+}
 
 /**
  * Static per-surface availableScopes map. Subsets of the 18 frozen public scope ids
@@ -52,8 +97,13 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   const filteredEntries = scope ? filterByScope(ctx.entries, scope) : ctx.entries;
   const deduped = filteredEntries.filter(dedupe);
 
-  const buttons = deduped
-    .filter((e) => CLICKABLE_ROLES.has(e.role))
+  // P-46 D-3 (OQ-3): when a composer is open, promote composer buttons (esp.
+  // "Post") ahead of the MAX_BUTTONS truncation so the unscoped inspect output
+  // surfaces them without the agent needing to know the "composerModal" scope.
+  const clickables = deduped.filter((e) => CLICKABLE_ROLES.has(e.role));
+  const composerBtns = clickables.filter(isComposerButtonEntry);
+  const otherBtns = clickables.filter((e) => !isComposerButtonEntry(e));
+  const buttons = [...composerBtns, ...otherBtns]
     .slice(0, MAX_BUTTONS)
     .map((e) => ({ ref: e.ref, label: e.name }));
 
@@ -67,7 +117,12 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
     .slice(0, MAX_TEXT)
     .map((e) => (e.name.length > TEXT_TRUNCATE ? `${e.name.slice(0, TEXT_TRUNCATE)}…` : e.name));
 
-  const availableScopes = AVAILABLE_SCOPES_BY_SURFACE[ctx.surface] ?? ["page"];
+  // P-46 D-3 (OQ-4): composerModal is a runtime-conditional scope — list it only
+  // when composer signals are actually present (per inspect-contract.md).
+  const availableScopes = [...(AVAILABLE_SCOPES_BY_SURFACE[ctx.surface] ?? ["page"])];
+  if (hasComposerSignals(ctx.entries) && !availableScopes.includes("composerModal")) {
+    availableScopes.push("composerModal");
+  }
 
   return {
     surface: ctx.surface,
@@ -79,7 +134,11 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   };
 }
 
-/** P-3 simplified scope filter: returns full entries (full subtree resolution is P-4). */
-function filterByScope(entries: SnapshotEntry[], _scope: string): SnapshotEntry[] {
+/** P-46 D-3: scope filter. `composerModal` → composer buttons + composer text
+ *  input only. All other scopes keep the P-3 no-op behavior (full entry set). */
+function filterByScope(entries: SnapshotEntry[], scope: string): SnapshotEntry[] {
+  if (scope === "composerModal") {
+    return entries.filter((e) => isComposerButtonEntry(e) || isComposerInputEntry(e));
+  }
   return entries;
 }

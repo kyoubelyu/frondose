@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.4.41",
+  "version": "0.4.42",
   "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",

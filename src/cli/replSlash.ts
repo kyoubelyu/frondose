@@ -1,5 +1,6 @@
 import type { CoreMessage, LanguageModel } from "ai";
 import { compactMessages } from "../agent/compaction.js";
+import { parseMaxSteps } from "../agent/maxSteps.js";
 import type { TokenBudget } from "../agent/tokenBudget.js";
 import type { TurnLock } from "../agent/turnSemaphore.js";
 import { newSessionFile, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
@@ -28,6 +29,10 @@ export interface SlashCtx {
   turnLock: TurnLock;
   /** P-11 / D-7: deps the /telegram on path needs to boot a poller in-place. */
   telegramDeps: TelegramTurnDeps;
+  /** P-46 D-1b: current effective step budget (for `/maxsteps` with no arg). */
+  maxSteps: number;
+  /** P-46 D-1b: setter — retunes operator + cron + telegram turn budgets. */
+  setMaxSteps: (n: number) => void;
 }
 
 export interface SlashResult {
@@ -39,6 +44,7 @@ export interface SlashResult {
 const HELP_TEXT = `mai REPL slash commands:
   /compact   summarize this session, keep last 10 messages
   /new       start a fresh session in this REPL
+  /maxsteps  show or set the agent-loop step budget: /maxsteps [n]
   /cron      schedule recurring or one-shot prompts:
                /cron schedule "<task>" --cron "<5-field cron>"
                /cron schedule "<task>" --at "<HH:MM | ISO>"
@@ -65,6 +71,21 @@ export async function dispatchSlash(line: string, ctx: SlashCtx): Promise<SlashR
       ctx.sessionFile.path = newSessionFile(ctx.cwd);
       ctx.tokenBudget.reset();
       ctx.out.write(`(new session: ${ctx.sessionFile.path.split("/").pop()})\n`);
+      return { handled: true };
+    }
+    case "/maxsteps": {
+      const arg = line.split(/\s+/)[1];
+      if (arg === undefined) {
+        ctx.out.write(`(step budget: ${ctx.maxSteps})\n`);
+        return { handled: true };
+      }
+      const n = parseMaxSteps(arg);
+      if (n === null) {
+        ctx.out.write(`/maxsteps: invalid step count "${arg}" — provide a positive integer\n`);
+        return { handled: true };
+      }
+      ctx.setMaxSteps(n);
+      ctx.out.write(`(step budget set to ${n} for this session)\n`);
       return { handled: true };
     }
     case "/cron": {

@@ -92,6 +92,8 @@ export interface RunCronTurnDeps {
   abortSignal?: AbortSignal;
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
   out: NodeJS.WritableStream;
+  /** P-46 D-1b: agent-loop step budget. Undefined → loop default (200). */
+  maxSteps?: number;
 }
 
 /** P-24 §6.5: cron prompt simplification + C-3 escape chain.
@@ -124,6 +126,7 @@ export async function runCronTurn(
     system: deps.system,
     messages: deps.messages,
     tools: deps.tools,
+    maxSteps: deps.maxSteps, // P-46 D-1b
     abortSignal: deps.abortSignal,
     onStepFinish: deps.onStepFinish,
   });
