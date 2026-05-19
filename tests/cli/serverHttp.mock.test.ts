@@ -36,11 +36,9 @@ async function startAndWait(
   bindAddress: string | null = "127.0.0.1",
 ): Promise<{ server: Server; port: number }> {
   return new Promise<{ server: Server; port: number }>((resolve, reject) => {
-    // C-1 fix: ServerHttpHandlers expands 2→6 fields at builder Step 4b.
-    // Stub new fields (invitesDb=null, personasDir="", serverUrl="", maiVersion="")
-    // and cast to `any` until builder lands the 6-field interface.
-    // biome-ignore lint/suspicious/noExplicitAny: P-28 adds credentialsDb (7th field); null until builder Step 4b
-    const srv = startServerHttp({ workersDb, serverInboxDb, invitesDb: null, personasDir: "", serverUrl: "", maiVersion: "", credentialsDb: null } as any, bindAddress, 0);
+    // P-41: ServerHttpHandlers shrinks to { workersDb, serverInboxDb } (retired: invitesDb, personasDir, serverUrl, maiVersion, credentialsDb).
+    // biome-ignore lint/suspicious/noExplicitAny: P-41 transition — as any bridges pre/post-Step-4b source states
+    const srv = startServerHttp({ workersDb, serverInboxDb } as any, bindAddress, 0);
     srv.on("listening", () => {
       const addr = srv.address() as AddressInfo;
       resolve({ server: srv, port: addr.port });
@@ -510,11 +508,11 @@ describe("POST /api/lead/touch (G-P26.6)", () => {
         | undefined;
       assert.ok(row !== undefined, "T-REST.TOUCH.1: 1 row inserted into lead_actions");
       assert.ok(
-        row!.profile_url.endsWith("/"),
-        `T-REST.TOUCH.1: profile_url must have trailing slash (normalizeProfileUrl); got: ${row!.profile_url}`,
+        row?.profile_url.endsWith("/"),
+        `T-REST.TOUCH.1: profile_url must have trailing slash (normalizeProfileUrl); got: ${row?.profile_url}`,
       );
-      assert.equal(row!.action_type, "connect", "T-REST.TOUCH.1: action_type=connect");
-      assert.equal(row!.worker_id, "worker_A", "T-REST.TOUCH.1: worker_id=worker_A (from token auth)");
+      assert.equal(row?.action_type, "connect", "T-REST.TOUCH.1: action_type=connect");
+      assert.equal(row?.worker_id, "worker_A", "T-REST.TOUCH.1: worker_id=worker_A (from token auth)");
     } finally {
       if (server) await closeServer(server);
       cleanup();
@@ -554,8 +552,8 @@ describe("POST /api/event (G-P26.7)", () => {
         | { status: string; data: string }
         | undefined;
       assert.ok(row !== undefined, "T-REST.EVENT.1: 1 row in server_inbox");
-      assert.equal(row!.status, "pending", "T-REST.EVENT.1: status=pending");
-      assert.deepEqual(JSON.parse(row!.data), { person: "alice" }, "T-REST.EVENT.1: data matches");
+      assert.equal(row?.status, "pending", "T-REST.EVENT.1: status=pending");
+      assert.deepEqual(JSON.parse(row?.data), { person: "alice" }, "T-REST.EVENT.1: data matches");
     } finally {
       if (server) await closeServer(server);
       cleanup();

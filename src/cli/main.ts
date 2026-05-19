@@ -40,14 +40,12 @@ import { runOneShot, runRepl } from "./repl.js";
 import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
-import { runBootstrapRegister } from "./subcommands/bootstrapRegister.js";
 import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runGhSubcommand } from "./subcommands/gh.js";
 import { runIdentitySubcommand } from "./subcommands/identity.js";
 import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
 import { runServerCredentialSubcommand, type ServerCredentialOpts } from "./subcommands/serverCredential.js";
-import { runServerInstallTokenSubcommand } from "./subcommands/serverInstallToken.js";
 import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
 import { runServerWebTokenSubcommand } from "./subcommands/serverWebToken.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
@@ -569,16 +567,17 @@ async function main(): Promise<void> {
       await runServerWorkerSubcommand("list", { json: cliOpts.json ?? false });
       process.exit(0);
     });
-  // P-27: provision (mint invite + curl one-liner) + revoke CLI shortcuts.
+  // P-41: provision a worker over SSH + revoke CLI shortcuts.
   serverWorker
     .command("provision <persona_id>")
-    .option("--hostname <h>", "worker hostname hint")
-    .option("--ttl-min <n>", "invite TTL in minutes", "30")
-    .action(async (personaId: string, cliOpts: { hostname?: string; ttlMin?: string }) => {
+    .description("Provision a new worker over SSH (installs + configures mai on the host)")
+    .option("--hostname <h>", "worker SSH-reachable hostname (required for SSH provisioning)")
+    .option("--worker-id <id>", "explicit worker id (default: random 8-hex)")
+    .action(async (personaId: string, cliOpts: { hostname?: string; workerId?: string }) => {
       await runServerWorkerSubcommand("provision", {
         personaId,
         hostname: cliOpts.hostname,
-        ttlMin: cliOpts.ttlMin ? Number.parseInt(cliOpts.ttlMin, 10) : 30,
+        workerId: cliOpts.workerId,
       });
       process.exit(0);
     });
@@ -604,21 +603,6 @@ async function main(): Promise<void> {
   });
   serverWebToken.command("remove").action(() => {
     runServerWebTokenSubcommand("remove");
-    process.exit(0);
-  });
-
-  // P-34: `mai server install-token set/show/remove` — GitHub PAT for worker bootstrap install.
-  const serverInstallToken = server.command("install-token").description("GitHub PAT for worker bootstrap install");
-  serverInstallToken.command("set [token]").action(async (token?: string) => {
-    await runServerInstallTokenSubcommand("set", { token });
-    process.exit(0);
-  });
-  serverInstallToken.command("show").action(async () => {
-    await runServerInstallTokenSubcommand("show");
-    process.exit(0);
-  });
-  serverInstallToken.command("remove").action(async () => {
-    await runServerInstallTokenSubcommand("remove");
     process.exit(0);
   });
 
@@ -729,23 +713,6 @@ async function main(): Promise<void> {
   serverGoogle.command("remove <id>").action(async (id: string) => {
     await runCred("google-account", "remove", { id });
   });
-
-  // P-27: `mai bootstrap-register` — worker-side registration (called by the
-  // bootstrap script). NOT a Vercel tool — a Commander subcommand.
-  program
-    .command("bootstrap-register")
-    .description("Register this worker with a mai server (called by the bootstrap script)")
-    .requiredOption("--server-url <url>", "server base URL")
-    .requiredOption("--invite-token <token>", "invite token from provision_worker")
-    .action(async (cliOpts: { serverUrl: string; inviteToken: string }) => {
-      try {
-        await runBootstrapRegister({ serverUrl: cliOpts.serverUrl, inviteToken: cliOpts.inviteToken });
-      } catch (e) {
-        process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
-        process.exit(1);
-      }
-      process.exit(0);
-    });
 
   // Hidden launchd entry — invoked by ProgramArguments only.
   server.command("daemon", { hidden: true }).action(async () => {
