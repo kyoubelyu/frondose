@@ -21,9 +21,9 @@ import { join } from "node:path";
 import { describe, it, test } from "node:test";
 import { runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
 import {
+  authPathToSecretsPath,
   DEFAULT_ANTHROPIC_BASE_URL,
   DEFAULT_OPENAI_BASE_URL,
-  authPathToSecretsPath,
   maskKey,
   migrateProviderEntry,
   readAuth,
@@ -44,8 +44,10 @@ function mockProcessExit(): { getCode: () => number | undefined; restore: () => 
   };
   return {
     getCode: () => capturedCode,
-    // biome-ignore lint/suspicious/noExplicitAny: restore
-    restore: () => { (process as any).exit = orig; },
+    restore: () => {
+      // biome-ignore lint/suspicious/noExplicitAny: restore process.exit
+      (process as any).exit = orig;
+    },
   };
 }
 
@@ -115,7 +117,11 @@ test("T-Auth2: runAuthSubcommand set stores baseUrl in providers[provider]", asy
     });
     const auth = readAuth(authPath);
     assert.equal(auth?.providers?.deepseek?.key, "sk-dsk-test", "T-Auth2: key must be stored");
-    assert.equal(auth?.providers?.deepseek?.baseUrl, "https://api.deepseek.com/v1", "T-Auth2: baseUrl must be stored verbatim from url arg");
+    assert.equal(
+      auth?.providers?.deepseek?.baseUrl,
+      "https://api.deepseek.com/v1",
+      "T-Auth2: baseUrl must be stored verbatim from url arg",
+    );
     console.log("T-Auth2: baseUrl stored correctly ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -172,7 +178,13 @@ test("T-Auth4: set then remove leaves provider absent in auth.json", async () =>
   const { dir, authPath } = tmpAuthPath();
   try {
     // P-21: "set" now takes url: instead of spec:. Update to URL-based API.
-    await runAuthSubcommand("set", { url: "https://api.anthropic.com/v1", key: "sk-ant-toremove", model: "claude-sonnet-4-5", name: "anthropic", authPath });
+    await runAuthSubcommand("set", {
+      url: "https://api.anthropic.com/v1",
+      key: "sk-ant-toremove",
+      model: "claude-sonnet-4-5",
+      name: "anthropic",
+      authPath,
+    });
     const before = readAuth(authPath);
     assert.ok(before?.providers?.anthropic, "T-Auth4: pre-condition: provider must exist before remove");
 
@@ -332,7 +344,11 @@ describe("migrateProviderEntry — old-format provider entries get type + defaul
     // Then:  returned entry.type === "anthropic", entry.baseUrl === DEFAULT_ANTHROPIC_BASE_URL, entry.key preserved
     const entry = migrateProviderEntry("anthropic", { key: "sk-ant-xxx" });
     assert.equal(entry.type, "anthropic", `T-MIG.1: type must be "anthropic"`);
-    assert.equal(entry.baseUrl, DEFAULT_ANTHROPIC_BASE_URL, `T-MIG.1: baseUrl must be DEFAULT_ANTHROPIC_BASE_URL (${DEFAULT_ANTHROPIC_BASE_URL})`);
+    assert.equal(
+      entry.baseUrl,
+      DEFAULT_ANTHROPIC_BASE_URL,
+      `T-MIG.1: baseUrl must be DEFAULT_ANTHROPIC_BASE_URL (${DEFAULT_ANTHROPIC_BASE_URL})`,
+    );
     assert.equal(entry.key, "sk-ant-xxx", "T-MIG.1: key must be preserved");
   });
 
@@ -342,7 +358,11 @@ describe("migrateProviderEntry — old-format provider entries get type + defaul
     // Then:  returned entry.type === "openai", entry.baseUrl === DEFAULT_OPENAI_BASE_URL, entry.key preserved
     const entry = migrateProviderEntry("openai", { key: "sk-proj-xxx" });
     assert.equal(entry.type, "openai", `T-MIG.2: type must be "openai"`);
-    assert.equal(entry.baseUrl, DEFAULT_OPENAI_BASE_URL, `T-MIG.2: baseUrl must be DEFAULT_OPENAI_BASE_URL (${DEFAULT_OPENAI_BASE_URL})`);
+    assert.equal(
+      entry.baseUrl,
+      DEFAULT_OPENAI_BASE_URL,
+      `T-MIG.2: baseUrl must be DEFAULT_OPENAI_BASE_URL (${DEFAULT_OPENAI_BASE_URL})`,
+    );
     assert.equal(entry.key, "sk-proj-xxx", "T-MIG.2: key must be preserved");
   });
 

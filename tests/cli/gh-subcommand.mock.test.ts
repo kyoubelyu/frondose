@@ -19,9 +19,9 @@ import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 import { runGhSubcommand } from "../../src/cli/subcommands/gh.js";
 import { readGithubConfig } from "../../src/persistence/github.js";
-import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 
 // ─── mock Prompter ────────────────────────────────────────────────────────────
 
@@ -186,15 +186,10 @@ describe("runGhSubcommand (G-P15.5)", () => {
     const { cfgPath, cleanup } = makeTmpDir();
     try {
       writeFileSync(cfgPath, JSON.stringify({ token: "ghp_abcdefgh1234", repo: "own/r" }), "utf-8");
-      const stdout = await captureStdout(() =>
-        runGhSubcommand("status", { cfgPath }, makeMockPrompter()),
-      );
+      const stdout = await captureStdout(() => runGhSubcommand("status", { cfgPath }, makeMockPrompter()));
       assert.ok(stdout.includes("***1234"), `stdout must contain masked token (***1234); got: "${stdout}"`);
       assert.ok(stdout.includes("own/r"), `stdout must include repo; got: "${stdout}"`);
-      assert.ok(
-        !stdout.includes("ghp_abcdefgh1234"),
-        `stdout must NOT contain plaintext token; got: "${stdout}"`,
-      );
+      assert.ok(!stdout.includes("ghp_abcdefgh1234"), `stdout must NOT contain plaintext token; got: "${stdout}"`);
     } finally {
       cleanup();
     }

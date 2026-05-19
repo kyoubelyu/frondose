@@ -17,18 +17,20 @@ const abortSignal = new AbortController().signal;
 function makeFakeSession() {
   const scrollCalls: Array<{ direction: string; amount: number }> = [];
 
+  // P-37: scroll now uses Runtime.evaluate("window.scrollBy(dx, dy)")
+  // — old Input.synthesizeScrollGesture and Page.getLayoutMetrics are no longer called.
   const fakeHandle = {
-    Page: {
-      getLayoutMetrics: async () => ({
-        visualViewport: { clientWidth: 1280, clientHeight: 800 },
-      }),
-    },
-    Input: {
-      synthesizeScrollGesture: async (args: { x: number; y: number; xDistance: number; yDistance: number }) => {
-        scrollCalls.push({
-          direction: args.yDistance > 0 ? "down" : args.yDistance < 0 ? "up" : args.xDistance > 0 ? "right" : "left",
-          amount: Math.abs(args.yDistance || args.xDistance),
-        });
+    Runtime: {
+      evaluate: async ({ expression }: { expression: string; returnByValue?: boolean; awaitPromise?: boolean }) => {
+        const match = expression.match(/window\.scrollBy\((-?\d+),\s*(-?\d+)\)/);
+        if (match) {
+          const dx = parseInt(match[1], 10);
+          const dy = parseInt(match[2], 10);
+          const direction = dy > 0 ? "down" : dy < 0 ? "up" : dx > 0 ? "right" : "left";
+          const amount = Math.abs(dy !== 0 ? dy : dx);
+          scrollCalls.push({ direction, amount });
+        }
+        return { result: { value: undefined } };
       },
     },
   };
@@ -36,6 +38,7 @@ function makeFakeSession() {
   const client = CdpClient.fromHandle(fakeHandle);
   return {
     inputMode: "cdp" as const,
+    heartbeat: async () => true,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
     getClient: () => client,
     setLastContext: (_ctx: CurrentSurfaceContext) => {},

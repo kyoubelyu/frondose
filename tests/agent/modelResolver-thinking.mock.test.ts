@@ -235,7 +235,9 @@ test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageMod
     mkdirSync(join(tmpHome, ".mai"), { recursive: true });
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
-      JSON.stringify({ providers: { openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" } } }),
+      JSON.stringify({
+        providers: { openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" } },
+      }),
       "utf-8",
     );
     process.env.HOME = tmpHome;
@@ -278,7 +280,9 @@ test("T-MR-FIX1.M11: resolveModel('openai:gpt-4o-mini') unaffected — no fetch 
     mkdirSync(join(tmpHome, ".mai"), { recursive: true });
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
-      JSON.stringify({ providers: { openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" } } }),
+      JSON.stringify({
+        providers: { openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" } },
+      }),
       "utf-8",
     );
     process.env.HOME = tmpHome;

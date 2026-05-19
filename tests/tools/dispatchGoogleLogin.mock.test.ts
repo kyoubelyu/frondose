@@ -27,14 +27,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { addGoogleAccount, getGoogleAccount, openCredentialsDb } from "../../src/persistence/credentialLibrary.js";
+import { personaTemplateSchema, writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
 import { openServerInboxDb } from "../../src/persistence/serverInbox.js";
 import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
-import { personaTemplateSchema, writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
 import {
   type DispatchGoogleLoginDeps,
   dispatchGoogleLogin,
@@ -160,9 +160,9 @@ describe("dispatch_google_login: enqueued instruction contains required steps (G
       const result = dispatchGoogleLogin(deps, "w1");
       assert.ok(result.ok === true, "T-DGL.3: dispatch succeeded");
       if (result.ok) {
-        const row = deps.serverInboxDb!
-          .prepare("SELECT content FROM worker_pending WHERE id=?")
-          .get(result.queuedId) as { content: string } | undefined;
+        const row = deps.serverInboxDb!.prepare("SELECT content FROM worker_pending WHERE id=?").get(result.queuedId) as
+          | { content: string }
+          | undefined;
         assert.ok(row !== undefined, "T-DGL.3: enqueued row found in worker_pending");
         const content = row!.content;
         assert.ok(content.includes("clear_cookies"), "T-DGL.3: cleanup step present");
@@ -192,9 +192,7 @@ describe("dispatch_google_login error: unknown workerId (G-P28.5.12a)", () => {
       if (!result.ok) {
         assert.ok(result.error.includes("ghost"), "T-DGL.4: error names unknown worker 'ghost'");
       }
-      const count = (
-        deps.serverInboxDb!.prepare("SELECT COUNT(*) AS c FROM worker_pending").get() as { c: number }
-      ).c;
+      const count = (deps.serverInboxDb!.prepare("SELECT COUNT(*) AS c FROM worker_pending").get() as { c: number }).c;
       assert.equal(count, 0, "T-DGL.4: nothing enqueued (0 rows in worker_pending)");
     } finally {
       cleanup();
@@ -385,9 +383,9 @@ describe("dispatch_google_login: nullable sms/recovery/phone omitted from instru
       const result = dispatchGoogleLogin(deps, "w5");
       assert.ok(result.ok === true, "T-DGL.9: dispatch succeeded");
       if (result.ok) {
-        const row = deps.serverInboxDb!
-          .prepare("SELECT content FROM worker_pending WHERE id=?")
-          .get(result.queuedId) as { content: string } | undefined;
+        const row = deps.serverInboxDb!.prepare("SELECT content FROM worker_pending WHERE id=?").get(result.queuedId) as
+          | { content: string }
+          | undefined;
         assert.ok(row !== undefined, "T-DGL.9: enqueued row found");
         const content = row!.content;
         // twofa_link IS set → navigate step present
@@ -447,9 +445,9 @@ describe("dispatch_google_login: twofa_link=null → STOP instruction, no naviga
       const result = dispatchGoogleLogin(deps, "w6");
       assert.ok(result.ok === true, "T-DGL.11: dispatch succeeded");
       if (result.ok) {
-        const row = deps.serverInboxDb!
-          .prepare("SELECT content FROM worker_pending WHERE id=?")
-          .get(result.queuedId) as { content: string } | undefined;
+        const row = deps.serverInboxDb!.prepare("SELECT content FROM worker_pending WHERE id=?").get(result.queuedId) as
+          | { content: string }
+          | undefined;
         assert.ok(row !== undefined, "T-DGL.11: enqueued row found");
         const content = row!.content;
         // C-1: twofa_link=null → STOP instruction instead of navigate_to_url

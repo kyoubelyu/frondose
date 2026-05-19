@@ -99,10 +99,12 @@ describe("serverInbox persistence (G-P26.7, G-P26.15)", () => {
         summary!.includes("180 more events queued"),
         `T-SINBOX.4: summary must mention 180 more; got: ${summary!.slice(-100)}`,
       );
-      const pending = (db.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'").get() as { c: number })
-        .c;
-      const drained = (db.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='drained'").get() as { c: number })
-        .c;
+      const pending = (
+        db.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='pending'").get() as { c: number }
+      ).c;
+      const drained = (
+        db.prepare("SELECT COUNT(*) AS c FROM server_inbox WHERE status='drained'").get() as { c: number }
+      ).c;
       assert.equal(pending, 180, "T-SINBOX.4: 180 pending rows remain (MAX_PER_DRAIN=20)");
       assert.equal(drained, 20, "T-SINBOX.4: exactly 20 rows drained");
     } finally {

@@ -8,8 +8,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import path from "node:path";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   type EnvSnapshot,
@@ -91,11 +90,7 @@ describe("serverLaunchd helpers (G-P25.7, G-P25.8)", () => {
       const plPath = serverPlistPath(home);
       assert.ok(existsSync(plPath), `plist must be written at ${plPath} even if launchctl fails`);
       const st = statSync(plPath);
-      assert.strictEqual(
-        st.mode & 0o777,
-        0o600,
-        `plist mode must be 0o600 (got 0o${(st.mode & 0o777).toString(8)})`,
-      );
+      assert.strictEqual(st.mode & 0o777, 0o600, `plist mode must be 0o600 (got 0o${(st.mode & 0o777).toString(8)})`);
     } finally {
       cleanup();
     }

@@ -7,8 +7,8 @@
  * T-Retry.2 — non-wrapped tool throws → 1 call, re-throws (pass-through)
  * T-Retry.3 — withRetry exhausts maxAttempts → re-throws last error
  * T-Retry.4 — error envelope (ok:false) NOT retried (returned, not thrown)
- * T-Retry.5 — IDEMPOTENT_TOOLS set membership: 13 members; analyze_screenshot absent
- * T-Retry.6 — IDEMPOTENT_TOOLS set membership: all 13 expected names present
+ * T-Retry.5 — IDEMPOTENT_TOOLS set membership: 16 members; analyze_screenshot absent
+ * T-Retry.6 — IDEMPOTENT_TOOLS set membership: all 16 expected names present
  * T-Retry.7 — tool with no execute returns unchanged (guard)
  * T-Retry.8 — withRetry preserves tool.description and tool.parameters
  *
@@ -149,6 +149,7 @@ test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 16 members (11 existing + web_fetc
 // ─── T-Retry.6: IDEMPOTENT_TOOLS exact membership ────────────────────────────
 
 test("T-Retry.6: IDEMPOTENT_TOOLS contains all expected idempotent tool names", () => {
+  // P-44: updated from 13 to 16 (adding query_lead_globally from P-26, navigate_to_url + clear_cookies from P-28.5)
   const expected = [
     "echo",
     "getMemory",
@@ -163,6 +164,9 @@ test("T-Retry.6: IDEMPOTENT_TOOLS contains all expected idempotent tool names", 
     "sleep",
     "web_fetch",
     "web_search",
+    "query_lead_globally",
+    "navigate_to_url",
+    "clear_cookies",
   ];
 
   for (const name of expected) {

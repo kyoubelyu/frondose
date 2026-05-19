@@ -52,9 +52,7 @@ function makeImmediateModel(): MockLanguageModelV1 {
     doStream: async () => ({
       rawCall: { rawPrompt: null as unknown, rawSettings: {} as Record<string, unknown> },
       stream: Readable.toWeb(
-        Readable.from([
-          { type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } },
-        ]),
+        Readable.from([{ type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } }]),
         // biome-ignore lint/suspicious/noExplicitAny: cast for stream type
       ) as unknown as ReadableStream<any>,
     }),
@@ -98,11 +96,16 @@ describe("drainPendingWorkerInbox DELETEs drained rows (G-P28.5.14)", () => {
     // timeout=100ms: loop runs once, finds rows immediately, deletes + returns before sleeping
     const rows = await drainPendingWorkerInbox(db, "w1", 100);
     assert.equal(rows.length, 2, "T-DAC.1: returned 2 rows");
-    assert.ok(rows.some((r) => r.content === "msg-alpha"), "T-DAC.1: msg-alpha present");
-    assert.ok(rows.some((r) => r.content === "msg-beta"), "T-DAC.1: msg-beta present");
-    const count = (
-      db.prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE worker_id='w1'").get() as { c: number }
-    ).c;
+    assert.ok(
+      rows.some((r) => r.content === "msg-alpha"),
+      "T-DAC.1: msg-alpha present",
+    );
+    assert.ok(
+      rows.some((r) => r.content === "msg-beta"),
+      "T-DAC.1: msg-beta present",
+    );
+    const count = (db.prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE worker_id='w1'").get() as { c: number })
+      .c;
     assert.equal(count, 0, "T-DAC.1: COUNT=0 after drain (rows DELETEd, not marked consumed)");
   });
 });
@@ -147,9 +150,7 @@ describe("deleteWorkerInboxMessages DELETEs worker_inbox rows (G-P28.5.15)", () 
     deleteWorkerInboxMessages(db, ids);
     const afterPending = peekPendingWorkerInboxMessages(db);
     assert.deepEqual(afterPending, [], "T-DAC.3: peekPending returns [] after deleteWorkerInboxMessages");
-    const totalCount = (
-      db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }
-    ).c;
+    const totalCount = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
     assert.equal(totalCount, 0, "T-DAC.3: COUNT(*) FROM worker_inbox === 0 — rows DELETEd, not flagged");
   });
 });

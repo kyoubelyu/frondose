@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createLinkedinSession, type ClientOrUnavailable } from "../../src/linkedin/index.js";
+import { type ClientOrUnavailable, createLinkedinSession } from "../../src/linkedin/index.js";
 
 // ─── Sentinel tests ───────────────────────────────────────────────────────────
 
@@ -27,13 +27,10 @@ describe("linkedin/sentinel: chromeAcquireGuard gate on getOrInitClient", () => 
       profileDir: "/tmp/fake-profile",
       chromeAcquireGuard: () => false,
     });
-    const result = await session.getOrInitClient() as ClientOrUnavailable;
+    const result = (await session.getOrInitClient()) as ClientOrUnavailable;
     assert.strictEqual(result.ok, false, "must return ok=false sentinel");
     assert.strictEqual((result as { ok: false; error: string }).error, "chrome_unavailable");
-    assert.ok(
-      typeof (result as { ok: false; message: string }).message === "string",
-      "must include a message",
-    );
+    assert.ok(typeof (result as { ok: false; message: string }).message === "string", "must include a message");
   });
 
   it("T-LINKEDIN.2: when chromeAcquireGuard returns true, getOrInitClient proceeds to Chrome boot path (throws, not sentinel)", async () => {
@@ -49,7 +46,7 @@ describe("linkedin/sentinel: chromeAcquireGuard gate on getOrInitClient", () => 
     });
     // Must throw (Chrome boot fails) but NOT return {ok:false, error:'chrome_unavailable'}
     try {
-      const result = await session.getOrInitClient() as ClientOrUnavailable;
+      const result = (await session.getOrInitClient()) as ClientOrUnavailable;
       // If for some reason it returns a value, it must NOT be the unavailable sentinel
       assert.notStrictEqual(
         (result as { ok: false; error: string }).error,
@@ -72,7 +69,7 @@ describe("linkedin/sentinel: chromeAcquireGuard gate on getOrInitClient", () => 
       // No chromeAcquireGuard — preserves pre-P23 behavior
     });
     try {
-      const result = await session.getOrInitClient() as ClientOrUnavailable;
+      const result = (await session.getOrInitClient()) as ClientOrUnavailable;
       // If returns, must not be chrome_unavailable
       assert.notStrictEqual(
         (result as { ok: false; error: string }).error,

@@ -60,8 +60,10 @@ test("T-Feed.1: agent calls expected tools in Feed flow", { timeout: 600_000 }, 
   // Presence assertions
   assert.ok(toolNames.includes("launch"), "Expected launch in tool calls");
   assert.ok(toolNames.includes("inspect"), "Expected inspect in tool calls");
-  assert.ok(toolNames.includes("scroll") || toolNames.includes("click"),
-    `Expected scroll or click in tool calls, got: ${toolNames.join(", ")}`);
+  assert.ok(
+    toolNames.includes("scroll") || toolNames.includes("click"),
+    `Expected scroll or click in tool calls, got: ${toolNames.join(", ")}`,
+  );
 
   // Count assertions
   const inspectCount = toolNames.filter((n: string) => n === "inspect").length;
@@ -70,8 +72,10 @@ test("T-Feed.1: agent calls expected tools in Feed flow", { timeout: 600_000 }, 
   // Order assertion: launch before first inspect
   const launchIdx = toolNames.indexOf("launch");
   const firstInspectIdx = toolNames.indexOf("inspect");
-  assert.ok(launchIdx < firstInspectIdx,
-    `launch (idx=${launchIdx}) must precede first inspect (idx=${firstInspectIdx})`);
+  assert.ok(
+    launchIdx < firstInspectIdx,
+    `launch (idx=${launchIdx}) must precede first inspect (idx=${firstInspectIdx})`,
+  );
 });
 
 // ─── T-Feed.2 ────────────────────────────────────────────────────
@@ -83,7 +87,7 @@ test("T-Feed.2: methodology terms appear in text output", { timeout: 600_000 }, 
   const foundTerms = METHODOLOGY_TERMS.filter((t) => feedResult.textOutput.includes(t));
   assert.ok(
     foundTerms.length >= 2,
-    `Expected ≥2 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`
+    `Expected ≥2 methodology terms in text output, found ${foundTerms.length}: ${foundTerms.join(", ")}`,
   );
 });
 
@@ -97,19 +101,26 @@ test("T-Feed.3: agent remembers ICP-relevant leads, ignores non-ICP", { timeout:
   const rememberCalls = feedResult.toolCalls.filter((tc: CapturedToolCall) => tc.toolName === "remember");
 
   // remember tool uses `personName` parameter — verified from src/tools/memory/remember.ts:8-16
-  const rememberPeople = rememberCalls.map((tc: CapturedToolCall) =>
-    String(tc.args.personName ?? "").toLowerCase());
+  const rememberPeople = rememberCalls.map((tc: CapturedToolCall) => String(tc.args.personName ?? "").toLowerCase());
 
   // At least one ICP lead should be remembered (Mark Rivera or James Okafor) — best-effort soft-fail
-  const icpRemembered = rememberPeople.some((n: string) =>
-    n.includes("alex") || n.includes("chen") || n.includes("mark") || n.includes("rivera") || n.includes("james") || n.includes("okafor"));
+  const icpRemembered = rememberPeople.some(
+    (n: string) =>
+      n.includes("alex") ||
+      n.includes("chen") ||
+      n.includes("mark") ||
+      n.includes("rivera") ||
+      n.includes("james") ||
+      n.includes("okafor"),
+  );
   if (!icpRemembered) {
-    process.stderr.write("[T-Feed.3] Soft fail: No ICP-relevant lead (Mark Rivera or James Okafor) remembered. " +
-      "Agent may have focused on content browsing rather than prospect identification.\n");
+    process.stderr.write(
+      "[T-Feed.3] Soft fail: No ICP-relevant lead (Mark Rivera or James Okafor) remembered. " +
+        "Agent may have focused on content browsing rather than prospect identification.\n",
+    );
   }
 
   // Emily Zhang should NOT be remembered (Staff Engineer — non-ICP)
-  const emilyRemembered = rememberPeople.some((n: string) =>
-    n.includes("emily") || n.includes("zhang"));
+  const emilyRemembered = rememberPeople.some((n: string) => n.includes("emily") || n.includes("zhang"));
   assert.ok(!emilyRemembered, "Emily Zhang (Staff Engineer) should NOT be remembered (non-ICP)");
 });

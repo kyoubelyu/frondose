@@ -24,11 +24,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import {
-  compareVersions,
-  runUpdateSubcommand,
-} from "../../src/cli/subcommands/update.js";
 import type { UpdateSubcommandOpts } from "../../src/cli/subcommands/update.js";
+import { compareVersions, runUpdateSubcommand } from "../../src/cli/subcommands/update.js";
 
 // ─── mock helpers ──────────────────────────────────────────────────────────────
 
@@ -40,9 +37,7 @@ function makeJsonResponse(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
-function makeMockFetch(
-  response: Response | Error,
-): Exclude<UpdateSubcommandOpts["fetchImpl"], undefined> {
+function makeMockFetch(response: Response | Error): Exclude<UpdateSubcommandOpts["fetchImpl"], undefined> {
   return async () => {
     if (response instanceof Error) throw response;
     return response;
@@ -101,16 +96,12 @@ describe("runUpdateSubcommand — token handling", () => {
     // cfgPath is inside tmpdir but we do NOT write it → readGithubConfig returns {}
     await withoutGhToken(async () => {
       let fetchCallCount = 0;
-      const trackedFetch = async (
-        ..._args: Parameters<typeof globalThis.fetch>
-      ): Promise<Response> => {
+      const trackedFetch = async (..._args: Parameters<typeof globalThis.fetch>): Promise<Response> => {
         fetchCallCount++;
         return makeJsonResponse(200, {}); // should never be reached
       };
 
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: trackedFetch, cfgPath }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: trackedFetch, cfgPath }));
 
       assert.strictEqual(fetchCallCount, 0, "fetchImpl must NEVER be called when no token");
       assert.ok(
@@ -145,9 +136,7 @@ describe("runUpdateSubcommand — version comparison", () => {
     );
 
     await withoutGhToken(async () => {
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }));
 
       assert.ok(out.includes("Current:  v0.4.14"), `missing "Current:  v0.4.14": ${JSON.stringify(out)}`);
       assert.ok(out.includes("Latest:   v0.4.14"), `missing "Latest:   v0.4.14": ${JSON.stringify(out)}`);
@@ -219,9 +208,7 @@ describe("runUpdateSubcommand — version comparison", () => {
 
     await withoutGhToken(async () => {
       // Human-readable mode
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }));
       assert.ok(
         out.includes("ahead of latest release"),
         `stdout should say "ahead of latest release": ${JSON.stringify(out)}`,
@@ -321,9 +308,7 @@ describe("runUpdateSubcommand — --json flag", () => {
     const { cfgPath, cleanup } = makeTmpDir();
     // Do NOT write cfgPath — no token in config
     await withoutGhToken(async () => {
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ cfgPath, json: true }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ cfgPath, json: true }));
 
       const parsed = JSON.parse(out.trim());
       assert.strictEqual(parsed.error, "no_token", `error must be "no_token": ${JSON.stringify(parsed)}`);
@@ -356,17 +341,12 @@ describe("runUpdateSubcommand — error handling", () => {
 
     await withoutGhToken(async () => {
       // Human-readable mode
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: makeMockFetch(resp401), cfgPath }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: makeMockFetch(resp401), cfgPath }));
       assert.ok(
         out.includes("GitHub token invalid"),
         `stdout should contain "GitHub token invalid": ${JSON.stringify(out)}`,
       );
-      assert.ok(
-        out.includes("mai gh set --token"),
-        `stdout should contain reconfigure hint: ${JSON.stringify(out)}`,
-      );
+      assert.ok(out.includes("mai gh set --token"), `stdout should contain reconfigure hint: ${JSON.stringify(out)}`);
 
       // JSON mode
       const jsonOut = await captureStdout(() =>
@@ -383,10 +363,7 @@ describe("runUpdateSubcommand — error handling", () => {
         false,
         `updateAvailable must be false on error: ${JSON.stringify(parsed)}`,
       );
-      assert.ok(
-        typeof parsed.message === "string",
-        `message must be a string: ${JSON.stringify(parsed)}`,
-      );
+      assert.ok(typeof parsed.message === "string", `message must be a string: ${JSON.stringify(parsed)}`);
     });
     cleanup();
   });
@@ -402,9 +379,7 @@ describe("runUpdateSubcommand — error handling", () => {
 
     await withoutGhToken(async () => {
       // Human-readable mode
-      const out = await captureStdout(() =>
-        runUpdateSubcommand({ fetchImpl: makeMockFetch(resp404), cfgPath }),
-      );
+      const out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: makeMockFetch(resp404), cfgPath }));
       // Implementation throws "Release not found" for 404 → stdout "Error checking for updates: Release not found"
       const lowerOut = out.toLowerCase();
       assert.ok(
@@ -446,9 +421,7 @@ describe("runUpdateSubcommand — error handling", () => {
       let threw = false;
       let out = "";
       try {
-        out = await captureStdout(() =>
-          runUpdateSubcommand({ fetchImpl: makeMockFetch(networkError), cfgPath }),
-        );
+        out = await captureStdout(() => runUpdateSubcommand({ fetchImpl: makeMockFetch(networkError), cfgPath }));
       } catch {
         threw = true;
       }
@@ -605,10 +578,7 @@ describe("Commander registration", () => {
     // When:  Help text is generated via node dist/cli/main.js --help
     // Then:  Output includes "update" subcommand and "Check for mai-agent updates"
     const out = execSync("node dist/cli/main.js --help", { encoding: "utf-8" });
-    assert.ok(
-      out.includes("update"),
-      `help text should include "update" subcommand: ${out}`,
-    );
+    assert.ok(out.includes("update"), `help text should include "update" subcommand: ${out}`);
     assert.ok(
       out.includes("Check for mai-agent updates"),
       `help text should include description "Check for mai-agent updates": ${out}`,
@@ -623,10 +593,7 @@ describe("contract checks", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
     // Then:  exactly 24 — mai update is a CLI subcommand, not a Vercel tool
-    const out = execSync(
-      "grep -r \"tool(\" src/tools/ --include=\"*.ts\" | wc -l",
-      { encoding: "utf-8" },
-    );
+    const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
     assert.strictEqual(
       count,
@@ -645,30 +612,18 @@ describe("contract checks", () => {
     //        part of P-20's gate — only the new file and the tool boundary are checked here.
 
     // update.ts must pass biome clean
-    const updateResult = execSync(
-      "npx biome check src/cli/subcommands/update.ts 2>&1",
-      { encoding: "utf-8" },
-    );
-    assert.ok(
-      !updateResult.includes("Found"),
-      `src/cli/subcommands/update.ts has biome lint issues:\n${updateResult}`,
-    );
+    const updateResult = execSync("npx biome check src/cli/subcommands/update.ts 2>&1", { encoding: "utf-8" });
+    assert.ok(!updateResult.includes("Found"), `src/cli/subcommands/update.ts has biome lint issues:\n${updateResult}`);
 
     // src/tools/ must pass biome clean (no child_process violations either)
-    const toolsResult = execSync(
-      "npx biome check src/tools/ 2>&1",
-      { encoding: "utf-8" },
-    );
-    assert.ok(
-      !toolsResult.includes("Found"),
-      `src/tools/ has biome lint issues:\n${toolsResult}`,
-    );
+    const toolsResult = execSync("npx biome check src/tools/ 2>&1", { encoding: "utf-8" });
+    assert.ok(!toolsResult.includes("Found"), `src/tools/ has biome lint issues:\n${toolsResult}`);
 
     // Verify no actual child_process import slipped into src/tools/.
     // Grep specifically for TypeScript import/require statements, not comments.
     // (grep returns exit code 1 if no match; || echo CLEAN prevents execSync throw)
     const cpCheck = execSync(
-      "grep -rE \"from ['\\\"]node:child_process['\\\"]|require\\(.*child_process\" src/tools/ 2>/dev/null || echo CLEAN",
+      'grep -rE "from [\'\\"]node:child_process[\'\\"]|require\\(.*child_process" src/tools/ 2>/dev/null || echo CLEAN',
       { encoding: "utf-8" },
     );
     assert.ok(

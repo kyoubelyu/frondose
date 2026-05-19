@@ -75,22 +75,13 @@ describe("readSecrets — corrupt secrets.json emits expected-shape hint on stde
       const stderr = stderrChunks.join("");
       // The hint written by tryReadJson:
       //   '  Expected: {"schema_version":1,"providers":{"<name>":{"key":"...","type":"anthropic|openai"}}}\n'
-      assert.ok(
-        stderr.length > 0,
-        "T-FD1.1: stderr must be non-empty when secrets.json is corrupt",
-      );
+      assert.ok(stderr.length > 0, "T-FD1.1: stderr must be non-empty when secrets.json is corrupt");
       assert.ok(
         stderr.includes("schema_version"),
         `T-FD1.1: stderr hint must include 'schema_version'; got: ${stderr}`,
       );
-      assert.ok(
-        stderr.includes("providers"),
-        `T-FD1.1: stderr hint must include 'providers'; got: ${stderr}`,
-      );
-      assert.ok(
-        stderr.includes("key"),
-        `T-FD1.1: stderr hint must include 'key'; got: ${stderr}`,
-      );
+      assert.ok(stderr.includes("providers"), `T-FD1.1: stderr hint must include 'providers'; got: ${stderr}`);
+      assert.ok(stderr.includes("key"), `T-FD1.1: stderr hint must include 'key'; got: ${stderr}`);
       assert.ok(
         stderr.includes("anthropic|openai"),
         `T-FD1.1: stderr hint must include 'anthropic|openai' type guidance; got: ${stderr}`,

@@ -83,7 +83,10 @@ describe("readSecrets — migrates auth.json on first call when secrets.json abs
       assert.ok(existsSync(secretsPath), "T-MIGRATE.AUTH.1: secrets.json must be written after migration");
       // auth.json unchanged
       const authContent = JSON.parse(readFileSync(authPath, "utf-8")) as { providers?: { anthropic?: unknown } };
-      assert.ok(authContent.providers?.anthropic, "T-MIGRATE.AUTH.1: auth.json must be retained (legacy file untouched)");
+      assert.ok(
+        authContent.providers?.anthropic,
+        "T-MIGRATE.AUTH.1: auth.json must be retained (legacy file untouched)",
+      );
     } finally {
       restoreEnv(saved);
       cleanup();
@@ -171,10 +174,20 @@ describe("readSecrets — secrets.json wins over legacy when both exist (G-P24.2
 
       const result = readSecrets(secretsPath);
 
-      assert.equal(result.providers?.anthropic?.key, "K1", "T-MIGRATE.MIXED.1: secrets.json must win; K1 must be returned");
+      assert.equal(
+        result.providers?.anthropic?.key,
+        "K1",
+        "T-MIGRATE.MIXED.1: secrets.json must win; K1 must be returned",
+      );
       // auth.json unchanged
-      const authContent = JSON.parse(readFileSync(authPath, "utf-8")) as { providers?: { anthropic?: { key?: string } } };
-      assert.equal(authContent.providers?.anthropic?.key, "K2", "T-MIGRATE.MIXED.1: auth.json must be unchanged (legacy never written)");
+      const authContent = JSON.parse(readFileSync(authPath, "utf-8")) as {
+        providers?: { anthropic?: { key?: string } };
+      };
+      assert.equal(
+        authContent.providers?.anthropic?.key,
+        "K2",
+        "T-MIGRATE.MIXED.1: auth.json must be unchanged (legacy never written)",
+      );
     } finally {
       restoreEnv(saved);
       cleanup();
@@ -307,8 +320,16 @@ describe("readSecrets — concurrent migrations produce valid result (G-P24.1)",
       // Both must return valid SecretsJson
       assert.equal(r1.schema_version, 1, "T-MIGRATE.RACE.1: first result must have schema_version:1");
       assert.equal(r2.schema_version, 1, "T-MIGRATE.RACE.1: second result must have schema_version:1");
-      assert.equal(r1.providers?.anthropic?.key, "sk-ant-race", "T-MIGRATE.RACE.1: first result must have migrated key");
-      assert.equal(r2.providers?.anthropic?.key, "sk-ant-race", "T-MIGRATE.RACE.1: second result must have migrated key");
+      assert.equal(
+        r1.providers?.anthropic?.key,
+        "sk-ant-race",
+        "T-MIGRATE.RACE.1: first result must have migrated key",
+      );
+      assert.equal(
+        r2.providers?.anthropic?.key,
+        "sk-ant-race",
+        "T-MIGRATE.RACE.1: second result must have migrated key",
+      );
       // secrets.json must be valid JSON
       assert.ok(existsSync(secretsPath), "T-MIGRATE.RACE.1: secrets.json must exist after migration");
       const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8")) as { schema_version?: number };

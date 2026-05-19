@@ -1,15 +1,15 @@
 import { streamText } from "ai";
 import { resolveModel } from "../../src/agent/modelResolver.js";
-import { composeSystemPrompt } from "../../src/agent/systemPrompt/compose.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
+import { composeSystemPrompt } from "../../src/agent/systemPrompt/compose.js";
 import { composeSoulBand } from "../../src/agent/systemPrompt/soul.js";
+import { __setPacingFn } from "../../src/linkedin/pacing.js";
 import type { LinkedinSession } from "../../src/linkedin/types.js";
 import { readIdentity } from "../../src/persistence/identity.js";
-import { makeAllTools } from "../../src/tools/index.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
+import { makeAllTools } from "../../src/tools/index.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
-import { __setPacingFn } from "../../src/linkedin/pacing.js";
 
 export const TEST_IDENTITY_PATH = new URL("../fixtures/test-identity.json", import.meta.url).pathname;
 
@@ -64,10 +64,14 @@ export async function runScenario(opts: ScenarioOpts): Promise<ScenarioResult> {
     auditPath: "",
   };
 
-  const tools = makeAllTools(session, {
-    memoryDbPath: ":memory:",
-    identityPath: TEST_IDENTITY_PATH,
-  }, control);
+  const tools = makeAllTools(
+    session,
+    {
+      memoryDbPath: ":memory:",
+      identityPath: TEST_IDENTITY_PATH,
+    },
+    control,
+  );
 
   const capturedCalls: CapturedToolCall[] = [];
 

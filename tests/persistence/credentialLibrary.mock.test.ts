@@ -83,7 +83,13 @@ describe("addLlmKey + getLlmKey: insert + retrieve (G-P28.15, G-P28.16)", () => 
     //        row.assigned_count === 0; row.base_url === null
     const db = openCredentialsDb(":memory:");
     try {
-      addLlmKey(db, { id: "llm1", provider_type: "anthropic", base_url: null, api_key: "sk-PLACEHOLDER", label: "test" });
+      addLlmKey(db, {
+        id: "llm1",
+        provider_type: "anthropic",
+        base_url: null,
+        api_key: "sk-PLACEHOLDER",
+        label: "test",
+      });
       const row = getLlmKey(db, "llm1");
       assert.ok(row !== null, "T-CRED.LLM.1: getLlmKey must return a row after addLlmKey");
       assert.equal(row.api_key, "sk-PLACEHOLDER", "T-CRED.LLM.1: api_key must be 'sk-PLACEHOLDER' (C-5)");
@@ -109,8 +115,14 @@ describe("listLlmKeys: returns all rows (G-P28.16)", () => {
       addLlmKey(db, { id: "b", provider_type: "openai", base_url: null, api_key: "sk-PLACEHOLDER", label: null });
       const rows = listLlmKeys(db);
       assert.equal(rows.length, 2, "T-CRED.LLM.2: listLlmKeys must return 2 rows (G-P28.16)");
-      assert.ok(rows.some((r) => r.id === "a"), "T-CRED.LLM.2: rows must include id='a'");
-      assert.ok(rows.some((r) => r.id === "b"), "T-CRED.LLM.2: rows must include id='b'");
+      assert.ok(
+        rows.some((r) => r.id === "a"),
+        "T-CRED.LLM.2: rows must include id='a'",
+      );
+      assert.ok(
+        rows.some((r) => r.id === "b"),
+        "T-CRED.LLM.2: rows must include id='b'",
+      );
     } finally {
       db.close();
     }
@@ -148,12 +160,9 @@ describe("addLlmKey: duplicate id rejected (G-P28.18)", () => {
     const db = openCredentialsDb(":memory:");
     try {
       addLlmKey(db, { id: "llm1", provider_type: "anthropic", base_url: null, api_key: "sk-PLACEHOLDER", label: null });
-      assert.throws(
-        () => {
-          addLlmKey(db, { id: "llm1", provider_type: "openai", base_url: null, api_key: "sk-PLACEHOLDER", label: null });
-        },
-        "T-CRED.LLM.4: duplicate id must throw UNIQUE constraint error (G-P28.18)",
-      );
+      assert.throws(() => {
+        addLlmKey(db, { id: "llm1", provider_type: "openai", base_url: null, api_key: "sk-PLACEHOLDER", label: null });
+      }, "T-CRED.LLM.4: duplicate id must throw UNIQUE constraint error (G-P28.18)");
       // Original row must still be present and intact
       const row = getLlmKey(db, "llm1");
       assert.ok(row !== null, "T-CRED.LLM.4: original row must be intact after failed duplicate insert");
@@ -183,7 +192,11 @@ describe("openai llmKey: base_url stored + retrieved (G-P28.15 openai variant)",
       });
       const row = getLlmKey(db, "oai1");
       assert.ok(row !== null, "T-CRED.LLM.5: getLlmKey must return a row");
-      assert.equal(row.base_url, "https://api.openai.com/v1", "T-CRED.LLM.5: base_url must be stored and retrieved (G-P28.15)");
+      assert.equal(
+        row.base_url,
+        "https://api.openai.com/v1",
+        "T-CRED.LLM.5: base_url must be stored and retrieved (G-P28.15)",
+      );
       assert.equal(row.provider_type, "openai", "T-CRED.LLM.5: provider_type must be 'openai'");
     } finally {
       db.close();
@@ -250,7 +263,11 @@ describe("addGoogleAccount: optional P-28.5 fields stored (G-P28.19)", () => {
       const row = list.find((r) => r.id === "g2");
       assert.ok(row !== undefined, "T-CRED.GOOG.2: row must be found after insert");
       assert.equal(row.recovery_email, "rec@example.com", "T-CRED.GOOG.2: recovery_email must be stored (G-P28.19)");
-      assert.equal(row.twofa_link, "https://2fa.show/PLACEHOLDER", "T-CRED.GOOG.2: twofa_link must be stored (C-5 placeholder)");
+      assert.equal(
+        row.twofa_link,
+        "https://2fa.show/PLACEHOLDER",
+        "T-CRED.GOOG.2: twofa_link must be stored (C-5 placeholder)",
+      );
       assert.equal(row.label, "full-test", "T-CRED.GOOG.2: label must be stored");
     } finally {
       db.close();
@@ -313,10 +330,18 @@ describe("incrementLlmKeyAssignedCount + incrementGoogleAccountAssignedCount (G-
       incrementGoogleAccountAssignedCount(db, "g1");
 
       const llmRow = getLlmKey(db, "llm1");
-      assert.equal(llmRow?.assigned_count, 2, "T-CRED.GOOG.4: llm assigned_count must be 2 after 2 increments (G-P28.22)");
+      assert.equal(
+        llmRow?.assigned_count,
+        2,
+        "T-CRED.GOOG.4: llm assigned_count must be 2 after 2 increments (G-P28.22)",
+      );
 
       const googRows = listGoogleAccounts(db);
-      assert.equal(googRows[0]?.assigned_count, 2, "T-CRED.GOOG.4: google assigned_count must be 2 after 2 increments (G-P28.22)");
+      assert.equal(
+        googRows[0]?.assigned_count,
+        2,
+        "T-CRED.GOOG.4: google assigned_count must be 2 after 2 increments (G-P28.22)",
+      );
 
       // Verify getGoogleAccount is also consistent
       const googRow = getGoogleAccount(db, "g1");

@@ -80,8 +80,11 @@ describe("FakeLinkedInWorld navigation (G-P16.1)", () => {
     await client.snapshot();
     await client.clickAt("@e2");
 
-    assert.equal(world.currentPageKey, "profile-alex",
-      "Clicking Alex Chen link on search page should transition to profile-alex");
+    assert.equal(
+      world.currentPageKey,
+      "profile-alex",
+      "Clicking Alex Chen link on search page should transition to profile-alex",
+    );
 
     // Subsequent snapshot returns profile AX nodes (15 for Alex Chen)
     const profileSnapshot = await client.snapshot();
@@ -110,7 +113,12 @@ describe("FakeLinkedInWorld navigation (G-P16.1)", () => {
     assert.equal(client1, client2, "getClient should return the same instance as getOrInitClient");
 
     // setLastContext / getLastContext round-trip
-    const ctx = { pageUrl: "https://www.linkedin.com/feed/", surface: "feed" as const, activeLayer: "page" as const, entries: [] };
+    const ctx = {
+      pageUrl: "https://www.linkedin.com/feed/",
+      surface: "feed" as const,
+      activeLayer: "page" as const,
+      entries: [],
+    };
     session.setLastContext(ctx);
     const retrieved = session.getLastContext();
     assert.equal(retrieved, ctx, "getLastContext should return the object set by setLastContext");

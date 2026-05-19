@@ -22,10 +22,7 @@ const FIXTURE_PNG = `${process.cwd()}/tests/fixtures/test-screenshot.png`;
 
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "b5-1", messages: [] as CoreMessage[] };
 
-async function withEnvMulti(
-  vars: Record<string, string | undefined>,
-  fn: () => Promise<void>,
-): Promise<void> {
+async function withEnvMulti(vars: Record<string, string | undefined>, fn: () => Promise<void>): Promise<void> {
   const savedKeys = Object.keys(vars);
   const saved: Record<string, string | undefined> = {};
   for (const k of savedKeys) {
@@ -48,10 +45,7 @@ async function withEnvMulti(
  * - On the first `failCount` calls: throws with a TLS-like error
  * - On subsequent calls: returns a successful Anthropic-shaped response
  */
-function makeFetchWithFailsThenSuccess(
-  failCount: number,
-  successText: string,
-): typeof globalThis.fetch {
+function makeFetchWithFailsThenSuccess(failCount: number, successText: string): typeof globalThis.fetch {
   let callCount = 0;
   return async (_url: string | URL | Request, _init?: RequestInit) => {
     callCount++;
@@ -81,10 +75,7 @@ function makeAlwaysThrowFetch(message: string): typeof globalThis.fetch {
   };
 }
 
-async function withMockFetch(
-  mockFn: typeof globalThis.fetch,
-  fn: () => Promise<void>,
-): Promise<void> {
+async function withMockFetch(mockFn: typeof globalThis.fetch, fn: () => Promise<void>): Promise<void> {
   const orig = globalThis.fetch;
   globalThis.fetch = mockFn;
   try {
@@ -97,201 +88,178 @@ async function withMockFetch(
 // ─── T-B5.1 ──────────────────────────────────────────────────────────────────
 
 describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)", () => {
-  it(
-    "T-B5.1: when vision generateText throws AND main modelId matches vision-capable pattern (claude-*), a second generateText runs with the main model; ok result visionModel reflects the fallback",
-    async () => {
-      // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7' (vision spec, different from main);
-      //        MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable — matches /claude/);
-      //        first fetch throws; second fetch returns success
-      // When:  analyze_screenshot.execute is called
-      // Then:  result.ok === true; result.data.visionModel === 'anthropic:claude-sonnet-4-5' (fallback main spec)
+  it("T-B5.1: when vision generateText throws AND main modelId matches vision-capable pattern (claude-*), a second generateText runs with the main model; ok result visionModel reflects the fallback", async () => {
+    // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7' (vision spec, different from main);
+    //        MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable — matches /claude/);
+    //        first fetch throws; second fetch returns success
+    // When:  analyze_screenshot.execute is called
+    // Then:  result.ok === true; result.data.visionModel === 'anthropic:claude-sonnet-4-5' (fallback main spec)
 
-      const tool = makeAnalyzeScreenshotTool();
+    const tool = makeAnalyzeScreenshotTool();
 
-      await withEnvMulti(
-        {
-          ANTHROPIC_API_KEY: "test-key-b5-1",
-          MAI_VISION_MODEL: "anthropic:claude-opus-4-7",
-          MAI_MODEL: "anthropic:claude-sonnet-4-5",
-          OPENAI_API_KEY: undefined,
-          DEEPSEEK_API_KEY: undefined,
-        },
-        async () =>
-          withMockFetch(
-            makeFetchWithFailsThenSuccess(1, "Fallback vision description"),
-            async () => {
-              const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
-                ok: boolean;
-                data?: { description: string; visionModel: string; mimeType: string; bytes: number };
-                error?: { message: string };
-              };
+    await withEnvMulti(
+      {
+        ANTHROPIC_API_KEY: "test-key-b5-1",
+        MAI_VISION_MODEL: "anthropic:claude-opus-4-7",
+        MAI_MODEL: "anthropic:claude-sonnet-4-5",
+        OPENAI_API_KEY: undefined,
+        DEEPSEEK_API_KEY: undefined,
+      },
+      async () =>
+        withMockFetch(makeFetchWithFailsThenSuccess(1, "Fallback vision description"), async () => {
+          const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
+            ok: boolean;
+            data?: { description: string; visionModel: string; mimeType: string; bytes: number };
+            error?: { message: string };
+          };
 
-              assert.equal(result.ok, true, `result must be ok:true after fallback succeeds; got: ${JSON.stringify(result.error)}`);
-              assert.equal(
-                result.data?.visionModel,
-                "anthropic:claude-sonnet-4-5",
-                "visionModel must be the fallback main spec (not the original vision spec)",
-              );
-              assert.equal(
-                result.data?.description,
-                "Fallback vision description",
-                "description must come from the fallback model's response",
-              );
-            },
-          ),
-      );
-    },
-  );
+          assert.equal(
+            result.ok,
+            true,
+            `result must be ok:true after fallback succeeds; got: ${JSON.stringify(result.error)}`,
+          );
+          assert.equal(
+            result.data?.visionModel,
+            "anthropic:claude-sonnet-4-5",
+            "visionModel must be the fallback main spec (not the original vision spec)",
+          );
+          assert.equal(
+            result.data?.description,
+            "Fallback vision description",
+            "description must come from the fallback model's response",
+          );
+        }),
+    );
+  });
 
-  it(
-    "T-B5.2: when vision generateText throws AND main modelId is 'deepseek-v4-flash' (not vision-capable), NO retry; fail envelope names MAI_VISION_MODEL",
-    async () => {
-      // Given: MAI_VISION_MODEL='anthropic:claude-sonnet-4-5'; MAI_MODEL='deepseek:deepseek-v4-flash' (not vision-capable);
-      //        all fetch calls throw
-      // When:  analyze_screenshot.execute is called
-      // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"; no second fetch (deepseek not vision-capable)
+  it("T-B5.2: when vision generateText throws AND main modelId is 'deepseek-v4-flash' (not vision-capable), NO retry; fail envelope names MAI_VISION_MODEL", async () => {
+    // Given: MAI_VISION_MODEL='anthropic:claude-sonnet-4-5'; MAI_MODEL='deepseek:deepseek-v4-flash' (not vision-capable);
+    //        all fetch calls throw
+    // When:  analyze_screenshot.execute is called
+    // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"; no second fetch (deepseek not vision-capable)
 
-      const tool = makeAnalyzeScreenshotTool();
+    const tool = makeAnalyzeScreenshotTool();
 
-      await withEnvMulti(
-        {
-          ANTHROPIC_API_KEY: "test-key-b5-2",
-          DEEPSEEK_API_KEY: "test-ds-key",
-          MAI_VISION_MODEL: "anthropic:claude-sonnet-4-5",
-          MAI_MODEL: "deepseek:deepseek-v4-flash",
-          OPENAI_API_KEY: undefined,
-        },
-        async () =>
-          withMockFetch(
-            makeAlwaysThrowFetch("MOCK TLS error for B5.2"),
-            async () => {
-              const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
-                ok: boolean;
-                error?: { message: string };
-              };
-
-              assert.equal(result.ok, false, "result must be ok:false (no retry for non-vision-capable main)");
-              assert.ok(
-                result.error?.message.includes("MAI_VISION_MODEL"),
-                `error message must name MAI_VISION_MODEL; got: "${result.error?.message}"`,
-              );
-              assert.ok(
-                result.error?.message.includes("deepseek:deepseek-v4-flash") ||
-                  result.error?.message.includes("not recognized as vision-capable"),
-                "error must indicate why fallback was not attempted",
-              );
-            },
-          ),
-      );
-    },
-  );
-});
-
-// ─── T-B5.3 ──────────────────────────────────────────────────────────────────
-
-describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () => {
-  it(
-    "T-B5.3: when resolveModel throws (no provider key configured for vision spec), the pre-generateText fail envelope message names MAI_VISION_MODEL",
-    async () => {
-      // Given: MAI_VISION_MODEL='unknown_provider_b53:some-model'; no key for that provider
-      // When:  analyze_screenshot.execute is called (resolveModel fails before generateText)
-      // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"
-
-      const tool = makeAnalyzeScreenshotTool();
-
-      await withEnvMulti(
-        {
-          MAI_VISION_MODEL: "unknown_provider_b53:some-model",
-          ANTHROPIC_API_KEY: undefined,
-          OPENAI_API_KEY: undefined,
-          DEEPSEEK_API_KEY: undefined,
-        },
-        async () => {
+    await withEnvMulti(
+      {
+        ANTHROPIC_API_KEY: "test-key-b5-2",
+        DEEPSEEK_API_KEY: "test-ds-key",
+        MAI_VISION_MODEL: "anthropic:claude-sonnet-4-5",
+        MAI_MODEL: "deepseek:deepseek-v4-flash",
+        OPENAI_API_KEY: undefined,
+      },
+      async () =>
+        withMockFetch(makeAlwaysThrowFetch("MOCK TLS error for B5.2"), async () => {
           const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
             ok: boolean;
             error?: { message: string };
           };
 
-          assert.equal(result.ok, false, "result must be ok:false when resolveModel throws");
+          assert.equal(result.ok, false, "result must be ok:false (no retry for non-vision-capable main)");
           assert.ok(
             result.error?.message.includes("MAI_VISION_MODEL"),
             `error message must name MAI_VISION_MODEL; got: "${result.error?.message}"`,
           );
-        },
-      );
-    },
-  );
+          assert.ok(
+            result.error?.message.includes("deepseek:deepseek-v4-flash") ||
+              result.error?.message.includes("not recognized as vision-capable"),
+            "error must indicate why fallback was not attempted",
+          );
+        }),
+    );
+  });
+});
+
+// ─── T-B5.3 ──────────────────────────────────────────────────────────────────
+
+describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () => {
+  it("T-B5.3: when resolveModel throws (no provider key configured for vision spec), the pre-generateText fail envelope message names MAI_VISION_MODEL", async () => {
+    // Given: MAI_VISION_MODEL='unknown_provider_b53:some-model'; no key for that provider
+    // When:  analyze_screenshot.execute is called (resolveModel fails before generateText)
+    // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"
+
+    const tool = makeAnalyzeScreenshotTool();
+
+    await withEnvMulti(
+      {
+        MAI_VISION_MODEL: "unknown_provider_b53:some-model",
+        ANTHROPIC_API_KEY: undefined,
+        OPENAI_API_KEY: undefined,
+        DEEPSEEK_API_KEY: undefined,
+      },
+      async () => {
+        const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
+          ok: boolean;
+          error?: { message: string };
+        };
+
+        assert.equal(result.ok, false, "result must be ok:false when resolveModel throws");
+        assert.ok(
+          result.error?.message.includes("MAI_VISION_MODEL"),
+          `error message must name MAI_VISION_MODEL; got: "${result.error?.message}"`,
+        );
+      },
+    );
+  });
 });
 
 // ─── T-B5.4 ──────────────────────────────────────────────────────────────────
 
 describe("B5: analyze_screenshot — tool description mentions MAI_VISION_MODEL (G-P37.7)", () => {
-  it(
-    "T-B5.4: the analyze_screenshot tool description string contains 'MAI_VISION_MODEL' (operator override path documented in description)",
-    () => {
-      // Given: makeAnalyzeScreenshotTool() called with no arguments
-      // When:  tool.description string is read
-      // Then:  the description contains "MAI_VISION_MODEL" — operator is informed of the override env var
+  it("T-B5.4: the analyze_screenshot tool description string contains 'MAI_VISION_MODEL' (operator override path documented in description)", () => {
+    // Given: makeAnalyzeScreenshotTool() called with no arguments
+    // When:  tool.description string is read
+    // Then:  the description contains "MAI_VISION_MODEL" — operator is informed of the override env var
 
-      const tool = makeAnalyzeScreenshotTool();
-      const description = tool.description ?? "";
+    const tool = makeAnalyzeScreenshotTool();
+    const description = tool.description ?? "";
 
-      assert.ok(
-        description.length > 0,
-        "analyze_screenshot tool must have a non-empty description",
-      );
-      assert.ok(
-        description.includes("MAI_VISION_MODEL"),
-        "tool description must contain 'MAI_VISION_MODEL' (operator needs to know about the override env var)",
-      );
-    },
-  );
+    assert.ok(description.length > 0, "analyze_screenshot tool must have a non-empty description");
+    assert.ok(
+      description.includes("MAI_VISION_MODEL"),
+      "tool description must contain 'MAI_VISION_MODEL' (operator needs to know about the override env var)",
+    );
+  });
 });
 
 // ─── T-B5.5 (edge case) ──────────────────────────────────────────────────────
 
 describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.8 double-fail)", () => {
-  it(
-    "T-B5.5: when both the vision call AND the fallback main-model call throw, the fail envelope names MAI_VISION_MODEL and both specs",
-    async () => {
-      // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7'; MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable);
-      //        ALL fetch calls throw (vision fails AND fallback fails)
-      // When:  analyze_screenshot.execute is called
-      // Then:  result.ok === false; error message references both specs and MAI_VISION_MODEL
+  it("T-B5.5: when both the vision call AND the fallback main-model call throw, the fail envelope names MAI_VISION_MODEL and both specs", async () => {
+    // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7'; MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable);
+    //        ALL fetch calls throw (vision fails AND fallback fails)
+    // When:  analyze_screenshot.execute is called
+    // Then:  result.ok === false; error message references both specs and MAI_VISION_MODEL
 
-      const tool = makeAnalyzeScreenshotTool();
+    const tool = makeAnalyzeScreenshotTool();
 
-      await withEnvMulti(
-        {
-          ANTHROPIC_API_KEY: "test-key-b5-5",
-          MAI_VISION_MODEL: "anthropic:claude-opus-4-7",
-          MAI_MODEL: "anthropic:claude-sonnet-4-5",
-          OPENAI_API_KEY: undefined,
-          DEEPSEEK_API_KEY: undefined,
-        },
-        async () =>
-          withMockFetch(
-            makeAlwaysThrowFetch("MOCK persistent API error"),
-            async () => {
-              const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
-                ok: boolean;
-                error?: { message: string };
-              };
+    await withEnvMulti(
+      {
+        ANTHROPIC_API_KEY: "test-key-b5-5",
+        MAI_VISION_MODEL: "anthropic:claude-opus-4-7",
+        MAI_MODEL: "anthropic:claude-sonnet-4-5",
+        OPENAI_API_KEY: undefined,
+        DEEPSEEK_API_KEY: undefined,
+      },
+      async () =>
+        withMockFetch(makeAlwaysThrowFetch("MOCK persistent API error"), async () => {
+          const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
+            ok: boolean;
+            error?: { message: string };
+          };
 
-              assert.equal(result.ok, false, "result must be ok:false when both vision and fallback fail");
-              assert.ok(
-                result.error?.message.includes("MAI_VISION_MODEL"),
-                `error must reference MAI_VISION_MODEL; got: "${result.error?.message}"`,
-              );
-              // Either the visionSpec or the fallback MAI_VISION_MODEL guidance must be present
-              const msg = result.error?.message ?? "";
-              assert.ok(
-                msg.includes("claude-opus-4-7") || msg.includes("claude-sonnet-4-5") || msg.includes("fallback"),
-                "error must reference the affected model specs or the fallback",
-              );
-            },
-          ),
-      );
-    },
-  );
+          assert.equal(result.ok, false, "result must be ok:false when both vision and fallback fail");
+          assert.ok(
+            result.error?.message.includes("MAI_VISION_MODEL"),
+            `error must reference MAI_VISION_MODEL; got: "${result.error?.message}"`,
+          );
+          // Either the visionSpec or the fallback MAI_VISION_MODEL guidance must be present
+          const msg = result.error?.message ?? "";
+          assert.ok(
+            msg.includes("claude-opus-4-7") || msg.includes("claude-sonnet-4-5") || msg.includes("fallback"),
+            "error must reference the affected model specs or the fallback",
+          );
+        }),
+    );
+  });
 });

@@ -7,15 +7,14 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
-import { makeAllTools } from "../../src/tools/index.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { makeAllTools } from "../../src/tools/index.js";
 
 const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
 
@@ -187,10 +186,7 @@ describe("no child_process in P-39 new/edited .ts files (G-P39.12)", () => {
 
     for (const filePath of p39TsFiles) {
       const content = readFileSync(filePath, "utf-8");
-      assert.ok(
-        !importRe.test(content),
-        `${filePath} must NOT import child_process (G-P39.12 no-bash boundary)`,
-      );
+      assert.ok(!importRe.test(content), `${filePath} must NOT import child_process (G-P39.12 no-bash boundary)`);
     }
   });
 });

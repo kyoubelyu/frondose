@@ -13,16 +13,16 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, it } from "node:test";
 import { MockLanguageModelV1 } from "ai/test";
+import type { ReplOpts } from "../../src/cli/repl.js";
+import { runRepl } from "../../src/cli/repl.js";
 import { isPidAlive, writePid } from "../../src/persistence/processLock.js";
 import { loadMessagesShared } from "../../src/persistence/sharedSession.js";
-import { runRepl } from "../../src/cli/repl.js";
-import type { ReplOpts } from "../../src/cli/repl.js";
 import { DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -111,10 +111,7 @@ describe("repl: daemon-handshake on REPL boot", () => {
         `expected daemon-active advisory in out, got: ${outText}`,
       );
       // Poller must NOT have started (no 'poller started' or 'enabled — poller' message)
-      assert.ok(
-        !outText.includes("enabled — poller"),
-        "REPL must not start its own poller when daemon is alive",
-      );
+      assert.ok(!outText.includes("enabled — poller"), "REPL must not start its own poller when daemon is alive");
     } finally {
       process.env.HOME = origHome;
       delete process.env.TELEGRAM_TOKEN;
@@ -135,10 +132,10 @@ describe("repl: daemon-handshake on REPL boot", () => {
       const cfgPath = writeTelegramCfg(home);
       // No telegram.pid file — poller should start instead of advisory
       // Mock fetch so poller doesn't make real HTTP calls
-      // biome-ignore lint/suspicious/noExplicitAny: fetch mock
       // Add 30ms delay to prevent tight poller spin loop OOM before pollerAbort fires on REPL exit
+      // biome-ignore lint/suspicious/noExplicitAny: fetch mock
       (globalThis as any).fetch = async (): Promise<Response> => {
-        await new Promise<void>(r => setTimeout(r, 30));
+        await new Promise<void>((r) => setTimeout(r, 30));
         return { ok: true, status: 200, json: async () => ({ ok: true, result: [] }) } as unknown as Response;
       };
 
@@ -279,7 +276,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       const sharedPath = sharedSessionPath(); // creates dir, returns path
 
       const inStream = new PassThrough();
-      await new Promise<void>(r => setImmediate(r)); // yield before sending input
+      await new Promise<void>((r) => setImmediate(r)); // yield before sending input
 
       const replPromise = runRepl({
         model: makeMockModel(),
@@ -294,17 +291,17 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       });
 
       // Yield until readline loop is ready, then send a message
-      await new Promise<void>(r => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
       inStream.write("hello\n");
       // Yield for turn processing
-      await new Promise<void>(r => setTimeout(r, 200));
+      await new Promise<void>((r) => setTimeout(r, 200));
       inStream.end();
       await replPromise;
 
       // Verify messages are in shared session
       const loaded = loadMessagesShared(sharedPath);
       assert.ok(loaded.length >= 1, "shared session must have at least the user message");
-      const userMsg = loaded.find(m => m.role === "user");
+      const userMsg = loaded.find((m) => m.role === "user");
       assert.ok(userMsg, "user message must be in shared session");
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
@@ -350,10 +347,10 @@ describe("repl: cross-process turn.lock acquired before runAgentLoop (C2 recipro
       });
 
       // Yield until REPL readline loop is ready
-      await new Promise<void>(r => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
       inStream.write("hello world\n");
       // Wait for turn processing
-      await new Promise<void>(r => setTimeout(r, 300));
+      await new Promise<void>((r) => setTimeout(r, 300));
       inStream.end();
       await replPromise;
 

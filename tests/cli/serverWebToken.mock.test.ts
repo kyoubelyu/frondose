@@ -74,10 +74,7 @@ describe("runServerWebTokenSubcommand — set with no token → auto-generated h
         typeof webToken === "string" && webToken.length > 0,
         "T-WT.2: auto-generated token must be a non-empty string in secrets.json",
       );
-      assert.ok(
-        /^[0-9a-f]+$/.test(webToken!),
-        `T-WT.2: auto-generated token must be lowercase hex; got: ${webToken}`,
-      );
+      assert.ok(/^[0-9a-f]+$/.test(webToken!), `T-WT.2: auto-generated token must be lowercase hex; got: ${webToken}`);
       // Then B: P-36 F-C — stdout shows masked form, NOT the full token
       assert.ok(
         !stdout.includes(webToken!),
@@ -122,10 +119,7 @@ describe("runServerWebTokenSubcommand — show prints masked token (G-P29.22)", 
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process.stdout as any).write = origWrite;
       const stdout = stdoutChunks.join("");
-      assert.ok(
-        stdout.includes("auth: enabled"),
-        `T-WT.3: stdout must contain 'auth: enabled'; got: ${stdout}`,
-      );
+      assert.ok(stdout.includes("auth: enabled"), `T-WT.3: stdout must contain 'auth: enabled'; got: ${stdout}`);
       assert.ok(
         !stdout.includes(fullToken),
         `T-WT.3: stdout must NOT contain the full token '${fullToken}'; got: ${stdout}`,
@@ -163,11 +157,7 @@ describe("runServerWebTokenSubcommand — remove deletes webToken (G-P29.22)", (
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process.stdout as any).write = origWrite;
       const stdout = stdoutChunks.join("");
-      assert.equal(
-        secretsAfter.server?.webToken,
-        undefined,
-        "T-WT.4: server.webToken must be undefined after remove",
-      );
+      assert.equal(secretsAfter.server?.webToken, undefined, "T-WT.4: server.webToken must be undefined after remove");
       assert.ok(
         stdout.includes("auth: disabled"),
         `T-WT.4: show after remove must include 'auth: disabled'; got: ${stdout}`,

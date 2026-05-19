@@ -74,7 +74,10 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     const exitCalls: number[] = [];
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
-    (process as any).exit = (code?: number) => { exitCalls.push(code ?? 0); throw new Error(`process.exit(${code})`); };
+    (process as any).exit = (code?: number) => {
+      exitCalls.push(code ?? 0);
+      throw new Error(`process.exit(${code})`);
+    };
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG, boundUserId: 12345 });
       process.env.TELEGRAM_TOKEN = "stub-token";

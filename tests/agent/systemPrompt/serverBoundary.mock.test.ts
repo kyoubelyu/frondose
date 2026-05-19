@@ -25,7 +25,10 @@ describe("SERVER_BOUNDARY constant (G-P25.13)", () => {
     // Then:  contains all three expected framing strings
     assert.ok(SERVER_BOUNDARY.includes("mai-server"), "must contain 'mai-server'");
     assert.ok(SERVER_BOUNDARY.includes("chief-of-staff"), "must contain 'chief-of-staff'");
-    assert.ok(SERVER_BOUNDARY.includes("tool boundary") || SERVER_BOUNDARY.includes("Tool boundary"), "must contain 'tool boundary'");
+    assert.ok(
+      SERVER_BOUNDARY.includes("tool boundary") || SERVER_BOUNDARY.includes("Tool boundary"),
+      "must contain 'tool boundary'",
+    );
   });
 
   it("T-SRV.BOUND.3: SERVER_BOUNDARY contains 'escalate_for_capability' (standard escape-hatch reference)", () => {

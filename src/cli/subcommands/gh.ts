@@ -1,7 +1,7 @@
 import { existsSync, unlinkSync } from "node:fs";
 import {
-  type GithubConfig,
   DEFAULT_GITHUB_CONFIG_PATH,
+  type GithubConfig,
   maskToken,
   readGithubConfig,
   writeGithubConfig,
