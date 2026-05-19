@@ -4,6 +4,7 @@ import readline from "node:readline";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { compactMessages } from "../agent/compaction.js";
 import { runAgentLoop } from "../agent/loop.js";
+import { DEFAULT_MAX_STEPS } from "../agent/maxSteps.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import {
@@ -53,6 +54,8 @@ export interface ReplOpts {
   turnLock?: TurnLock;
   /** P-11 (D-7): telegram.json path. Default: ~/.mai/agent/telegram.json. */
   telegramConfigPath?: string;
+  /** P-46 D-1b: resolved agent-loop step budget. Default DEFAULT_MAX_STEPS. */
+  maxSteps?: number;
 }
 
 const AUTO_COMPACT_THRESHOLD = 0.5;
@@ -120,12 +123,16 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     opts.telegramConfigPath ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
   // P-11 (D-19): shared TurnLock — default-construct when absent (preserves test-stub compat).
   const turnLock = opts.turnLock ?? new TurnLock();
+  // P-46 D-1b: effective step budget for this REPL session. Mutable — the
+  // `/maxsteps` slash command retunes it for subsequent turns.
+  let effectiveMaxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
   // cronDeps mutates `sessionFile` after /new rotates the session file mid-loop.
   const cronDeps = {
     model: opts.model,
     system: opts.system,
     messages: opts.messages,
     tools: opts.tools,
+    maxSteps: effectiveMaxSteps,
     sessionFile: sessionFileRef.path,
     abortSignal: opts.abortSignal,
     onStepFinish: composedStepFinish,
@@ -139,12 +146,21 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     system: opts.system,
     messages: opts.messages,
     tools: opts.tools,
+    maxSteps: effectiveMaxSteps,
     sessionFile: sessionFileRef,
     abortSignal: opts.abortSignal,
     onStepFinish: composedStepFinish,
     out,
     configPath: effectiveTelegramConfigPath,
     uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai", "agent", "uploads"),
+  };
+  // P-46 D-1b: `/maxsteps` retunes the operator turn budget AND the background
+  // cron / telegram turn budgets (cronDeps + telegramDeps are mutated in place,
+  // mirroring the existing cronDeps.sessionFile mutation pattern).
+  const setMaxSteps = (n: number): void => {
+    effectiveMaxSteps = n;
+    cronDeps.maxSteps = n;
+    telegramDeps.maxSteps = n;
   };
 
   // P-10 (D-3 + D-16): boot-time drain of overdue jobs before first prompt.
@@ -251,6 +267,8 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
       },
       turnLock,
       telegramDeps,
+      maxSteps: effectiveMaxSteps,
+      setMaxSteps,
     });
     if (slash.handled) {
       // rev-3 D-18: /compact and /new reset the budget; redraw status.
@@ -274,6 +292,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
           system: opts.system,
           messages: opts.messages,
           tools: opts.tools,
+          maxSteps: effectiveMaxSteps, // P-46 D-1b
           // D-7: NO onText — buffered render after the loop resolves
           abortSignal: opts.abortSignal,
           onStepFinish: composedStepFinish,
@@ -379,6 +398,7 @@ export async function runOneShot(opts: ReplOpts & { prompt: string }): Promise<v
     system: opts.system,
     messages: opts.messages,
     tools: opts.tools,
+    maxSteps: opts.maxSteps, // P-46 D-1b
     onText: (delta) => out.write(delta), // unchanged: --prompt mode keeps streaming
     abortSignal: opts.abortSignal,
     onStepFinish: opts.onStepFinish,

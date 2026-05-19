@@ -41,6 +41,7 @@ export async function drainWorkerInbox(
       system: deps.system,
       messages: deps.messages,
       tools: deps.tools,
+      maxSteps: deps.maxSteps, // P-46 D-1b
       abortSignal,
       onStepFinish: deps.onStepFinish,
     });

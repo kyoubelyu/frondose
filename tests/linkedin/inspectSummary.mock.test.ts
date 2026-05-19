@@ -1,14 +1,16 @@
 /**
  * P-3 mock tests — T-M46..T-M49: InspectSummary building.
+ * P-46 mock tests — T-Inspect.1–6, T-Contract.1: composer surface + D-3 fix + contract.
  *
  * Tests buildInspectSummary(), deduplication, slicing limits, and scope handling.
  * No Chrome or LLM required.
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import { buildInspectSummary } from "../../src/linkedin/inspectSummary.js";
 import type { CurrentSurfaceContext, SnapshotEntry } from "../../src/linkedin/types.js";
+import { inspectSummarySchema } from "../../src/linkedin/types.js";
 
 function makeCtx(surface: CurrentSurfaceContext["surface"], entries: SnapshotEntry[]): CurrentSurfaceContext {
   return { pageUrl: "https://www.linkedin.com/feed/", surface, activeLayer: "page", entries };
@@ -87,8 +89,13 @@ test("T-M47: buildInspectSummary deduplicates entries by (role, name)", () => {
 });
 
 // ─── T-M48 ─────────────────────────────────────────────────────────────────────
+// NOTE (P-46 builder scope-creep): Codex raised MAX_TEXT from 10 → 40 and added
+// "StaticText" (capital S) to TEXT_ROLES for Chrome AX tree compatibility. These
+// were not in the P-46 plan but are benign production changes. MAX_TEXT=40 means
+// a fixture with 12 staticText entries returns all 12 (no slicing at 10). The
+// assertion below reflects the new MAX_TEXT=40. Documented in phase-46-test.md §Results.
 
-test("T-M48: buildInspectSummary slices buttons at 12, inputs at 12, text at 10; truncates text at 180 chars", () => {
+test("T-M48: buildInspectSummary slices buttons at 12, inputs at 12, text at 40; truncates text at 180 chars", () => {
   // Build 15 buttons, 14 inputs, 11 text nodes, and one very long text
   const entries: SnapshotEntry[] = [];
 
@@ -108,12 +115,16 @@ test("T-M48: buildInspectSummary slices buttons at 12, inputs at 12, text at 10;
   const ctx = makeCtx("unknown", entries);
   const summary = buildInspectSummary(ctx);
 
+  // P-46: MAX_BUTTONS=12, MAX_INPUTS=12, MAX_TEXT=40 (raised from 10 in P-46)
   assert.ok(summary.buttons.length <= 12, `buttons must be ≤12 (got ${summary.buttons.length})`);
   assert.ok(summary.inputs.length <= 12, `inputs must be ≤12 (got ${summary.inputs.length})`);
-  assert.ok(summary.text.length <= 10, `text must be ≤10 (got ${summary.text.length})`);
+  assert.ok(summary.text.length <= 40, `text must be ≤40 (got ${summary.text.length})`);
+  // With 12 text entries and MAX_TEXT=40, all 12 are returned (no slicing at 10)
+  assert.equal(summary.text.length, 12, "all 12 staticText entries fit within MAX_TEXT=40");
 
-  // The long text entry should be truncated to 180 chars + ellipsis, or not appear if already sliced off
+  // The long text entry should be truncated to 180 chars + ellipsis (TEXT_TRUNCATE=180 unchanged)
   const truncated = summary.text.find((t) => t.startsWith("A"));
+  assert.ok(truncated !== undefined, "long text entry must appear in text array (within MAX_TEXT=40)");
   if (truncated !== undefined) {
     assert.ok(
       truncated.length <= 182, // 180 chars + "…"
@@ -136,4 +147,280 @@ test("T-M49: buildInspectSummary with scope= is a no-op in P-3 (returns same sum
 
   // P-3: filterByScope is a no-op; both summaries must be identical
   assert.deepEqual(withoutScope, withScope, "scope param must be no-op in P-3");
+});
+
+// ─── P-46 D-3 fixtures ──────────────────────────────────────────────────────
+
+/**
+ * C-3 fixture: AX entries modelling the observed real LinkedIn composer-open page.
+ * ~15 non-composer nav/feed buttons appear before the Post button in AX tree order.
+ * The Post button is at position 16 — beyond MAX_BUTTONS=12 in the pre-P-46 code,
+ * hence "truncated out" per the D-3 diagnosis.
+ */
+const COMPOSER_LIVE_FIXTURE: SnapshotEntry[] = [
+  // Non-composer nav/feed buttons (15 total — positions 1–15 in AX order)
+  { ref: "@e1", role: "button", name: "LinkedIn Home" },
+  { ref: "@e2", role: "button", name: "My Network" },
+  { ref: "@e3", role: "button", name: "Jobs" },
+  { ref: "@e4", role: "button", name: "Messaging" },
+  { ref: "@e5", role: "button", name: "Notifications" },
+  { ref: "@e6", role: "button", name: "Start a post" },
+  { ref: "@e7", role: "button", name: "Add a photo" },
+  { ref: "@e8", role: "button", name: "Write an article" },
+  { ref: "@e9", role: "button", name: "Like" },
+  { ref: "@e10", role: "button", name: "Comment" },
+  { ref: "@e11", role: "button", name: "Share" },
+  { ref: "@e12", role: "button", name: "Send" },
+  { ref: "@e13", role: "button", name: "More options" },
+  { ref: "@e14", role: "button", name: "See all" },
+  { ref: "@e15", role: "button", name: "Connect" },
+  // Composer modal publish button — position 16 in AX tree (beyond MAX_BUTTONS=12 pre-P-46)
+  // Accessible name exactly "Post" (^post$ anchored — NOT "Repost", NOT "Post to feed")
+  { ref: "@e80", role: "button", name: "Post" },
+  // Composer text editor input (surfaces independently as an INPUT_ROLES entry)
+  { ref: "@e661", role: "textbox", name: "Text editor for creating content" },
+];
+
+/** A plain feed ctx with no composer signals (no modal open). */
+const PLAIN_FEED_ENTRIES: SnapshotEntry[] = [
+  { ref: "@n1", role: "button", name: "LinkedIn Home" },
+  { ref: "@n2", role: "button", name: "My Network" },
+  { ref: "@n3", role: "button", name: "Start a post" }, // feed entry-point — NOT a composer button
+  { ref: "@n4", role: "link", name: "Feed" },
+  { ref: "@n5", role: "staticText", name: "Top post" },
+];
+
+// ─── T-Inspect.1: composerModal scope surfaces the Post button ───────────────
+
+describe("T-Inspect.1 (G-P46.8): buildInspectSummary({scope:'composerModal'}) surfaces Post button", () => {
+  it("buttons contains {label:'Post',ref:'@e80'}; no non-composer nav buttons; inputs has text editor", () => {
+    // Given: a feed ctx whose entries are the COMPOSER_LIVE_FIXTURE
+    //        (15 non-composer buttons, Post button at @e80, text editor at @e661)
+    // When:  buildInspectSummary(ctx, "composerModal")
+    // Then:  buttons contains {ref:'@e80', label:'Post'};
+    //        buttons does NOT contain non-composer nav buttons (e.g. 'LinkedIn Home');
+    //        inputs contains the text editor (@e661)
+    const ctx = makeCtx("feed", COMPOSER_LIVE_FIXTURE);
+    const summary = buildInspectSummary(ctx, "composerModal");
+
+    assert.ok(
+      summary.buttons.some((b) => b.label === "Post" && b.ref === "@e80"),
+      "composerModal buttons must include {label:'Post', ref:'@e80'}",
+    );
+    assert.ok(
+      !summary.buttons.some((b) => b.label === "LinkedIn Home"),
+      "nav buttons must NOT appear in composerModal scope",
+    );
+    assert.ok(
+      summary.inputs.some((i) => i.ref === "@e661"),
+      "inputs must include the text editor @e661",
+    );
+  });
+
+  it("C-4 positive: {name:'Post'} exactly matches COMPOSER_PUBLISH_RE", () => {
+    // Given: ctx with a single button named exactly 'Post'
+    // When:  buildInspectSummary(ctx, "composerModal")
+    // Then:  buttons contains {label:'Post'} (COMPOSER_PUBLISH_RE ^post$ matches)
+    const ctx = makeCtx("feed", [{ ref: "@px", role: "button", name: "Post" }]);
+    const summary = buildInspectSummary(ctx, "composerModal");
+
+    assert.ok(
+      summary.buttons.some((b) => b.label === "Post"),
+      "composerModal must include the Post button when name='Post' exactly (^post$ match)",
+    );
+    assert.equal(summary.buttons[0]?.ref, "@px", "Post button ref must be @px");
+  });
+
+  it("C-4 negative: {name:'Repost'} does NOT match COMPOSER_PUBLISH_RE (anchored ^post$)", () => {
+    // Given: ctx with a single button named 'Repost'
+    // When:  buildInspectSummary(ctx, "composerModal")
+    // Then:  buttons is EMPTY — 'Repost' does not match ^post$ (anchored regex)
+    const ctx = makeCtx("feed", [{ ref: "@rx", role: "button", name: "Repost" }]);
+    const summary = buildInspectSummary(ctx, "composerModal");
+
+    assert.equal(
+      summary.buttons.length,
+      0,
+      "composerModal buttons must be EMPTY when only entry is 'Repost' (^post$ does not match 'Repost')",
+    );
+  });
+});
+
+// ─── T-Inspect.2: composerModal appears in availableScopes when composer open ─
+
+describe("T-Inspect.2 (G-P46.8): composerModal in availableScopes when composer signals detected", () => {
+  it("unscoped inspect on COMPOSER_LIVE_FIXTURE → availableScopes includes 'composerModal'", () => {
+    // Given: a feed ctx with composer signals (Post button @e80 + text editor @e661)
+    // When:  buildInspectSummary(ctx) — no scope argument
+    // Then:  availableScopes includes 'composerModal' (hasComposerSignals=true: hasPublish=true)
+    const ctx = makeCtx("feed", COMPOSER_LIVE_FIXTURE);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      summary.availableScopes.includes("composerModal"),
+      "composerModal must be in availableScopes when Post button present (hasComposerSignals=true)",
+    );
+  });
+});
+
+// ─── T-Inspect.3: composerModal absent when no composer ─────────────────────
+
+describe("T-Inspect.3 (G-P46.8): composerModal absent from availableScopes on plain feed (no modal)", () => {
+  it("unscoped inspect on PLAIN_FEED_ENTRIES → availableScopes = ['page','feed','post','postActions']", () => {
+    // Given: a plain feed ctx with no composer-signal entries (no Post publish button, no text editor)
+    // When:  buildInspectSummary(ctx)
+    // Then:  availableScopes does NOT include 'composerModal';
+    //        availableScopes equals ['page','feed','post','postActions'] (static feed list)
+    const ctx = makeCtx("feed", PLAIN_FEED_ENTRIES);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      !summary.availableScopes.includes("composerModal"),
+      "composerModal must NOT be in availableScopes for plain feed (no composer signals)",
+    );
+    assert.deepEqual(
+      summary.availableScopes,
+      ["page", "feed", "post", "postActions"],
+      "plain feed availableScopes must equal the static list (no composerModal)",
+    );
+  });
+});
+
+// ─── T-Inspect.4: unscoped inspect auto-surfaces Post button (OQ-3 robustness) ─
+
+describe("T-Inspect.4 (G-P46.9): unscoped inspect promotes composer buttons ahead of MAX_BUTTONS truncation", () => {
+  it("Post button at position 16 in AX tree appears in unscoped buttons[] (promoted above cap)", () => {
+    // Given: COMPOSER_LIVE_FIXTURE — 15 non-composer buttons then 'Post' at position 16
+    //        (pre-P-46: Post was truncated by MAX_BUTTONS=12; position 16 > cap 12)
+    // When:  buildInspectSummary(ctx) — no scope
+    // Then:  buttons (capped at MAX_BUTTONS=12) still contains {label:'Post'} at position 0 —
+    //        because D-3 composer-priority partition promotes composer buttons ahead of truncation
+    const ctx = makeCtx("feed", COMPOSER_LIVE_FIXTURE);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      summary.buttons.some((b) => b.label === "Post"),
+      "Post button must appear in unscoped buttons despite being at AX position 16 (>MAX_BUTTONS=12) — D-3 fix",
+    );
+    // Confirm it's at the front (promoted to position 0 by composer-priority partition)
+    assert.equal(
+      summary.buttons[0]?.label,
+      "Post",
+      "Post button must be promoted to buttons[0] ahead of non-composer nav buttons",
+    );
+    // Sanity: buttons still capped at 12
+    assert.ok(summary.buttons.length <= 12, `buttons must be ≤12 (got ${summary.buttons.length})`);
+  });
+});
+
+// ─── T-Inspect.5: non-composer unscoped inspect unchanged (regression guard) ─
+
+describe("T-Inspect.5 (G-P46.9 regression): non-composer unscoped inspect behavior unchanged", () => {
+  it("plain feed with 20 buttons → buttons = first 12 in original order; no composerModal in scopes", () => {
+    // Given: a plain feed ctx with 20 {role:'button'} entries and no composer signals
+    // When:  buildInspectSummary(ctx) — no scope
+    // Then:  buttons equals the first 12 clickables in ctx.entries order (pre-P-46 behavior);
+    //        availableScopes equals the static feed list (no 'composerModal')
+    const entries: SnapshotEntry[] = Array.from({ length: 20 }, (_, i) => ({
+      ref: `@b${i + 1}`,
+      role: "button",
+      name: `Button ${i + 1}`,
+    }));
+    const ctx = makeCtx("feed", entries);
+    const summary = buildInspectSummary(ctx);
+
+    assert.equal(summary.buttons.length, 12, "buttons must be capped at MAX_BUTTONS=12");
+    assert.equal(summary.buttons[0]?.label, "Button 1", "first button must be 'Button 1' (original order preserved)");
+    assert.equal(summary.buttons[11]?.label, "Button 12", "last button must be 'Button 12' (cap at 12)");
+    assert.ok(
+      !summary.availableScopes.includes("composerModal"),
+      "no composerModal for plain 20-button feed (no composer signals)",
+    );
+  });
+});
+
+// ─── T-Inspect.6: weak single composer-adjacent signal does NOT advertise composerModal (C-5) ─
+
+describe("T-Inspect.6 (G-P46.8 / C-5): hasComposerSignals requires strong signal (publish OR input+action)", () => {
+  it("'Create a post' button alone → composerModal NOT in availableScopes (weak signal)", () => {
+    // Given: ctx with exactly ONE weak composer-adjacent entry: {role:'button', name:'Create a post'}
+    //        (this is the feed entry-point button, present even when no modal is open)
+    //        NO composer text editor input, NO publish button
+    // When:  buildInspectSummary(ctx)
+    // Then:  availableScopes does NOT include 'composerModal' — single weak signal insufficient
+    //        hasComposerSignals = hasPublish || (hasInput && hasActionButton) = false || (false && true) = false
+    const ctx = makeCtx("feed", [
+      { ref: "@c1", role: "button", name: "Create a post" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      !summary.availableScopes.includes("composerModal"),
+      "C-5: 'Create a post' alone must NOT advertise composerModal (hasInput=false → weak-signal guard)",
+    );
+  });
+
+  it("composer text editor input AND a composer action button → composerModal IS in availableScopes", () => {
+    // Given: ctx with composer text editor (@e661) AND a composer action button ('Open emoji keyboard')
+    //        'Open emoji keyboard' IS in COMPOSER_BUTTON_RE (matches 'open emoji keyboard')
+    // When:  buildInspectSummary(ctx)
+    // Then:  availableScopes INCLUDES 'composerModal' (strong signal: hasInput=true AND hasActionButton=true)
+    const ctx = makeCtx("feed", [
+      { ref: "@e661", role: "textbox", name: "Text editor for creating content" },
+      { ref: "@ea1", role: "button", name: "Open emoji keyboard" }, // matches COMPOSER_BUTTON_RE
+    ]);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      summary.availableScopes.includes("composerModal"),
+      "text editor + 'Open emoji keyboard' action button → composerModal must be in availableScopes",
+    );
+  });
+
+  it("Post publish button alone → composerModal IS in availableScopes (strongest single signal)", () => {
+    // Given: ctx with ONLY the Post publish button — strongest single composer signal
+    // When:  buildInspectSummary(ctx)
+    // Then:  availableScopes INCLUDES 'composerModal' (isComposerPublishEntry → hasPublish=true)
+    const ctx = makeCtx("feed", [
+      { ref: "@e80", role: "button", name: "Post" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+
+    assert.ok(
+      summary.availableScopes.includes("composerModal"),
+      "Post button alone → composerModal in availableScopes (isComposerPublishEntry: ^post$ matches 'Post')",
+    );
+  });
+});
+
+// ─── T-Contract.1: InspectSummary schema unchanged (regression / contract pin) ─
+
+describe("T-Contract.1 (G-P46.9): InspectSummary Zod schema shape unchanged; activeLayer === 'page'", () => {
+  it("buildInspectSummary output (composer + non-composer) parses cleanly with inspectSummarySchema", () => {
+    // Given: buildInspectSummary on a plain ctx and a composer-open ctx
+    // When:  each output is parsed with inspectSummarySchema.parse(...)
+    // Then:  both succeed; activeLayer === 'page' (invariant); no extra/missing fields
+    const plainCtx = makeCtx("feed", PLAIN_FEED_ENTRIES);
+    const composerCtx = makeCtx("feed", COMPOSER_LIVE_FIXTURE);
+    const plain = buildInspectSummary(plainCtx);
+    const composer = buildInspectSummary(composerCtx);
+
+    // Both must parse without throwing
+    const parsedPlain = inspectSummarySchema.parse(plain);
+    const parsedComposer = inspectSummarySchema.parse(composer);
+
+    // activeLayer invariant: must be literal "page"
+    assert.equal(parsedPlain.activeLayer, "page", "plain inspect activeLayer must be 'page' (invariant)");
+    assert.equal(parsedComposer.activeLayer, "page", "composer inspect activeLayer must be 'page' (invariant)");
+
+    // Scope contracts
+    assert.ok(
+      !parsedPlain.availableScopes.includes("composerModal"),
+      "plain: composerModal must not be in availableScopes",
+    );
+    assert.ok(
+      parsedComposer.availableScopes.includes("composerModal"),
+      "composer: composerModal must be in availableScopes (D-3 dynamic scope)",
+    );
+  });
 });

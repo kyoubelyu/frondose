@@ -11,6 +11,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
+import { resolveMaxSteps } from "../agent/maxSteps.js";
 import { resolveModelOrNull } from "../agent/modelResolver.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
@@ -159,6 +160,8 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       soul: composeServerSoulBand(identity),
       checkpoint: CHECKPOINT,
     });
+    // P-46 D-1b: `mai server` has no --max-steps flag — env-only (MAI_MAX_STEPS) or default 200.
+    const serverMaxSteps = resolveMaxSteps();
 
     // Start Telegram poller if bound.
     // Step-5a D-SRV.DAEMON.CONFIGPATH: pass SERVER_CONFIG_PATH() so boundUserId is
@@ -189,6 +192,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       abortSignal: abortController.signal,
       onStepFinish: auditWriter,
       out: process.stdout,
+      maxSteps: serverMaxSteps,
     };
     await turnLock.run(() => drainDueJobs(SERVER_SCHEDULE_PATH(), abortController.signal, cronDeps));
     const cronTick = setInterval(() => {
@@ -223,6 +227,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
           system,
           tools,
           messages,
+          maxSteps: serverMaxSteps, // P-46 D-1b
           abortSignal: abortController.signal,
           onStepFinish: auditWriter,
         });

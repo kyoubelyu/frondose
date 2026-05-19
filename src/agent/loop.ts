@@ -1,4 +1,8 @@
-import { type CoreMessage, type LanguageModel, type StepResult, streamText, type ToolSet } from "ai";
+import { type CoreMessage, type FinishReason, type LanguageModel, type StepResult, streamText, type ToolSet } from "ai";
+import { DEFAULT_MAX_STEPS } from "./maxSteps.js";
+
+/** P-46 D-2: fraction of the step budget consumed before the soft warning fires. */
+const WARN_FRACTION = 0.8;
 
 export interface AgentLoopOpts {
   model: LanguageModel;
@@ -7,7 +11,7 @@ export interface AgentLoopOpts {
   tools: ToolSet;
   /** Called for each text-delta chunk. Optional. */
   onText?: (delta: string) => void;
-  /** Max LLM round-trips for tool-call loops. Default 10 (per scout Q2 sufficient for echo). */
+  /** Max LLM round-trips for tool-call loops. Default 200 (P-46 D-1). */
   maxSteps?: number;
   /** Abort signal for graceful cancellation (P-1; reused by P-6 stop tool). */
   abortSignal?: AbortSignal;
@@ -18,22 +22,64 @@ export interface AgentLoopOpts {
 }
 
 /**
+ * P-46 D-2: step-budget warning injected as a `user` turn between Phase 1 and
+ * Phase 2 when Phase 1 was cut off mid-task. Deliberately distinct from the
+ * Checkpoint band's token-limit / compaction guidance — this is a step-count
+ * limit. Reuses the Checkpoint convention of reporting via `telegram_notify`.
+ */
+function budgetWarningMessage(remaining: number): CoreMessage {
+  return {
+    role: "user",
+    content:
+      `[STEP-BUDGET WARNING] About ${remaining} tool-call steps remain before this turn is ` +
+      `force-ended. This is a step-count limit, not a context/token limit. Do NOT start new ` +
+      `sub-tasks. Either complete the current action now, or stop and report your current ` +
+      `progress and what still remains. Before the turn ends, call telegram_notify with the ` +
+      `outcome (done / partial / blocked) so the operator is informed.`,
+  };
+}
+
+/**
  * Run one turn of the agent loop:
  *  - sends the messages array to the LLM via streamText
  *  - executes any tool calls in-line (Vercel handles execution per scout Q2)
  *  - streams text deltas to onText
  *  - on stream end, appends response messages to the caller's messages array (mutates in place)
  *
+ * P-46 D-2: two-phase. streamText (ai 4.3.19) has no mid-loop injection hook, so
+ * we run Phase 1 to softCap = floor(maxSteps * 0.8); if it ends with finishReason
+ * 'tool-calls' AND consumed the full Phase-1 cap (a heuristic for a genuine
+ * maxSteps cutoff — see C-1), inject a soft budget warning as a user message and
+ * run Phase 2 for the remaining steps. If Phase 1 finishes naturally ('stop'),
+ * no Phase 2 — zero overhead.
+ *
+ * The two-phase split runs ONLY when the remaining budget is >= 2 (C-2): a
+ * 1-step Phase 2 cannot both act and report, so for small budgets we run a
+ * single phase at the full budget with no warning.
+ *
  * Caller is responsible for persisting the new messages after this resolves.
  */
 export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
-  try {
+  const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
+  const softCap = Math.max(1, Math.floor(maxSteps * WARN_FRACTION));
+  const remaining = maxSteps - softCap;
+  // C-2: only split into two phases when Phase 2 has a usable budget — at least
+  // 2 steps, enough to both finish the current action AND call telegram_notify.
+  // For small budgets (maxSteps <= 5 → remaining < 2) run a single phase at the
+  // full budget with no warning, so the agent is never handed a 1-step Phase 2.
+  const twoPhase = remaining >= 2;
+
+  /** Run one streamText pass: stream text deltas, append response messages,
+   *  return the resolved finishReason and the number of steps consumed. */
+  const runPhase = async (
+    stepCap: number,
+  ): Promise<{ finishReason: FinishReason; stepCount: number }> => {
     const result = streamText({
       model: opts.model,
       system: opts.system,
       messages: opts.messages,
       tools: opts.tools,
-      maxSteps: opts.maxSteps ?? 10,
+      maxSteps: stepCap,
       abortSignal: opts.abortSignal,
       onStepFinish: opts.onStepFinish,
     });
@@ -42,12 +88,29 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
     }
     const { messages: responseMessages } = await result.response;
     opts.messages.push(...responseMessages);
+    const steps = await result.steps;
+    return { finishReason: await result.finishReason, stepCount: steps.length };
+  };
+
+  try {
+    const phase1 = await runPhase(twoPhase ? softCap : maxSteps);
+    // C-1: `finishReason === "tool-calls"` alone is a heuristic — the SDK type
+    // defines it as "model triggered tool calls", not "maxSteps reached", and it
+    // can fire without a cutoff (e.g. unexecuted tool results). Confirm a GENUINE
+    // mid-task cutoff by ALSO requiring Phase 1 to have consumed the full softCap
+    // (`stepCount >= softCap`). Only then inject the warning + run Phase 2.
+    // 'stop' / a short Phase 1 → finished naturally, no warning, no Phase 2.
+    const cutOffMidTask =
+      phase1.finishReason === "tool-calls" && phase1.stepCount >= softCap;
+    if (twoPhase && cutOffMidTask && !opts.abortSignal?.aborted) {
+      opts.messages.push(budgetWarningMessage(remaining));
+      await runPhase(remaining);
+    }
   } catch (e) {
     // P-6 Step 5a (Failure 1 fix): when the stop tool fires control.requestStop(),
     // the shared AbortController.abort() makes streamText throw AbortError. Treat
     // an aborted-signal completion as clean — caller's process.exit(0) flow expects
-    // this. Audit JSONL is already flushed via onStepFinish for any completed steps
-    // (synchronous appendFileSync per src/persistence/audit.ts).
+    // this. Audit JSONL is already flushed via onStepFinish for any completed steps.
     if (opts.abortSignal?.aborted) return;
     throw e;
   }

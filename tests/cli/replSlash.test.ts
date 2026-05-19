@@ -94,13 +94,22 @@ async function withTmpHomeAsync<T>(fn: (tmpHome: string) => Promise<T>): Promise
 /**
  * P-11 hygiene: stub values for the 6 new required SlashCtx fields.
  * These fields are not exercised by the existing T-Slash tests; stubs keep them satisfied.
+ * P-46 update: also stubs maxSteps=200 and setMaxSteps no-op so all existing tests
+ * satisfy the now-required SlashCtx fields without runtime issues.
  */
 function p11SlashStubs(
   model: MockLanguageModelV1,
   out: NodeJS.WritableStream,
 ): Pick<
   SlashCtx,
-  "telegramConfigPath" | "telegramAbort" | "pollerHandle" | "onPollerStart" | "turnLock" | "telegramDeps"
+  | "telegramConfigPath"
+  | "telegramAbort"
+  | "pollerHandle"
+  | "onPollerStart"
+  | "turnLock"
+  | "telegramDeps"
+  | "maxSteps"
+  | "setMaxSteps"
 > {
   return {
     telegramConfigPath: "/tmp/test-mai-telegram.json",
@@ -118,6 +127,8 @@ function p11SlashStubs(
       configPath: "/tmp/test-mai-telegram.json",
       uploadAllowlistRoot: "/tmp",
     },
+    maxSteps: 200,
+    setMaxSteps: () => {},
   };
 }
 
@@ -488,6 +499,127 @@ test("T-Slash.5: non-slash line returns handled:false; no side effects", async (
   assert.equal(result.handled, false, "non-slash must return handled:false");
   assert.equal(lines.length, 0, "non-slash must produce no output");
   assert.equal(messages.length, messagesBefore, "non-slash must not mutate messages");
+});
+
+// ─── P-46 T-Slash.1–3: /maxsteps slash command scaffolds ─────────────────────
+//
+// NOTE (Step 4a): assertion bodies are TODO — tests intentionally fail.
+// The /maxsteps case is added to replSlash.ts at Step 4b.
+// SlashCtx.maxSteps + SlashCtx.setMaxSteps are added to the interface at Step 4b.
+// At Step 5, assertion bodies are filled.
+//
+// These tests use the p11SlashStubs helper from the existing test for all P-11
+// required fields, plus p46SlashExtras for the new maxSteps / setMaxSteps fields.
+
+/** P-46 SlashCtx extras: maxSteps (current budget) + setMaxSteps spy */
+function makeP46SlashExtras(): {
+  maxSteps: number;
+  setMaxSteps: (n: number) => void;
+  lastSetMaxStepsArg: () => number | undefined;
+  setMaxStepsCalled: () => boolean;
+} {
+  let _called = false;
+  let _arg: number | undefined;
+  return {
+    maxSteps: 200,
+    setMaxSteps: (n: number) => {
+      _called = true;
+      _arg = n;
+    },
+    lastSetMaxStepsArg: () => _arg,
+    setMaxStepsCalled: () => _called,
+  };
+}
+
+// T-Slash.1 (P-46 G-P46.7): /maxsteps 30 retunes the budget
+
+test("T-P46-Slash.1: /maxsteps 30 calls setMaxSteps(30); output confirms '30'; handled:true", async () => {
+  // Given: SlashCtx with maxSteps:200 and a setMaxSteps spy
+  // When:  dispatchSlash("/maxsteps 30", ctx)
+  // Then:  setMaxSteps called once with 30; {handled:true} returned; output contains '30'
+  const model = makeModel();
+  const budget = new TokenBudget(model);
+  const { lines, stream } = makeOut();
+  const p46 = makeP46SlashExtras();
+
+  const result = await dispatchSlash("/maxsteps 30", {
+    messages: [],
+    sessionFile: { path: "/fake/session.jsonl" },
+    tokenBudget: budget,
+    model,
+    out: stream,
+    cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
+    maxSteps: p46.maxSteps,
+    setMaxSteps: p46.setMaxSteps,
+  } as Parameters<typeof dispatchSlash>[1]);
+
+  assert.equal(result.handled, true, "/maxsteps 30 must return handled:true");
+  assert.equal(p46.setMaxStepsCalled(), true, "setMaxSteps must be called once when arg is valid");
+  assert.equal(p46.lastSetMaxStepsArg(), 30, "setMaxSteps must be called with 30");
+  const output1 = lines.join("");
+  assert.ok(output1.includes("30"), `output must include '30'; got: "${output1}"`);
+});
+
+// T-Slash.2 (P-46 G-P46.7): /maxsteps with no arg prints current value
+
+test("T-P46-Slash.2: /maxsteps (no arg) prints current budget (200); setMaxSteps NOT called; handled:true", async () => {
+  // Given: SlashCtx with maxSteps:200
+  // When:  dispatchSlash("/maxsteps", ctx) — no argument
+  // Then:  setMaxSteps NOT called; {handled:true} returned; output contains '200'
+  const model = makeModel();
+  const budget = new TokenBudget(model);
+  const { lines, stream } = makeOut();
+  const p46 = makeP46SlashExtras();
+
+  const result = await dispatchSlash("/maxsteps", {
+    messages: [],
+    sessionFile: { path: "/fake/session.jsonl" },
+    tokenBudget: budget,
+    model,
+    out: stream,
+    cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
+    maxSteps: p46.maxSteps,
+    setMaxSteps: p46.setMaxSteps,
+  } as Parameters<typeof dispatchSlash>[1]);
+
+  assert.equal(result.handled, true, "/maxsteps (no arg) must return handled:true");
+  assert.equal(p46.setMaxStepsCalled(), false, "setMaxSteps must NOT be called when no arg given");
+  const output2 = lines.join("");
+  assert.ok(output2.includes("200"), `output must include current budget '200'; got: "${output2}"`);
+});
+
+// T-Slash.3 (P-46 G-P46.7): /maxsteps abc rejected with invalid message
+
+test("T-P46-Slash.3: /maxsteps abc — invalid arg; setMaxSteps NOT called; output contains 'invalid'; handled:true", async () => {
+  // Given: SlashCtx with any maxSteps
+  // When:  dispatchSlash("/maxsteps abc", ctx) — non-integer argument
+  // Then:  setMaxSteps NOT called; {handled:true} returned; output contains 'invalid'
+  const model = makeModel();
+  const budget = new TokenBudget(model);
+  const { lines, stream } = makeOut();
+  const p46 = makeP46SlashExtras();
+
+  const result = await dispatchSlash("/maxsteps abc", {
+    messages: [],
+    sessionFile: { path: "/fake/session.jsonl" },
+    tokenBudget: budget,
+    model,
+    out: stream,
+    cwd: "/fake/cwd",
+    schedulePath: "/tmp/test-mai-schedule.jsonl",
+    ...p11SlashStubs(model, stream),
+    maxSteps: p46.maxSteps,
+    setMaxSteps: p46.setMaxSteps,
+  } as Parameters<typeof dispatchSlash>[1]);
+
+  assert.equal(result.handled, true, "/maxsteps abc must return handled:true");
+  assert.equal(p46.setMaxStepsCalled(), false, "setMaxSteps must NOT be called for invalid arg");
+  const output3 = lines.join("");
+  assert.ok(output3.includes("invalid"), `output must include 'invalid'; got: "${output3}"`);
 });
 
 // ─── T-Slash.8: /cost is NOT a valid command (rev-3 removal) ──────────────────
