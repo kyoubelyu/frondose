@@ -10,19 +10,18 @@ import type { Duplex } from "node:stream";
 import type { Database as DB } from "better-sqlite3";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
-import { listInvitesByPersona } from "../persistence/invitesRegistry.js";
 import { listRecentMemoryEvents } from "../persistence/memory.js";
 import { listPersonaTemplates, readPersonaTemplate } from "../persistence/personaLibrary.js";
 import { readWorkerNodeConfig } from "../persistence/workerNodeConfig.js";
 import { getLastLeadActionByWorker, listWorkers } from "../persistence/workersRegistry.js";
-import { mintInvite } from "../tools/server/provisionWorker.js";
+import { runSshProvision } from "../tools/server/provisionWorker.js";
 import { handleSshWs } from "./serverSsh.js";
 import { handleVncWs } from "./serverVnc.js";
 
 export interface WebHttpDeps {
   workersDb: DB | null;
   memoryDb: DB | null;
-  invitesDb: DB | null;
+  credentialsDb: DB | null;
   personasDir: string;
   serverUrl: string;
   /** Absolute path to the static asset directory (dist/web/; injected for tests). */
@@ -44,7 +43,7 @@ const MIME: Record<string, string> = {
 const provisionBodySchema = z.object({
   personaId: z.string().min(1),
   hostname: z.string().optional(),
-  ttlMin: z.number().int().min(5).max(1440).optional(),
+  workerId: z.string().min(1).max(64).optional(),
 });
 
 /** Timing-safe Basic-Auth check. Returns true when auth passes OR webToken is
@@ -135,12 +134,6 @@ async function route(req: IncomingMessage, res: ServerResponse, deps: WebHttpDep
     });
     return sendJson(res, 200, { personas });
   }
-  if (req.method === "GET" && path === "/api/web/invites") {
-    const personaId = u.searchParams.get("personaId");
-    if (!personaId) return sendJson(res, 400, { error: "validation", detail: "personaId required" });
-    const invites = deps.invitesDb ? listInvitesByPersona(deps.invitesDb, personaId) : [];
-    return sendJson(res, 200, { invites });
-  }
   // ─── POST provision ───
   if (req.method === "POST" && path === "/api/web/provision") {
     let body: unknown;
@@ -151,10 +144,19 @@ async function route(req: IncomingMessage, res: ServerResponse, deps: WebHttpDep
     }
     const parsed = provisionBodySchema.safeParse(body);
     if (!parsed.success) return sendJson(res, 400, { ok: false, error: "validation" });
-    if (!deps.invitesDb) return sendJson(res, 503, { ok: false, error: "invites_db_unavailable" });
-    const r = mintInvite(deps.invitesDb, deps.personasDir, deps.serverUrl, parsed.data);
-    if (!r.ok) return sendJson(res, 422, { ok: false, error: "persona_not_found", detail: r.error });
-    return sendJson(res, 200, r);
+    const r = await runSshProvision(
+      {
+        workersDb: deps.workersDb,
+        credentialsDb: deps.credentialsDb,
+        personasDir: deps.personasDir,
+        serverUrl: deps.serverUrl,
+        sshUser: deps.sshUser ?? null,
+        sshPort: deps.sshPort ?? 22,
+        workersConfigDir: deps.workersConfigDir ?? "",
+      },
+      parsed.data,
+    );
+    return sendJson(res, r.ok ? 200 : 422, r);
   }
   // ─── unknown /api/web/* ───
   if (path.startsWith("/api/web/")) return sendJson(res, 404, { error: "not_found" });

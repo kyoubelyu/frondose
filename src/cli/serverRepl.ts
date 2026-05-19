@@ -5,7 +5,6 @@
  *  Daemon-alive check: refuses to start if SERVER_PID_PATH() is alive
  *  (only one foreground process per server instance). */
 
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
@@ -21,7 +20,6 @@ import { TurnLock } from "../agent/turnSemaphore.js";
 import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
-import { openInvitesDb } from "../persistence/invitesRegistry.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
 import { isAlive, readPid } from "../persistence/processLock.js";
 import { readSecrets } from "../persistence/secrets.js";
@@ -33,7 +31,6 @@ import {
   SERVER_CREDENTIALS_DB_PATH,
   SERVER_IDENTITY_PATH,
   SERVER_INBOX_DB_PATH,
-  SERVER_INVITES_DB_PATH,
   SERVER_MEMORY_DB_PATH,
   SERVER_PERSONAS_DIR,
   SERVER_PID_PATH,
@@ -81,12 +78,9 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   // makeAllTools + the HTTP listener below.
   const workersDb = openWorkersDb(SERVER_WORKERS_DB_PATH());
   const serverInboxDb = openServerInboxDb(SERVER_INBOX_DB_PATH());
-  // P-27: invite store handle (shared by HTTP /api/register + provision_worker).
-  const invitesDb = openInvitesDb(SERVER_INVITES_DB_PATH());
   // P-28: credential library handle (LLM keys + Google accounts).
   const credentialsDb = openCredentialsDb(SERVER_CREDENTIALS_DB_PATH());
   const serverCfg = readConfig(SERVER_CONFIG_PATH());
-  const maiVersion = (createRequire(import.meta.url)("../../package.json") as { version: string }).version;
 
   // mode="server" — 20 tools (P-31+).
   const tools = makeAllTools(
@@ -96,7 +90,6 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       identityPath: SERVER_IDENTITY_PATH(),
       workersDbPath: SERVER_WORKERS_DB_PATH(),
       serverInboxDbPath: SERVER_INBOX_DB_PATH(),
-      invitesDbPath: SERVER_INVITES_DB_PATH(),
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       credentialsDbPath: SERVER_CREDENTIALS_DB_PATH(),
@@ -108,19 +101,8 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
   );
 
   // P-26: server-side HTTP listener (Tailscale-private; defaults to 127.0.0.1).
-  // P-34: installToken — GitHub PAT embedded into rendered /bootstrap scripts.
-  const installToken = readSecrets(SERVER_SECRETS_PATH()).server?.installToken;
   const httpServer = startServerHttp(
-    {
-      workersDb,
-      serverInboxDb,
-      invitesDb,
-      personasDir: SERVER_PERSONAS_DIR(),
-      serverUrl: serverCfg.server.url ?? "",
-      maiVersion,
-      credentialsDb,
-      installToken,
-    },
+    { workersDb, serverInboxDb },
     serverCfg.server.bind_address ?? null,
     serverCfg.server.rest_port, // P-36 F-D2: configurable REST port (default 3031)
   );
@@ -140,7 +122,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
     {
       workersDb,
       memoryDb,
-      invitesDb,
+      credentialsDb, // P-41: replaces invitesDb (provision needs LLM keys)
       personasDir: SERVER_PERSONAS_DIR(),
       serverUrl: serverCfg.server.url ?? "",
       assetRoot: webAssetRoot,

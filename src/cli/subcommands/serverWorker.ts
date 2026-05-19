@@ -3,18 +3,16 @@
  *  Token mint: `crypto.randomBytes(32).toString("hex")`. Plaintext printed in
  *  a clear boxed advisory ONCE — operator captures via terminal. SHA-256 hash
  *  stored in `~/.mai/server/workers.sqlite`. */
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { readConfig } from "../../persistence/config.js";
 import { openCredentialsDb } from "../../persistence/credentialLibrary.js";
-import { insertInvite, openInvitesDb } from "../../persistence/invitesRegistry.js";
-import { readPersonaTemplate } from "../../persistence/personaLibrary.js";
 import { openServerInboxDb } from "../../persistence/serverInbox.js";
 import {
   SERVER_CONFIG_PATH,
   SERVER_CREDENTIALS_DB_PATH,
   SERVER_INBOX_DB_PATH,
-  SERVER_INVITES_DB_PATH,
   SERVER_PERSONAS_DIR,
+  SERVER_WORKERS_CONFIG_DIR,
   SERVER_WORKERS_DB_PATH,
 } from "../../persistence/serverPaths.js";
 import {
@@ -25,6 +23,7 @@ import {
   rotateWorkerToken,
 } from "../../persistence/workersRegistry.js";
 import { dispatchGoogleLogin } from "../../tools/server/dispatchGoogleLogin.js";
+import { runSshProvision } from "../../tools/server/provisionWorker.js";
 
 export async function runServerWorkerSubcommand(
   action: "add" | "rotate" | "remove" | "list" | "provision" | "revoke" | "login",
@@ -33,7 +32,6 @@ export async function runServerWorkerSubcommand(
     hostname?: string;
     persona?: string;
     personaId?: string;
-    ttlMin?: number;
     json?: boolean;
   },
 ): Promise<void> {
@@ -92,20 +90,25 @@ export async function runServerWorkerSubcommand(
       process.stderr.write("[server worker provision] missing <persona_id>\n");
       process.exit(1);
     }
-    const persona = readPersonaTemplate(SERVER_PERSONAS_DIR(), opts.personaId);
-    if (!persona) {
-      process.stderr.write(`[server worker provision] persona ${opts.personaId} not found\n`);
+    const serverCfg = readConfig(SERVER_CONFIG_PATH());
+    const r = await runSshProvision(
+      {
+        workersDb: db,
+        credentialsDb: openCredentialsDb(SERVER_CREDENTIALS_DB_PATH()),
+        personasDir: SERVER_PERSONAS_DIR(),
+        serverUrl: serverCfg.server.url ?? "",
+        sshUser: serverCfg.server.ssh_user,
+        sshPort: serverCfg.server.ssh_port,
+        workersConfigDir: SERVER_WORKERS_CONFIG_DIR(),
+      },
+      { personaId: opts.personaId, hostname: opts.hostname, workerId: opts.workerId },
+    );
+    if (!r.ok) {
+      process.stderr.write(`[server worker provision] ${r.error}\n`);
       process.exit(1);
     }
-    const invitesDb = openInvitesDb(SERVER_INVITES_DB_PATH());
-    const inviteToken = randomBytes(32).toString("hex");
-    const tokenSha256 = createHash("sha256").update(inviteToken).digest("hex");
-    const expiresAt = Date.now() + (opts.ttlMin ?? 30) * 60_000;
-    insertInvite(invitesDb, tokenSha256, opts.personaId, opts.hostname ?? null, expiresAt);
-    const serverUrl = readConfig(SERVER_CONFIG_PATH()).server.url ?? "<set config.json.server.url first>";
-    const curl = `curl -sf ${serverUrl}/bootstrap/${inviteToken}.sh | bash`;
-    process.stdout.write(`\nRun on worker VM:\n\n  ${curl}\n\n`);
-    process.stdout.write(`Expires: ${new Date(expiresAt).toISOString()}\n`);
+    process.stdout.write(`✓ Provisioned worker ${r.workerId} (persona ${r.personaId}) on ${r.hostname}\n`);
+    for (const s of r.nextSteps) process.stdout.write(`  • ${s}\n`);
     return;
   }
 

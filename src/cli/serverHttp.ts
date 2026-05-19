@@ -14,15 +14,11 @@
  *  `getWorkerByTokenHashConstantTime`. The non-constant-time variant is NOT
  *  exported from workersRegistry.ts.
  */
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
-import { getGoogleAccount, getLlmKey, incrementLlmKeyAssignedCount } from "../persistence/credentialLibrary.js";
-import { consumeInvite, lookupInviteAny, lookupPendingInvite } from "../persistence/invitesRegistry.js";
-import { readPersonaTemplate } from "../persistence/personaLibrary.js";
 import { enqueueServerInbox } from "../persistence/serverInbox.js";
 import {
-  addWorker,
   drainPendingWorkerInbox,
   getWorkerByTokenHashConstantTime,
   insertLeadAction,
@@ -30,25 +26,12 @@ import {
   queryRecentLeadAction,
   updateHeartbeat,
 } from "../persistence/workersRegistry.js";
-import { renderBootstrapScript } from "./serverBootstrapTemplate.js";
 
 export const SERVER_HTTP_PORT = 3031;
 
 export interface ServerHttpHandlers {
   workersDb: import("better-sqlite3").Database;
   serverInboxDb: import("better-sqlite3").Database;
-  // P-27 additions:
-  invitesDb: import("better-sqlite3").Database;
-  personasDir: string;
-  serverUrl: string;
-  maiVersion: string;
-  // P-28: credential library. Nullable — credential folding is skipped silently
-  // when the DB handle is absent (graceful degradation; register still 200s).
-  credentialsDb: import("better-sqlite3").Database | null;
-  // P-34: fine-grained GitHub PAT for the bootstrap tarball install (contents:read).
-  // When undefined, handleBootstrapScript returns a bash error script (HTTP 200).
-  // Optional at Step 4a stub — builder wires at Step 4b (serverDaemon.ts + serverRepl.ts).
-  installToken?: string | undefined;
 }
 
 // ─── Zod request schemas (mirror plan §4.4) ──────────────────────────────────
@@ -73,12 +56,6 @@ const eventReqSchema = z.object({
 const pollQuerySchema = z.object({
   worker_id: z.string().min(1),
   timeout: z.coerce.number().int().min(1).max(60).optional().default(25),
-});
-// P-27: invite-token register request.
-const registerReqSchema = z.object({
-  inviteToken: z.string().regex(/^[0-9a-f]{64}$/i),
-  hostname: z.string().min(1).max(255).optional(),
-  requestedWorkerId: z.string().min(1).max(64).optional(),
 });
 
 // ─── Public entrypoint ────────────────────────────────────────────────────────
@@ -110,18 +87,6 @@ interface AuthedWorker {
 async function routeRequest(req: IncomingMessage, res: ServerResponse, handlers: ServerHttpHandlers): Promise<void> {
   const url = req.url ?? "/";
 
-  // ─── P-27 public route: GET /bootstrap/<token>.sh (no Bearer) ───
-  // All /bootstrap/* GETs route to the handler; the handler's regex decides
-  // 200 vs 404 (a path missing the .sh suffix or with a malformed token → 404).
-  if (req.method === "GET" && url.startsWith("/bootstrap/")) {
-    return handleBootstrapScript(req, res, handlers);
-  }
-
-  // ─── P-27 invite-token route: POST /api/register (body field, no Bearer) ───
-  if (req.method === "POST" && url === "/api/register") {
-    return handleRegister(req, res, handlers);
-  }
-
   // ─── Bearer-token routes (P-26 unchanged): existing 5 endpoints ───
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -152,150 +117,6 @@ async function routeRequest(req: IncomingMessage, res: ServerResponse, handlers:
     return handleWorkerInboxPoll(req, res, handlers, worker);
   }
   sendJson(res, 404, { error: "not_found" });
-}
-
-// ─── P-27 handler: GET /bootstrap/<token>.sh ──────────────────────────────────
-
-async function handleBootstrapScript(req: IncomingMessage, res: ServerResponse, h: ServerHttpHandlers): Promise<void> {
-  const url = req.url ?? "";
-  const m = url.match(/^\/bootstrap\/([0-9a-f]{64})\.sh(?:\?|$)/i);
-  if (!m || !m[1]) {
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("invite token not found or expired\n");
-    return;
-  }
-  const tokenPlain = m[1];
-  const tokenSha256 = createHash("sha256").update(tokenPlain).digest("hex");
-  const pending = lookupPendingInvite(h.invitesDb, tokenSha256);
-  if (!pending) {
-    // Distinguish 404 (not found / expired) from 410 (consumed).
-    const any = lookupInviteAny(h.invitesDb, tokenSha256);
-    if (any?.status === "consumed") {
-      res.writeHead(410, { "Content-Type": "text/plain" });
-      res.end("invite token already used\n");
-    } else {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("invite token not found or expired\n");
-    }
-    return;
-  }
-  // P-34 / CONCERN-1: the operator runs `curl … | bash`. When the install token
-  // is unset, return a VALID bash error script (HTTP 200, text/x-sh) — NOT a
-  // plain-text 500 (bash would execute the prose → a `command not found` cascade).
-  if (!h.installToken) {
-    res.writeHead(200, { "Content-Type": "text/x-sh; charset=utf-8" });
-    res.end(
-      "#!/usr/bin/env bash\n" +
-        "echo 'ERROR: server install token not configured — run `mai server install-token set` on the server' >&2\n" +
-        "exit 1\n",
-    );
-    return;
-  }
-  const script = renderBootstrapScript(h.serverUrl, tokenPlain, h.maiVersion, h.installToken);
-  res.writeHead(200, { "Content-Type": "text/x-sh; charset=utf-8" });
-  res.end(script);
-}
-
-// ─── P-27 handler: POST /api/register ─────────────────────────────────────────
-
-async function handleRegister(req: IncomingMessage, res: ServerResponse, h: ServerHttpHandlers): Promise<void> {
-  let body: unknown;
-  try {
-    body = await readJsonBody(req);
-  } catch {
-    sendJson(res, 400, { error: "bad_json" });
-    return;
-  }
-  const parsed = registerReqSchema.safeParse(body);
-  if (!parsed.success) {
-    sendJson(res, 400, { error: "validation", detail: parsed.error.format() });
-    return;
-  }
-
-  const tokenSha256 = createHash("sha256").update(parsed.data.inviteToken).digest("hex");
-  const pending = lookupPendingInvite(h.invitesDb, tokenSha256);
-  if (!pending) {
-    sendJson(res, 401, { ok: false, error: "invite invalid or consumed" });
-    return;
-  }
-
-  // (1) Validate persona EXISTS before consuming — avoid burning an invite on a
-  //     non-existent persona (operator fixes the library and re-provisions).
-  const persona = readPersonaTemplate(h.personasDir, pending.persona_id);
-  if (!persona) {
-    sendJson(res, 422, { ok: false, error: `persona_not_found: ${pending.persona_id}` });
-    return;
-  }
-
-  // (2) Generate worker_id + permanent token.
-  const workerId = parsed.data.requestedWorkerId ?? randomBytes(4).toString("hex");
-  const permanentToken = randomBytes(32).toString("hex");
-
-  // (3) Consume invite FIRST (atomic single-row UPDATE).
-  const consumed = consumeInvite(h.invitesDb, tokenSha256, workerId);
-  if (!consumed) {
-    // Race: another request consumed between our lookup and update.
-    sendJson(res, 401, { ok: false, error: "invite invalid or consumed" });
-    return;
-  }
-
-  // (4) Insert worker into workers.sqlite. Cross-DB; if this throws the invite
-  //     is already consumed — operator re-provisions (§9 R-3).
-  addWorker(h.workersDb, workerId, permanentToken, parsed.data.hostname ?? undefined, pending.persona_id);
-
-  // (5) Build identity from persona template.
-  //     C-2 FIX: the field is `profileUrl` (identityRecordSchema's actual name),
-  //     NOT `linkedInUrl` — P-27 wrote `linkedInUrl`, which Zod silently STRIPPED
-  //     on every parse, losing the URL. Source stays `persona.linkedInUrl`
-  //     (personaTemplateSchema's field — unchanged); the identity KEY is `profileUrl`.
-  const identity = {
-    fullName: persona.fullName,
-    role: persona.role,
-    company: persona.company,
-    profileUrl: persona.linkedInUrl,
-    email: persona.email,
-    persona: pending.persona_id,
-    updatedAt: new Date().toISOString(),
-  };
-
-  // (5a) P-28: resolve LLM key + Google account from persona refs.
-  //      Missing/unresolvable refs (or a null credentialsDb) degrade gracefully —
-  //      register still 200s. Step 5a runs AFTER consumeInvite + addWorker so a
-  //      missing credential never burns an invite or blocks registration.
-  let llmProviderConfig: { name: string; type: "anthropic" | "openai"; baseUrl?: string; key: string } | undefined;
-  if (h.credentialsDb && persona.llmKeyRef) {
-    const k = getLlmKey(h.credentialsDb, persona.llmKeyRef);
-    if (k) {
-      llmProviderConfig = {
-        name: k.id,
-        type: k.provider_type,
-        baseUrl: k.base_url ?? undefined,
-        key: k.api_key,
-      };
-      incrementLlmKeyAssignedCount(h.credentialsDb, persona.llmKeyRef);
-    } else {
-      process.stderr.write(`[server http] register: llmKeyRef '${persona.llmKeyRef}' not found\n`);
-    }
-  }
-
-  let googleAccountEmail: string | undefined;
-  if (h.credentialsDb && persona.googleAccountRef) {
-    const g = getGoogleAccount(h.credentialsDb, persona.googleAccountRef);
-    if (g)
-      googleAccountEmail = g.email; // password NEVER pushed (G-P28.23)
-    else process.stderr.write(`[server http] register: googleAccountRef '${persona.googleAccountRef}' not found\n`);
-  }
-
-  sendJson(res, 200, {
-    ok: true,
-    workerId,
-    permanentToken,
-    personaId: pending.persona_id,
-    identity,
-    soulBandOverride: persona.soulBandOverride ?? null,
-    ...(llmProviderConfig ? { llmProviderConfig } : {}),
-    ...(googleAccountEmail ? { googleAccountEmail } : {}),
-  });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
