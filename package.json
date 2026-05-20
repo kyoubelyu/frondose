@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.4.46",
+  "version": "0.4.47",
   "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",
@@ -37,6 +37,7 @@
     "@inquirer/prompts": "^7.10.1",
     "ai": "^4.0.0",
     "better-sqlite3": "^12.4.1",
+    "chalk": "^5.6.2",
     "chrome-launcher": "^1.1.2",
     "chrome-remote-interface": "0.34.0",
     "commander": "^12.1.0",
