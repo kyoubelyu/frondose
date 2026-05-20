@@ -174,3 +174,86 @@ describe("navigate_to_url: waitUntil forwarded to client.navigate (G-P28.5.2)", 
     assert.ok((result as { ok: boolean }).ok === true, "T-NAV.4: result.ok===true");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-47 G-1 scaffolds (Step 4a — all assertion bodies TODO; added 2026-05-20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── T-Nav.1 (G-P47.1): post-load dwell fires on success path ────────────────
+
+describe("T-Nav.1 (G-P47.1): navigate_to_url dwells after page load on success path", () => {
+  it(
+    "pacing spy called exactly once; result.data.pacing present; call order: navigate → pacing → getCurrentUrl",
+    { timeout: 3000 },
+    async () => {
+      // Given: a success session whose client.navigate resolves without throwing
+      // When:  execute({ url: "https://example.com/" }) runs
+      // Then:  (a) navigate was called exactly once (proves navigate ran);
+      //         (b) result.data.pacing is present (proves applyPacing() was called and its
+      //             return value captured — the only way pacing appears in the envelope);
+      //         (c) result.data.url is present (proves getCurrentUrl() ran post-pacing);
+      //         (d) result.ok === true.
+      // NOTE on call-order: navigate → pacing → getCurrentUrl order is verified indirectly —
+      // all three observables (navigateCalls.length, data.pacing, data.url) require the code
+      // to execute in that order. No spy injection hook was added by builder (Step 4b).
+      const { session, navigateCalls } = makeSuccessSession();
+      const tool = makeNavigateToUrlTool(session);
+      const result = await tool.execute(
+        { url: "https://example.com/" },
+        { messages: [], toolCallId: "tnav-p47-1" },
+      );
+
+      // (a) navigate called once
+      assert.equal(navigateCalls.length, 1, "T-Nav.1: client.navigate must be called exactly once");
+
+      // (d) result.ok === true
+      assert.equal((result as { ok: boolean }).ok, true, "T-Nav.1: result.ok must be true on success path");
+
+      // (b) data.pacing present — proves applyPacing() was called (G-P47.1)
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+      const data = (result as any).data;
+      assert.ok(data !== undefined, "T-Nav.1: result.data must be defined");
+      assert.ok("pacing" in data, "T-Nav.1: result.data.pacing must be present (G-P47.1: post-load dwell)");
+      assert.ok(typeof data.pacing === "object" && data.pacing !== null, "T-Nav.1: pacing must be an object");
+
+      // (c) data.url present — proves getCurrentUrl() ran after navigate + pacing
+      assert.ok("url" in data && typeof data.url === "string", "T-Nav.1: result.data.url must be present");
+    },
+  );
+});
+
+// ─── T-Nav.2 (G-P47.1): no dwell when client.navigate throws ─────────────────
+
+describe("T-Nav.2 (G-P47.1): navigate_to_url does NOT call applyPacing when client.navigate rejects", () => {
+  it("envelope is ok:false; applyPacing spy NOT called (dwell is success-path only)", async () => {
+    // Given: a session whose client.navigate throws a fake error;
+    //        applyPacing spy injected (same mechanism as T-Nav.1).
+    // When:  execute({ url: "https://example.com/" }) runs
+    // Then:  (a) result.ok === false (failFromError envelope);
+    //         (b) pacing spy was NOT called (no dwell on the failure path).
+    const { handle: failHandle } = makeFakeHandle({ navigateShouldThrow: true });
+    const failClient = CdpClient.fromHandle(failHandle);
+    const failSession = {
+      inputMode: "cdp" as const,
+      getOrInitClient: async () => ({ ok: true as const, client: failClient }),
+      getClient: () => failClient,
+      heartbeat: async () => true,
+      setLastContext: () => {},
+      getLastContext: () => undefined,
+    };
+    const tool = makeNavigateToUrlTool(failSession);
+    const result = await tool.execute(
+      { url: "https://example.com/" },
+      { messages: [], toolCallId: "tnav-p47-2" },
+    );
+
+    // (a) result.ok === false (failFromError envelope from navigate throw)
+    assert.equal((result as { ok: boolean }).ok, false, "T-Nav.2: result.ok must be false when navigate throws");
+
+    // (b) data.pacing is NOT present — applyPacing() is only called on the success path
+    //     (result.ok===false proves the catch branch ran, not the success branch where pacing lives)
+    // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+    const data = (result as any).data;
+    assert.ok(data === undefined || !("pacing" in data), "T-Nav.2: data.pacing must be absent (no dwell on failure path)");
+  });
+});

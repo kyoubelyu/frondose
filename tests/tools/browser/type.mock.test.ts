@@ -7,10 +7,10 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeTypeTool } from "../../../src/tools/browser/type.js";
+import { computeCharDelay, makeTypeTool } from "../../../src/tools/browser/type.js";
 
 const abortSignal = new AbortController().signal;
 const FAKE_BORDER = [0, 0, 10, 0, 10, 10, 0, 10]; // center: x=5, y=5
@@ -164,19 +164,21 @@ test("T-M66: type tool execute via ref dispatches click → Ctrl+A → insertTex
   assert.equal(result.ok, true, "result.ok must be true");
   assert.equal(result.command, "type");
 
-  // Verify call sequence: click happened, then Ctrl+A, then insertText
+  // Verify call sequence: click happened, then Ctrl+A, then per-char insertText calls
   const log = session.callLog;
 
-  const insertIdx = log.findIndex((e) => e.startsWith("insertText:hello world"));
-  assert.ok(insertIdx >= 0, "insertText must be called with the typed text");
+  // P-47 G-2: per-char dispatch — "hello world" (11 chars) → 11 single-char insertText calls
+  const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
+  assert.equal(singleCharInserts.length, 11, "insertText must be called 11× (one per char of 'hello world')");
 
   // Ctrl+A: dispatchKeyEvent with key='a' and modifiers=2 (Ctrl)
   const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
   assert.ok(ctrlA !== undefined, "Ctrl+A (keyDown a modifiers=2) must be dispatched before insertText");
 
-  // Mouse click must precede insertText
+  // Mouse click must precede first insertText
   const mouseMoveIdx = log.indexOf("mouse:mouseMoved");
-  assert.ok(mouseMoveIdx >= 0 && mouseMoveIdx < insertIdx, "mouse click must precede insertText");
+  const firstInsertIdx = log.findIndex((e) => e.startsWith("insertText:") && e.length === 12);
+  assert.ok(mouseMoveIdx >= 0 && mouseMoveIdx < firstInsertIdx, "mouse click must precede insertText");
 
   // type does NOT emit hint (not state-changing per cli-primitives.md §type)
   // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
@@ -244,12 +246,13 @@ test("T-Type.4: succeeds with label disambiguation on >1 input scope", { timeout
   const data = (result as any).data;
   assert.equal(data.target, "@e1", "data.target must be the resolved ref of the label-matched input");
 
-  // Verify Ctrl+A + insertText dispatched
+  // Verify Ctrl+A + per-char insertText dispatched
   const log = session.callLog;
   const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
   assert.ok(ctrlA !== undefined, "Ctrl+A must be dispatched before insertText");
-  const insertText = log.find((e) => e.startsWith("insertText:hello"));
-  assert.ok(insertText !== undefined, "insertText must be dispatched with correct text");
+  // P-47 G-2: per-char dispatch — "hello" (5 chars) → 5 single-char insertText calls
+  const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
+  assert.equal(singleCharInserts.length, 5, "insertText must be called 5× (one per char of 'hello')");
 });
 
 // ─── T-Type.5 — succeeds on single-input scope without label ──────────────────
@@ -278,9 +281,246 @@ test("T-Type.5: no error on single-input scope without label", { timeout: 5000 }
   const log = session.callLog;
   const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
   assert.ok(ctrlA !== undefined, "Ctrl+A must be dispatched");
-  const insertText = log.find((e) => e.startsWith("insertText:query"));
-  assert.ok(insertText !== undefined, "insertText must be dispatched with correct text");
+  // P-47 G-2: per-char dispatch — "query" (5 chars) → 5 single-char insertText calls
+  const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
+  assert.equal(singleCharInserts.length, 5, "insertText must be called 5× (one per char of 'query')");
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-47 G-2 scaffolds (Step 4a — all assertion bodies TODO; added 2026-05-20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── T-Type.1 (G-P47.2): per-char dispatch — 5 printable chars ───────────────
+
+describe("T-Type.1 (G-P47.2): per-char dispatch — 'hello' → 5 single-char insertText calls", () => {
+  it(
+    "insertText called 5× (one per char); full string never passed; dispatchKeyEvent only for Ctrl+A",
+    { timeout: 3000 },
+    async () => {
+      // Given: CDP-mode session; fake handle records insertText/dispatchKeyEvent to callLog;
+      //        text = "hello" (5 printable chars, no \n); ref = "@e1" (textbox in context)
+      // When:  execute({ text: "hello", ref: "@e1" }) runs (Step 4b: per-char loop implemented)
+      // Then:  (a) insertText called exactly 5 times, each call's text is ONE character
+      //             ("h", "e", "l", "l", "o" in order)
+      //         (b) insertText is NEVER called with the full string "hello"
+      //         (c) dispatchKeyEvent called exactly twice: Ctrl+A keyDown + Ctrl+A keyUp
+      //             (key:"a", modifiers:2) — and NOT for any of the 5 printable chars
+      const session = makeFakeSession();
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "hello", ref: "@e1" },
+        { toolCallId: "t-type1", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, true, "T-Type.1: result.ok must be true");
+
+      const log = session.callLog;
+
+      // (a) insertText called exactly 5 times, each with one character in order
+      const insertCalls = log.filter((e) => e.startsWith("insertText:"));
+      assert.equal(insertCalls.length, 5, "T-Type.1: insertText must be called exactly 5 times (one per char)");
+      const actualChars = insertCalls.map((e) => e.slice("insertText:".length));
+      assert.deepEqual(actualChars, ["h", "e", "l", "l", "o"], "T-Type.1: chars must be h/e/l/l/o in order");
+
+      // (b) insertText NEVER called with the full string
+      assert.ok(!log.some((e) => e === "insertText:hello"), "T-Type.1: atomic insertText('hello') must never be called");
+
+      // (c) dispatchKeyEvent only for Ctrl+A — no Enter events (no \\n in "hello")
+      const enterEvents = log.filter((e) => e.includes(":Enter:"));
+      assert.equal(enterEvents.length, 0, "T-Type.1: no Enter key events for text with no newlines");
+      const ctrlAEvents = log.filter((e) => e.includes(":a:mod2"));
+      assert.equal(ctrlAEvents.length, 2, "T-Type.1: exactly 2 Ctrl+A events (keyDown + keyUp)");
+    },
+  );
+});
+
+// ─── T-Type.2 (G-P47.2): \n → Enter keyDown/keyUp ───────────────────────────
+
+describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent between adjacent insertText calls", () => {
+  it(
+    "text='a\\nb': insertText('a'), Enter keyDown, Enter keyUp, insertText('b') in order",
+    { timeout: 3000 },
+    async () => {
+      // Given: CDP-mode session with callLog; text = "a\nb" (2 printable chars + 1 newline)
+      // When:  execute({ text: "a\nb", ref: "@e1" }) runs
+      // Then:  (a) insertText called for "a" then "b" (2 single-char calls, in order)
+      //         (b) dispatchKeyEvent called with {type:"keyDown", key:"Enter"} then
+      //             {type:"keyUp", key:"Enter"} for the \n (in addition to Ctrl+A pair)
+      //         (c) dispatch ORDER is: [Ctrl+A keyDown, Ctrl+A keyUp,]
+      //             insertText("a") → Enter keyDown → Enter keyUp → insertText("b")
+      const session = makeFakeSession();
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "a\nb", ref: "@e1" },
+        { toolCallId: "t-type2", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, true, "T-Type.2: result.ok must be true");
+
+      const log = session.callLog;
+
+      // (a) insertText called for "a" then "b" (2 calls, in order)
+      const insertCalls = log.filter((e) => e.startsWith("insertText:"));
+      assert.equal(insertCalls.length, 2, "T-Type.2: insertText must be called 2 times ('a' and 'b')");
+      assert.equal(insertCalls[0], "insertText:a", "T-Type.2: first insertText call must be 'a'");
+      assert.equal(insertCalls[1], "insertText:b", "T-Type.2: second insertText call must be 'b'");
+
+      // (b) Enter keyDown/keyUp dispatched for \\n
+      const enterDowns = log.filter((e) => e === "key:keyDown:Enter:mod0");
+      const enterUps = log.filter((e) => e === "key:keyUp:Enter:mod0");
+      assert.equal(enterDowns.length, 1, "T-Type.2: exactly 1 Enter keyDown for the \\n");
+      assert.equal(enterUps.length, 1, "T-Type.2: exactly 1 Enter keyUp for the \\n");
+
+      // (c) ORDER: [CtrlA↓ CtrlA↑] insertText("a") → Enter↓ → Enter↑ → insertText("b")
+      const aIdx = log.indexOf("insertText:a");
+      const enterDownIdx = log.indexOf("key:keyDown:Enter:mod0");
+      const enterUpIdx = log.indexOf("key:keyUp:Enter:mod0");
+      const bIdx = log.indexOf("insertText:b");
+      const ctrlADownIdx = log.indexOf("key:keyDown:a:mod2");
+      const ctrlAUpIdx = log.indexOf("key:keyUp:a:mod2");
+      assert.ok(ctrlADownIdx < ctrlAUpIdx, "T-Type.2: Ctrl+A keyDown before keyUp");
+      assert.ok(ctrlAUpIdx < aIdx, "T-Type.2: Ctrl+A before first insertText");
+      assert.ok(aIdx < enterDownIdx, "T-Type.2: insertText('a') before Enter keyDown");
+      assert.ok(enterDownIdx < enterUpIdx, "T-Type.2: Enter keyDown before Enter keyUp");
+      assert.ok(enterUpIdx < bIdx, "T-Type.2: Enter keyUp before insertText('b')");
+    },
+  );
+});
+
+// ─── T-Type.3 (G-P47.3): computeCharDelay cap / floor / jitter ───────────────
+
+describe("T-Type.3 (G-P47.3): computeCharDelay — ~8s cap holds; 30ms floor for short/medium; jitter collapses for long text", () => {
+  it(
+    "cap ≤8000ms; floor ≥30ms (short/medium); jitter varies for len≤200; jitter collapses for len≥500",
+    async () => {
+      // Given: exported pure function computeCharDelay(textLength, rand): number
+      //        rand ∈ [0,1] maps to a 0.3..1.0 multiplier; floor=min(30,budget); budget=min(8000/len,150)
+      // When:  called with textLength ∈ {1,54,100,266,300,500,1000,5000} and rand=0/rand=1
+      // Then:  (a) CAP: for all lengths, textLength × computeCharDelay(textLength, 1) ≤ 8001 (fp tolerance)
+      //         (b) FLOOR: computeCharDelay(3, 0) ≥ 30 AND computeCharDelay(54, 0) ≥ 30
+      //             (30ms floor binds when budget ≥ 30, i.e. textLength ≲ 266)
+      //         (c) JITTER VARIES (short/medium): computeCharDelay(200, 0) < computeCharDelay(200, 1)
+      //         (d) JITTER COLLAPSES (long): computeCharDelay(500, 0) === computeCharDelay(500, 1)
+      //             AND that value < 30 (budget-aware floor: floor=budget<30 for len≥500)
+
+      // (a) CAP: len × computeCharDelay(len, 1) ≤ 8001 (8000ms + 1ms fp tolerance)
+      for (const len of [1, 54, 100, 266, 300, 500, 1000, 5000]) {
+        const delay = computeCharDelay(len, 1);
+        const total = len * delay;
+        assert.ok(total <= 8001, `T-Type.3 CAP: len=${len}, delay=${delay}, total=${total} must be ≤8001`);
+      }
+
+      // (b) FLOOR: 30ms minimum for short/medium text (budget ≥ 30 when len ≤ ~266)
+      assert.ok(computeCharDelay(3, 0) >= 30, `T-Type.3 FLOOR: len=3,rand=0 → ${computeCharDelay(3, 0)} must be ≥30`);
+      assert.ok(computeCharDelay(54, 0) >= 30, `T-Type.3 FLOOR: len=54,rand=0 → ${computeCharDelay(54, 0)} must be ≥30`);
+
+      // (c) JITTER VARIES for short/medium text (len=200: budget=40,floor=30 → rand=0→30, rand=1→40)
+      const d200r0 = computeCharDelay(200, 0);
+      const d200r1 = computeCharDelay(200, 1);
+      assert.ok(d200r0 < d200r1, `T-Type.3 JITTER VARIES: len=200, rand=0 (${d200r0}) must be < rand=1 (${d200r1})`);
+
+      // (d) JITTER COLLAPSES for long text (len=500: budget=16,floor=16 → same for any rand)
+      const d500r0 = computeCharDelay(500, 0);
+      const d500r1 = computeCharDelay(500, 1);
+      assert.equal(d500r0, d500r1, `T-Type.3 COLLAPSES: len=500 delay must be same for rand=0 (${d500r0}) and rand=1 (${d500r1})`);
+      assert.ok(d500r0 < 30, `T-Type.3 COLLAPSES: collapsed delay (${d500r0}) must be < 30ms (budget-aware floor ≈ 16)`);
+    },
+  );
+});
+
+// ─── T-Type.4 (G-P47.2): hardware arm unchanged ──────────────────────────────
+
+describe("T-Type.4 (G-P47.2): hardware arm — hardwareTypeAt invoked; CDP insertText NOT called", () => {
+  it(
+    "when inputMode==='hardware', hardwareTypeAt is called once; insertText spy sees no calls",
+    { timeout: 3000 },
+    async () => {
+      // Given: session with inputMode="hardware"; fake CDP callLog session
+      // When:  execute({ text: "hello", ref: "@e1" }) runs
+      // Then:  (a) Input.insertText is NEVER called (CDP per-char loop does not run)
+      //         (b) Ctrl+A (CDP dispatchKeyEvent) is NEVER called (hardware arm bypasses CDP keyboard)
+      //         (c) result.ok===false in test env (hardwareTypeAt throws: no native CGEvent addon)
+      //             This PROVES the hardware branch was taken — CDP arm would return ok===true.
+      //
+      // NOTE: hardwareTypeAt's default parameter `cg = loadCgEvent()` throws immediately in test env
+      // (no native CGEvent addon built). The throw propagates to execute's try-catch → failFromError.
+      // The observable check is that CDP insertText was NEVER called — the hardware arm never
+      // falls through to the CDP else-branch, regardless of whether the native call succeeds.
+      const fakeSession = makeFakeSession();
+      // Override inputMode to "hardware"
+      const hardwareSession = { ...fakeSession, inputMode: "hardware" as const };
+      await fakeSession.getClient().snapshot();
+      const tool = makeTypeTool(hardwareSession);
+      const result = await tool.execute(
+        { text: "hello", ref: "@e1" },
+        { toolCallId: "t-type4-hw", messages: [], abortSignal },
+      );
+
+      const log = fakeSession.callLog;
+
+      // (a) CDP insertText NEVER called (hardware arm skips the CDP else-branch entirely)
+      const insertCalls = log.filter((e) => e.startsWith("insertText:"));
+      assert.equal(insertCalls.length, 0, "T-Type.4 hardware: CDP insertText must NOT be called");
+
+      // (b) CDP Ctrl+A NEVER called (in hardware branch, CDP keyboard path is skipped)
+      const ctrlAEvents = log.filter((e) => e.includes(":a:mod2"));
+      assert.equal(ctrlAEvents.length, 0, "T-Type.4 hardware: CDP Ctrl+A must NOT be dispatched");
+
+      // (c) result.ok===false confirms hardware branch ran (hardwareTypeAt throws in test env)
+      assert.equal(result.ok, false, "T-Type.4 hardware: ok===false (hardwareTypeAt throws: no CGEvent native addon in test)");
+    },
+  );
+});
+
+// ─── T-Type.5 (G-P47.2 / B-1): empty text clears the field ──────────────────
+
+describe("T-Type.5 (G-P47.2 / B-1 regression): empty text='' calls insertText('') exactly once", () => {
+  it(
+    "Ctrl+A fires; insertText called exactly once with ''; no per-char loop; result.ok===true",
+    { timeout: 3000 },
+    async () => {
+      // Given: CDP-mode session; fake handle records insertText/dispatchKeyEvent; text = ""
+      // When:  execute({ text: "", ref: "@e1" }) runs
+      //        (Step 4b B-1: text.length===0 branch → explicit insertText({ text: "" }) clear)
+      // Then:  (a) dispatchKeyEvent Ctrl+A pair fires: key:"a", modifiers:2 keyDown + keyUp
+      //             (Ctrl+A selects existing content — required step)
+      //         (b) insertText called EXACTLY ONCE with text "" (the explicit B-1 clear branch)
+      //             — replaces the Ctrl+A selection with nothing; this is what CLEARS the field
+      //         (c) NO single-character insertText calls (per-char loop body does NOT run for len=0)
+      //         (d) NO Enter dispatchKeyEvent (no \n in empty string)
+      //         (e) result.ok === true (clear is not an error)
+      const session = makeFakeSession();
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "", ref: "@e1" },
+        { toolCallId: "t-type5-b1", messages: [], abortSignal },
+      );
+
+      // (e) result.ok === true
+      assert.equal(result.ok, true, "T-Type.5 B-1: result.ok must be true (clear is valid)");
+
+      const log = session.callLog;
+
+      // (a) Ctrl+A pair fires (selects existing content)
+      const ctrlADown = log.filter((e) => e === "key:keyDown:a:mod2");
+      const ctrlAUp = log.filter((e) => e === "key:keyUp:a:mod2");
+      assert.equal(ctrlADown.length, 1, "T-Type.5 B-1: Ctrl+A keyDown must fire");
+      assert.equal(ctrlAUp.length, 1, "T-Type.5 B-1: Ctrl+A keyUp must fire");
+
+      // (b)+(c) insertText called EXACTLY ONCE with "" (B-1 explicit clear; per-char loop does not run)
+      const insertCalls = log.filter((e) => e.startsWith("insertText:"));
+      assert.equal(insertCalls.length, 1, "T-Type.5 B-1: insertText must be called exactly once");
+      assert.equal(insertCalls[0], "insertText:", "T-Type.5 B-1: the one insertText call uses '' (empty string)");
+
+      // (d) NO Enter key events (no \\n in empty string)
+      const enterEvents = log.filter((e) => e.includes(":Enter:"));
+      assert.equal(enterEvents.length, 0, "T-Type.5 B-1: no Enter key events for empty text");
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 test("T-M67: type tool execute without ref or label returns fail envelope", { timeout: 3000 }, async () => {
   const session = makeFakeSession();
