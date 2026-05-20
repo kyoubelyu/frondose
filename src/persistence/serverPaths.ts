@@ -1,10 +1,10 @@
 /** P-25: path constants for the server's independent directory tree.
- *  All constants are getter functions so homedir() is evaluated lazily
- *  (important for test isolation: tests can set process.env.HOME before calling). */
-import { homedir } from "node:os";
+ *  All constants are getter functions so getHomeBase() is evaluated lazily
+ *  (important for test isolation: tests can set process.env.MAI_HOME_BASE before calling). */
 import { join } from "node:path";
+import { getHomeBase } from "./paths.js";
 
-export const SERVER_ROOT = (): string => join(homedir(), ".mai", "server");
+export const SERVER_ROOT = (): string => join(getHomeBase(), ".mai", "server");
 export const SERVER_MEMORY_DB_PATH = (): string => join(SERVER_ROOT(), "memory.sqlite");
 export const SERVER_AUDIT_PATH = (): string => join(SERVER_ROOT(), "audit.jsonl");
 export const SERVER_SESSIONS_ROOT = (): string => join(SERVER_ROOT(), "sessions");

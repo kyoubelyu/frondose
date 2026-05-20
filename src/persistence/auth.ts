@@ -9,12 +9,12 @@
  * imports `providerEntrySchema` + `migrateProviderEntry` to validate
  * + auto-migrate provider entries inside `secrets.json`.
  */
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { getHomeBase } from "./paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
-export const DEFAULT_AUTH_PATH = (): string => join(homedir(), ".mai", "auth.json");
+export const DEFAULT_AUTH_PATH = (): string => join(getHomeBase(), ".mai", "auth.json");
 
 export const providerEntrySchema = z.object({
   key: z.string().min(1),

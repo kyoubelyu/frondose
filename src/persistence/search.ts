@@ -5,12 +5,12 @@
  * (production → DEFAULT_SECRETS_PATH; tests pass tmpDir/search.json which
  * derives tmpDir/secrets.json). C-1 RMW preserves sibling fields on write.
  */
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { getHomeBase } from "./paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
-export const DEFAULT_SEARCH_CONFIG_PATH = (): string => join(homedir(), ".mai", "agent", "search.json");
+export const DEFAULT_SEARCH_CONFIG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "search.json");
 
 export const searchConfigSchema = z.object({
   braveApiKey: z.string().min(1).optional(),

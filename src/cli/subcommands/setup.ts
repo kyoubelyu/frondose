@@ -154,14 +154,21 @@ async function runSoulSection(opts: SetupSubcommandOpts, prompter: Prompter): Pr
     const reconfig = await prompter.confirm("Soul axes already configured. Reconfigure?", false);
     if (!reconfig) return;
   }
-  const axes: FreeAxesRecord = await promptFreeAxesInteractive(prompter);
+  // P-52 B-2 + BLOCKER-3 (Step-3b): identity-presence guard MOVED before the
+  // axes prompt. Previously the operator answered all 4 axis prompts and only
+  // then saw a silent stderr "skipping" line — wasted input and confusing.
+  // Now: fail fast with a visible operator-facing stdout error; the axes prompt
+  // never fires when identity.json is absent. Returns without throwing so
+  // other selected sections (e.g. integrations) continue in the same wizard run.
   const existing = readIdentity(opts.identityPath);
   if (!existing) {
-    process.stderr.write(
-      "[setup] identity.json missing during soul section — skipping (run identity section first).\n",
+    process.stdout.write(
+      "\n⚠ Soul section requires identity.json. Please complete the Identity section first — " +
+        "either re-run `mai setup` and select Identity (auth + identity → soul), or run `mai identity init` directly.\n\n",
     );
     return;
   }
+  const axes: FreeAxesRecord = await promptFreeAxesInteractive(prompter);
   const patched = applyIdentityPatch(existing, { freeAxes: axes });
   const merged = identityRecordSchema.parse({ ...patched, updatedAt: new Date().toISOString() });
   writeIdentity(merged, opts.identityPath);

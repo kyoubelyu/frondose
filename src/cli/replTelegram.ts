@@ -13,11 +13,11 @@
  *
  * BLOCKER-1 fix locked: abort guard between turnLock release and offset write.
  */
-import os from "node:os";
 import path from "node:path";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import type { TurnLock } from "../agent/turnSemaphore.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { acquireTurnLock, isPidAlive, releaseTurnLock } from "../persistence/processLock.js";
 import { appendMessages as appendMessagesPerCwd } from "../persistence/session.js";
 import { readTelegramConfig, type TelegramConfig, writeTelegramConfig } from "../persistence/telegramConfig.js";
@@ -372,8 +372,8 @@ export async function startDaemonPoller(
     lastReceivedAt: cfg.lastReceivedAt ?? null,
     abort,
   };
-  const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
-  const turnLockPath = path.join(os.homedir(), ".mai", "agent", "turn.lock");
+  const replPidPath = path.join(getHomeBase(), ".mai", "agent", "repl.pid");
+  const turnLockPath = path.join(getHomeBase(), ".mai", "agent", "turn.lock");
   void (async () => {
     const token = process.env.TELEGRAM_TOKEN;
     if (!token) {

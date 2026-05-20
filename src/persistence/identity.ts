@@ -6,7 +6,6 @@
  *  keep compiling. `readIdentity`/`writeIdentity` are now shims over
  *  `config.json.identity` (authoritative) with a legacy `identity.json` fallback. */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "./config.js";
 import {
@@ -19,6 +18,7 @@ import {
   identityPatchSchema,
   identityRecordSchema,
 } from "./identitySchema.js";
+import { getHomeBase } from "./paths.js";
 
 // P-28 re-export: keep `from "./identity.js"` imports of the schema names working.
 export {
@@ -32,7 +32,7 @@ export {
   type IdentityPatch,
 };
 
-export const DEFAULT_IDENTITY_PATH = (): string => join(homedir(), ".mai", "agent", "identity.json");
+export const DEFAULT_IDENTITY_PATH = (): string => join(getHomeBase(), ".mai", "agent", "identity.json");
 
 /** Lists which of the 7 required-field-names are missing/empty in a record. */
 export function missingIdentityFields(identity: Partial<IdentityRecord>): IdentityFieldName[] {

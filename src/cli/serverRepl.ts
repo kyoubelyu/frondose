@@ -5,7 +5,6 @@
  *  Daemon-alive check: refuses to start if SERVER_PID_PATH() is alive
  *  (only one foreground process per server instance). */
 
-import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -23,6 +22,7 @@ import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
 import { isAlive, readPid } from "../persistence/processLock.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
 import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
@@ -177,7 +177,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai/agent/uploads"),
     };
     // startDaemonPoller runs fire-and-forget; does not block readline.
     void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);

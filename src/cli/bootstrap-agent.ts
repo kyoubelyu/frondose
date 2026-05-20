@@ -3,6 +3,27 @@ import { type CoreMessage, type LanguageModel, streamText } from "ai";
 import { readIdentity } from "../persistence/identity.js";
 import { type BootstrapToolsOpts, makeBootstrapTools, readWipFile, writeWipFile } from "./bootstrap-tools.js";
 
+/** P-52 B-5: thrown when a `streamText` round-trip inside the identity bootstrap
+ *  exceeds MAI_BOOTSTRAP_TIMEOUT_MS (default 60s). The operator sees an actionable
+ *  message — they can adjust network/proxy and retry `mai identity init`. */
+export class BootstrapTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BootstrapTimeoutError";
+  }
+}
+
+/** Parse MAI_BOOTSTRAP_TIMEOUT_MS — positive integer ms; default 60_000.
+ *  Exported (CONCERN-1, Step-3b) so the validator can unit-test the default
+ *  + invalid-env fallback paths without spinning a real 60s wall-clock test. */
+export function bootstrapTimeoutMs(): number {
+  const raw = process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+  if (raw === undefined) return 60_000;
+  const n = Number(raw.trim());
+  if (!Number.isInteger(n) || n < 1000) return 60_000;
+  return n;
+}
+
 /** The 12 ordered field names — 8 professional + 4 methodology axes. */
 export const BOOTSTRAP_FIELD_NAMES = [
   "fullName",
@@ -175,20 +196,47 @@ export async function runBootstrapAgent(opts: BootstrapAgentOpts): Promise<void>
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   const runOneTurn = async (): Promise<void> => {
-    const result = streamText({
-      model,
-      system: buildBootstrapSystemPrompt(committedSet),
-      messages,
-      tools,
-      maxSteps: 5, // tool-call → tool-result → text round-trip within one turn
-    });
-    for await (const delta of result.textStream) {
-      process.stdout.write(delta);
+    // P-52 B-5: hard timeout per round-trip so a stalled LLM (network / proxy
+    // misconfiguration) surfaces as a clear error within ~60s rather than an
+    // indefinite REPL hang. Default 60s; overridable via MAI_BOOTSTRAP_TIMEOUT_MS
+    // (validator uses a small value for fast tests).
+    const timeoutMs = bootstrapTimeoutMs();
+    const abortController = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutErrorMessage =
+      `Identity bootstrap LLM call stalled (no response in ${Math.round(timeoutMs / 1000)}s). ` +
+      "Check your network connection or proxy settings (HTTPS_PROXY, ALL_PROXY, TELEGRAM_PROXY, Clash, etc.) " +
+      "and retry with `mai identity init`. " +
+      "If the problem persists, try a different LLM provider via `mai auth set`.";
+    try {
+      const streamWork = (async (): Promise<void> => {
+        const result = streamText({
+          model,
+          system: buildBootstrapSystemPrompt(committedSet),
+          messages,
+          tools,
+          maxSteps: 5, // tool-call → tool-result → text round-trip within one turn
+          abortSignal: abortController.signal,
+        });
+        for await (const delta of result.textStream) {
+          process.stdout.write(delta);
+        }
+        process.stdout.write("\n");
+        // Push the assistant turn (text only; tool messages handled by SDK internally).
+        const responseText = await result.text;
+        if (responseText) messages.push({ role: "assistant", content: responseText });
+      })();
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new BootstrapTimeoutError(timeoutErrorMessage));
+          abortController.abort();
+        }, timeoutMs);
+      });
+
+      await Promise.race([streamWork, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
-    process.stdout.write("\n");
-    // Push the assistant turn (text only; tool messages handled by SDK internally).
-    const responseText = await result.text;
-    if (responseText) messages.push({ role: "assistant", content: responseText });
   };
 
   try {

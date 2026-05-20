@@ -1,14 +1,14 @@
 // P-18 D-1: crash logger — appends uncaughtException, unhandledRejection, SIGABRT to crash log
 import { appendFileSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { getHomeBase } from "../persistence/paths.js";
 
-const DEFAULT_LOG_PATH = join(homedir(), ".mai", "agent", "logs", "crash.log");
+const DEFAULT_LOG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "logs", "crash.log");
 
 let registered = false;
 
 /** Register crash handlers. Idempotent — second call is a no-op. */
-export function registerCrashHandlers(logPath = DEFAULT_LOG_PATH): void {
+export function registerCrashHandlers(logPath = DEFAULT_LOG_PATH()): void {
   if (registered) return;
   registered = true;
 

@@ -6,6 +6,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseModelSpec, resolveModelSpec } from "../../agent/modelResolver.js";
+import { getHomeBase } from "../../persistence/paths.js";
 import { isPidAlive, readPid } from "../../persistence/processLock.js";
 import {
   readTelegramConfig,
@@ -103,7 +104,7 @@ export async function runTelegramSubcommand(
       process.stderr.write("[telegram on] macOS-only — daemon supervision requires launchd\n");
       process.exit(1);
     }
-    const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
+    const replPidPath = path.join(getHomeBase(), ".mai", "agent", "repl.pid");
     if (isPidAlive(replPidPath)) {
       process.stderr.write("[telegram on] mai REPL is currently running — close it first (Close mai REPL first)\n");
       process.exit(1);
@@ -158,14 +159,15 @@ export async function runTelegramSubcommand(
         `PROXY=${process.env.TELEGRAM_PROXY ?? cfg.proxyUrl ?? "(unset)"}\n`,
     );
     // P-23 §3.3: daemon plist + PID + log tail.
-    const home = os.homedir();
-    const tgPidPath = path.join(home, ".mai", "agent", "telegram.pid");
-    const installed = isDaemonInstalled(home);
+    const homeBase = getHomeBase();
+    const launchdHome = os.homedir();
+    const tgPidPath = path.join(homeBase, ".mai", "agent", "telegram.pid");
+    const installed = isDaemonInstalled(launchdHome);
     const daemonPid = readPid(tgPidPath);
     const daemonAlive = daemonPid !== null && isPidAlive(tgPidPath);
-    process.stdout.write(`[telegram] daemon plist: ${plistPath(home)} (installed=${installed})\n`);
+    process.stdout.write(`[telegram] daemon plist: ${plistPath(launchdHome)} (installed=${installed})\n`);
     process.stdout.write(`[telegram] daemon pid: ${daemonPid ?? "(none)"} (alive=${daemonAlive})\n`);
-    const errLog = path.join(home, ".mai", "agent", "logs", "telegram-daemon.err.log");
+    const errLog = path.join(homeBase, ".mai", "agent", "logs", "telegram-daemon.err.log");
     const tail = tailLogLastLine(errLog);
     process.stdout.write(`[telegram] log file: ${errLog} (last line: ${tail ?? "(empty)"})\n`);
     process.stdout.write("[telegram] running: false (CLI mode — no in-process poller)\n");

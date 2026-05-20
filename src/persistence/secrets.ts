@@ -10,11 +10,11 @@
  * secrets.json atomically, and returns the merged shape.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { type AuthJson, DEFAULT_AUTH_PATH, migrateProviderEntry } from "./auth.js";
 import { DEFAULT_GITHUB_CONFIG_PATH } from "./github.js";
+import { getHomeBase } from "./paths.js";
 import { DEFAULT_SEARCH_CONFIG_PATH } from "./search.js";
 
 // Inline provider schema — duplicated from auth.ts to break the secrets.ts ↔
@@ -27,7 +27,7 @@ const providerEntrySchema = z.object({
   type: z.enum(["openai", "anthropic"]).optional(),
 });
 
-export const DEFAULT_SECRETS_PATH = (): string => join(homedir(), ".mai", "agent", "secrets.json");
+export const DEFAULT_SECRETS_PATH = (): string => join(getHomeBase(), ".mai", "agent", "secrets.json");
 
 const githubSubSchema = z.object({
   token: z.string().min(1).optional(),
