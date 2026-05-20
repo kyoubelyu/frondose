@@ -1,7 +1,7 @@
 /** P-28.5: `navigate_to_url` worker tool — HTTPS-only general navigation. */
 import { tool } from "ai";
 import { z } from "zod";
-import { failFromError, ok } from "../../linkedin/index.js";
+import { applyPacing, failFromError, ok } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
 export function makeNavigateToUrlTool(session: LinkedinSession) {
@@ -24,8 +24,11 @@ export function makeNavigateToUrlTool(session: LinkedinSession) {
         if (!r.ok) return r;
         const { client } = r;
         await client.navigate(url, waitUntil);
+        // P-47 G-1: post-load human dwell — mirrors the `launch` tool. A page
+        // that loads then fires the next tool call instantly is a bot signal.
+        const pacing = await applyPacing();
         const finalUrl = await client.getCurrentUrl();
-        return ok("navigate_to_url", { url: finalUrl });
+        return ok("navigate_to_url", { url: finalUrl, pacing });
       } catch (e) {
         return failFromError("navigate_to_url", e);
       }
