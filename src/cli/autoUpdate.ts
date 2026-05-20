@@ -28,9 +28,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { readGithubConfig } from "../persistence/github.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { compareVersions } from "./subcommands/update.js";
 
 const require = createRequire(import.meta.url);
@@ -39,9 +39,9 @@ const pkg = require("../../package.json") as { version: string };
 const PKG_NAME = "@kyoube/mai-agent";
 const REPO_PATH = "kyoubelyu/mai-agent";
 const LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`;
-const RELEASES_DIR = (): string => join(homedir(), ".mai", "agent", "releases");
-const UPDATE_LOCK = (): string => join(homedir(), ".mai", "agent", "update.lock");
-const UPDATE_LOG = (): string => join(homedir(), ".mai", "agent", "logs", "update.log");
+const RELEASES_DIR = (): string => join(getHomeBase(), ".mai", "agent", "releases");
+const UPDATE_LOCK = (): string => join(getHomeBase(), ".mai", "agent", "update.lock");
+const UPDATE_LOG = (): string => join(getHomeBase(), ".mai", "agent", "logs", "update.log");
 // Step-3b C3: 45 min provides ~24.5 min margin over worst-case 20-min cold-cache
 // `npm install` + 15s build. Eliminates false-takeover-then-duplicate-build.
 const LOCK_STALE_MS = 45 * 60 * 1000;

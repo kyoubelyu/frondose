@@ -1,9 +1,9 @@
 /** P-38: `mai uninstall` — remove the global mai install. fs-only (no child_process).
  *  --purge also removes ~/.mai/ (credentials, sessions, the Chrome-profile symlink). */
 import { existsSync, lstatSync, rmSync, unlinkSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { confirm } from "@inquirer/prompts";
+import { getHomeBase } from "../../persistence/paths.js";
 import { derivePackageSymlink, isDevLink } from "../autoUpdate.js";
 
 export interface UninstallOpts {
@@ -11,7 +11,7 @@ export interface UninstallOpts {
   yes: boolean;
   /** DI for tests — default process.argv[1]. */
   argv1?: string;
-  /** DI for tests — default os.homedir(). */
+  /** DI for tests — default getHomeBase(). */
   homeDir?: string;
   /** DI for tests — default the @inquirer/prompts confirm. */
   confirm?: (message: string) => Promise<boolean>;
@@ -39,7 +39,7 @@ function removePathSafe(p: string): void {
 
 export async function runUninstallSubcommand(opts: UninstallOpts): Promise<void> {
   const argv1 = opts.argv1 ?? process.argv[1] ?? "";
-  const home = opts.homeDir ?? homedir();
+  const home = opts.homeDir ?? getHomeBase();
   const ask = opts.confirm ?? ((m: string) => confirm({ message: m }));
 
   const pkgSymlink = derivePackageSymlink(argv1);

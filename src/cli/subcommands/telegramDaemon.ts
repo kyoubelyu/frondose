@@ -5,7 +5,6 @@
  * is alive; Chrome boot is gated by `chromeAcquireGuard` so daemon yields to
  * REPL on conflict.
  */
-import os from "node:os";
 import path from "node:path";
 import type { CoreMessage } from "ai";
 import { resolveModel } from "../../agent/modelResolver.js";
@@ -17,14 +16,15 @@ import { TurnLock } from "../../agent/turnSemaphore.js";
 import { createLinkedinSession } from "../../linkedin/index.js";
 import { makeAuditWriter } from "../../persistence/audit.js";
 import { readIdentity } from "../../persistence/identity.js";
+import { getHomeBase } from "../../persistence/paths.js";
 import { isAlive, isPidAlive, readPid, removePid, writePid } from "../../persistence/processLock.js";
 import { appendMessagesShared, sharedSessionPath } from "../../persistence/sharedSession.js";
 import { readTelegramConfig } from "../../persistence/telegramConfig.js";
 import { makeAllTools } from "../../tools/index.js";
 import { type PollerHandle, startDaemonPoller, type TelegramTurnDeps } from "../replTelegram.js";
 
-const TELEGRAM_PID = (): string => path.join(os.homedir(), ".mai", "agent", "telegram.pid");
-const REPL_PID = (): string => path.join(os.homedir(), ".mai", "agent", "repl.pid");
+const TELEGRAM_PID = (): string => path.join(getHomeBase(), ".mai", "agent", "telegram.pid");
+const REPL_PID = (): string => path.join(getHomeBase(), ".mai", "agent", "repl.pid");
 
 export async function runTelegramDaemon(): Promise<void> {
   // (1) PID mutex — refuse if another daemon is alive; reap stale otherwise.
@@ -54,7 +54,7 @@ export async function runTelegramDaemon(): Promise<void> {
     cleanup();
     process.exit(1);
   }
-  const tcPath = process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
+  const tcPath = process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
   const cfg = readTelegramConfig(tcPath);
   if (cfg.boundUserId === null) {
     process.stderr.write("[telegram daemon] boundUserId null; run `mai telegram bind` first\n");
@@ -63,11 +63,11 @@ export async function runTelegramDaemon(): Promise<void> {
   }
 
   // (4) Build agent stack — identical signature to runRepl setup.
-  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
-  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
-  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(os.homedir(), ".mai", "agent", "audit.jsonl");
+  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
+  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
+  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
-  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
+  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
 
   const identity = readIdentity(identityPath);
   const model = resolveModel({});
@@ -103,7 +103,7 @@ export async function runTelegramDaemon(): Promise<void> {
     onStepFinish: auditWriter,
     out: process.stdout,
     configPath: tcPath,
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
     // P-23 §6.7: daemon always uses the shared-session writer.
     appendMessages: appendMessagesShared,
   };

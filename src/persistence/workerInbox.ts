@@ -8,12 +8,12 @@
  *  `enqueueWorkerInboxMessage`). Validator-locked name; do not alias.
  */
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Database as DB } from "better-sqlite3";
 import Database from "better-sqlite3";
+import { getHomeBase } from "./paths.js";
 
-export const WORKER_INBOX_DB_PATH = (): string => join(homedir(), ".mai", "agent", "inbox.sqlite");
+export const WORKER_INBOX_DB_PATH = (): string => join(getHomeBase(), ".mai", "agent", "inbox.sqlite");
 
 export function openWorkerInboxDb(path: string): DB {
   mkdirSync(dirname(path), { recursive: true });

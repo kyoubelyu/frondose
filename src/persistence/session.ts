@@ -9,12 +9,12 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { CoreMessage } from "ai";
+import { getHomeBase } from "./paths.js";
 
 /** Root directory for all sessions. ~/.mai/agent/sessions/<cwd-hash>/<ts>.jsonl */
-export const SESSIONS_ROOT = (): string => join(homedir(), ".mai", "agent", "sessions");
+export const SESSIONS_ROOT = (): string => join(getHomeBase(), ".mai", "agent", "sessions");
 
 /**
  * Stable, short hash of a cwd path. 16 hex chars of SHA-256 = 64 bits of

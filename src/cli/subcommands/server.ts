@@ -4,6 +4,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type ConfigJson, readConfig } from "../../persistence/config.js";
+import { getHomeBase } from "../../persistence/paths.js";
 import { isAlive, readPid } from "../../persistence/processLock.js";
 import { readServerIdentity, writeServerIdentity } from "../../persistence/serverIdentity.js";
 import {
@@ -206,7 +207,7 @@ async function runServerIdentityInitAction(opts: ServerSubcommandOpts): Promise<
   await runServerIdentityInit(
     {
       serverIdentityPath: opts.serverIdentityPath ?? SERVER_IDENTITY_PATH(),
-      workerIdentityPath: opts.workerIdentityPath ?? path.join(os.homedir(), ".mai", "agent", "identity.json"),
+      workerIdentityPath: opts.workerIdentityPath ?? path.join(getHomeBase(), ".mai", "agent", "identity.json"),
       reset: opts.reset ?? false,
     },
     prompter,
