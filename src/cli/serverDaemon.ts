@@ -1,6 +1,7 @@
 /** P-25: `mai server daemon` — launchd-invoked. Telegram-only; no readline.
  *  Mirrors src/cli/subcommands/telegramDaemon.ts but uses server-specific
  *  paths, identity, and tool set (mode="server", 14 tools). */
+import type { Server } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
@@ -14,8 +15,8 @@ import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
-import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
 import { getHomeBase } from "../persistence/paths.js";
+import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
 import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
 import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
@@ -40,9 +41,28 @@ import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
 import { makeAllTools } from "../tools/index.js";
 import { drainDueJobs, type RunCronTurnDeps } from "./replCron.js";
-import { startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
+import { type PollerHandle, startDaemonPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { startServerHttp } from "./serverHttp.js";
 import { startWebHttp } from "./serverWeb.js";
+
+export interface DaemonHandles {
+  httpServer: Server;
+  webServer: Server;
+  abort: () => void;
+  drainPoller: PollerHandle | null;
+}
+
+let captureFn: ((handles: DaemonHandles) => void) | null = null;
+
+/** @internal — test-only DI hook. */
+export function __captureDaemonHandles(fn: ((handles: DaemonHandles) => void) | null): void {
+  captureFn = fn;
+}
+
+/** @internal — test-only DI hook reset. */
+export function __resetCaptureDaemonHandles(): void {
+  captureFn = null;
+}
 
 export async function runServerDaemon(): Promise<void> {
   const pidPath = SERVER_PID_PATH();
@@ -167,6 +187,7 @@ export async function runServerDaemon(): Promise<void> {
   const messages: CoreMessage[] = [];
   // Step-3b C-3 fix: serverSessionFile() auto-creates ~/.mai/server/sessions/.
   const sessionFile = { path: serverSessionFile() };
+  let pollerHandle: PollerHandle | null = null;
 
   // P-36 F-B (B2): resolve the LLM WITHOUT throwing — the REST + web listeners
   // are already bound above, so a bad LLM config degrades the orchestrator agent
@@ -215,13 +236,21 @@ export async function runServerDaemon(): Promise<void> {
     process.stdout.write(`[server daemon] up, PID ${process.pid}, session ${sessionFile.path}\n`);
     // Step-3b C-2: pass unified abortController to poller; SIGTERM path handles
     // process.exit(0) directly (see handler above).
-    await startDaemonPoller(cfg, deps, turnLock, abortController);
+    pollerHandle = await startDaemonPoller(cfg, deps, turnLock, abortController);
   } else {
     process.stdout.write(
       `[server daemon] up, PID ${process.pid} — orchestrator agent DISABLED (LLM auth error above). ` +
         "REST + web listeners are up; workers can heartbeat/register/poll. " +
         "Fix the LLM auth and restart `mai server`.\n",
     );
+  }
+  if (captureFn) {
+    captureFn({
+      httpServer,
+      webServer,
+      abort: () => abortController.abort(),
+      drainPoller: pollerHandle,
+    });
   }
   await new Promise<void>((resolve) => {
     abortController.signal.addEventListener("abort", () => resolve());

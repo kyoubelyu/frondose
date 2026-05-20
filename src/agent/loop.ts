@@ -71,9 +71,7 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
 
   /** Run one streamText pass: stream text deltas, append response messages,
    *  return the resolved finishReason and the number of steps consumed. */
-  const runPhase = async (
-    stepCap: number,
-  ): Promise<{ finishReason: FinishReason; stepCount: number }> => {
+  const runPhase = async (stepCap: number): Promise<{ finishReason: FinishReason; stepCount: number }> => {
     const result = streamText({
       model: opts.model,
       system: opts.system,
@@ -100,8 +98,7 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
     // mid-task cutoff by ALSO requiring Phase 1 to have consumed the full softCap
     // (`stepCount >= softCap`). Only then inject the warning + run Phase 2.
     // 'stop' / a short Phase 1 → finished naturally, no warning, no Phase 2.
-    const cutOffMidTask =
-      phase1.finishReason === "tool-calls" && phase1.stepCount >= softCap;
+    const cutOffMidTask = phase1.finishReason === "tool-calls" && phase1.stepCount >= softCap;
     if (twoPhase && cutOffMidTask && !opts.abortSignal?.aborted) {
       opts.messages.push(budgetWarningMessage(remaining));
       await runPhase(remaining);

@@ -1,44 +1,12 @@
 #!/usr/bin/env node
-import { existsSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { ExitPromptError } from "@inquirer/core";
-import type { CoreMessage } from "ai";
 import { Command } from "commander";
-import { HookRunner } from "../agent/hooks.js";
-import { resolveMaxSteps } from "../agent/maxSteps.js";
-import { resolveModel } from "../agent/modelResolver.js";
-import { BOUNDARY } from "../agent/systemPrompt/boundary.js";
-import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
-import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
-import { resolveSoulBand } from "../agent/systemPrompt/soul.js";
-import { TurnLock } from "../agent/turnSemaphore.js";
-import { createLinkedinSession } from "../linkedin/index.js";
-import type { FreeAxesRecord } from "../methodology/types.js";
-import { makeAuditWriter } from "../persistence/audit.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
-import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
-import {
-  applyIdentityPatch,
-  type IdentityRecord,
-  identityRecordSchema,
-  readIdentity,
-  writeIdentity,
-} from "../persistence/identity.js";
-import { setSafeModeServerUrl } from "../persistence/safeModeState.js";
-import { readSecrets } from "../persistence/secrets.js";
-import { continueRecent, loadMessages } from "../persistence/session.js";
-import { loadMessagesShared, sharedSessionPath } from "../persistence/sharedSession.js";
-import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { getHomeBase } from "../persistence/paths.js";
-import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
-import type { ControlSignals } from "../tools/index.js";
-import { makeAllTools } from "../tools/index.js";
 import { registerCrashHandlers } from "./crashLogger.js";
 import { loadDotenv } from "./env.js";
-import { runIdentityBootstrap } from "./identity-init.js";
-import { runOneShot, runRepl } from "./repl.js";
 import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
@@ -53,15 +21,14 @@ import { runServerWebTokenSubcommand } from "./subcommands/serverWebToken.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
 import { runSessionsSubcommand } from "./subcommands/sessions.js";
 import { runSetupSubcommand } from "./subcommands/setup.js";
-import { promptFreeAxes, runSoulSubcommand } from "./subcommands/soul.js";
+import { runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runTelegramDaemon } from "./subcommands/telegramDaemon.js";
 import { runUninstallSubcommand } from "./subcommands/uninstall.js";
 import { runUpdateSubcommand } from "./subcommands/update.js";
 import { runVersionSubcommand } from "./subcommands/version.js";
-import { startWorkerHeartbeat } from "./workerHeartbeat.js";
-import { startWorkerServerPoll } from "./workerServerPoll.js";
+import { bootWorker } from "./workerBoot.js";
 
 /**
  * P-13 D-2: canonical Ctrl-C catch helper. Every Commander action body that may
@@ -84,36 +51,6 @@ interface CliOpts {
   cwd: string;
   resetIdentity: boolean;
   maxSteps?: string; // P-46 D-1b — Commander delivers <n> as a string
-}
-
-/**
- * Prompt the operator for the 4 free axes via readline; persist into identity.json.
- * Caller (`main()` body, only-when-freeAxes-absent path) ensures this runs only once
- * per binary invocation. Reuses §6.7's `promptFreeAxes` for the readline loop +
- * freeAxesSchema validation; adds the persist step here.
- *
- * Wrapper-here over substitution with `runSoulSubcommand("reset", …)` because the
- * reset subcommand prints a "=== mai soul reset — re-pick the 4 free axes ===" header
- * — wrong UX for the FIRST-time-after-bootstrap path. This wrapper runs the prompts
- * silently after identity bootstrap, no "reset" framing.
- */
-async function promptFreeAxesAndPersist(identityPath: string): Promise<void> {
-  const existing = readIdentity(identityPath);
-  if (!existing) {
-    process.stderr.write("[mai] identity.json missing during axes-prompt — skipping (operator must re-run mai).\n");
-    return;
-  }
-  process.stdout.write(
-    "\n=== Pick your 4 methodology habit axes (one-time setup; can be re-rolled via `mai soul reset`) ===\n",
-  );
-  const axes: FreeAxesRecord = await promptFreeAxes();
-  const patched = applyIdentityPatch(existing, { freeAxes: axes });
-  const merged = identityRecordSchema.parse({
-    ...patched,
-    updatedAt: new Date().toISOString(),
-  });
-  writeIdentity(merged, identityPath);
-  process.stdout.write("[mai] freeAxes saved.\n");
 }
 
 async function main(): Promise<void> {
@@ -151,20 +88,6 @@ async function main(): Promise<void> {
   const telegramConfigPath =
     process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
 
-  // P-24 §6.9: path to ~/.mai/agent/config.json. CLI production honors
-  // MAI_CONFIG_PATH (operator override); library-level DEFAULT_CONFIG_PATH()
-  // getter does NOT — see plan §8 NIT-B. Both env vars are undocumented in
-  // CLAUDE.md and unsupported for direct readConfig()/readSecrets() calls.
-  // Currently unused in main.ts dispatch — subcommands rely on the
-  // DEFAULT_CONFIG_PATH() default inside writeTelegramConfigFields. Reserved
-  // for future P-25 server/worker reads + explicit threading.
-  const _configPath = process.env.MAI_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "config.json");
-  void _configPath;
-
-  // P-11 (D-3 / D-19): single TurnLock for the binary lifetime. Threaded into runRepl
-  // so operator + cron + telegram turns serialize on a single mutex chain.
-  const turnLock = new TurnLock();
-
   // P-7: dynamic version read so commander's --version + the `version` subcommand stay in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
   const pkg = requireFromHere("../../package.json") as { version: string };
@@ -185,157 +108,16 @@ async function main(): Promise<void> {
     // fall through to the usage screen and exit 1. The full REPL / one-shot body lives here.
     .action(async () => {
       const opts = program.opts<CliOpts>();
-
-      // P-4: identity-init bootstrap (must run BEFORE Chrome boot — readline owns stdin).
-      if (opts.resetIdentity && existsSync(identityPath)) unlinkSync(identityPath);
-      if (!existsSync(identityPath)) {
-        await runIdentityBootstrap(identityPath);
-      }
-
-      // P-5: axes-prompt-or-default (rev-2 §4 migration semantics). If identity.json exists
-      // but lacks freeAxes (pre-P-5 record), trigger axes prompt on interactive REPL; silent
-      // default + stderr nudge for non-TTY/--prompt.
-      const initialIdentity = readIdentity(identityPath);
-      if (initialIdentity && !initialIdentity.freeAxes) {
-        if (process.stdin.isTTY && !opts.prompt) {
-          await promptFreeAxesAndPersist(identityPath);
-          // (re-read happens below via finalIdentity)
-        } else {
-          process.stderr.write(
-            "[mai] freeAxes not yet picked — using methodology defaults. Run `mai soul reset` to set them.\n",
-          );
-        }
-      }
-
-      const model = resolveModel({ cli: opts.model });
-      // P-46 D-1b: resolve the step budget — flag > MAI_MAX_STEPS env > default 200.
-      const maxSteps = resolveMaxSteps(opts.maxSteps);
-
-      // P-5 + P-28: Soul band — config.soul.override REPLACES the composed band when set.
-      const finalIdentity: IdentityRecord | null = readIdentity(identityPath);
-      const cfgForSoul = readConfig(DEFAULT_CONFIG_PATH());
-      const system = composeSystemPrompt({
-        boundary: BOUNDARY, // P-9 D-8 — was BOUNDARY_PLACEHOLDER
-        // soul is non-optional in configJsonSchemaV2 (.default({override:null})).
-        soul: resolveSoulBand(cfgForSoul.soul.override, finalIdentity),
-        checkpoint: CHECKPOINT, // P-10 D-10
-      });
-      // P-23 §6.7: when telegram daemon is enabled in cfg, REPL switches to
-      // shared session JSONL so operator + daemon turns share one log.
-      const tgCfgForSession = readTelegramConfig(telegramConfigPath);
-      const usingShared = tgCfgForSession.enabled;
-      const sessionFile = usingShared ? sharedSessionPath() : continueRecent(opts.cwd, { newSession: opts.newSession });
-      const messages: CoreMessage[] = usingShared ? loadMessagesShared(sessionFile) : loadMessages(sessionFile);
-
-      // v0.3-fix1: lazy LinkedinSession factory — captures launch options only; Chrome
-      // boots on first session.getOrInitClient() call inside any LinkedIn tool's execute.
-      // Memory + identity tools work without Chrome.
-      // P-32: per-worker input mode (cdp default | hardware) from config.json.
-      const linkedinSession = createLinkedinSession({
-        port: cdpPort,
+      await bootWorker({
+        cdpPort,
         profileDir,
-        inputMode: readConfig(DEFAULT_CONFIG_PATH()).worker.input_mode,
-      });
-
-      // P-18 D-2: periodic CDP health check — clears stale cache between idle periods
-      const heartbeatInterval = setInterval(() => {
-        linkedinSession.heartbeat().catch(() => {
-          /* best-effort; heartbeat failures are non-fatal */
-        });
-      }, 30_000);
-      // Allow Node to exit even if this interval is pending
-      heartbeatInterval.unref();
-
-      // P-6: single AbortController for the binary lifetime (sticky once aborted —
-      // a turn-N stop should prevent turn N+1 from starting). Wired into makeAllTools
-      // via control.requestStop, and into runAgentLoop via abortSignal.
-      const abortController = new AbortController();
-      const control: ControlSignals = {
-        requestStop: () => abortController.abort(),
-        // P-6 Step 5a r3: stop tool writes its own audit row directly because
-        // Vercel SDK v4 skips onStepFinish on abort-triggered step exits.
+        memoryDbPath,
+        identityPath,
         auditPath,
-      };
-      const auditWriter = makeAuditWriter(auditPath);
-
-      // P-9 D-10: lazy-loads ~/.mai/agent/hooks.json; missing-file = no-op runner.
-      const hookRunner = new HookRunner();
-
-      // P-26: worker-side server-coord plumbing. When `config.server.url` is set
-      // AND `secrets.server.token` is provisioned (via `mai server worker add`),
-      // start the heartbeat + long-poll loops. Otherwise the worker runs
-      // standalone (safe-mode never activates; query_lead_globally / publish_event
-      // return graceful envelopes via their null-coords paths).
-      const workerCfg = readConfig();
-      const workerSecrets = readSecrets();
-      const workerId = finalIdentity?.fullName ?? os.hostname();
-      if (workerCfg.server.url) {
-        if (workerSecrets.server?.token) {
-          setSafeModeServerUrl(workerCfg.server.url);
-          const coords = {
-            serverUrl: workerCfg.server.url,
-            token: workerSecrets.server.token,
-            workerId,
-          };
-          startWorkerHeartbeat(coords, abortController.signal);
-          startWorkerServerPoll(
-            coords,
-            WORKER_INBOX_DB_PATH(),
-            abortController.signal,
-            workerCfg.server.poll_interval_s * 1000,
-          );
-        } else {
-          process.stderr.write(
-            "[mai] config.server.url set but secrets.server.token missing — server features disabled\n",
-          );
-        }
-      }
-
-      const tools = makeAllTools(
-        linkedinSession,
-        { memoryDbPath, identityPath, schedulePath }, // P-31: + schedulePath (schedule_task tool)
-        control,
-        hookRunner,
-        { mode: "worker", workerId },
-      );
-
-      if (typeof opts.prompt === "string" && opts.prompt.length > 0) {
-        await runOneShot({
-          model,
-          system,
-          messages,
-          tools,
-          maxSteps, // P-46 D-1b
-          sessionFile,
-          cwd: opts.cwd,
-          prompt: opts.prompt,
-          abortSignal: abortController.signal,
-          onStepFinish: auditWriter,
-          turnLock, // P-11 D-19 — unused in oneShot but keeps signature uniform
-          telegramConfigPath, // P-11 D-9
-        });
-        process.exit(0);
-      }
-
-      await runRepl({
-        model,
-        system,
-        messages,
-        tools,
-        maxSteps, // P-46 D-1b
-        linkedinSession,
-        sessionFile,
-        cwd: opts.cwd,
-        abortController,
-        abortSignal: abortController.signal,
-        onStepFinish: auditWriter,
-        schedulePath, // P-10 D-9
-        turnLock, // P-11 D-19
-        telegramConfigPath, // P-11 D-9
-        control, // P-54 OQ-1
+        schedulePath,
+        telegramConfigPath,
+        opts,
       });
-      // REPL fall-through (Ctrl-C or stop-triggered break): exit cleanly.
-      process.exit(0);
     });
 
   // P-5: `mai soul <action>` subcommand. Short-circuits via process.exit(0) — never
