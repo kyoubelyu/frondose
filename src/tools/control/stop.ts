@@ -16,6 +16,16 @@ export interface ControlSignals {
    * would otherwise be missing. (P-6 Step 5a r3.)
    */
   auditPath?: string;
+  /**
+   * P-54 OQ-1: when `true`, `escalate_for_capability` suppresses the
+   * `requestStop()` call (telegram + gh_issue still fire) and returns
+   * `stopped: false` so the interactive REPL session stays alive. Mutated
+   * per-turn — the interactive operator-turn in `repl.ts` flips this to
+   * `true` before `runAgentLoop` and restores to `undefined` in `finally`.
+   * Undefined / `false` → F-3 unconditional-stop semantics preserved
+   * (cron / telegram / worker / server background paths).
+   */
+  isInteractive?: boolean;
 }
 
 const stopParams = z.object({
