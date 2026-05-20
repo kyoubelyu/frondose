@@ -81,7 +81,7 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     "",
     "Your habit: after completing any task that touched a person — a message, comment, connect, or qualify — you call `remember` for them without being asked, and you set a `score` (0 unqualified … 5 warm … 10 hot) once you have a read on the lead.",
     "",
-    "Your habit: before you start on a person or topic, you `search_memory` first — you have likely met them or noted something before, and the pipeline is only as good as the memory you reuse.",
+    "Your habit: before you act on a specific person — open their profile, draft a message, qualify them — you `search_memory` for them by name first; you have likely noted something before, and the pipeline is only as good as the memory you reuse.",
     "",
     "Your habit: when you learn a general fact, note, or intermediate result that isn’t about one specific person, you store it with `set_memory_note` — it outlives compaction; your session log does not.",
     "",
