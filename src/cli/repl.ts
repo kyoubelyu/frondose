@@ -26,6 +26,7 @@ import { drainDueJobs } from "./replCron.js";
 import { dispatchSlash } from "./replSlash.js";
 import { type PollerHandle, startTelegramPoller, type TelegramTurnDeps } from "./replTelegram.js";
 import { StatusLine } from "./statusLine.js";
+import { formatToolCallLine } from "./toolCallLine.js";
 import { drainWorkerInbox } from "./workerInbox.js";
 
 export interface ReplOpts {
@@ -96,8 +97,20 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   const telegramPidPath = path.join(getHomeBase(), ".mai", "agent", "telegram.pid");
   const daemonAliveAtBoot = isPidAlive(telegramPidPath);
   const sessionFileRef = { path: opts.sessionFile };
+  const isTtyOut = out === process.stdout && process.stdout.isTTY === true;
   const composedStepFinish = async (step: StepResult<ToolSet>) => {
     tokenBudget.add(step.usage);
+    if (isTtyOut && step.toolResults && step.toolResults.length > 0) {
+      const toolResults = step.toolResults as unknown as Array<{
+        toolCallId: string;
+        toolName: string;
+        args: unknown;
+        result: unknown;
+      }>;
+      for (const tr of toolResults) {
+        out.write(`${formatToolCallLine(tr)}\n`);
+      }
+    }
     await opts.onStepFinish?.(step);
   };
 
