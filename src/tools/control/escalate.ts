@@ -25,14 +25,18 @@ export interface EscalateDeps {
 
 /**
  * Build the escalate_for_capability tool. The composite calls telegram_notify
- * + gh_issue + stop sequentially and unconditionally:
+ * + gh_issue sequentially (both best-effort), then conditionally calls stop:
  *   1. await telegramNotify.execute({ severity: "error", body }) — best-effort
  *   2. await ghIssue.execute({ title, body, dedupKey }) — best-effort
- *   3. control.requestStop() — UNCONDITIONAL (per scout F-3 / OQ-5 failure-of-failure rule)
+ *   3. control.requestStop() — UNCONDITIONAL in autonomous/cron mode (F-3 / OQ-5);
+ *      SUPPRESSED in interactive REPL mode (P-54 OQ-1) so a misfire on a chat
+ *      question cannot kill the operator's session. Telegram + gh_issue still
+ *      fire in both modes (per P-54 OQ-4 — gh_issue is not gated by mode).
  *
  * The LLM sees ONE tool call (escalate_for_capability) and ONE envelope return.
  * Inner Telegram + gh_issue API calls are internal side-effects whose outcomes
- * are folded into the composite envelope.
+ * are folded into the composite envelope. The envelope's `stopped` field
+ * mirrors the mode: `true` in autonomous/cron, `false` in interactive REPL.
  */
 export function makeEscalateTool(deps: EscalateDeps) {
   const requestStop =
@@ -44,9 +48,19 @@ export function makeEscalateTool(deps: EscalateDeps) {
     });
   return tool({
     description:
-      "Escalate for a capability gap: notify operator via Telegram, file a tracked GitHub issue, then stop the agent cleanly. " +
-      "Use ONLY when you've encountered a real capability gap (not a transient error). " +
-      "Telegram + gh_issue failures are logged in the return envelope; the stop signal fires regardless.",
+      "Composite escalation for a GENUINE capability gap encountered MID-TASK. " +
+      "This single tool internally sends the Telegram notification, files the GitHub issue, " +
+      "and signals stop — do NOT call `telegram_notify` or `gh_issue` yourself before it; " +
+      "that would double-notify and double-file. " +
+      "Use ONLY when you are executing a specific task (navigate, click, type, search, …) " +
+      "and have determined mid-execution that a required capability is genuinely absent from " +
+      "your tool list (not a transient error, not a retry-able failure). " +
+      "Do NOT call in response to conversational questions, hypotheticals, or meta-discussions " +
+      "about your capabilities — those are conversation, answer in plain text. " +
+      "Return envelope: `stopped: true` in autonomous/cron mode (agent loop exits); " +
+      "`stopped: false` in interactive REPL mode (session stays alive — do NOT re-invoke; " +
+      "surface the situation to the operator in your next message). " +
+      "Telegram + gh_issue failures are logged in the envelope.",
     parameters: escalateParams,
     execute: async (params) => {
       const tgBody =
@@ -90,17 +104,27 @@ export function makeEscalateTool(deps: EscalateDeps) {
         ghFailure = e instanceof Error ? e.message : String(e);
       }
 
-      // UNCONDITIONAL stop — failure of telegram or gh_issue does not block exit.
-      try {
-        requestStop();
-      } catch (e) {
-        // requestStop should never throw; if it does, log + proceed.
-        process.stderr.write(`[mai] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`);
+      // P-54 OQ-1: interactive REPL mode suppresses the stop call (telegram +
+      // gh_issue still fired above). Cron / autonomous mode keeps the F-3
+      // unconditional-stop semantics. Read at EXECUTE time (not factory time)
+      // because `control.isInteractive` is mutated per-turn — the interactive
+      // operator-turn flips it to `true` before each runAgentLoop call.
+      const isInteractive = deps.control?.isInteractive === true;
+      if (!isInteractive) {
+        // Unconditional stop — failure of telegram or gh_issue does not block exit.
+        try {
+          requestStop();
+        } catch (e) {
+          // requestStop should never throw; if it does, log + proceed.
+          process.stderr.write(
+            `[mai] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`,
+          );
+        }
       }
 
       try {
         return ok("escalate_for_capability", {
-          stopped: true,
+          stopped: !isInteractive,
           telegramOutcome,
           telegramFailure,
           ghOutcome,

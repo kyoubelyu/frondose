@@ -19,6 +19,7 @@ import { appendMessages, rewriteSession, writeCompactionMarker } from "../persis
 import { appendMessagesShared } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
 import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
+import type { ControlSignals } from "../tools/control/stop.js";
 import { renderMarkdown } from "./markdown.js";
 import { drainDueJobs } from "./replCron.js";
 import { dispatchSlash } from "./replSlash.js";
@@ -56,6 +57,12 @@ export interface ReplOpts {
   telegramConfigPath?: string;
   /** P-46 D-1b: resolved agent-loop step budget. Default DEFAULT_MAX_STEPS. */
   maxSteps?: number;
+  /** P-54 OQ-1: interactive-mode signal. When set, the operator-turn
+   *  wrapper flips `control.isInteractive = true` before each runAgentLoop
+   *  call so `escalate_for_capability` suppresses the unconditional stop in
+   *  interactive REPL mode. main.ts passes the same `control` object that
+   *  is closed over by the tool factories. */
+  control?: ControlSignals;
 }
 
 const AUTO_COMPACT_THRESHOLD = 0.5;
@@ -287,16 +294,30 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     const xLock = await acquireTurnLock(turnLockPath, "repl-op", { timeoutMs: 60_000 });
     try {
       await turnLock.run(async () => {
-        await runAgentLoop({
-          model: opts.model,
-          system: opts.system,
-          messages: opts.messages,
-          tools: opts.tools,
-          maxSteps: effectiveMaxSteps, // P-46 D-1b
-          // D-7: NO onText — buffered render after the loop resolves
-          abortSignal: opts.abortSignal,
-          onStepFinish: composedStepFinish,
-        });
+        // P-54 OQ-1 (Step-3b BLOCKER-1 fix): flip the shared control's
+        // isInteractive=true INSIDE the turnLock.run callback — i.e. only
+        // after any in-flight background cron / telegram / worker turn has
+        // released the lock. Flipping it OUTSIDE turnLock.run (e.g. before
+        // the await) would let a still-running cron escalate observe `true`
+        // on the shared `control` and wrongly suppress F-3's autonomous stop.
+        // Restored in inner finally so cron / telegram / worker subsequent
+        // turns observe `isInteractive === undefined` (cron-safe default).
+        const priorInteractive = opts.control?.isInteractive;
+        if (opts.control) opts.control.isInteractive = true;
+        try {
+          await runAgentLoop({
+            model: opts.model,
+            system: opts.system,
+            messages: opts.messages,
+            tools: opts.tools,
+            maxSteps: effectiveMaxSteps, // P-46 D-1b
+            // D-7: NO onText — buffered render after the loop resolves
+            abortSignal: opts.abortSignal,
+            onStepFinish: composedStepFinish,
+          });
+        } finally {
+          if (opts.control) opts.control.isInteractive = priorInteractive;
+        }
       });
       tail = opts.messages.slice(turnStart);
       finalText = extractAssistantText(tail);
