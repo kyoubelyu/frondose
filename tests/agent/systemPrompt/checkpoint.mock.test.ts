@@ -101,14 +101,15 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
 
 // ─── T-Checkpoint.7 — character count budget (P-39 update) ──────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 3000 characters (P-39 raised the budget: 2 new subsections added; regression guard updated)", () => {
+test("T-Checkpoint.7: CHECKPOINT.length is <= 4200 characters (P-49 raised the budget: 'Task-start context lookup' subsection added; regression guard updated)", () => {
   // Given: CHECKPOINT constant (P-39 added 'Session-end persistence' + 'Daily memory organization'
-  //        subsections → grew from ~1786 chars to ~2620)
+  //        subsections → grew from ~1786 chars to ~2620; P-49 added 'Task-start context lookup'
+  //        subsection → grew from ~2620 chars to ~3626)
   // When: CHECKPOINT.length measured
-  // Then: <= 3000 — generous ceiling preserving meaningful regression guard while allowing P-39 growth
+  // Then: <= 4200 — generous ceiling preserving meaningful regression guard while allowing P-49 growth
   assert.ok(
-    CHECKPOINT.length <= 3000,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 3000-char budget (P-39 regression guard)`,
+    CHECKPOINT.length <= 4200,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 4200-char budget (P-49 regression guard)`,
   );
 });
 
