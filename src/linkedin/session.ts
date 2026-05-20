@@ -1,6 +1,8 @@
 import { CdpClient } from "../cdp/client.js";
 import { resolveInputMode } from "../cdp/hardwareInput.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
+import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
+import { installOverlay } from "../overlay/inject.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
 
 export interface CreateLinkedinSessionOpts {
@@ -63,6 +65,9 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
         // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
         const client = await CdpClient.connect(handle.port);
         await injectStealth(client.handle);
+        // P-55 M-0 overlay spike — throwaway
+        await installOverlay(client.handle);
+        attachEventBus(client.handle, appendOverlayEventRow);
         return client;
       })();
       // Cache-on-success + clear-pending-on-either, via the two-arm then() pattern.
