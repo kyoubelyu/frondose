@@ -1,4 +1,3 @@
-import os from "node:os";
 import path, { basename } from "node:path";
 import readline from "node:readline";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
@@ -7,6 +6,7 @@ import { runAgentLoop } from "../agent/loop.js";
 import { DEFAULT_MAX_STEPS } from "../agent/maxSteps.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
+import type { LinkedinSession } from "../linkedin/types.js";
 import {
   acquireTurnLock,
   isPidAlive,
@@ -18,6 +18,7 @@ import {
 import { appendMessages, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
 import { appendMessagesShared } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
 import type { ControlSignals } from "../tools/control/stop.js";
 import { renderMarkdown } from "./markdown.js";
@@ -57,6 +58,8 @@ export interface ReplOpts {
   telegramConfigPath?: string;
   /** P-46 D-1b: resolved agent-loop step budget. Default DEFAULT_MAX_STEPS. */
   maxSteps?: number;
+  /** P-52: optional eager Chrome warmup in interactive REPL mode. */
+  linkedinSession?: LinkedinSession;
   /** P-54 OQ-1: interactive-mode signal. When set, the operator-turn
    *  wrapper flips `control.isInteractive = true` before each runAgentLoop
    *  call so `escalate_for_capability` suppresses the unconditional stop in
@@ -82,15 +85,15 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
 
   // P-23 §6.7: repl.pid lifecycle + cross-process turn-lock path. Written here
   // so daemon's §6.4 gate observes REPL liveness on subsequent poll iterations.
-  const replPidPath = path.join(os.homedir(), ".mai", "agent", "repl.pid");
-  const turnLockPath = path.join(os.homedir(), ".mai", "agent", "turn.lock");
+  const replPidPath = path.join(getHomeBase(), ".mai", "agent", "repl.pid");
+  const turnLockPath = path.join(getHomeBase(), ".mai", "agent", "turn.lock");
   writePid(replPidPath);
   const cleanupReplPid = (): void => removePid(replPidPath);
   process.once("exit", cleanupReplPid);
 
   // P-23 §6.7: when daemon is alive, REPL switches its session file to the
   // shared JSONL so operator turns + daemon-deferred turns coexist on one log.
-  const telegramPidPath = path.join(os.homedir(), ".mai", "agent", "telegram.pid");
+  const telegramPidPath = path.join(getHomeBase(), ".mai", "agent", "telegram.pid");
   const daemonAliveAtBoot = isPidAlive(telegramPidPath);
   const sessionFileRef = { path: opts.sessionFile };
   const composedStepFinish = async (step: StepResult<ToolSet>) => {
@@ -124,10 +127,10 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   let pending: string[] | null = null;
 
   // P-10 (D-9): schedule path for /cron persistence + drain/poll.
-  const effectiveSchedulePath = opts.schedulePath ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+  const effectiveSchedulePath = opts.schedulePath ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
   // P-11 (D-7): telegram config path.
   const effectiveTelegramConfigPath =
-    opts.telegramConfigPath ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
+    opts.telegramConfigPath ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
   // P-11 (D-19): shared TurnLock — default-construct when absent (preserves test-stub compat).
   const turnLock = opts.turnLock ?? new TurnLock();
   // P-46 D-1b: effective step budget for this REPL session. Mutable — the
@@ -159,7 +162,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     onStepFinish: composedStepFinish,
     out,
     configPath: effectiveTelegramConfigPath,
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
   };
   // P-46 D-1b: `/maxsteps` retunes the operator turn budget AND the background
   // cron / telegram turn budgets (cronDeps + telegramDeps are mutated in place,
@@ -229,6 +232,12 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   }
 
   out.write("mai-agent ready. type a prompt; Ctrl-C exits.\n> ");
+  if (opts.linkedinSession && process.env.MAI_NO_EAGER_CHROME !== "1") {
+    opts.linkedinSession.getOrInitClient().catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[mai] eager Chrome init failed (will retry on first tool call): ${msg}\n`);
+    });
+  }
   for await (const rawLine of rl) {
     // P-6: between-turn stop check — if a prior turn's stop tool aborted, exit the loop.
     if (opts.abortController?.signal.aborted) break;

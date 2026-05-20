@@ -11,12 +11,12 @@
  * RAW JSON's `schema_version` BEFORE any Zod parse (D-5).
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
+import { getHomeBase } from "./paths.js";
 
-export const DEFAULT_CONFIG_PATH = (): string => join(homedir(), ".mai", "agent", "config.json");
+export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "config.json");
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
@@ -216,7 +216,7 @@ export function writeConfig(cfg: ConfigJsonV2, path: string = DEFAULT_CONFIG_PAT
  * P-28: returns ConfigJsonV2 (spreads DEFAULT_CONFIG_V2).
  */
 export function migrateTelegramIntoConfig(
-  tcPath: string = join(homedir(), ".mai", "agent", "telegram.json"),
+  tcPath: string = join(getHomeBase(), ".mai", "agent", "telegram.json"),
 ): ConfigJsonV2 {
   if (!existsSync(tcPath)) return DEFAULT_CONFIG_V2;
   try {

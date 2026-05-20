@@ -31,6 +31,7 @@ import { readSecrets } from "../persistence/secrets.js";
 import { continueRecent, loadMessages } from "../persistence/session.js";
 import { loadMessagesShared, sharedSessionPath } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
 import type { ControlSignals } from "../tools/index.js";
 import { makeAllTools } from "../tools/index.js";
@@ -134,21 +135,21 @@ async function main(): Promise<void> {
 
   // P-3 env reads (CDP layer): port + profile dir.
   const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
-  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(os.homedir(), ".mai", "agent", "chrome-profile");
+  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
 
   // P-4 env reads (persistence layer): memory DB + identity JSON paths.
-  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
-  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
+  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
+  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
 
   // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
-  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(os.homedir(), ".mai", "agent", "audit.jsonl");
+  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
 
   // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
-  const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+  const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
 
   // P-11 (D-9 / D-13) env read: telegram.json path for /telegram persistence.
   const telegramConfigPath =
-    process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
+    process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
 
   // P-24 §6.9: path to ~/.mai/agent/config.json. CLI production honors
   // MAI_CONFIG_PATH (operator override); library-level DEFAULT_CONFIG_PATH()
@@ -157,7 +158,7 @@ async function main(): Promise<void> {
   // Currently unused in main.ts dispatch — subcommands rely on the
   // DEFAULT_CONFIG_PATH() default inside writeTelegramConfigFields. Reserved
   // for future P-25 server/worker reads + explicit threading.
-  const _configPath = process.env.MAI_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "config.json");
+  const _configPath = process.env.MAI_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "config.json");
   void _configPath;
 
   // P-11 (D-3 / D-19): single TurnLock for the binary lifetime. Threaded into runRepl
@@ -322,6 +323,7 @@ async function main(): Promise<void> {
         messages,
         tools,
         maxSteps, // P-46 D-1b
+        linkedinSession,
         sessionFile,
         cwd: opts.cwd,
         abortController,

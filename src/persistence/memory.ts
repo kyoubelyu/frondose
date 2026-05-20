@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Database as DB } from "better-sqlite3";
 import Database from "better-sqlite3";
@@ -11,8 +10,9 @@ import {
   type MemoryEvent,
   type MemoryProjection,
 } from "../linkedin/memoryProjection.js";
+import { getHomeBase } from "./paths.js";
 
-export const DEFAULT_MEMORY_DB_PATH = (): string => join(homedir(), ".mai", "agent", "memory.sqlite");
+export const DEFAULT_MEMORY_DB_PATH = (): string => join(getHomeBase(), ".mai", "agent", "memory.sqlite");
 
 /** Open the memory DB, run migrations, return the handle. Synchronous (better-sqlite3 is sync). */
 export function openMemoryDatabase(path: string = DEFAULT_MEMORY_DB_PATH()): DB {

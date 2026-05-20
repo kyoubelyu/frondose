@@ -13,12 +13,12 @@
  *         This is the defense-in-depth guarantee against gate-check regression.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { CoreMessage } from "ai";
+import { getHomeBase } from "./paths.js";
 
 export function sharedSessionPath(): string {
-  const dir = path.join(os.homedir(), ".mai", "agent", "sessions", "shared");
+  const dir = path.join(getHomeBase(), ".mai", "agent", "sessions", "shared");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return path.join(dir, "active.jsonl");
 }

@@ -1,7 +1,6 @@
 /** P-25: `mai server daemon` — launchd-invoked. Telegram-only; no readline.
  *  Mirrors src/cli/subcommands/telegramDaemon.ts but uses server-specific
  *  paths, identity, and tool set (mode="server", 14 tools). */
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
@@ -16,6 +15,7 @@ import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
 import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
 import { drainServerInbox, openServerInboxDb } from "../persistence/serverInbox.js";
@@ -188,7 +188,7 @@ export async function runServerDaemon(): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(os.homedir(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai/agent/uploads"),
       // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
       // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
       inboxPrefix: () => drainServerInbox(serverInboxDb),
