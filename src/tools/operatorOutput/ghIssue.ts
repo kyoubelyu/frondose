@@ -17,11 +17,18 @@ const ghIssueParams = z.object({
 // biome-ignore lint/complexity/noBannedTypes: placeholder for future repo override (plan §6.2).
 export type GhIssueOpts = {};
 
+type CachedIssue = { url: string; number: number; dedupKey: string; createdAt: number };
+const sameProcessDedupCache = new Map<string, CachedIssue>();
+
+function cacheKey(repo: string, dedupKey: string): string {
+  return `${repo}:${dedupKey}`;
+}
+
 /**
  * Build the gh_issue Vercel tool. Creates a GitHub issue via REST API, with
  * agent-side dedup against existing open issues whose title contains dedup_key.
  *
- * Reads GH_TOKEN + GITHUB_REPO from process.env (or ~/.mai/agent/github.json fallback).
+ * Reads GH_TOKEN + GH_REPO from process.env (or ~/.mai/agent/github.json fallback).
  * Graceful degradation when both unset.
  */
 export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
@@ -35,7 +42,7 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
       try {
         const ghCfg = readGithubConfig();
         const token = process.env.GH_TOKEN ?? ghCfg.token;
-        const repo = process.env.GITHUB_REPO ?? ghCfg.repo;
+        const repo = process.env.GH_REPO ?? ghCfg.repo;
         if (!token) {
           return {
             ok: false,
@@ -47,38 +54,57 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
           return {
             ok: false,
             command: "gh_issue",
-            error: { kind: "runtime_error", message: "GITHUB_REPO is not set (format owner/repo); issue not created." },
+            error: { kind: "runtime_error", message: "GH_REPO is not set (format owner/repo); issue not created." },
           };
         }
 
-        // Dedup: search open issues whose title contains dedup_key.
-        const searchUrl =
-          `https://api.github.com/search/issues?` +
-          `q=repo:${repo}+state:open+in:title+${encodeURIComponent(params.dedupKey)}&per_page=1`;
-        const searchResp = await globalThis.fetch(searchUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github+json",
-          },
-        });
-        if (searchResp.ok) {
-          const searchResult = (await searchResp.json()) as {
-            total_count: number;
-            items?: Array<{ html_url: string; number: number }>;
-          };
-          if (searchResult.total_count > 0 && searchResult.items && searchResult.items.length > 0) {
-            // biome-ignore lint/style/noNonNullAssertion: length-checked above.
-            const existing = searchResult.items[0]!;
+        if (params.dedupKey) {
+          const key = cacheKey(repo, params.dedupKey);
+          const cached = sameProcessDedupCache.get(key);
+          if (cached) {
             return ok("gh_issue", {
               skipped: true,
-              existingUrl: existing.html_url,
-              existingNumber: existing.number,
-              dedupKey: params.dedupKey,
+              existingUrl: cached.url,
+              existingNumber: cached.number,
+              dedupKey: cached.dedupKey,
             });
           }
+
+          // Dedup: search open issues whose title contains dedup_key.
+          const searchUrl =
+            `https://api.github.com/search/issues?` +
+            `q=repo:${repo}+state:open+in:title+${encodeURIComponent(params.dedupKey)}&per_page=1`;
+          const searchResp = await globalThis.fetch(searchUrl, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github+json",
+            },
+          });
+          if (searchResp.ok) {
+            const searchResult = (await searchResp.json()) as {
+              total_count: number;
+              items?: Array<{ html_url: string; number: number }>;
+            };
+            if (searchResult.total_count > 0 && searchResult.items && searchResult.items.length > 0) {
+              // biome-ignore lint/style/noNonNullAssertion: length-checked above.
+              const existing = searchResult.items[0]!;
+              sameProcessDedupCache.set(key, {
+                url: existing.html_url,
+                number: existing.number,
+                dedupKey: params.dedupKey,
+                createdAt: Date.now(),
+              });
+              return ok("gh_issue", {
+                skipped: true,
+                existingUrl: existing.html_url,
+                existingNumber: existing.number,
+                dedupKey: params.dedupKey,
+              });
+            }
+          }
+          // If search itself failed (non-OK), proceed to create — we'd rather create a duplicate
+          // than skip a real escalation.
         }
-        // If search itself failed (non-OK), proceed to create — we'd rather create a duplicate
-        // than skip a real escalation.
 
         // Create issue.
         const createUrl = `https://api.github.com/repos/${repo}/issues`;
@@ -115,6 +141,14 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
         }
 
         const created = (await createResp.json()) as { html_url: string; number: number };
+        if (params.dedupKey) {
+          sameProcessDedupCache.set(cacheKey(repo, params.dedupKey), {
+            url: created.html_url,
+            number: created.number,
+            dedupKey: params.dedupKey,
+            createdAt: Date.now(),
+          });
+        }
         return ok("gh_issue", {
           skipped: false,
           issueUrl: created.html_url,

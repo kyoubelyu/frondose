@@ -104,9 +104,7 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   const clickables = deduped.filter((e) => CLICKABLE_ROLES.has(e.role));
   const composerBtns = clickables.filter(isComposerButtonEntry);
   const otherBtns = clickables.filter((e) => !isComposerButtonEntry(e));
-  const buttons = [...composerBtns, ...otherBtns]
-    .slice(0, MAX_BUTTONS)
-    .map((e) => ({ ref: e.ref, label: e.name }));
+  const buttons = [...composerBtns, ...otherBtns].slice(0, MAX_BUTTONS).map((e) => ({ ref: e.ref, label: e.name }));
 
   const inputs = deduped
     .filter((e) => INPUT_ROLES.has(e.role))

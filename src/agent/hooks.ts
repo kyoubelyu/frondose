@@ -1,14 +1,14 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { getHomeBase } from "../persistence/paths.js";
 
 /**
  * P-9 D-10 / D-14: Hook runner. Loaded once at REPL boot. NO hot-reload.
  *
  * Lives in src/agent/ NOT src/tools/ — the child_process import is legal here
- * (lint scope per scout V-6 is src/tools/** only). Tool wrappers (src/tools/
+ * because the lint boundary is scoped to src/tools/** only. Tool wrappers (src/tools/
  * hookWrapper.ts) import this class as a TYPE only.
  */
 
@@ -43,7 +43,7 @@ export class HookRunner {
   private readonly hooksJson: HooksJson | null;
   private readonly matcherCache = new WeakMap<HookEntry, RegExp>();
 
-  constructor(hooksJsonPath = path.join(homedir(), ".mai", "agent", "hooks.json")) {
+  constructor(hooksJsonPath = path.join(getHomeBase(), ".mai", "agent", "hooks.json")) {
     this.hooksJson = loadHooksJson(hooksJsonPath);
   }
 

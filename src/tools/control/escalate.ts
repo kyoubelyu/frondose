@@ -116,9 +116,7 @@ export function makeEscalateTool(deps: EscalateDeps) {
           requestStop();
         } catch (e) {
           // requestStop should never throw; if it does, log + proceed.
-          process.stderr.write(
-            `[mai] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`,
-          );
+          process.stderr.write(`[mai] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`);
         }
       }
 

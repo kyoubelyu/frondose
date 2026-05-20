@@ -1,13 +1,13 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { launch as chromeLaunch } from "chrome-launcher";
 import { DEFAULT_FLAGS } from "chrome-launcher/dist/flags.js";
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
+import { getHomeBase } from "../persistence/paths.js";
 import type { ChromeHandle, ChromeLaunchOptions } from "./types.js";
 
 const DEFAULT_PORT = 9222;
-const DEFAULT_PROFILE_DIR = (): string => join(homedir(), ".mai", "agent", "chrome-profile");
+const DEFAULT_PROFILE_DIR = (): string => join(getHomeBase(), ".mai", "agent", "chrome-profile");
 
 const TARGET_POLL_INTERVAL_MS = 300;
 const TARGET_POLL_MAX_ATTEMPTS = 10;
