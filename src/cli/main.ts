@@ -330,6 +330,7 @@ async function main(): Promise<void> {
         schedulePath, // P-10 D-9
         turnLock, // P-11 D-19
         telegramConfigPath, // P-11 D-9
+        control, // P-54 OQ-1
       });
       // REPL fall-through (Ctrl-C or stop-triggered break): exit cleanly.
       process.exit(0);
