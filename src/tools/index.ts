@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Tool, ToolSet } from "ai";
 import type { HookRunner } from "../agent/hooks.js";
@@ -7,6 +6,7 @@ import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
+import { getHomeBase } from "../persistence/paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
 import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH, SERVER_WORKERS_CONFIG_DIR } from "../persistence/serverPaths.js";
@@ -71,9 +71,8 @@ export interface PersistencePaths {
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 26 tools (P-9 24 + query_lead_globally + publish_event)
- *   - server  mode: 15 tools (P-25 14 + send_worker_message; list_workers
- *                              upgraded from P-25 stub to registry-backed)
+ *   - worker mode: 32 tools
+ *   - server  mode: 23 tools
  *
  * Layer order applied across BOTH modes (outermost → innermost):
  *   hookWrapper → safeModeWrap → retryWrap → original execute
@@ -210,7 +209,7 @@ export function makeAllTools(
       publish_event: makePublishEventTool(serverCoords),
     });
     // P-31: schedule_task — worker self-scheduling.
-    const workerSchedulePath = persistence?.schedulePath ?? join(homedir(), ".mai", "agent", "schedule.jsonl");
+    const workerSchedulePath = persistence?.schedulePath ?? join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
     Object.assign(out, makeCronTools(workerSchedulePath));
   }
 

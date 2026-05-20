@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { getHomeBase } from "../persistence/paths.js";
 
 /**
  * Default upload allowlist (per guardian critic CONCERN-MR-1 path (a) — reverts plan §6.4
@@ -8,7 +9,7 @@ import path from "node:path";
  * blast radius if a path-traversal bug surfaces. Operator can override via
  * `MAI_UPLOAD_ALLOWLIST=/path1:/path2` for ad-hoc allowlists.
  */
-const DEFAULTS = (): string[] => [path.join(os.homedir(), ".mai", "agent", "uploads")];
+const DEFAULTS = (): string[] => [path.join(getHomeBase(), ".mai", "agent", "uploads")];
 
 /** Resolve the upload allowlist from env (colon-separated) or defaults. */
 export function resolveUploadAllowlist(): string[] {
@@ -53,7 +54,7 @@ export function assertFileReadable(filePath: string): void {
   const allowed = [
     ...resolveUploadAllowlist(),
     path.resolve(os.tmpdir()),
-    path.join(os.homedir(), ".mai", "agent"),
+    path.join(getHomeBase(), ".mai", "agent"),
     path.join(process.cwd(), "tests", "fixtures"),
   ];
   const ok = allowed.some((dir) => canonical === dir || canonical.startsWith(dir + path.sep));

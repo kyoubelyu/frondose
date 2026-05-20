@@ -1,8 +1,16 @@
 import { dirname, join } from "node:path";
 import type { LanguageModel } from "ai";
 import { detectAnyModelKey, resolveModel } from "../agent/modelResolver.js";
-import { type IdentityRecord, readIdentity } from "../persistence/identity.js";
+import type { FreeAxesRecord } from "../methodology/types.js";
+import {
+  applyIdentityPatch,
+  type IdentityRecord,
+  identityRecordSchema,
+  readIdentity,
+  writeIdentity,
+} from "../persistence/identity.js";
 import { runBootstrapAgent } from "./bootstrap-agent.js";
+import { promptFreeAxes } from "./subcommands/soul.js";
 
 const NO_KEY_ERROR = `[mai] No LLM API key found. The identity bootstrap requires an LLM to guide
       the conversation.
@@ -54,4 +62,27 @@ export async function runIdentityBootstrap(
     throw new Error("Identity bootstrap completed but identity.json is missing or invalid. Check stderr for details.");
   }
   return record;
+}
+
+/**
+ * Prompt the operator for the 4 free axes via readline; persist into identity.json.
+ * Called only when identity.json exists but freeAxes is absent (pre-P-5 record).
+ */
+export async function promptFreeAxesAndPersist(identityPath: string): Promise<void> {
+  const existing = readIdentity(identityPath);
+  if (!existing) {
+    process.stderr.write("[mai] identity.json missing during axes-prompt — skipping (operator must re-run mai).\n");
+    return;
+  }
+  process.stdout.write(
+    "\n=== Pick your 4 methodology habit axes (one-time setup; can be re-rolled via `mai soul reset`) ===\n",
+  );
+  const axes: FreeAxesRecord = await promptFreeAxes();
+  const patched = applyIdentityPatch(existing, { freeAxes: axes });
+  const merged = identityRecordSchema.parse({
+    ...patched,
+    updatedAt: new Date().toISOString(),
+  });
+  writeIdentity(merged, identityPath);
+  process.stdout.write("[mai] freeAxes saved.\n");
 }

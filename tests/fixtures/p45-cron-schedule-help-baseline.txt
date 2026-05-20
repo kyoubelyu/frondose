@@ -1,0 +1,6 @@
+Usage: mai cron schedule [options] <task>
+
+Options:
+  --cron <expr>  5-field cron expression (recurring)
+  --at <time>    HH:MM or ISO datetime (one-shot)
+  -h, --help     display help for command
