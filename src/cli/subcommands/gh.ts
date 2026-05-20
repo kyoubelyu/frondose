@@ -24,17 +24,31 @@ export async function runGhSubcommand(
 
   switch (action) {
     case "set": {
-      let token = opts.token;
+      const token = opts.token;
       const repo = opts.repo;
-      if (!token && isInteractive()) {
-        token = await prompter.apiKeyInput("GitHub PAT");
+      // P-15: only prompt when no NEW token AND no EXISTING token on file.
+      // Lets `mai gh set --repo own/r` succeed when a token is already stored
+      // (operator-reported 2026-05-20: partial-update was broken).
+      let resolvedToken = token;
+      if (!resolvedToken && !existing.token && isInteractive()) {
+        resolvedToken = await prompter.apiKeyInput("GitHub PAT");
       }
-      if (!token) {
+      if (!resolvedToken && !existing.token) {
         printNoninteractiveGuidance("gh set", "<token>", "--token ghp_xxx --repo owner/repo");
         process.exit(1);
       }
-      // Merge: preserve repo if new one not provided
-      const next: GithubConfig = { ...existing, token };
+      // P-15 (OQ-1): no-op guard — existing token on file + no new flags →
+      // preserve and announce. Prevents gratuitous mtime churn on a bare
+      // `mai gh set` call when the operator already has config.
+      if (!resolvedToken && !repo) {
+        process.stdout.write("✓ no changes; existing github config preserved\n");
+        return;
+      }
+      // Safe merge: spread existing first, conditionally apply new values.
+      // (The pre-P-15 spread `{ ...existing, token }` was unsafe — it would
+      // overwrite an existing token with `undefined` when the new one is empty.)
+      const next: GithubConfig = { ...existing };
+      if (resolvedToken) next.token = resolvedToken;
       if (repo) next.repo = repo;
       writeGithubConfig(next, path);
       process.stdout.write(`[gh] github.json updated${repo ? ` (repo: ${repo})` : ""}\n`);
