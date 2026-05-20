@@ -14,8 +14,9 @@ export const CLICKABLE_ROLES = new Set([
 ]);
 export const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "textarea"]);
 // P-37 B4: feedPost — synthesized feed-post entries surface as inspect text.
-// Chrome AX tree returns "StaticText" (capital S); include both forms for safety.
-export const TEXT_ROLES = new Set(["staticText", "StaticText", "text", "heading", "feedPost"]);
+// P-47 G-3: profileCard — synthesized profile-card entries (prepended on the
+// profile surface). Chrome AX returns "StaticText" (capital S); keep both forms.
+export const TEXT_ROLES = new Set(["staticText", "StaticText", "text", "heading", "feedPost", "profileCard"]);
 
 const MAX_BUTTONS = 12;
 const MAX_INPUTS = 12;

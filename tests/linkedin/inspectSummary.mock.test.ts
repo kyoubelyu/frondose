@@ -11,6 +11,8 @@ import { describe, it, test } from "node:test";
 import { buildInspectSummary } from "../../src/linkedin/inspectSummary.js";
 import type { CurrentSurfaceContext, SnapshotEntry } from "../../src/linkedin/types.js";
 import { inspectSummarySchema } from "../../src/linkedin/types.js";
+import { makeNavigateToUrlTool } from "../../src/tools/browser/navigateToUrl.js";
+import { makeTypeTool } from "../../src/tools/browser/type.js";
 
 function makeCtx(surface: CurrentSurfaceContext["surface"], entries: SnapshotEntry[]): CurrentSurfaceContext {
   return { pageUrl: "https://www.linkedin.com/feed/", surface, activeLayer: "page", entries };
@@ -392,6 +394,142 @@ describe("T-Inspect.6 (G-P46.8 / C-5): hasComposerSignals requires strong signal
     );
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-47 G-3/G-5 scaffolds (Step 4a — all assertion bodies TODO; added 2026-05-20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── T-Profile.2 (G-P47.4): profileCard entries survive MAX_TEXT truncation ──
+
+describe("T-Profile.2 (G-P47.4): profileCard entries are at top of text[] and survive MAX_TEXT=40 truncation", () => {
+  it(
+    "summary.text[0] is @pp1 identity line; summary.text[1] is @pp2 details line (despite 50+ staticText nav entries after them)",
+    () => {
+      // Given: a profile ctx whose entries array starts with 2 profileCard entries (@pp1, @pp2)
+      //        followed by 50 staticText nav entries — more than MAX_TEXT=40
+      //        (after Step 4b: "profileCard" ∈ TEXT_ROLES so profileCard entries reach text[])
+      // When:  buildInspectSummary(ctx) — no scope argument
+      // Then:  (a) summary.text[0] is the @pp1 identity line ("Jane Doe — VP Sales at Acme")
+      //         (b) summary.text[1] is the @pp2 details line (contains "Acme", "London, UK", "500+")
+      //         (c) Both profile entries survive the MAX_TEXT=40 slice (they are first in order)
+      //         (d) summary.text.length ≤ 40 (slice is respected)
+      //
+      // NOTE: This test pins both §6.4 (profileCard ∈ TEXT_ROLES) AND OQ-3 (prepend ordering).
+      //       Both are required: TEXT_ROLES admits the entries; prepend makes them first in text[].
+      const profileEntries: SnapshotEntry[] = [
+        { ref: "@pp1", role: "profileCard", name: "Jane Doe — VP Sales at Acme" },
+        { ref: "@pp2", role: "profileCard", name: "Profile: Acme · London, UK · 500+ connections" },
+        // 50 staticText nav entries follow (overwhelm MAX_TEXT=40 without the prepend)
+        ...Array.from({ length: 50 }, (_, i) => ({
+          ref: `@n${i + 1}`,
+          role: "staticText",
+          name: `Nav item ${i + 1}`,
+        })),
+      ];
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/in/jane-doe/",
+        surface: "profile",
+        activeLayer: "page",
+        entries: profileEntries,
+      };
+
+      const summary = buildInspectSummary(ctx);
+
+      // (d) text.length ≤ 40 (MAX_TEXT cap respected)
+      assert.ok(summary.text.length <= 40, `T-Profile.2: text.length (${summary.text.length}) must be ≤ 40`);
+      assert.ok(summary.text.length >= 2, "T-Profile.2: at least 2 text entries (the profileCard entries)");
+
+      // (a) text[0] is @pp1 identity line (requires profileCard ∈ TEXT_ROLES + prepend ordering)
+      assert.ok(typeof summary.text[0] === "string", "T-Profile.2: text[0] must exist");
+      assert.ok(
+        summary.text[0]!.includes("Jane Doe") && summary.text[0]!.includes("VP Sales at Acme"),
+        `T-Profile.2: text[0] must be the @pp1 identity line; got "${summary.text[0]}"`,
+      );
+
+      // (b) text[1] is @pp2 details line
+      assert.ok(typeof summary.text[1] === "string", "T-Profile.2: text[1] must exist");
+      assert.ok(
+        summary.text[1]!.includes("Acme") && summary.text[1]!.includes("London, UK"),
+        `T-Profile.2: text[1] must be the @pp2 details line; got "${summary.text[1]}"`,
+      );
+    },
+  );
+});
+
+// ─── P-47 T-Contract.1 (G-P47.5): InspectSummary schema + tool schemas unchanged ─
+
+describe("T-Contract.1 (G-P47.5): InspectSummary Zod schema unchanged; type + navigate_to_url tool schemas unchanged", () => {
+  it(
+    "inspectSummarySchema parses profile output; activeLayer==='page'; type + navigate_to_url parameter shapes untouched",
+    () => {
+      // Given: buildInspectSummary on a profile ctx (with profileCard entries) and a plain feed ctx
+      //        makeTypeTool and makeNavigateToUrlTool with stub sessions
+      // When:  (1) inspectSummarySchema.parse(profileOutput) and .parse(feedOutput)
+      //         (2) type tool .parameters.safeParse({ text:"x", ref:"@e1" })
+      //         (3) navigate_to_url tool .parameters.safeParse({ url:"https://example.com" })
+      // Then:  (1) both parse without throwing; activeLayer === "page" for both;
+      //             profile output has "profileCard" entries visible only if TEXT_ROLES includes it
+      //         (2) type schema: text+ref valid; no text → invalid; schema shape unchanged post-P-47
+      //         (3) navigate_to_url schema: https:// valid; http:// invalid; shape unchanged post-P-47
+      //
+      // NOTE (Step 4a): assert.fail before any assertions — scaffold is fast.
+      // At Step 5: build profile ctx, run all three checks, fill assertions.
+      const profileCtx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/in/jane-doe/",
+        surface: "profile",
+        activeLayer: "page",
+        entries: [
+          { ref: "@pp1", role: "profileCard", name: "Jane Doe — VP Sales at Acme" },
+          { ref: "@pp2", role: "profileCard", name: "Profile: Acme · London, UK · 500+ connections" },
+          { ref: "@n1", role: "button", name: "Home" },
+        ],
+      };
+      // Stub sessions for tool schema checks (no Chrome needed — only .parameters used)
+      const stubSession = {
+        inputMode: "cdp" as const,
+        // biome-ignore lint/suspicious/noExplicitAny: stub session
+        getOrInitClient: async () => ({ ok: false as const, error: "chrome_unavailable" as const, message: "" }) as any,
+        getClient: () => undefined,
+        heartbeat: async () => false,
+        setLastContext: () => {},
+        getLastContext: () => undefined,
+      };
+
+      // (1) inspectSummarySchema.parse on profile + plain feed output
+      const profileOutput = buildInspectSummary(profileCtx);
+      const feedOutput = buildInspectSummary(makeCtx("feed", PLAIN_FEED_ENTRIES));
+
+      const parsedProfile = inspectSummarySchema.parse(profileOutput);
+      const parsedFeed = inspectSummarySchema.parse(feedOutput);
+
+      // activeLayer === "page" for both (invariant)
+      assert.equal(parsedProfile.activeLayer, "page", "T-Contract.1 P-47: profile activeLayer must be 'page'");
+      assert.equal(parsedFeed.activeLayer, "page", "T-Contract.1 P-47: feed activeLayer must be 'page'");
+
+      // profileCard in TEXT_ROLES — Jane Doe must appear in profile text
+      assert.ok(
+        parsedProfile.text.some((t) => t.includes("Jane Doe")),
+        "T-Contract.1 P-47: profile text must include 'Jane Doe' (profileCard in TEXT_ROLES)",
+      );
+
+      // (2) type tool schema: {text, ref} valid; {ref} only invalid
+      const typeTool = makeTypeTool(stubSession);
+      const typeValid = typeTool.parameters.safeParse({ text: "x", ref: "@e1" });
+      assert.equal(typeValid.success, true, "T-Contract.1 P-47: type schema must accept {text, ref}");
+      const typeInvalid = typeTool.parameters.safeParse({ ref: "@e1" });
+      assert.equal(typeInvalid.success, false, "T-Contract.1 P-47: type schema must reject missing text");
+
+      // (3) navigate_to_url schema: https:// valid; http:// invalid
+      const navTool = makeNavigateToUrlTool(stubSession);
+      const navValid = navTool.parameters.safeParse({ url: "https://example.com" });
+      assert.equal(navValid.success, true, "T-Contract.1 P-47: navigate_to_url accepts https://");
+      const navInvalid = navTool.parameters.safeParse({ url: "http://example.com" });
+      assert.equal(navInvalid.success, false, "T-Contract.1 P-47: navigate_to_url rejects http://");
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─── T-Contract.1: InspectSummary schema unchanged (regression / contract pin) ─
 
