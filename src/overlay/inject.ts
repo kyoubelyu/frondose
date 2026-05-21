@@ -73,6 +73,11 @@ export const OVERLAY_BOOTSTRAP_JS = `
     body.style.cssText = 'flex:1; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:10px;';
     dialog.appendChild(body);
 
+    var cronSlot = document.createElement('div');
+    cronSlot.id = '__mai_cron_slot';
+    cronSlot.style.cssText = 'display:contents;';
+    body.appendChild(cronSlot);
+
     var ticker = document.createElement('div');
     ticker.id = 'ticker';
     ticker.style.cssText = 'font-size:12px; color:#0a66c2; font-style:italic; min-height:16px;';
@@ -92,6 +97,11 @@ export const OVERLAY_BOOTSTRAP_JS = `
     output.id = 'output';
     output.style.cssText = 'font-size:13px; color:#222; white-space:pre-wrap; min-height:80px; padding:8px; background:#f8f8f8; border-radius:4px;';
     body.appendChild(output);
+
+    var retrySlot = document.createElement('div');
+    retrySlot.id = 'retry-slot';
+    retrySlot.style.cssText = 'display:none; padding:8px; background:#fdecea; border:1px solid #f5c6cb; border-radius:4px; align-items:center; gap:8px; margin:8px 0;';
+    body.appendChild(retrySlot);
 
     var inputFooter = document.createElement('div');
     inputFooter.id = 'input-footer';
@@ -113,7 +123,7 @@ export const OVERLAY_BOOTSTRAP_JS = `
     inputFooter.appendChild(input);
     dialog.appendChild(inputFooter);
 
-    dialogElements = { ticker: ticker, output: output, input: input, cardSlot: cardSlot, nextActionsSlot: nextActionsSlot };
+    dialogElements = { ticker: ticker, output: output, input: input, cardSlot: cardSlot, nextActionsSlot: nextActionsSlot, retrySlot: retrySlot, cronSlot: cronSlot };
   }
 
   window.__maiExpandDialog = function() {
@@ -262,6 +272,91 @@ export const OVERLAY_BOOTSTRAP_JS = `
     });
   };
 
+  window.__maiShowRetry = function(message) {
+    if (!dialogExpanded) window.__maiExpandDialog();
+    if (!dialogElements) return;
+    var slot = dialogElements.retrySlot;
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    slot.style.cssText = 'display:flex; padding:8px; background:#fdecea; border:1px solid #f5c6cb; border-radius:4px; align-items:center; gap:8px; margin:8px 0;';
+
+    var msg = document.createElement('div');
+    msg.style.cssText = 'flex:1; font-size:12px; color:#a00;';
+    msg.textContent = message || 'agent error';
+    slot.appendChild(msg);
+
+    var btn = document.createElement('button');
+    btn.style.cssText = 'background:#0a66c2; color:white; border:0; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:13px;';
+    btn.textContent = 'Retry';
+    btn.addEventListener('click', function() {
+      post({ type:'retry', t0: Date.now() });
+    });
+    slot.appendChild(btn);
+  };
+
+  window.__maiHideRetry = function() {
+    if (!dialogElements) return;
+    var slot = dialogElements.retrySlot;
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    slot.style.cssText = 'display:none; padding:8px; background:#fdecea; border:1px solid #f5c6cb; border-radius:4px; align-items:center; gap:8px; margin:8px 0;';
+  };
+
+  var cronBannerEl = null;
+  var cronBannerPulseInterval = null;
+
+  window.__maiShowCronBanner = function(text) {
+    if (window.__maiHideCronBanner) window.__maiHideCronBanner();
+
+    cronBannerEl = document.createElement('div');
+    cronBannerEl.id = '__mai_cron_banner';
+    cronBannerEl.style.cssText = 'all:initial; background:#fff7e6; color:#222; border:1px solid #f0b400; border-left:4px solid #f0b400; border-radius:6px; padding:9px 11px; font:13px/1.35 -apple-system,system-ui,sans-serif; box-shadow:0 6px 20px rgba(0,0,0,0.15); z-index:2147483647;';
+
+    if (dialogExpanded && dialogElements && dialogElements.cronSlot) {
+      cronBannerEl.style.cssText += ' margin-bottom:6px;';
+      dialogElements.cronSlot.appendChild(cronBannerEl);
+    } else {
+      cronBannerEl.style.cssText += ' position:fixed; bottom:248px; right:16px; width:300px;';
+      document.documentElement.appendChild(cronBannerEl);
+    }
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-weight:600; font-size:12px; line-height:18px; color:#946200;';
+    title.textContent = '\\u23f0 cron active';
+    cronBannerEl.appendChild(title);
+
+    if (text) {
+      var hint = document.createElement('div');
+      hint.style.cssText = 'margin-top:3px; font-size:11px; line-height:15px; color:#59636e; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
+      hint.textContent = text;
+      cronBannerEl.appendChild(hint);
+    }
+
+    var pulseDirection = -1;
+    var currentOpacity = 1;
+    cronBannerPulseInterval = setInterval(function() {
+      if (!cronBannerEl) return;
+      currentOpacity += pulseDirection * 0.04;
+      if (currentOpacity <= 0.6) {
+        currentOpacity = 0.6;
+        pulseDirection = 1;
+      } else if (currentOpacity >= 1) {
+        currentOpacity = 1;
+        pulseDirection = -1;
+      }
+      cronBannerEl.style.opacity = String(currentOpacity);
+    }, 80);
+  };
+
+  window.__maiHideCronBanner = function() {
+    if (cronBannerPulseInterval !== null) {
+      clearInterval(cronBannerPulseInterval);
+      cronBannerPulseInterval = null;
+    }
+    if (cronBannerEl && cronBannerEl.parentNode) {
+      cronBannerEl.parentNode.removeChild(cronBannerEl);
+    }
+    cronBannerEl = null;
+  };
+
   var activeCardEl = null;
   var activeCardTimer = null;
 
@@ -400,6 +495,7 @@ export const OVERLAY_BOOTSTRAP_JS = `
       if (!target || !target.matches) return;
       if (!target.matches('div[contenteditable], textarea')) return;
       var text = target.textContent || target.value || '';
+      if (text.length < 20) return;
       window.__maiPost(JSON.stringify({
         type: 'observe',
         event_type: 'input',
@@ -412,21 +508,7 @@ export const OVERLAY_BOOTSTRAP_JS = `
       }));
     }, 1000);
 
-    document.addEventListener('input', debouncedInput, { passive: true });
-
-    function detectComposerKind(el) {
-      var n = el;
-      for (var i = 0; i < 8 && n; i++) {
-        var cls = n.className || '';
-        if (typeof cls === 'string') {
-          if (cls.indexOf('msg-form') !== -1) return 'message-thread';
-          if (cls.indexOf('share-creation-state') !== -1) return 'post-compose';
-          if (cls.indexOf('comments-comment-box') !== -1) return 'comment-reply';
-        }
-        n = n.parentElement;
-      }
-      return 'unknown';
-    }
+    document.addEventListener('input', debouncedInput, { capture: true, passive: true });
   }
 })();
 `.trim();

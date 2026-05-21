@@ -23,23 +23,24 @@ type ChromeOk = { ok: true; chromePort: number; overlayInstalled: boolean };
 type ChromeErr = { ok: false; error: string; message?: string };
 type ChromeResp = ChromeOk | ChromeErr;
 type TurnOk = { ok: true; turnId: string };
-type TurnBusy = { ok: false; reason: "turn_in_progress"; turnId: string };
-type TurnInvalid = { ok: false; reason: "missing_prompt" };
-type TurnResp = TurnOk | TurnBusy | TurnInvalid;
+type TurnErr = { ok: false; reason: string; turnId?: string; attempts?: number };
+type TurnResp = TurnOk | TurnErr;
 
 type SseFrame =
   | { type: "tool-call"; turnId: string; toolName: string }
   | { type: "text"; turnId: string; chunk: string }
   | { type: "step-done"; turnId: string; toolNames: string[] }
-  | { type: "done"; turnId: string; finishReason: string }
-  | { type: "error"; turnId?: string; message: string }
+  | { type: "done"; turnId: string; finishReason: string; aborted?: boolean }
+  | { type: "error"; turnId?: string; message: string; retryable?: boolean }
   | { type: "overlay-reconnected" }
   | { type: "overlay-event"; event: unknown }
   | { type: "suggestion-card"; turnId?: string }
   | { type: "next-actions"; turnId?: string }
   | { type: "profile-nav"; profileHandle?: string }
   | { type: "dialog-mode"; dialogMode?: "expand" | "collapse" }
-  | { type: "cron-mode"; cronEnabled?: boolean };
+  | { type: "cron-mode"; cronEnabled?: boolean }
+  | { type: "cron-tick"; cronRunId: string; taskHint?: string; ts: number }
+  | { type: "cron-done"; cronRunId: string; ts: number };
 
 interface ClassListLike {
   add(token: string): void;
@@ -61,6 +62,7 @@ interface InputElementLike extends TextElementLike {
   value: string;
   disabled: boolean;
   addEventListener(type: "keydown", listener: (e: { key?: string; preventDefault: () => void }) => void): void;
+  addEventListener(type: "input", listener: () => void): void;
 }
 
 interface DocumentLike {
@@ -78,6 +80,8 @@ function mustGet<T extends TextElementLike>(id: string): T {
 type AppState = "identity-missing" | "chrome-needed" | "idle" | "running" | "error";
 let appState: AppState = "chrome-needed";
 let currentTurnId: string | null = null;
+let steerInFlight = false;
+let lastTurnPrompt: string | null = null;
 
 const nameEl = mustGet<TextElementLike>("name");
 const startEl = mustGet<ButtonElementLike>("start");
@@ -88,6 +92,8 @@ const autoModeBtnEl = mustGet<ButtonElementLike>("auto-mode-toggle");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
+const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
+const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
 let cronEnabled = true;
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -103,15 +109,20 @@ function transition(next: AppState): void {
   tickerEl.classList.toggle("hidden", next !== "running");
   outputEl.classList.toggle("hidden", next === "identity-missing" || next === "chrome-needed");
   errorBannerEl.classList.toggle("hidden", next !== "error");
-  commandEl.disabled = next !== "idle";
-  sendEl.disabled = next !== "idle";
+  commandEl.disabled = next !== "idle" && next !== "running";
+  sendEl.disabled = next !== "idle" && next !== "running";
   if (next === "idle") {
     sendEl.textContent = "Send";
     commandEl.value = "";
+    retryBtnEl.classList.add("hidden");
   } else if (next === "running") {
-    sendEl.textContent = "Cancel";
-    sendEl.disabled = false;
+    updateSendButtonLabel();
   }
+}
+
+function updateSendButtonLabel(): void {
+  if (appState !== "running") return;
+  sendEl.textContent = commandEl.value.trim().length > 0 ? "Steer" : "Cancel";
 }
 
 async function loadIdentity(): Promise<void> {
@@ -170,10 +181,15 @@ async function toggleAutoMode(): Promise<void> {
 
 async function sendCommand(): Promise<void> {
   if (appState === "running" && currentTurnId !== null) {
+    const text = commandEl.value.trim();
+    if (text.length > 0) {
+      void performSteer(text);
+      return;
+    }
     try {
       await invoke("mai_agent_abort");
     } catch {
-      // Cancellation is best-effort; the SSE error/done event owns UI recovery.
+      // Best-effort; the SSE error/done event owns UI recovery.
     }
     return;
   }
@@ -181,6 +197,8 @@ async function sendCommand(): Promise<void> {
   if (appState !== "idle") return;
   const prompt = commandEl.value.trim();
   if (!prompt) return;
+  retryBtnEl.classList.add("hidden");
+  errorBannerEl.classList.add("hidden");
   try {
     const r = await invoke<TurnResp>("mai_agent_turn", { prompt });
     if (r.ok === false) {
@@ -189,11 +207,79 @@ async function sendCommand(): Promise<void> {
       return;
     }
     currentTurnId = r.turnId;
+    lastTurnPrompt = prompt;
     outputEl.textContent = "";
     tickerEl.textContent = "starting...";
     transition("running");
   } catch (e) {
     errorBannerEl.textContent = `invoke failed: ${String(e)}`;
+    transition("error");
+  }
+}
+
+async function waitForDoneSse(targetTurnId: string, timeoutMs = 3000, intervalMs = 50): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (currentTurnId === null || currentTurnId !== targetTurnId) return true;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return false;
+}
+
+async function performSteer(newPrompt: string): Promise<void> {
+  if (steerInFlight) return;
+  if (appState !== "running" || currentTurnId === null) return;
+  steerInFlight = true;
+  const previousTurnId = currentTurnId;
+  try {
+    try {
+      await invoke("mai_agent_abort");
+    } catch {
+      // The follow-up turn response owns the visible error if abort fails.
+    }
+    const completed = await waitForDoneSse(previousTurnId, 3000, 50);
+    if (!completed) {
+      errorBannerEl.textContent = "steer timeout - aborted turn never confirmed";
+      transition("error");
+      return;
+    }
+    const r = await invoke<TurnResp>("mai_agent_turn", { prompt: newPrompt });
+    if (r.ok === false) {
+      errorBannerEl.textContent = `steer resubmit rejected: ${r.reason}`;
+      transition("error");
+      return;
+    }
+    currentTurnId = r.turnId;
+    lastTurnPrompt = newPrompt;
+    outputEl.textContent = "";
+    tickerEl.textContent = "starting...";
+    transition("running");
+  } catch (e) {
+    errorBannerEl.textContent = `steer failed: ${String(e)}`;
+    transition("error");
+  } finally {
+    steerInFlight = false;
+  }
+}
+
+async function performRetry(): Promise<void> {
+  retryBtnEl.classList.add("hidden");
+  errorBannerEl.classList.add("hidden");
+  try {
+    const r = await invoke<TurnResp>("mai_agent_retry");
+    if (r.ok === false) {
+      errorBannerEl.textContent = `retry rejected: ${r.reason}`;
+      errorBannerEl.classList.remove("hidden");
+      transition("error");
+      return;
+    }
+    currentTurnId = r.turnId;
+    outputEl.textContent = "";
+    tickerEl.textContent = lastTurnPrompt === null ? "starting..." : "retrying last prompt...";
+    transition("running");
+  } catch (e) {
+    errorBannerEl.textContent = `retry invoke failed: ${String(e)}`;
+    errorBannerEl.classList.remove("hidden");
     transition("error");
   }
 }
@@ -217,6 +303,11 @@ function handleEvent(payload: SseFrame): void {
       if (payload.turnId === currentTurnId) {
         tickerEl.textContent = `done (${payload.finishReason})`;
         currentTurnId = null;
+        if (payload.aborted !== true) {
+          retryBtnEl.classList.add("hidden");
+          errorBannerEl.classList.add("hidden");
+          lastTurnPrompt = null;
+        }
         transition("idle");
       }
       break;
@@ -224,6 +315,11 @@ function handleEvent(payload: SseFrame): void {
       errorBannerEl.textContent = `agent error: ${payload.message}`;
       currentTurnId = null;
       transition("error");
+      if (payload.retryable === true) {
+        retryBtnEl.classList.remove("hidden");
+      } else {
+        retryBtnEl.classList.add("hidden");
+      }
       break;
     case "overlay-reconnected":
       statusEl.textContent = "overlay reconnected";
@@ -248,6 +344,14 @@ function handleEvent(payload: SseFrame): void {
       cronEnabled = payload.cronEnabled ?? cronEnabled;
       autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
       break;
+    case "cron-tick":
+      cronTickBannerEl.textContent = `\u23f0 cron active${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
+      cronTickBannerEl.classList.remove("hidden");
+      break;
+    case "cron-done":
+      cronTickBannerEl.classList.add("hidden");
+      cronTickBannerEl.textContent = "";
+      break;
   }
 }
 
@@ -257,10 +361,16 @@ startEl.addEventListener("click", () => {
 sendEl.addEventListener("click", () => {
   void sendCommand();
 });
+retryBtnEl.addEventListener("click", () => {
+  void performRetry();
+});
 autoModeBtnEl.addEventListener("click", () => {
   void toggleAutoMode();
 });
 autoModeBtnEl.textContent = "Auto-mode: ON";
+commandEl.addEventListener("input", () => {
+  updateSendButtonLabel();
+});
 commandEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
