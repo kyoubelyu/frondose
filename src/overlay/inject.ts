@@ -32,6 +32,47 @@ export const OVERLAY_BOOTSTRAP_JS = `
   var MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__;
   const passiveEnabled = MAI_PASSIVE_ENABLED;
 
+  // P-57d (item d): sessionStorage dialog state replay.
+  // type MaiDialogState = {
+  //   ts: number;
+  //   ticker: string | null;
+  //   output: string;
+  //   card: string | null;
+  //   frames?: Array<{ type: "text" | "tool", content: string, ts: number }>;
+  // };
+  var MAI_DIALOG_KEY = '__mai_dialog_state';
+  var MAI_OUTPUT_CAP = 2000;
+  var MAI_FRAMES_CAP = 20;
+
+  function maiReadDialogState() {
+    try {
+      return JSON.parse(sessionStorage.getItem(MAI_DIALOG_KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function maiWriteDialogState(state) {
+    try {
+      state.ts = Date.now();
+      state.output = state.output || '';
+      state.output = state.output.slice(-MAI_OUTPUT_CAP);
+      state.frames = state.frames || [];
+      state.frames = state.frames.slice(-MAI_FRAMES_CAP);
+      sessionStorage.setItem(MAI_DIALOG_KEY, JSON.stringify(state));
+    } catch (e) {
+      // sessionStorage quota exceeded or disabled; dialog still works.
+    }
+  }
+
+  var maiDialogState = {
+    ts: Date.now(),
+    ticker: null,
+    output: '',
+    card: null,
+    frames: [],
+  };
+
   new MutationObserver(() => {
     if (!document.documentElement.contains(host)) {
       document.documentElement.appendChild(host);
@@ -154,6 +195,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
     } else {
       pill.textContent = text;
     }
+    maiDialogState.ticker = text || null;
+    maiWriteDialogState(maiDialogState);
     if (text === 'done') {
       resetTimer = setTimeout(function() {
         if (dialogExpanded && dialogElements && dialogElements.ticker) {
@@ -162,6 +205,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
           pill.textContent = 'mai \\xb7 idle';
         }
         resetTimer = null;
+        maiDialogState.ticker = null;
+        maiWriteDialogState(maiDialogState);
       }, 5000);
     }
   };
@@ -177,11 +222,18 @@ export const OVERLAY_BOOTSTRAP_JS = `
     var prev = dialogElements.output.textContent || '';
     dialogElements.output.textContent = prev + text;
     dialogElements.output.scrollTop = dialogElements.output.scrollHeight;
+    maiDialogState.output = dialogElements.output.textContent || '';
+    maiDialogState.frames = maiDialogState.frames || [];
+    maiDialogState.frames.push({ type: 'text', content: text, ts: Date.now() });
+    maiWriteDialogState(maiDialogState);
   };
 
   window.__maiClearOutput = function() {
     if (!dialogElements) return;
     dialogElements.output.textContent = '';
+    maiDialogState.output = '';
+    maiDialogState.frames = [];
+    maiWriteDialogState(maiDialogState);
   };
 
   window.__maiShowCard = function(payloadJson) {
@@ -237,6 +289,10 @@ export const OVERLAY_BOOTSTRAP_JS = `
       move.appendChild(text);
       slot.appendChild(move);
     }
+    maiDialogState.card = payloadJson;
+    maiDialogState.frames = maiDialogState.frames || [];
+    maiDialogState.frames.push({ type: 'tool', content: payloadJson, ts: Date.now() });
+    maiWriteDialogState(maiDialogState);
   };
 
   window.__maiHideCard = function() {
@@ -244,7 +300,24 @@ export const OVERLAY_BOOTSTRAP_JS = `
     var slot = dialogElements.cardSlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
     slot.style.cssText = cardSlotHiddenStyle;
+    maiDialogState.card = null;
+    maiWriteDialogState(maiDialogState);
   };
+
+  buildDialog();
+  const saved = maiReadDialogState();
+  if (saved) {
+    maiDialogState = saved;
+    maiDialogState.frames = maiDialogState.frames || [];
+    if (maiDialogState.output) dialogElements.output.textContent = maiDialogState.output;
+    if (maiDialogState.ticker) dialogElements.ticker.textContent = maiDialogState.ticker;
+    if (saved.card) {
+      try {
+        window.__maiShowCard(saved.card);
+      } catch (e) {
+      }
+    }
+  }
 
   window.__maiShowNextActions = function(payloadJson) {
     var payload;
