@@ -25,5 +25,5 @@
     "paths": {}
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "**/*.test.ts", "src/web"]
+  "exclude": ["node_modules", "dist", "tests", "**/*.test.ts", "src/web", "src/tauri/src-tauri/target"]
 }
