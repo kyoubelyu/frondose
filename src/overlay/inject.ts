@@ -29,6 +29,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
 
   document.documentElement.appendChild(host);
   window.__maiBootstrapped = true;
+  var MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__;
+  const passiveEnabled = MAI_PASSIVE_ENABLED;
 
   new MutationObserver(() => {
     if (!document.documentElement.contains(host)) {
@@ -260,6 +262,59 @@ export const OVERLAY_BOOTSTRAP_JS = `
     });
   };
 
+  var activeCardEl = null;
+  var activeCardTimer = null;
+
+  window.__maiShowCollapsedCard = function(payloadJson) {
+    var payload;
+    try { payload = JSON.parse(payloadJson); } catch (e) { return; }
+    if (!payload) return;
+    if (activeCardEl && activeCardEl.parentNode) {
+      activeCardEl.parentNode.removeChild(activeCardEl);
+    }
+    if (activeCardTimer) {
+      clearTimeout(activeCardTimer);
+      activeCardTimer = null;
+    }
+
+    activeCardEl = document.createElement('div');
+    activeCardEl.id = '__mai_collapsed_card';
+    activeCardEl.style.cssText = 'all:initial;position:fixed;bottom:160px;right:16px;width:300px;max-height:80px;background:white;color:#222;border:1px solid #d0d7de;border-left:4px solid #0a66c2;border-radius:6px;padding:9px 11px;font:13px/1.35 -apple-system,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,0.18);cursor:pointer;z-index:2147483647;overflow:hidden;';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-weight:600;font-size:13px;line-height:18px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;';
+    title.textContent = payload.title || 'Suggestion';
+    activeCardEl.appendChild(title);
+
+    var stage = document.createElement('div');
+    stage.style.cssText = 'margin-top:4px;font-size:11px;line-height:15px;color:#59636e;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;';
+    stage.textContent = payload.painChainStage || 'methodology';
+    activeCardEl.appendChild(stage);
+
+    activeCardEl.addEventListener('click', function() {
+      var fullCardJson = payload.fullCardJson;
+      if (window.__maiHideCollapsedCard) window.__maiHideCollapsedCard();
+      if (window.__maiExpandDialog) window.__maiExpandDialog(payload);
+      if (fullCardJson && window.__maiShowCard) window.__maiShowCard(fullCardJson);
+    });
+
+    document.documentElement.appendChild(activeCardEl);
+    activeCardTimer = setTimeout(function() {
+      if (window.__maiHideCollapsedCard) window.__maiHideCollapsedCard();
+    }, 30000);
+  };
+
+  window.__maiHideCollapsedCard = function() {
+    if (activeCardTimer) {
+      clearTimeout(activeCardTimer);
+      activeCardTimer = null;
+    }
+    if (activeCardEl && activeCardEl.parentNode) {
+      activeCardEl.parentNode.removeChild(activeCardEl);
+    }
+    activeCardEl = null;
+  };
+
   pill.addEventListener('click', function() {
     var m = window.location.pathname.match(/^\\/in\\/([^/]+)\\/?$/);
     if (m) {
@@ -300,6 +355,79 @@ export const OVERLAY_BOOTSTRAP_JS = `
     new MutationObserver(checkRouteChange).observe(titleEl, { childList: true });
   }
   window.addEventListener('popstate', checkRouteChange);
+
+  if (passiveEnabled) installPageObservers();
+
+  function installPageObservers() {
+    function debounce(fn, ms) {
+      var t;
+      return function() {
+        var a = arguments;
+        clearTimeout(t);
+        t = setTimeout(function() { fn.apply(null, a); }, ms);
+      };
+    }
+
+    var debouncedClick = debounce(function(event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      if (target.closest('#__mai_root') !== null) return;
+      if (target.closest('#__mai_collapsed_card') !== null) return;
+      var targetText = '';
+      try {
+        targetText = (target.textContent || '').slice(0, 100);
+      } catch (e) {
+        targetText = '';
+      }
+      window.__maiPost(JSON.stringify({
+        type: 'observe',
+        event_type: 'click',
+        ctx: {
+          url: location.href,
+          targetTag: target.tagName,
+          targetText: targetText,
+          x: event.clientX,
+          y: event.clientY,
+        },
+        t0: Date.now(),
+      }));
+    }, 300);
+
+    document.documentElement.addEventListener('click', debouncedClick, { capture: true, passive: true });
+
+    var debouncedInput = debounce(function(event) {
+      var target = event.target;
+      if (!target || !target.matches) return;
+      if (!target.matches('div[contenteditable], textarea')) return;
+      var text = target.textContent || target.value || '';
+      window.__maiPost(JSON.stringify({
+        type: 'observe',
+        event_type: 'input',
+        ctx: {
+          url: location.href,
+          charCount: text.length,
+          snippet: text.slice(0, 100),
+        },
+        t0: Date.now(),
+      }));
+    }, 1000);
+
+    document.addEventListener('input', debouncedInput, { passive: true });
+
+    function detectComposerKind(el) {
+      var n = el;
+      for (var i = 0; i < 8 && n; i++) {
+        var cls = n.className || '';
+        if (typeof cls === 'string') {
+          if (cls.indexOf('msg-form') !== -1) return 'message-thread';
+          if (cls.indexOf('share-creation-state') !== -1) return 'post-compose';
+          if (cls.indexOf('comments-comment-box') !== -1) return 'comment-reply';
+        }
+        n = n.parentElement;
+      }
+      return 'unknown';
+    }
+  }
 })();
 `.trim();
 
@@ -307,8 +435,10 @@ export async function installOverlay(client: CdpHandle): Promise<string> {
   await client.Runtime.enable();
   await client.Page.enable();
   await client.Runtime.addBinding({ name: "__maiPost" });
+  const passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !== "off";
+  const substituted = OVERLAY_BOOTSTRAP_JS.replace("__MAI_PASSIVE_ENABLED__", JSON.stringify(passiveEnabled));
   const { identifier } = await client.Page.addScriptToEvaluateOnNewDocument({
-    source: OVERLAY_BOOTSTRAP_JS,
+    source: substituted,
     worldName: "mai-overlay",
     runImmediately: true,
   });

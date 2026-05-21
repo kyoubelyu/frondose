@@ -10,7 +10,7 @@
 //   POST /agent/abort
 //   GET  /audit/tail
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -26,6 +26,7 @@ import { CHECKPOINT } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
 import { resolveSoulBand } from "../../agent/systemPrompt/soul.js";
 import { createLinkedinSession } from "../../linkedin/session.js";
+import { matchIcp } from "../../methodology/icpMatcher.js";
 import { attachEventBus, type OverlayEvent } from "../../overlay/eventBus.js";
 import { callInOverlay, subscribeContextId } from "../../overlay/inject.js";
 import { makeAuditWriter } from "../../persistence/audit.js";
@@ -35,6 +36,7 @@ import { getHomeBase } from "../../persistence/paths.js";
 import { computeCronRunId, findDueJobs, markRan, readSchedule, writeSchedule } from "../../persistence/schedule.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
+import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRateLimit.js";
 
 export interface ServeOpts {
   sockPath: string;
@@ -42,36 +44,48 @@ export interface ServeOpts {
 }
 
 const AUDIT_PATH = (): string => join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+const PASSIVE_PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
 
-interface SseFrame {
-  type:
-    | "tool-call"
-    | "text"
-    | "step-done"
-    | "done"
-    | "error"
-    | "overlay-reconnected"
-    | "overlay-event"
-    | "suggestion-card"
-    | "next-actions"
-    | "profile-nav"
-    | "dialog-mode"
-    | "cron-mode";
-  turnId?: string;
-  toolName?: string;
-  toolNames?: string[];
-  chunk?: string;
-  finishReason?: string;
-  aborted?: boolean;
-  message?: string;
-  event?: OverlayEvent;
-  card?: SuggestionCardPayload;
-  nextActions?: NextActionsPayload;
-  profileUrl?: string;
-  profileHandle?: string;
-  dialogMode?: "expand" | "collapse";
-  cronEnabled?: boolean;
-}
+// biome-ignore lint/style/useConst: P-57b Step 4b requires module-level passive state.
+let passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !== "off";
+// biome-ignore lint/style/useConst: P-57b Step 4b requires module-level passive state.
+let passiveLimiter = new PassiveRateLimiter(passiveRateLimiterOptsFromEnv());
+const passiveProfileCache = new Map<string, { ts: number }>();
+
+type PassiveSkipReason = "rate_limit" | "icp_mismatch" | "cache_hit" | "busy" | "disabled";
+
+type SseFrame =
+  | {
+      type:
+        | "tool-call"
+        | "text"
+        | "step-done"
+        | "done"
+        | "error"
+        | "overlay-reconnected"
+        | "overlay-event"
+        | "suggestion-card"
+        | "next-actions"
+        | "profile-nav"
+        | "dialog-mode"
+        | "cron-mode";
+      turnId?: string;
+      toolName?: string;
+      toolNames?: string[];
+      chunk?: string;
+      finishReason?: string;
+      aborted?: boolean;
+      message?: string;
+      event?: OverlayEvent;
+      card?: SuggestionCardPayload;
+      nextActions?: NextActionsPayload;
+      profileUrl?: string;
+      profileHandle?: string;
+      dialogMode?: "expand" | "collapse";
+      cronEnabled?: boolean;
+    }
+  | { type: "passive-fired"; turnId: string; ts: number; reason: string }
+  | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown };
 
 interface SuggestionCardPayload {
   dismissed?: boolean;
@@ -91,6 +105,14 @@ interface NextActionsPayload {
 interface CurrentTurn {
   turnId: string;
   abortController: AbortController;
+}
+
+function isProfileCacheHit(handle: string): boolean {
+  const entry = passiveProfileCache.get(handle);
+  if (entry === undefined) return false;
+  if (Date.now() - entry.ts <= PASSIVE_PROFILE_CACHE_TTL_MS) return true;
+  passiveProfileCache.delete(handle);
+  return false;
 }
 
 type ServeEmitter = EventEmitter<{
@@ -140,6 +162,9 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   const emitter: ServeEmitter = new EventEmitter();
   const sseClients = new Set<ServerResponse>();
+  const emitSse = (frame: SseFrame): void => {
+    emitter.emit("sse-frame", frame);
+  };
   const broadcast = (frame: SseFrame): void => {
     const data = `data: ${JSON.stringify(frame)}\n\n`;
     for (const res of sseClients) {
@@ -412,26 +437,31 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     }
   });
 
-  function dispatchOverlayEvent(event: OverlayEvent): void {
+  function overlayStringField(event: OverlayEvent, key: string): string | undefined {
     const eventRecord = event as unknown as Record<string, unknown>;
     const payload = event.payload;
-    const stringField = (key: string): string | undefined => {
-      const direct = eventRecord[key];
-      if (typeof direct === "string") return direct;
-      const fromPayload = payload?.[key];
-      return typeof fromPayload === "string" ? fromPayload : undefined;
-    };
+    const direct = eventRecord[key];
+    if (typeof direct === "string") return direct;
+    const fromPayload = payload?.[key];
+    return typeof fromPayload === "string" ? fromPayload : undefined;
+  }
 
+  function dispatchOverlayEvent(event: OverlayEvent): void {
     if (event.event_type === "profile-nav") {
       emitter.emit("sse-frame", {
         type: "profile-nav",
-        profileUrl: stringField("url"),
-        profileHandle: stringField("handle"),
+        profileUrl: overlayStringField(event, "url"),
+        profileHandle: overlayStringField(event, "handle"),
       });
+      handlePassiveProfileNav(event);
+      return;
+    }
+    if (event.event_type === "observe") {
+      handlePassiveObservation(event);
       return;
     }
     if (event.event_type === "activate") {
-      const pageUrl = stringField("url");
+      const pageUrl = overlayStringField(event, "url");
       if (!pageUrl) return;
       if (currentTurn !== null) {
         emitter.emit("sse-frame", {
@@ -453,20 +483,158 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       return;
     }
     if (event.event_type === "prompt") {
-      const text = stringField("text");
+      const text = overlayStringField(event, "text");
       if (text && text.length > 0) {
         void triggerCardActionTurn(text);
       }
       return;
     }
     if (event.event_type === "card-action") {
-      const prompt = stringField("prompt");
+      const prompt = overlayStringField(event, "prompt");
       if (prompt && prompt.length > 0) {
         void triggerCardActionTurn(prompt);
       }
       return;
     }
     emitter.emit("overlay-event", event);
+  }
+
+  function handlePassiveProfileNav(event: OverlayEvent): void {
+    const handle = overlayStringField(event, "handle");
+    const url = overlayStringField(event, "url");
+    const ts = Date.now();
+    if (!passiveEnabled) {
+      emitSse({ type: "passive-skipped", ts, reason: "disabled" });
+      return;
+    }
+    if (currentTurn !== null) {
+      emitSse({ type: "passive-skipped", ts, reason: "busy" });
+      return;
+    }
+    if (!handle || !url) return;
+    if (isProfileCacheHit(handle)) {
+      emitSse({ type: "passive-skipped", ts, reason: "cache_hit" });
+      return;
+    }
+    if (!passiveLimiter.tryConsume()) {
+      emitSse({ type: "passive-skipped", ts, reason: "rate_limit" });
+      return;
+    }
+    passiveProfileCache.set(handle, { ts: Date.now() });
+    void triggerPassiveAnalysis("profile-nav", { handle, url });
+  }
+
+  function handlePassiveObservation(event: OverlayEvent): void {
+    const ts = Date.now();
+    if (!passiveEnabled) {
+      emitSse({ type: "passive-skipped", ts, reason: "disabled" });
+      return;
+    }
+    if (currentTurn !== null) {
+      emitSse({ type: "passive-skipped", ts, reason: "busy" });
+      return;
+    }
+
+    const eventType = typeof event.payload?.event_type === "string" ? event.payload.event_type : undefined;
+    const ctx = event.payload?.ctx;
+    if (!ctx || typeof ctx !== "object" || Array.isArray(ctx)) return;
+    const ctxRecord = ctx as Record<string, unknown>;
+
+    if (eventType === "click") {
+      const url = typeof ctxRecord.url === "string" ? ctxRecord.url : "";
+      const targetText = typeof ctxRecord.targetText === "string" ? ctxRecord.targetText : "";
+      const profilePageHit = /\/in\/[^/]+/.test(url);
+      const icpRoleHit =
+        identity?.icp !== undefined &&
+        matchIcp(identity.icp, {
+          role: targetText,
+          industry: null,
+          region: null,
+          companyName: null,
+        }).role.status === "match";
+      if (!profilePageHit && !icpRoleHit) {
+        emitSse({ type: "passive-skipped", ts, reason: "icp_mismatch", ctx: ctxRecord });
+        return;
+      }
+      if (!passiveLimiter.tryConsume()) {
+        emitSse({ type: "passive-skipped", ts, reason: "rate_limit", ctx: ctxRecord });
+        return;
+      }
+      void triggerPassiveAnalysis("click", ctxRecord);
+      return;
+    }
+
+    if (eventType === "input") {
+      if (!passiveLimiter.tryConsume()) {
+        emitSse({ type: "passive-skipped", ts, reason: "rate_limit", ctx: ctxRecord });
+        return;
+      }
+      void triggerPassiveAnalysis("input", ctxRecord);
+    }
+  }
+
+  function buildPassivePrompt(eventType: string, ctx: Record<string, unknown>): string {
+    if (eventType === "profile-nav") {
+      return `You just navigated to a LinkedIn profile. Handle: ${ctx.handle}. Silently analyse whether this person matches your ICP. If yes call suggest_card with a single insight. If not a match, call stop.`;
+    }
+    if (eventType === "click") {
+      const targetText = typeof ctx.targetText === "string" ? ctx.targetText.slice(0, 80) : undefined;
+      return `The operator clicked: ${ctx.targetTag} ${JSON.stringify(targetText)}. URL: ${ctx.url}. Silently assess whether this signals a sales intent. If actionable, call suggest_card. Otherwise call stop.`;
+    }
+    if (eventType === "input") {
+      const snippet = typeof ctx.snippet === "string" ? ctx.snippet.slice(0, 60) : undefined;
+      return `The operator is composing a message (${ctx.charCount} chars). Opening: ${JSON.stringify(snippet)}. Silently assess and suggest improvements via suggest_card if helpful. Otherwise call stop.`;
+    }
+    return "";
+  }
+
+  async function triggerPassiveAnalysis(eventType: string, ctx: Record<string, unknown>): Promise<void> {
+    const passiveMessages: CoreMessage[] = [];
+    const prompt = buildPassivePrompt(eventType, ctx);
+    if (!prompt) return;
+    passiveMessages.push({ role: "user", content: prompt });
+    const turnId = randomUUID();
+    try {
+      await runAgentLoop({
+        model,
+        system,
+        messages: passiveMessages,
+        tools,
+        maxSteps: 20,
+        onStepFinish: async (step: StepResult<ToolSet>) => {
+          await auditWriter(step);
+          const toolResults =
+            (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown }> }).toolResults ?? [];
+          for (const tr of toolResults) {
+            if (tr.toolName !== "suggest_card") continue;
+            const card = (tr.result as SuggestionCardPayload | undefined) ?? {};
+            if (card.dismissed) continue;
+            const ctxId = overlayContextId;
+            const client = session.getClient();
+            if (ctxId === undefined || !client) continue;
+            const collapsedPayload = {
+              id: turnId,
+              title: card.title ?? "Suggestion",
+              painChainStage: card.painChainStage ?? "",
+              fullCardJson: JSON.stringify(card),
+            };
+            const collapsedJson = JSON.stringify(collapsedPayload);
+            void callInOverlay(
+              client.handle,
+              ctxId,
+              `function() { window.__maiShowCollapsedCard(${JSON.stringify(collapsedJson)}); }`,
+            );
+          }
+        },
+      });
+      emitSse({ type: "passive-fired", turnId, ts: Date.now(), reason: eventType });
+    } catch (e) {
+      emitSse({
+        type: "error",
+        turnId,
+        message: `passive analysis failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
   }
 
   async function triggerAnalyzeProfile(
