@@ -19,6 +19,8 @@ export interface AgentLoopOpts {
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
   /** Informational callback; the actual abort happens via abortSignal. Reserved for future use (P-6). */
   onStopRequested?: () => void;
+  /** P-56b: fires when the model starts a tool call before execution. */
+  onToolCall?: (toolName: string) => void;
 }
 
 /**
@@ -79,7 +81,14 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
       tools: opts.tools,
       maxSteps: stepCap,
       abortSignal: opts.abortSignal,
-      onStepFinish: opts.onStepFinish,
+      onStepFinish: (step) => {
+        if (opts.onToolCall) {
+          for (const tc of step.toolCalls ?? []) {
+            opts.onToolCall(tc.toolName);
+          }
+        }
+        opts.onStepFinish?.(step);
+      },
     });
     for await (const chunk of result.textStream) {
       opts.onText?.(chunk);
