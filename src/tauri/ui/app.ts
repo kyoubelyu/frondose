@@ -34,7 +34,12 @@ type SseFrame =
   | { type: "done"; turnId: string; finishReason: string }
   | { type: "error"; turnId?: string; message: string }
   | { type: "overlay-reconnected" }
-  | { type: "overlay-event"; event: unknown };
+  | { type: "overlay-event"; event: unknown }
+  | { type: "suggestion-card"; turnId?: string }
+  | { type: "next-actions"; turnId?: string }
+  | { type: "profile-nav"; profileHandle?: string }
+  | { type: "dialog-mode"; dialogMode?: "expand" | "collapse" }
+  | { type: "cron-mode"; cronEnabled?: boolean };
 
 interface ClassListLike {
   add(token: string): void;
@@ -70,8 +75,8 @@ function mustGet<T extends TextElementLike>(id: string): T {
   return el as unknown as T;
 }
 
-type AppState = "F-identity-missing" | "H-chrome-needed" | "A-idle" | "C-running" | "I-error";
-let appState: AppState = "H-chrome-needed";
+type AppState = "identity-missing" | "chrome-needed" | "idle" | "running" | "error";
+let appState: AppState = "chrome-needed";
 let currentTurnId: string | null = null;
 
 const nameEl = mustGet<TextElementLike>("name");
@@ -79,9 +84,11 @@ const startEl = mustGet<ButtonElementLike>("start");
 const statusEl = mustGet<TextElementLike>("status");
 const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
+const autoModeBtnEl = mustGet<ButtonElementLike>("auto-mode-toggle");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
+let cronEnabled = true;
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
@@ -90,18 +97,18 @@ function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promi
 
 function transition(next: AppState): void {
   appState = next;
-  startEl.classList.toggle("hidden", next !== "H-chrome-needed");
-  commandEl.classList.toggle("hidden", next !== "A-idle" && next !== "C-running");
-  sendEl.classList.toggle("hidden", next !== "A-idle" && next !== "C-running");
-  tickerEl.classList.toggle("hidden", next !== "C-running");
-  outputEl.classList.toggle("hidden", next === "F-identity-missing" || next === "H-chrome-needed");
-  errorBannerEl.classList.toggle("hidden", next !== "I-error");
-  commandEl.disabled = next !== "A-idle";
-  sendEl.disabled = next !== "A-idle";
-  if (next === "A-idle") {
+  startEl.classList.toggle("hidden", next !== "chrome-needed");
+  commandEl.classList.toggle("hidden", next !== "idle" && next !== "running");
+  sendEl.classList.toggle("hidden", next !== "idle" && next !== "running");
+  tickerEl.classList.toggle("hidden", next !== "running");
+  outputEl.classList.toggle("hidden", next === "identity-missing" || next === "chrome-needed");
+  errorBannerEl.classList.toggle("hidden", next !== "error");
+  commandEl.disabled = next !== "idle";
+  sendEl.disabled = next !== "idle";
+  if (next === "idle") {
     sendEl.textContent = "Send";
     commandEl.value = "";
-  } else if (next === "C-running") {
+  } else if (next === "running") {
     sendEl.textContent = "Cancel";
     sendEl.disabled = false;
   }
@@ -113,17 +120,17 @@ async function loadIdentity(): Promise<void> {
     if (r.ok === false) {
       nameEl.classList.add("error");
       nameEl.textContent = r.reason;
-      transition("F-identity-missing");
+      transition("identity-missing");
       return;
     }
     nameEl.classList.remove("error");
     nameEl.textContent = r.fullName ?? "(no fullName in identity)";
-    transition("H-chrome-needed");
+    transition("chrome-needed");
   } catch (e) {
     nameEl.classList.add("error");
     nameEl.textContent = String(e);
     errorBannerEl.textContent = `boot error: ${String(e)}`;
-    transition("I-error");
+    transition("error");
   }
 }
 
@@ -140,7 +147,7 @@ async function startLinkedIn(): Promise<void> {
       return;
     }
     statusEl.textContent = `Chrome on port ${r.chromePort}`;
-    transition("A-idle");
+    transition("idle");
   } catch (e) {
     statusEl.textContent = String(e);
     startEl.disabled = false;
@@ -148,8 +155,21 @@ async function startLinkedIn(): Promise<void> {
   }
 }
 
+async function toggleAutoMode(): Promise<void> {
+  const next = !cronEnabled;
+  try {
+    const r = await invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode", { enabled: next });
+    if (r.ok) {
+      cronEnabled = r.cronEnabled ?? next;
+      autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
+    }
+  } catch {
+    // The next SSE cron-mode event owns eventual resync.
+  }
+}
+
 async function sendCommand(): Promise<void> {
-  if (appState === "C-running" && currentTurnId !== null) {
+  if (appState === "running" && currentTurnId !== null) {
     try {
       await invoke("mai_agent_abort");
     } catch {
@@ -158,23 +178,23 @@ async function sendCommand(): Promise<void> {
     return;
   }
 
-  if (appState !== "A-idle") return;
+  if (appState !== "idle") return;
   const prompt = commandEl.value.trim();
   if (!prompt) return;
   try {
     const r = await invoke<TurnResp>("mai_agent_turn", { prompt });
     if (r.ok === false) {
       errorBannerEl.textContent = `turn rejected: ${r.reason}`;
-      transition("I-error");
+      transition("error");
       return;
     }
     currentTurnId = r.turnId;
     outputEl.textContent = "";
     tickerEl.textContent = "starting...";
-    transition("C-running");
+    transition("running");
   } catch (e) {
     errorBannerEl.textContent = `invoke failed: ${String(e)}`;
-    transition("I-error");
+    transition("error");
   }
 }
 
@@ -197,13 +217,13 @@ function handleEvent(payload: SseFrame): void {
       if (payload.turnId === currentTurnId) {
         tickerEl.textContent = `done (${payload.finishReason})`;
         currentTurnId = null;
-        transition("A-idle");
+        transition("idle");
       }
       break;
     case "error":
       errorBannerEl.textContent = `agent error: ${payload.message}`;
       currentTurnId = null;
-      transition("I-error");
+      transition("error");
       break;
     case "overlay-reconnected":
       statusEl.textContent = "overlay reconnected";
@@ -212,6 +232,21 @@ function handleEvent(payload: SseFrame): void {
       }, 2000);
       break;
     case "overlay-event":
+      break;
+    case "suggestion-card":
+      statusEl.textContent = "suggestion card rendered in-page";
+      break;
+    case "next-actions":
+      statusEl.textContent = "next actions rendered in-page";
+      break;
+    case "profile-nav":
+      statusEl.textContent = `profile: ${payload.profileHandle ?? "?"}`;
+      break;
+    case "dialog-mode":
+      break;
+    case "cron-mode":
+      cronEnabled = payload.cronEnabled ?? cronEnabled;
+      autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
       break;
   }
 }
@@ -222,6 +257,10 @@ startEl.addEventListener("click", () => {
 sendEl.addEventListener("click", () => {
   void sendCommand();
 });
+autoModeBtnEl.addEventListener("click", () => {
+  void toggleAutoMode();
+});
+autoModeBtnEl.textContent = "Auto-mode: ON";
 commandEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -232,7 +271,7 @@ commandEl.addEventListener("keydown", (e) => {
 async function boot(): Promise<void> {
   if (!windowRef.__TAURI__) {
     errorBannerEl.textContent = "__TAURI__ missing - not running inside Tauri shell";
-    transition("I-error");
+    transition("error");
     return;
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
