@@ -1,28 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
   <title>mai</title>
   <style>
-    body { margin: 0; padding: 24px; font: 14px/1.4 -apple-system, BlinkMacSystemFont, system-ui;
-           background: #0a0a0a; color: #e0e0e0; }
-    h1 { font-size: 18px; font-weight: 600; margin: 0 0 16px; }
-    .name { font-size: 24px; font-weight: 700; margin: 16px 0; }
-    .name.error { color: #ff6b6b; font-size: 13px; font-weight: 400; }
-    button { background: #0a66c2; color: white; border: 0; border-radius: 8px;
-             padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-             margin-top: 16px; }
-    button:hover { background: #084e93; }
-    button:disabled { background: #333; cursor: wait; }
-    .status { font-size: 12px; color: #888; margin-top: 12px; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #fafafa; color: #222; padding: 16px; }
+    h1 { margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #555; }
+    #name { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+    #name.error { color: #c0392b; font-size: 14px; font-weight: 400; }
+    #status { font-size: 12px; color: #666; margin-bottom: 12px; min-height: 16px; }
+    button { background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #084e93; }
+    #command-input { width: 100%; min-height: 60px; padding: 8px; box-sizing: border-box; font-size: 14px; font-family: inherit; resize: vertical; border: 1px solid #ccc; border-radius: 4px; }
+    #command-input:disabled { background: #f0f0f0; }
+    .send-row { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
+    #ticker { font-size: 13px; color: #0a66c2; font-style: italic; padding: 6px 10px; background: #e7f0fa; border-radius: 4px; margin: 8px 0; }
+    #output { font-size: 13px; color: #333; white-space: pre-wrap; padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px; max-height: 300px; overflow-y: auto; margin-top: 8px; min-height: 40px; }
+    #error-banner { font-size: 13px; color: #c0392b; padding: 8px 12px; background: #fdecea; border: 1px solid #f5c6cb; border-radius: 4px; margin: 8px 0; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <h1>mai · M-1 demo skeleton</h1>
-  <div id="name" class="name">Loading identity…</div>
+  <h1>mai</h1>
+  <div id="name">loading identity...</div>
+  <div id="status"></div>
   <button id="start">Start LinkedIn</button>
-  <div id="status" class="status"></div>
+  <textarea id="command-input" class="hidden" placeholder="Ask mai (e.g. 'qualify this profile')"></textarea>
+  <div class="send-row">
+    <button id="send-btn" class="hidden">Send</button>
+  </div>
+  <div id="ticker" class="hidden"></div>
+  <div id="output" class="hidden"></div>
+  <div id="error-banner" class="hidden">error</div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
