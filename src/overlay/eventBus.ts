@@ -16,9 +16,12 @@ export interface OverlayEvent {
   event_type: string;
   t0: number;
   latency_ms: number;
+  payload?: Record<string, unknown>;
 }
 
-type RawOverlayPayload = {
+type OverlayEventPayload = Record<string, unknown>;
+
+type RawOverlayPayload = OverlayEventPayload & {
   type?: unknown;
   t0?: unknown;
 };
@@ -27,24 +30,38 @@ export function appendOverlayEventRow(
   event: OverlayEvent,
   auditPath: string = path.join(getHomeBase(), ".mai", "agent", "audit.jsonl"),
 ): void {
-  appendFileSync(auditPath, `${JSON.stringify(event)}\n`);
+  const auditEvent: Omit<OverlayEvent, "payload"> = {
+    kind: event.kind,
+    ts: event.ts,
+    event_type: event.event_type,
+    t0: event.t0,
+    latency_ms: event.latency_ms,
+  };
+  appendFileSync(auditPath, `${JSON.stringify(auditEvent)}\n`);
 }
 
 export function attachEventBus(client: CdpHandle, onEvent: (event: OverlayEvent) => void): () => void {
   const unsubscribe = client.Runtime.bindingCalled(({ name, payload }: { name: string; payload: string }) => {
     if (name !== "__maiPost") return;
     try {
-      const raw = JSON.parse(payload) as RawOverlayPayload;
+      const parsed = JSON.parse(payload) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+      const raw = parsed as RawOverlayPayload;
       if (typeof raw.type !== "string") return;
       const ts = Date.now();
       const t0 = typeof raw.t0 === "number" ? raw.t0 : ts;
-      onEvent({
+      const event: OverlayEvent = {
         kind: "overlay-event",
         ts,
         event_type: raw.type,
         t0,
         latency_ms: ts - t0,
+      };
+      Object.defineProperty(event, "payload", {
+        value: raw,
+        enumerable: false,
       });
+      onEvent(event);
     } catch {
       return;
     }

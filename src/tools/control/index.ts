@@ -5,6 +5,8 @@ import { makeEscalateTool } from "./escalate.js";
 import { sleepTool } from "./sleep.js";
 import type { ControlSignals } from "./stop.js";
 import { makeStopTool } from "./stop.js";
+import { suggestCardTool } from "./suggestCard.js";
+import { suggestNextActionsTool } from "./suggestNextActions.js";
 
 export { echoTool } from "./echo.js";
 export type { ControlSignals } from "./stop.js";
@@ -33,6 +35,8 @@ export function makeControlTools(
     echo: echoTool,
     stop: makeStopTool(control, hookRunner),
     sleep: sleepTool,
+    suggest_card: suggestCardTool,
+    suggest_next_actions: suggestNextActionsTool,
   };
   if (deps) {
     out.escalate_for_capability = makeEscalateTool({

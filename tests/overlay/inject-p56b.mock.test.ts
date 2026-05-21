@@ -91,13 +91,14 @@ describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + t
 // ─── T-Overlay.3 — subscribeContextId filters by context.name ────────────────
 
 describe("subscribeContextId — invokes onContext only for context.name === 'mai-overlay' (G-P56b.3)", () => {
-  it("T-Overlay.3: given a fake CdpHandle capturing Runtime.executionContextCreated handler + onContext=spy, WHEN handler invoked with (a) {context:{id:7,name:'mai-overlay'}} (b) {context:{id:8,name:'main'}} (c) {context:{id:9,name:undefined}}, THEN onContext called exactly once with 7; and the return value of subscribeContextId is a function (unsubscribe)", () => {
-    // Given: fake CdpHandle whose Runtime.executionContextCreated captures the registered handler;
-    //        onContext is a manual spy (call log array); three payload variants prepared
-    // When:  subscribeContextId(fakeHandle, onContext) registers the handler;
-    //        validator invokes captured handler with payloads (a) (b) (c) in sequence
-    // Then:  onContext called count === 1; only call arg === 7; payloads (b) and (c) filtered out;
-    //        return value of subscribeContextId is typeof 'function'
+  it("T-Overlay.3: given a fake CdpHandle with Page.getFrameTree (mainFrameId='main-1') + Runtime.executionContextCreated handler-capture + onContext=spy, WHEN await subscribeContextId(handle, spy) + handler invoked with (a) mai-overlay+main-1 (b) mai-overlay+iframe-2 (c) other+main-1, THEN onContext called exactly once with id=7; and the return is a function (unsubscribe)", async () => {
+    // Given: P-57a evolved subscribeContextId to async + Page.getFrameTree() + top-frame filter
+    //        (D-P57a-01 Option B fix). Mock CdpHandle now provides Page.getFrameTree returning
+    //        {frameTree: {frame: {id: "main-1"}}}; Runtime.executionContextCreated captures handler.
+    // When:  await subscribeContextId(fakeHandle, onContext) → registers handler;
+    //        validator invokes captured handler with three payload variants in sequence.
+    // Then:  onContext called count === 1 (only the mai-overlay context whose auxData.frameId
+    //        matches the mainFrameId); other variants filtered; return is a function.
 
     // biome-ignore lint/suspicious/noExplicitAny: captured handler needs any to avoid never-type narrowing
     let capturedHandler: any = null;
@@ -105,6 +106,10 @@ describe("subscribeContextId — invokes onContext only for context.name === 'ma
       /* noop */
     };
     const fakeHandle = {
+      Page: {
+        // P-57a Option B: subscribeContextId now reads frameTree to get mainFrameId for top-frame filter.
+        getFrameTree: async () => ({ frameTree: { frame: { id: "main-1" } } }),
+      },
       Runtime: {
         // biome-ignore lint/suspicious/noExplicitAny: fake CDP handle — typed loosely for test
         executionContextCreated: (handler: any) => {
@@ -119,25 +124,28 @@ describe("subscribeContextId — invokes onContext only for context.name === 'ma
       onContextCalls.push(id);
     };
 
-    // Call subscribeContextId and capture the unsubscribe return value
+    // P-57a: subscribeContextId is now async — await it.
     // biome-ignore lint/suspicious/noExplicitAny: fake handle typed as any
-    const unsub = subscribeContextId(fakeHandle as any, onContext);
+    const unsub = await subscribeContextId(fakeHandle as any, onContext);
 
-    // Verify handler was captured
+    // Verify handler was captured (after Page.getFrameTree() resolves)
     assert.ok(capturedHandler !== null, "executionContextCreated handler should have been registered");
 
-    // Invoke handler with three payloads in sequence
-    capturedHandler?.({ context: { id: 7, name: "mai-overlay" } }); // should pass
-    capturedHandler?.({ context: { id: 8, name: "main" } }); // should be filtered
-    capturedHandler?.({ context: { id: 9, name: undefined } }); // should be filtered
+    // Invoke handler with three payloads in sequence:
+    //  (a) mai-overlay in TOP frame → accepted
+    //  (b) mai-overlay in iframe → filtered by Option B mainFrameId check
+    //  (c) non-mai-overlay name in top frame → filtered by name check
+    capturedHandler?.({ context: { id: 7, name: "mai-overlay", auxData: { frameId: "main-1" } } });
+    capturedHandler?.({ context: { id: 8, name: "mai-overlay", auxData: { frameId: "iframe-2" } } });
+    capturedHandler?.({ context: { id: 9, name: "main", auxData: { frameId: "main-1" } } });
 
-    // onContext should only be called once (for the mai-overlay context)
+    // onContext should only be called once (for the top-frame mai-overlay context)
     assert.equal(
       onContextCalls.length,
       1,
-      `onContext should be called exactly once (for mai-overlay); got ${onContextCalls.length} call(s)`,
+      `onContext should be called exactly once (top-frame mai-overlay); got ${onContextCalls.length} call(s)`,
     );
-    assert.equal(onContextCalls[0], 7, `onContext should receive id=7 (mai-overlay context); got ${onContextCalls[0]}`);
+    assert.equal(onContextCalls[0], 7, `onContext should receive id=7 (top-frame mai-overlay); got ${onContextCalls[0]}`);
     // Return value should be a function (unsubscribe handle)
     assert.strictEqual(typeof unsub, "function", "subscribeContextId must return a function (unsubscribe handle)");
   });
