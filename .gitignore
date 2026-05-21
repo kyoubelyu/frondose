@@ -37,3 +37,9 @@ CLAUDE.md
 .gitignore
 ROADMAP.md
 .omx/
+
+# P-56a M-1 Tauri scaffold
+src/tauri/src-tauri/target/
+src/tauri/src-tauri/gen/
+src/tauri/ui/app.js
+src/tauri/ui/app.js.map
