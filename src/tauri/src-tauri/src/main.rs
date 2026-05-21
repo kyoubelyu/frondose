@@ -92,6 +92,20 @@ async fn mai_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value
     uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
 }
 
+#[tauri::command]
+async fn mai_set_cron_mode(
+    state: tauri::State<'_, MaiServeState>,
+    enabled: bool,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/agent/cron-mode",
+        Some(json!({"enabled": enabled})),
+    )
+    .await
+}
+
 /// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
 async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
     loop {
@@ -252,7 +266,8 @@ async fn main() {
             mai_identity,
             mai_chrome_ensure,
             mai_agent_turn,
-            mai_agent_abort
+            mai_agent_abort,
+            mai_set_cron_mode
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");

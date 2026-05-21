@@ -12,6 +12,7 @@
     button { background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; }
     button:disabled { background: #aaa; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #084e93; }
+    .auto-mode-btn { background: #0a8540; color: white; padding: 6px 12px; border: 0; border-radius: 4px; cursor: pointer; margin: 4px 0; font-size: 13px; }
     #command-input { width: 100%; min-height: 60px; padding: 8px; box-sizing: border-box; font-size: 14px; font-family: inherit; resize: vertical; border: 1px solid #ccc; border-radius: 4px; }
     #command-input:disabled { background: #f0f0f0; }
     .send-row { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
@@ -26,6 +27,7 @@
   <div id="name">loading identity...</div>
   <div id="status"></div>
   <button id="start">Start LinkedIn</button>
+  <button id="auto-mode-toggle" class="auto-mode-btn">Auto-mode: ON</button>
   <textarea id="command-input" class="hidden" placeholder="Ask mai (e.g. 'qualify this profile')"></textarea>
   <div class="send-row">
     <button id="send-btn" class="hidden">Send</button>

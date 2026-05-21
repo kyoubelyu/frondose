@@ -32,6 +32,7 @@ import { makeAuditWriter } from "../../persistence/audit.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { getHomeBase } from "../../persistence/paths.js";
+import { computeCronRunId, findDueJobs, markRan, readSchedule, writeSchedule } from "../../persistence/schedule.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
 
@@ -43,7 +44,19 @@ export interface ServeOpts {
 const AUDIT_PATH = (): string => join(getHomeBase(), ".mai", "agent", "audit.jsonl");
 
 interface SseFrame {
-  type: "tool-call" | "text" | "step-done" | "done" | "error" | "overlay-reconnected" | "overlay-event";
+  type:
+    | "tool-call"
+    | "text"
+    | "step-done"
+    | "done"
+    | "error"
+    | "overlay-reconnected"
+    | "overlay-event"
+    | "suggestion-card"
+    | "next-actions"
+    | "profile-nav"
+    | "dialog-mode"
+    | "cron-mode";
   turnId?: string;
   toolName?: string;
   toolNames?: string[];
@@ -52,6 +65,27 @@ interface SseFrame {
   aborted?: boolean;
   message?: string;
   event?: OverlayEvent;
+  card?: SuggestionCardPayload;
+  nextActions?: NextActionsPayload;
+  profileUrl?: string;
+  profileHandle?: string;
+  dialogMode?: "expand" | "collapse";
+  cronEnabled?: boolean;
+}
+
+interface SuggestionCardPayload {
+  dismissed?: boolean;
+  reason?: string;
+  title?: string;
+  icpMatch?: { qualified: boolean; matched: string[]; missing: string[] };
+  painChainHypothesis?: string;
+  painChainStage?: string;
+  suggestedMove?: { kind: "connect" | "comment" | "message"; text: string };
+}
+
+interface NextActionsPayload {
+  summary: string;
+  actions: Array<{ id: string; label: string; prompt: string; danger?: boolean }>;
 }
 
 interface CurrentTurn {
@@ -122,6 +156,72 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   let overlayContextId: number | undefined;
   let unsubscribeContextId: (() => void) | undefined;
   let unsubscribeOverlayEvents: (() => void) | undefined;
+  let cronEnabled = true;
+  let cronInterval: ReturnType<typeof setInterval> | null = null;
+
+  cronInterval = setInterval(async () => {
+    if (!cronEnabled) return;
+    if (currentTurn !== null) return;
+    let records: ReturnType<typeof readSchedule>;
+    try {
+      records = readSchedule(schedulePath);
+    } catch {
+      return;
+    }
+    const due = findDueJobs(records, new Date());
+    if (due.length === 0) return;
+    due.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const next = due[0];
+    if (!next) return;
+    const fireDate = new Date(next.nextRunAt);
+    const cronRunId = computeCronRunId(next, fireDate);
+    const localHH = fireDate.getHours().toString().padStart(2, "0");
+    const localMM = fireDate.getMinutes().toString().padStart(2, "0");
+    const escapeTask = (task: string): string =>
+      task.replace(/\\/g, "\\\\").replace(/\r/g, "").replace(/\n/g, " ").replace(/"/g, '\\"');
+    const trimmed = next.task.trim();
+    const taskLine = trimmed.length > 0 ? `\n(scheduled task: "${escapeTask(trimmed)}")` : "";
+    const cronPrompt = `[TIME ${localHH}:${localMM}]\n[CRON_RUN_ID=${cronRunId}]${taskLine}`;
+    const turnId = randomBytes(4).toString("hex");
+    const abortController = new AbortController();
+    currentTurn = { turnId, abortController };
+    messages.push({ role: "user", content: cronPrompt });
+    try {
+      await runOneTurn({
+        turnId,
+        abortController,
+        model,
+        system,
+        messages,
+        tools,
+        maxSteps,
+        auditWriter,
+        emitFrame: (frame) => emitter.emit("sse-frame", frame),
+        session,
+        getOverlayContextId: () => overlayContextId,
+      });
+      const all = readSchedule(schedulePath);
+      const idx = all.findIndex((record) => record.id === next.id);
+      if (idx >= 0) {
+        const target = all[idx];
+        if (target !== undefined) {
+          const updated = markRan(target, fireDate);
+          if (updated === null) all.splice(idx, 1);
+          else all[idx] = updated;
+          writeSchedule(schedulePath, all);
+        }
+      }
+    } catch (e) {
+      emitter.emit("sse-frame", {
+        type: "error",
+        turnId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      currentTurn = null;
+    }
+  }, 60_000);
+  cronInterval.unref();
 
   const expectedToken = Buffer.from(opts.bearerToken, "utf-8");
   const server = createServer(async (req, res) => {
@@ -156,7 +256,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
           return;
         }
         if (!unsubscribeContextId) {
-          unsubscribeContextId = subscribeContextId(result.client.handle, (id) => {
+          unsubscribeContextId = await subscribeContextId(result.client.handle, (id) => {
             const wasReconnect = overlayContextId !== undefined && overlayContextId !== id;
             overlayContextId = id;
             if (wasReconnect) {
@@ -173,9 +273,9 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
           });
         }
         if (!unsubscribeOverlayEvents) {
-          unsubscribeOverlayEvents = attachEventBus(result.client.handle, (event) =>
-            emitter.emit("overlay-event", event),
-          );
+          unsubscribeOverlayEvents = attachEventBus(result.client.handle, (event) => {
+            void dispatchOverlayEvent(event);
+          });
         }
         sendJson(res, 200, { ok: true, chromePort: 9222, overlayInstalled: true });
         return;
@@ -224,6 +324,27 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         return;
       }
 
+      if (method === "POST" && url === "/agent/activate") {
+        const body = await readJsonBody(req);
+        const pageUrl = typeof body?.url === "string" ? body.url : null;
+        if (!pageUrl) {
+          sendJson(res, 400, { ok: false, reason: "missing_url" });
+          return;
+        }
+        if (currentTurn !== null) {
+          sendJson(res, 409, { ok: false, reason: "turn_in_progress", turnId: currentTurn.turnId });
+          return;
+        }
+        const turnId = randomBytes(4).toString("hex");
+        const abortController = new AbortController();
+        currentTurn = { turnId, abortController };
+        sendJson(res, 200, { ok: true, turnId, status: "queued" });
+        void triggerAnalyzeProfile(pageUrl, turnId, abortController).finally(() => {
+          currentTurn = null;
+        });
+        return;
+      }
+
       if (method === "POST" && url === "/agent/abort") {
         if (currentTurn === null) {
           sendJson(res, 200, { ok: false, reason: "not_found" });
@@ -231,6 +352,19 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         }
         currentTurn.abortController.abort();
         sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (method === "POST" && url === "/agent/cron-mode") {
+        const body = await readJsonBody(req);
+        const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
+        if (enabled === null) {
+          sendJson(res, 400, { ok: false, reason: "missing_enabled" });
+          return;
+        }
+        cronEnabled = enabled;
+        emitter.emit("sse-frame", { type: "cron-mode", cronEnabled: enabled });
+        sendJson(res, 200, { ok: true, cronEnabled });
         return;
       }
 
@@ -278,11 +412,147 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     }
   });
 
+  function dispatchOverlayEvent(event: OverlayEvent): void {
+    const eventRecord = event as unknown as Record<string, unknown>;
+    const payload = event.payload;
+    const stringField = (key: string): string | undefined => {
+      const direct = eventRecord[key];
+      if (typeof direct === "string") return direct;
+      const fromPayload = payload?.[key];
+      return typeof fromPayload === "string" ? fromPayload : undefined;
+    };
+
+    if (event.event_type === "profile-nav") {
+      emitter.emit("sse-frame", {
+        type: "profile-nav",
+        profileUrl: stringField("url"),
+        profileHandle: stringField("handle"),
+      });
+      return;
+    }
+    if (event.event_type === "activate") {
+      const pageUrl = stringField("url");
+      if (!pageUrl) return;
+      if (currentTurn !== null) {
+        emitter.emit("sse-frame", {
+          type: "error",
+          message: `cannot activate - turn ${currentTurn.turnId} in progress`,
+        });
+        return;
+      }
+      const turnId = randomBytes(4).toString("hex");
+      const abortController = new AbortController();
+      currentTurn = { turnId, abortController };
+      void triggerAnalyzeProfile(pageUrl, turnId, abortController).finally(() => {
+        currentTurn = null;
+      });
+      return;
+    }
+    if (event.event_type === "expand-dialog") {
+      emitter.emit("sse-frame", { type: "dialog-mode", dialogMode: "expand" });
+      return;
+    }
+    if (event.event_type === "prompt") {
+      const text = stringField("text");
+      if (text && text.length > 0) {
+        void triggerCardActionTurn(text);
+      }
+      return;
+    }
+    if (event.event_type === "card-action") {
+      const prompt = stringField("prompt");
+      if (prompt && prompt.length > 0) {
+        void triggerCardActionTurn(prompt);
+      }
+      return;
+    }
+    emitter.emit("overlay-event", event);
+  }
+
+  async function triggerAnalyzeProfile(
+    pageUrl: string,
+    turnId: string,
+    abortController: AbortController,
+  ): Promise<void> {
+    const analyzePrompt =
+      `Operator is on profile ${pageUrl}. Analyze this profile against the operator's ICP. ` +
+      "First call `inspect` to extract role/industry/region/companyName from the page. " +
+      "Then call `qualify_profile` with those four fields. " +
+      "Then call `suggest_card` with: " +
+      "(a) when qualified — title (name + role), icpMatch, painChainHypothesis (≤2 sentences), " +
+      "painChainStage (one of the 15 methodology enum values), suggestedMove (kind + text); " +
+      '(b) when disqualified or extraction failed — {dismissed:true, reason:"..."}. ' +
+      "Stop after suggest_card. Do NOT take any outreach action in this sub-turn.";
+    messages.push({ role: "user", content: analyzePrompt });
+    try {
+      await runOneTurn({
+        turnId,
+        abortController,
+        model,
+        system,
+        messages,
+        tools,
+        maxSteps: 20,
+        auditWriter,
+        emitFrame: (frame) => emitter.emit("sse-frame", frame),
+        session,
+        getOverlayContextId: () => overlayContextId,
+      });
+    } catch (e) {
+      emitter.emit("sse-frame", {
+        type: "error",
+        turnId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  async function triggerCardActionTurn(actionPrompt: string): Promise<void> {
+    if (currentTurn !== null) {
+      emitter.emit("sse-frame", {
+        type: "error",
+        message: `cannot fire card action - turn ${currentTurn.turnId} in progress`,
+      });
+      return;
+    }
+    const turnId = randomBytes(4).toString("hex");
+    const abortController = new AbortController();
+    currentTurn = { turnId, abortController };
+    messages.push({ role: "user", content: actionPrompt });
+    try {
+      await runOneTurn({
+        turnId,
+        abortController,
+        model,
+        system,
+        messages,
+        tools,
+        maxSteps,
+        auditWriter,
+        emitFrame: (frame) => emitter.emit("sse-frame", frame),
+        session,
+        getOverlayContextId: () => overlayContextId,
+      });
+    } catch (e) {
+      emitter.emit("sse-frame", {
+        type: "error",
+        turnId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      currentTurn = null;
+    }
+  }
+
   const shutdown = (signal: string) => {
     process.stdout.write(`[mai serve] ${signal} - shutting down\n`);
     if (currentTurn) currentTurn.abortController.abort();
     if (unsubscribeContextId) unsubscribeContextId();
     if (unsubscribeOverlayEvents) unsubscribeOverlayEvents();
+    if (cronInterval) {
+      clearInterval(cronInterval);
+      cronInterval = null;
+    }
     for (const res of sseClients) {
       try {
         res.end();
@@ -334,6 +604,11 @@ interface RunOneTurnOpts {
 
 async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
   const { turnId, abortController, emitFrame, session, getOverlayContextId } = opts;
+  const ctxId0 = getOverlayContextId();
+  const client0 = session.getClient();
+  if (ctxId0 !== undefined && client0) {
+    void callInOverlay(client0.handle, ctxId0, "function() { window.__maiClearOutput(); }");
+  }
   try {
     await runAgentLoop({
       model: opts.model,
@@ -345,9 +620,45 @@ async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
       onStepFinish: async (step: StepResult<ToolSet>) => {
         await opts.auditWriter(step);
         const toolCalls = step.toolCalls as unknown as Array<{ toolName: string }>;
+        const toolResults =
+          (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown }> }).toolResults ?? [];
+        for (const tr of toolResults) {
+          if (tr.toolName === "suggest_card") {
+            const card = (tr.result as unknown as { ok: boolean }) ?? {};
+            emitFrame({ type: "suggestion-card", turnId, card: card as SuggestionCardPayload });
+            const ctxId = getOverlayContextId();
+            const client = session.getClient();
+            if (ctxId !== undefined && client) {
+              const json = JSON.stringify(card);
+              void callInOverlay(client.handle, ctxId, `function() { window.__maiShowCard(${JSON.stringify(json)}); }`);
+            }
+          }
+          if (tr.toolName === "suggest_next_actions") {
+            const nextActions = (tr.result as unknown as { ok: boolean }) ?? {};
+            emitFrame({ type: "next-actions", turnId, nextActions: nextActions as unknown as NextActionsPayload });
+            const ctxId = getOverlayContextId();
+            const client = session.getClient();
+            if (ctxId !== undefined && client) {
+              const json = JSON.stringify(nextActions);
+              void callInOverlay(
+                client.handle,
+                ctxId,
+                `function() { window.__maiShowNextActions(${JSON.stringify(json)}); }`,
+              );
+            }
+          }
+        }
         emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
       },
-      onText: (delta) => emitFrame({ type: "text", turnId, chunk: delta }),
+      onText: (delta) => {
+        emitFrame({ type: "text", turnId, chunk: delta });
+        const ctxId = getOverlayContextId();
+        const client = session.getClient();
+        if (ctxId !== undefined && client) {
+          const s = JSON.stringify(delta);
+          void callInOverlay(client.handle, ctxId, `function() { window.__maiAppendOutput(${JSON.stringify(s)}); }`);
+        }
+      },
       onToolCall: (toolName) => {
         emitFrame({ type: "tool-call", turnId, toolName });
         const ctxId = getOverlayContextId();
