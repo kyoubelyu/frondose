@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.5.0-alpha.1",
+  "version": "0.5.0-alpha.2",
   "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",
@@ -21,9 +21,10 @@
   ],
   "scripts": {
     "install": "true",
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js && npm run build:web && npm run build:native",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js && npm run build:web && npm run build:native && npm run build:tauri-ui",
     "build:web": "esbuild src/web/main.tsx --bundle --minify --jsx=automatic --external:/vendor/* --outfile=dist/web/app.js && tailwindcss -i src/web/style.css -o dist/web/style.css --minify && cp src/web/index.html dist/web/index.html && cp -r src/web/vendor dist/web/vendor",
     "build:native": "node-gyp rebuild || echo '[mai] cgevent native addon build skipped (Xcode CLT missing) — hardware input mode unavailable; cdp mode unaffected'",
+    "build:tauri-ui": "tsc -p src/tauri/ui/tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

@@ -560,6 +560,19 @@ async function main(): Promise<void> {
     process.exit(0);
   });
 
+  // P-56a: `mai serve` — HTTP-over-UDS bridge for the Tauri desktop shell (v0.5 hover pivot).
+  program
+    .command("serve")
+    .description("HTTP-over-UDS bridge for the v0.5 Tauri desktop shell")
+    .requiredOption("--sock <path>", "Unix Domain Socket path (provided by parent Tauri process)")
+    .requiredOption("--token <token>", "Bearer token (provided by parent Tauri process)")
+    .action(async (cliOpts: { sock: string; token: string }) => {
+      const { runServeSubcommand } = await import("./subcommands/serve.js");
+      await runServeSubcommand({ sockPath: cliOpts.sock, bearerToken: cliOpts.token });
+      // runServeSubcommand returns when the server exits (SIGTERM/SIGINT).
+      process.exit(0);
+    });
+
   // P-20: `mai update` — check GitHub Releases for newer mai-agent version.
   // P-22 §3.2: `--bootstrap` triggers a forced auto-update (bypasses dev-link guard).
   program
