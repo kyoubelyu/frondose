@@ -7,7 +7,9 @@ import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { assertFileReadable } from "../../linkedin/uploadAllowlist.js";
 import { readAuth } from "../../persistence/auth.js";
 
-const DEFAULT_VISION_MODEL = "anthropic:claude-sonnet-4-5";
+// P-57d (item b): default unset. Operator must configure MAI_VISION_MODEL to a
+// custom-URL vision-capable provider per project_llm_scope_custom_url_only.
+const DEFAULT_VISION_MODEL = "";
 
 /** P-37 B5: conservative name heuristic for vision-capable models. Used ONLY to
  *  decide whether a fallback retry on the MAIN model is safe — an unknown model
@@ -23,9 +25,8 @@ const analyzeScreenshotParams = z.object({
 
 /**
  * P-9 F-4 / D-6: analyze_screenshot tool. Secondary generateText call to a
- * vision-capable model (default anthropic:claude-sonnet-4-5; override via
- * MAI_VISION_MODEL). Main streamText session model UNCHANGED — vision call
- * is fully isolated.
+ * vision-capable model via MAI_VISION_MODEL. Main streamText session model
+ * UNCHANGED — vision call is fully isolated.
  *
  * D-7 file sandbox: assertFileReadable() called on the supplied path BEFORE
  * readFileSync. Allowed: ~/.mai/agent/**, MAI_UPLOAD_ALLOWLIST, os.tmpdir(),
@@ -42,9 +43,11 @@ export function makeAnalyzeScreenshotTool() {
     description:
       "Analyze a screenshot file via a vision-capable LLM. " +
       "Pass an absolute path to a PNG/JPEG file (typically the path returned by the screenshot tool). " +
-      "Returns a text description. Vision model defaults to anthropic:claude-sonnet-4-5 (override via MAI_VISION_MODEL env). " +
-      "Costs vision tokens billed against the vision provider's API key. " +
-      "Requires Anthropic API access by default; set MAI_VISION_MODEL=<provider>:<modelId> to use a different vision-capable provider.",
+      "Returns a text description. P-57d: default unset — operator must set `MAI_VISION_MODEL` " +
+      "to a custom-URL vision-capable provider to enable this tool. Otherwise prefer `inspect` " +
+      "(accessibility tree primitive). External vision APIs (anthropic-direct/openai-direct) " +
+      "are scope-disabled per `project_llm_scope_custom_url_only`. " +
+      'Returns {ok:false, error:{kind:"vision_unavailable"}} when MAI_VISION_MODEL is unset (operator scope lock).',
     parameters: analyzeScreenshotParams,
     execute: async ({ path: filePath, prompt }, opts) => {
       try {
@@ -54,6 +57,18 @@ export function makeAnalyzeScreenshotTool() {
         const mimeType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
         const auth = readAuth();
         const visionSpec = process.env.MAI_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL;
+        if (visionSpec === "") {
+          return {
+            ok: false,
+            error: {
+              kind: "vision_unavailable",
+              message:
+                "Vision unavailable — current MAI_MODEL doesn't support vision. " +
+                "Set MAI_VISION_MODEL to a custom-URL vision-capable provider OR use the inspect tool instead. " +
+                "operator scope: MAI_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled.",
+            },
+          };
+        }
         let model: LanguageModel;
         try {
           model = resolveModel({ factory: visionSpec });

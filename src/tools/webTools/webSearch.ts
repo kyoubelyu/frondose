@@ -27,11 +27,27 @@ export function makeWebSearchTool() {
   return tool({
     description:
       "Search the web for the given query. Returns top results (title, url, snippet). " +
-      "Provider chain: Brave (BRAVE_API_KEY) → Tavily (TAVILY_API_KEY) fallback. " +
-      "Use for ICP/company/industry research outside LinkedIn.",
+      "P-57d: requires MCP_SEARCH_URL configured (Model Context Protocol search server). " +
+      'Without it, returns {ok:false, error:{kind:"scope_disabled"}}. ' +
+      "Operator scope disallows direct Brave/Tavily integration. " +
+      "For now, prefer LinkedIn's own search UI (`launch destination='search'`) or `web_fetch` to known URLs. ",
     parameters: webSearchParams,
     execute: async ({ query, maxResults }) => {
       const sCfg = readSearchConfig();
+      const mcpSearchUrl = process.env.MCP_SEARCH_URL;
+      if (!mcpSearchUrl || mcpSearchUrl.trim().length === 0) {
+        return {
+          ok: false,
+          error: {
+            kind: "scope_disabled",
+            message:
+              "search MCP not configured. " +
+              "Operator scope: external search APIs (Brave/Tavily) are disabled; await search MCP integration. " +
+              "Use LinkedIn navigation tools (navigate_to_url + inspect + click) for now. " +
+              "MCP_SEARCH_URL not configured; LinkedIn's own search UI or web_fetch to known URLs can be used when appropriate.",
+          },
+        };
+      }
       const braveKey = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
       const tavilyKey = process.env.TAVILY_API_KEY ?? sCfg.tavilyApiKey;
       if (!braveKey && !tavilyKey) {
