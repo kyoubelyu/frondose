@@ -3,6 +3,13 @@ import path from "node:path";
 import type { CdpHandle } from "../cdp/types.js";
 import { getHomeBase } from "../persistence/paths.js";
 
+/** P-55 + P-56b: overlay -> host event envelope. Runtime shape stays open.
+ *
+ * Known `event_type` discriminator values:
+ * - "hello" (P-55): operator clicked the idle pill.
+ * - "tool-call" (P-56b): the agent loop called a tool; payload includes toolName.
+ * - "overlay-reconnected" (P-56b): a new overlay context was captured after an earlier one.
+ */
 export interface OverlayEvent {
   kind: "overlay-event";
   ts: number;

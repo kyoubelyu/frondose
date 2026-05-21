@@ -8,11 +8,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use hyper::body::HttpBody;
 use hyper::{Body, Client, Method, Request, StatusCode};
 use hyperlocal::{UnixClientExt, Uri};
 use rand::RngCore;
 use serde_json::{json, Value};
-use tauri::RunEvent;
+use tauri::{AppHandle, Emitter, RunEvent};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
@@ -76,6 +77,70 @@ async fn mai_identity(state: tauri::State<'_, MaiServeState>) -> Result<Value, S
 #[tauri::command]
 async fn mai_chrome_ensure(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/chrome/ensure", Some(json!({}))).await
+}
+
+#[tauri::command]
+async fn mai_agent_turn(
+    state: tauri::State<'_, MaiServeState>,
+    prompt: String,
+) -> Result<Value, String> {
+    uds_request(state.inner(), Method::POST, "/agent/turn", Some(json!({"prompt": prompt}))).await
+}
+
+#[tauri::command]
+async fn mai_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+    uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
+}
+
+/// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
+async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
+    loop {
+        let client = Client::unix();
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(build_uri(&state.sock_path, "/agent/events"))
+            .header("Authorization", format!("Bearer {}", state.token))
+            .header("Host", "localhost")
+            .body(Body::empty());
+        let req = match req {
+            Ok(r) => r,
+            Err(_) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+        let res = match client.request(req).await {
+            Ok(r) => r,
+            Err(_) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+        if res.status() != StatusCode::OK {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        let mut body = res.into_body();
+        let mut buf = String::new();
+        while let Some(chunk) = body.data().await {
+            let bytes = match chunk {
+                Ok(b) => b,
+                Err(_) => break,
+            };
+            buf.push_str(&String::from_utf8_lossy(&bytes));
+            while let Some(pos) = buf.find("\n\n") {
+                let frame = buf[..pos].to_string();
+                buf = buf[pos + 2..].to_string();
+                if let Some(data) = frame.strip_prefix("data: ") {
+                    if let Ok(val) = serde_json::from_str::<Value>(data.trim()) {
+                        let _ = app.emit("overlay-event", val);
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 }
 
 /// Generate a per-process UDS path under $TMPDIR and a 32-byte hex token.
@@ -185,10 +250,32 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             mai_health,
             mai_identity,
-            mai_chrome_ensure
+            mai_chrome_ensure,
+            mai_agent_turn,
+            mai_agent_abort
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");
+
+    // P-56b: spawn SSE subscriber + SIGTERM handler before the blocking app.run().
+    let app_handle = app.handle().clone();
+    let app_handle_sse = app_handle.clone();
+    let state_for_sse = state.clone();
+    tokio::spawn(async move {
+        run_sse_subscriber(app_handle_sse, state_for_sse).await;
+    });
+
+    let app_handle_sigterm = app_handle.clone();
+    tokio::spawn(async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+                app_handle_sigterm.exit(0);
+            }
+            Err(e) => eprintln!("[mai-tauri] SIGTERM handler init failed: {}", e),
+        }
+    });
 
     app.run(move |_app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {
