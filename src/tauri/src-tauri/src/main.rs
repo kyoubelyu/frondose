@@ -93,6 +93,11 @@ async fn mai_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value
 }
 
 #[tauri::command]
+async fn mai_agent_retry(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+    uds_request(state.inner(), Method::POST, "/agent/retry", Some(json!({}))).await
+}
+
+#[tauri::command]
 async fn mai_set_cron_mode(
     state: tauri::State<'_, MaiServeState>,
     enabled: bool,
@@ -267,6 +272,7 @@ async fn main() {
             mai_chrome_ensure,
             mai_agent_turn,
             mai_agent_abort,
+            mai_agent_retry,
             mai_set_cron_mode
         ])
         .build(tauri::generate_context!())

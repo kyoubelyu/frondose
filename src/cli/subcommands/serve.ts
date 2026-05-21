@@ -8,6 +8,7 @@
 //   POST /agent/turn
 //   GET  /agent/events
 //   POST /agent/abort
+//   POST /agent/retry
 //   GET  /audit/tail
 
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -51,6 +52,10 @@ let passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !==
 // biome-ignore lint/style/useConst: P-57b Step 4b requires module-level passive state.
 let passiveLimiter = new PassiveRateLimiter(passiveRateLimiterOptsFromEnv());
 const passiveProfileCache = new Map<string, { ts: number }>();
+let lastTurnUserPrompt: string | null = null;
+let lastFailedTurnPrompt: string | null = null;
+let retryAttempts = 0;
+const MAX_RETRY_ATTEMPTS = 3;
 
 type PassiveSkipReason = "rate_limit" | "icp_mismatch" | "cache_hit" | "busy" | "disabled";
 
@@ -68,7 +73,9 @@ type SseFrame =
         | "next-actions"
         | "profile-nav"
         | "dialog-mode"
-        | "cron-mode";
+        | "cron-mode"
+        | "cron-tick"
+        | "cron-done";
       turnId?: string;
       toolName?: string;
       toolNames?: string[];
@@ -76,6 +83,7 @@ type SseFrame =
       finishReason?: string;
       aborted?: boolean;
       message?: string;
+      retryable?: boolean;
       event?: OverlayEvent;
       card?: SuggestionCardPayload;
       nextActions?: NextActionsPayload;
@@ -83,6 +91,9 @@ type SseFrame =
       profileHandle?: string;
       dialogMode?: "expand" | "collapse";
       cronEnabled?: boolean;
+      cronRunId?: string;
+      taskHint?: string;
+      ts?: number;
     }
   | { type: "passive-fired"; turnId: string; ts: number; reason: string }
   | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown };
@@ -210,11 +221,30 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     const turnId = randomBytes(4).toString("hex");
     const abortController = new AbortController();
     currentTurn = { turnId, abortController };
+    const taskHint = trimmed.length > 0 ? trimmed.slice(0, 60) : undefined;
+    emitter.emit("sse-frame", {
+      type: "cron-tick",
+      cronRunId,
+      taskHint,
+      ts: Date.now(),
+    });
+    const ctxId = overlayContextId;
+    const client = session.getClient();
+    if (ctxId !== undefined && client) {
+      void callInOverlay(
+        client.handle,
+        ctxId,
+        `function() { if (window.__maiShowCronBanner) window.__maiShowCronBanner(${JSON.stringify(taskHint ?? "")}); }`,
+      );
+    }
     messages.push({ role: "user", content: cronPrompt });
+    // P-57c: cron-fired turns are not retryable in M-1; lastTurnUserPrompt is not set here.
     try {
       await runOneTurn({
         turnId,
         abortController,
+        userPrompt: cronPrompt,
+        isRetryable: false,
         model,
         system,
         messages,
@@ -241,9 +271,20 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         type: "error",
         turnId,
         message: e instanceof Error ? e.message : String(e),
+        retryable: false,
       });
     } finally {
       currentTurn = null;
+      emitter.emit("sse-frame", { type: "cron-done", cronRunId, ts: Date.now() });
+      const doneCtxId = overlayContextId;
+      const doneClient = session.getClient();
+      if (doneCtxId !== undefined && doneClient) {
+        void callInOverlay(
+          doneClient.handle,
+          doneCtxId,
+          "function() { if (window.__maiHideCronBanner) window.__maiHideCronBanner(); }",
+        );
+      }
     }
   }, 60_000);
   cronInterval.unref();
@@ -321,11 +362,14 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         const abortController = new AbortController();
         currentTurn = { turnId, abortController };
         messages.push({ role: "user", content: prompt });
+        lastTurnUserPrompt = prompt;
 
         sendJson(res, 200, { ok: true, turnId, status: "queued" });
         void runOneTurn({
           turnId,
           abortController,
+          userPrompt: prompt,
+          isRetryable: true,
           model,
           system,
           messages,
@@ -377,6 +421,48 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         }
         currentTurn.abortController.abort();
         sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (method === "POST" && url === "/agent/retry") {
+        if (currentTurn !== null) {
+          sendJson(res, 409, { ok: false, reason: "turn_in_progress", turnId: currentTurn.turnId });
+          return;
+        }
+        if (lastFailedTurnPrompt === null) {
+          sendJson(res, 200, { ok: false, reason: "no_failed_turn" });
+          return;
+        }
+        if (retryAttempts >= MAX_RETRY_ATTEMPTS) {
+          sendJson(res, 200, { ok: false, reason: "retry_limit_reached", attempts: retryAttempts });
+          return;
+        }
+        const prompt = lastFailedTurnPrompt ?? lastTurnUserPrompt;
+        lastFailedTurnPrompt = null;
+        retryAttempts++;
+        const turnId = randomBytes(4).toString("hex");
+        const abortController = new AbortController();
+        currentTurn = { turnId, abortController };
+        messages.push({ role: "user", content: prompt });
+        lastTurnUserPrompt = prompt;
+        sendJson(res, 200, { ok: true, turnId, status: "queued", attempts: retryAttempts });
+        void runOneTurn({
+          turnId,
+          abortController,
+          userPrompt: prompt,
+          isRetryable: true,
+          model,
+          system,
+          messages,
+          tools,
+          maxSteps,
+          auditWriter,
+          emitFrame: (frame) => emitter.emit("sse-frame", frame),
+          session,
+          getOverlayContextId: () => overlayContextId,
+        }).finally(() => {
+          currentTurn = null;
+        });
         return;
       }
 
@@ -482,11 +568,31 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       emitter.emit("sse-frame", { type: "dialog-mode", dialogMode: "expand" });
       return;
     }
+    if (event.event_type === "retry") {
+      if (currentTurn !== null) return;
+      if (lastFailedTurnPrompt === null) return;
+      if (retryAttempts >= MAX_RETRY_ATTEMPTS) {
+        emitter.emit("sse-frame", {
+          type: "error",
+          message: `retry limit reached (${retryAttempts}/${MAX_RETRY_ATTEMPTS})`,
+          retryable: false,
+        });
+        return;
+      }
+      const prompt = lastFailedTurnPrompt ?? lastTurnUserPrompt;
+      lastFailedTurnPrompt = null;
+      retryAttempts++;
+      void triggerCardActionTurn(prompt);
+      return;
+    }
     if (event.event_type === "prompt") {
       const text = overlayStringField(event, "text");
-      if (text && text.length > 0) {
-        void triggerCardActionTurn(text);
+      if (!text || text.length === 0) return;
+      if (currentTurn !== null) {
+        void steerThenTrigger(text);
+        return;
       }
+      void triggerCardActionTurn(text);
       return;
     }
     if (event.event_type === "card-action") {
@@ -652,10 +758,13 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       '(b) when disqualified or extraction failed — {dismissed:true, reason:"..."}. ' +
       "Stop after suggest_card. Do NOT take any outreach action in this sub-turn.";
     messages.push({ role: "user", content: analyzePrompt });
+    lastTurnUserPrompt = analyzePrompt;
     try {
       await runOneTurn({
         turnId,
         abortController,
+        userPrompt: analyzePrompt,
+        isRetryable: false,
         model,
         system,
         messages,
@@ -675,6 +784,28 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     }
   }
 
+  async function steerThenTrigger(newPrompt: string): Promise<void> {
+    if (currentTurn === null) {
+      void triggerCardActionTurn(newPrompt);
+      return;
+    }
+    const previousTurnId = currentTurn.turnId;
+    currentTurn.abortController.abort();
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      if (currentTurn === null || currentTurn.turnId !== previousTurnId) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (currentTurn !== null && currentTurn.turnId === previousTurnId) {
+      emitter.emit("sse-frame", {
+        type: "error",
+        message: "steer timeout - aborted turn never cleared currentTurn",
+      });
+      return;
+    }
+    void triggerCardActionTurn(newPrompt);
+  }
+
   async function triggerCardActionTurn(actionPrompt: string): Promise<void> {
     if (currentTurn !== null) {
       emitter.emit("sse-frame", {
@@ -687,10 +818,13 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     const abortController = new AbortController();
     currentTurn = { turnId, abortController };
     messages.push({ role: "user", content: actionPrompt });
+    lastTurnUserPrompt = actionPrompt;
     try {
       await runOneTurn({
         turnId,
         abortController,
+        userPrompt: actionPrompt,
+        isRetryable: true,
         model,
         system,
         messages,
@@ -759,6 +893,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 interface RunOneTurnOpts {
   turnId: string;
   abortController: AbortController;
+  userPrompt: string;
+  isRetryable: boolean;
   model: ReturnType<typeof resolveModel>;
   system: string;
   messages: CoreMessage[];
@@ -841,18 +977,42 @@ async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
     const finishReason = abortController.signal.aborted ? "aborted" : "stop";
     emitFrame({ type: "done", turnId, finishReason, aborted: abortController.signal.aborted });
     if (!abortController.signal.aborted) {
+      lastFailedTurnPrompt = null;
+      retryAttempts = 0;
       const ctxId = getOverlayContextId();
       const client = session.getClient();
       if (ctxId !== undefined && client) {
-        void callInOverlay(client.handle, ctxId, 'function() { window.__maiUpdateTicker("done"); }');
+        void callInOverlay(
+          client.handle,
+          ctxId,
+          'function() { window.__maiUpdateTicker("done"); if (window.__maiHideRetry) window.__maiHideRetry(); }',
+        );
       }
     }
   } catch (e) {
-    if (abortController.signal.aborted) {
+    const aborted = opts.abortController.signal.aborted;
+    if (aborted) {
+      lastFailedTurnPrompt = null;
       emitFrame({ type: "done", turnId, finishReason: "aborted", aborted: true });
       return;
     }
-    emitFrame({ type: "error", turnId, message: e instanceof Error ? e.message : String(e) });
+    if (opts.isRetryable) {
+      lastFailedTurnPrompt = opts.userPrompt;
+    } else {
+      lastFailedTurnPrompt = null;
+    }
+    const message = e instanceof Error ? e.message : String(e);
+    const retryable = lastFailedTurnPrompt !== null;
+    emitFrame({ type: "error", turnId, message, retryable });
+    const ctxId = getOverlayContextId();
+    const client = session.getClient();
+    if (ctxId !== undefined && client) {
+      const messageJson = JSON.stringify(message);
+      const fn = retryable
+        ? `function() { if (window.__maiShowRetry) window.__maiShowRetry(${messageJson}); }`
+        : "function() { if (window.__maiHideRetry) window.__maiHideRetry(); }";
+      void callInOverlay(client.handle, ctxId, fn);
+    }
   }
 }
 
