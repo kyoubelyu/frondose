@@ -111,6 +111,21 @@ async fn mai_set_cron_mode(
     .await
 }
 
+// P-57g — passive auto-react toggle (mirrors mai_set_cron_mode).
+#[tauri::command]
+async fn mai_set_passive_mode(
+    state: tauri::State<'_, MaiServeState>,
+    enabled: bool,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/agent/passive-mode",
+        Some(json!({"enabled": enabled})),
+    )
+    .await
+}
+
 /// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
 async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
     loop {
@@ -273,7 +288,8 @@ async fn main() {
             mai_agent_turn,
             mai_agent_abort,
             mai_agent_retry,
-            mai_set_cron_mode
+            mai_set_cron_mode,
+            mai_set_passive_mode
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");

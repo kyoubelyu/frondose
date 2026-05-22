@@ -46,8 +46,9 @@ export interface ServeOpts {
 const AUDIT_PATH = (): string => join(getHomeBase(), ".mai", "agent", "audit.jsonl");
 const PASSIVE_PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
 
-// biome-ignore lint/style/useConst: P-57b Step 4b requires module-level passive state.
-let passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !== "off";
+// P-57g (D-DOGFOOD-07): passive auto-react HIDDEN by default — opt in via MAI.app toggle
+// (mai_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
+let passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on";
 // biome-ignore lint/style/useConst: P-57b Step 4b requires module-level passive state.
 let passiveLimiter = new PassiveRateLimiter(passiveRateLimiterOptsFromEnv());
 const passiveProfileCache = new Map<string, { ts: number }>();
@@ -74,7 +75,8 @@ type SseFrame =
         | "dialog-mode"
         | "cron-mode"
         | "cron-tick"
-        | "cron-done";
+        | "cron-done"
+        | "passive-mode";
       turnId?: string;
       toolName?: string;
       toolNames?: string[];
@@ -90,6 +92,7 @@ type SseFrame =
       profileHandle?: string;
       dialogMode?: "expand" | "collapse";
       cronEnabled?: boolean;
+      passiveEnabled?: boolean; // P-57g — passive-mode SSE payload
       cronRunId?: string;
       taskHint?: string;
       ts?: number;
@@ -475,6 +478,19 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         cronEnabled = enabled;
         emitter.emit("sse-frame", { type: "cron-mode", cronEnabled: enabled });
         sendJson(res, 200, { ok: true, cronEnabled });
+        return;
+      }
+
+      if (method === "POST" && url === "/agent/passive-mode") {
+        const body = await readJsonBody(req);
+        const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
+        if (enabled === null) {
+          sendJson(res, 400, { ok: false, reason: "missing_enabled" });
+          return;
+        }
+        passiveEnabled = enabled;
+        emitter.emit("sse-frame", { type: "passive-mode", passiveEnabled: enabled });
+        sendJson(res, 200, { ok: true, passiveEnabled });
         return;
       }
 

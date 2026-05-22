@@ -39,6 +39,7 @@ type SseFrame =
   | { type: "profile-nav"; profileHandle?: string }
   | { type: "dialog-mode"; dialogMode?: "expand" | "collapse" }
   | { type: "cron-mode"; cronEnabled?: boolean }
+  | { type: "passive-mode"; passiveEnabled?: boolean }
   | { type: "cron-tick"; cronRunId: string; taskHint?: string; ts: number }
   | { type: "cron-done"; cronRunId: string; ts: number };
 
@@ -89,12 +90,14 @@ const statusEl = mustGet<TextElementLike>("status");
 const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
 const autoModeBtnEl = mustGet<ButtonElementLike>("auto-mode-toggle");
+const passiveModeBtnEl = mustGet<ButtonElementLike>("passive-mode-toggle");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
 let cronEnabled = true;
+let passiveEnabled = false; // P-57g — passive auto-react default OFF
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
@@ -176,6 +179,19 @@ async function toggleAutoMode(): Promise<void> {
     }
   } catch {
     // The next SSE cron-mode event owns eventual resync.
+  }
+}
+
+async function togglePassiveMode(): Promise<void> {
+  const next = !passiveEnabled;
+  try {
+    const r = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", { enabled: next });
+    if (r.ok) {
+      passiveEnabled = r.passiveEnabled ?? next;
+      passiveModeBtnEl.textContent = `Magical click: ${passiveEnabled ? "ON" : "OFF"}`;
+    }
+  } catch {
+    // The next SSE passive-mode event owns eventual resync.
   }
 }
 
@@ -344,6 +360,10 @@ function handleEvent(payload: SseFrame): void {
       cronEnabled = payload.cronEnabled ?? cronEnabled;
       autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
       break;
+    case "passive-mode":
+      passiveEnabled = payload.passiveEnabled ?? passiveEnabled;
+      passiveModeBtnEl.textContent = `Magical click: ${passiveEnabled ? "ON" : "OFF"}`;
+      break;
     case "cron-tick":
       cronTickBannerEl.textContent = `\u23f0 cron active${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
       cronTickBannerEl.classList.remove("hidden");
@@ -367,7 +387,11 @@ retryBtnEl.addEventListener("click", () => {
 autoModeBtnEl.addEventListener("click", () => {
   void toggleAutoMode();
 });
+passiveModeBtnEl.addEventListener("click", () => {
+  void togglePassiveMode();
+});
 autoModeBtnEl.textContent = "Auto-mode: ON";
+passiveModeBtnEl.textContent = "Magical click: OFF";
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();
 });
