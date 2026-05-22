@@ -714,12 +714,38 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     return "";
   }
 
+  function passiveRefSummary(eventType: string, ctx: Record<string, unknown>): string {
+    if (eventType === "click") {
+      const ref = (ctx.ref as Record<string, string> | undefined) ?? {};
+      return (
+        [ref.ariaLabel, ref.controlName, ref.text]
+          .find((v) => typeof v === "string" && v.trim().length > 0)
+          ?.slice(0, 60) ?? "an element"
+      );
+    }
+    if (eventType === "input") {
+      const val = String((ctx.value as string | undefined) ?? "");
+      return val.slice(0, 40) || "an input";
+    }
+    if (eventType === "profile-nav") return String((ctx.handle as string | undefined) ?? "a profile");
+    return "the page";
+  }
+
+  function passiveTicker(text: string): void {
+    const ctxId = overlayContextId;
+    const client = session.getClient();
+    if (ctxId === undefined || !client) return;
+    void callInOverlay(client.handle, ctxId, `function() { window.__maiUpdateTicker(${JSON.stringify(text)}); }`);
+  }
+
   async function triggerPassiveAnalysis(eventType: string, ctx: Record<string, unknown>): Promise<void> {
     const passiveMessages: CoreMessage[] = [];
     const prompt = buildPassivePrompt(eventType, ctx);
     if (!prompt) return;
     passiveMessages.push({ role: "user", content: prompt });
     const turnId = randomUUID();
+    // P-57f (D-DOGFOOD-06): real-time ticker feedback — passive turns were silent.
+    passiveTicker(`mai · observing ${eventType}: ${passiveRefSummary(eventType, ctx)}…`);
     try {
       await runAgentLoop({
         model,
@@ -754,6 +780,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         },
       });
       emitSse({ type: "passive-fired", turnId, ts: Date.now(), reason: eventType });
+      // P-57f: surface a brief result on the ticker (✓-prefix → overlay auto-clears after 5s, §3.2).
+      passiveTicker(`✓ noted: ${passiveRefSummary(eventType, ctx)}`);
     } catch (e) {
       emitSse({
         type: "error",

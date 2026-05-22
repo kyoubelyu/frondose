@@ -223,7 +223,7 @@ export const OVERLAY_BOOTSTRAP_JS = `
     }
     maiDialogState.ticker = text || null;
     maiWriteDialogState(maiDialogState);
-    if (text === 'done') {
+    if (text === 'done' || (typeof text === 'string' && text.charAt(0) === '✓')) {
       resetTimer = setTimeout(function() {
         if (dialogExpanded && dialogElements && dialogElements.ticker) {
           dialogElements.ticker.textContent = '';
