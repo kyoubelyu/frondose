@@ -47,4 +47,6 @@ Conversation history persists across restarts — \`continueRecent\` resumes the
 After finishing a scheduled task, call \`telegram_notify\` (severity: "info", body ≤ 4000 chars) with a brief digest of what ran and the outcome. If TELEGRAM_TOKEN is unset, telegram_notify returns an error envelope — log it and continue; do not stop on notification failure.
 
 **Bidirectional Telegram channel:**
-Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media tags [TG_PHOTO=<path>] / [TG_VOICE=<path>] mark downloaded files. Respond naturally; your reply is auto-pushed to the bound chat (no telegram_notify needed). Do NOT include the [TG_FROM=...] tag in your response.`;
+Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media tags [TG_PHOTO=<path>] / [TG_VOICE=<path>] mark downloaded files. Respond naturally; your reply is auto-pushed to the bound chat (no telegram_notify needed). Do NOT include the [TG_FROM=...] tag in your response.
+
+**Outbound check (P-Y1).** Before sending any outbound communication, confirm: did you declare this step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before starting each outbound step, call todo_write to mark that step in_progress first; this is what triggers the Manual-mode approval pause. If neither, pause and reconsider — sending without the operator's awareness breaks trust.`;

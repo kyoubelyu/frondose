@@ -7,9 +7,11 @@ import type { ControlSignals } from "./stop.js";
 import { makeStopTool } from "./stop.js";
 import { suggestCardTool } from "./suggestCard.js";
 import { suggestNextActionsTool } from "./suggestNextActions.js";
+import { todoWriteTool } from "./todoWrite.js";
 
 export { echoTool } from "./echo.js";
 export type { ControlSignals } from "./stop.js";
+export { todoWriteSchema, todoWriteTool } from "./todoWrite.js";
 
 export interface ControlToolDeps {
   telegramTool: Tool;
@@ -37,6 +39,7 @@ export function makeControlTools(
     sleep: sleepTool,
     suggest_card: suggestCardTool,
     suggest_next_actions: suggestNextActionsTool,
+    todo_write: todoWriteTool,
   };
   if (deps) {
     out.escalate_for_capability = makeEscalateTool({

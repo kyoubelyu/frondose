@@ -126,6 +126,65 @@ async fn mai_set_passive_mode(
     .await
 }
 
+#[tauri::command]
+async fn mai_workflow_approve(
+    state: tauri::State<'_, MaiServeState>,
+    workflow_id: String,
+    step_id: String,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/workflow/approve",
+        Some(json!({"workflowId": workflow_id, "stepId": step_id})),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn mai_workflow_decline(
+    state: tauri::State<'_, MaiServeState>,
+    workflow_id: String,
+    step_id: String,
+    reason: Option<String>,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/workflow/decline",
+        Some(json!({"workflowId": workflow_id, "stepId": step_id, "reason": reason})),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn mai_workflow_handoff(
+    state: tauri::State<'_, MaiServeState>,
+    workflow_id: String,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/workflow/handoff",
+        Some(json!({"workflowId": workflow_id})),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn mai_workflow_cancel(
+    state: tauri::State<'_, MaiServeState>,
+    workflow_id: String,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/workflow/cancel",
+        Some(json!({"workflowId": workflow_id})),
+    )
+    .await
+}
+
 /// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
 async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
     loop {
@@ -289,7 +348,11 @@ async fn main() {
             mai_agent_abort,
             mai_agent_retry,
             mai_set_cron_mode,
-            mai_set_passive_mode
+            mai_set_passive_mode,
+            mai_workflow_approve,
+            mai_workflow_decline,
+            mai_workflow_handoff,
+            mai_workflow_cancel
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");

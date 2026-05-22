@@ -131,3 +131,10 @@ export function resolveSoulBand(override: string | null, identity: IdentityRecor
   if (override !== null && override.trim() !== "") return override;
   return composeSoulBand(identity);
 }
+
+export function soulModeFragment(mode: "manual" | "auto"): string {
+  if (mode === "auto") {
+    return "You are in AUTO mode (cron-driven or operator hand-off). Execute your workflow plan autonomously without pausing for outbound-approval — the operator has pre-approved. Still call telegram_notify to report significant outcomes.";
+  }
+  return "You are in MANUAL mode (operator-prompt-driven). Before any outbound communication step (DM, connection request with note, post, comment), declare it in your todo plan with requiresApproval:true and mark it in_progress — the operator will approve before you proceed.";
+}

@@ -50,8 +50,9 @@ const FAKE_PERSISTENCE = {
 
 const FAKE_CONTROL = { requestStop: () => {} };
 
-// Complete enumeration — 32 tools (P-44: updated from 24; adds P-28.5 browser, P-26 server-coords, P-31 scheduler, P-39 memory)
-const EXPECTED_32_TOOLS = [
+// Complete enumeration — 35 tools (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions;
+// P-44: updated from 24; adds P-28.5 browser, P-26 server-coords, P-31 scheduler, P-39 memory)
+const EXPECTED_35_TOOLS = [
   // P-1 (1)
   "echo",
   // P-4 memory (2)
@@ -87,6 +88,11 @@ const EXPECTED_32_TOOLS = [
   "stop",
   "sleep",
   "escalate_for_capability",
+  // P-57a suggestion tools (2)
+  "suggest_card",
+  "suggest_next_actions",
+  // P-Y1 workflow tool (1)
+  "todo_write",
   // P-9 webTools (3)
   "web_fetch",
   "web_search",
@@ -130,7 +136,7 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 7 tools (echo + web + pu
 
 // ─── T-MakeAllTools.3: full 4-arg → exactly 32 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 32 tools (G-P9.14; P-44: updated from 24)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 35 tools (G-P9.14; P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: updated from 24)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -138,8 +144,8 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 32 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      32,
-      `must have exactly 32 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      35,
+      `must have exactly 35 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -148,14 +154,14 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 32 tools (G-P9.14; P
 
 // ─── T-MakeAllTools.4: all 32 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 32 expected tool names present (enumeration; P-44: updated from 24)", () => {
+test("T-MakeAllTools.4: all 35 expected tool names present (enumeration; P-Y1: updated from 32)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
     const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL, runner);
     const keys = Object.keys(t).sort();
 
-    assert.deepEqual(keys, EXPECTED_32_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
+    assert.deepEqual(keys, EXPECTED_35_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
 
     // Spot-check P-9 web tools
     assert.ok("web_fetch" in t, "web_fetch must be in tool set (P-9)");
@@ -274,13 +280,13 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
 
 // ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 32 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 32 tools (P-44: updated from 24)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 35 tools (P-Y1: updated from 32; +todo_write/suggest_card/suggest_next_actions)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
   assert.equal(
     count,
-    32,
-    `3-arg makeAllTools must return 32 tools (P-44: was 24 in P-9; +8 via P-28.5/P-26/P-31/P-39); got ${count}`,
+    35,
+    `3-arg makeAllTools must return 35 tools (P-Y1: was 32 pre-P-57a; +suggest_card/suggest_next_actions/todo_write); got ${count}`,
   );
 });
 

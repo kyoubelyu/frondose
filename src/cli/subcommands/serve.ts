@@ -25,11 +25,13 @@ import { resolveModel } from "../../agent/modelResolver.js";
 import { BOUNDARY } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
-import { resolveSoulBand } from "../../agent/systemPrompt/soul.js";
+import { resolveSoulBand, soulModeFragment } from "../../agent/systemPrompt/soul.js";
+import { createWorkflowController, type WorkflowController } from "../../agent/workflow/controller.js";
+import type { WorkflowSseFrame } from "../../agent/workflow/types.js";
 import { createLinkedinSession } from "../../linkedin/session.js";
 import { attachEventBus, type OverlayEvent } from "../../overlay/eventBus.js";
 import { callInOverlay, subscribeContextId } from "../../overlay/inject.js";
-import { makeAuditWriter } from "../../persistence/audit.js";
+import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { getHomeBase } from "../../persistence/paths.js";
@@ -98,7 +100,8 @@ type SseFrame =
       ts?: number;
     }
   | { type: "passive-fired"; turnId: string; ts: number; reason: string }
-  | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown };
+  | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown }
+  | WorkflowSseFrame;
 
 interface SuggestionCardPayload {
   dismissed?: boolean;
@@ -148,7 +151,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const identity = readIdentity(DEFAULT_IDENTITY_PATH());
   const system = composeSystemPrompt({
     boundary: BOUNDARY,
-    soul: resolveSoulBand(cfg.soul.override, identity),
+    soul: `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`,
     checkpoint: CHECKPOINT,
   });
   const model = resolveModel({});
@@ -174,6 +177,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   });
 
   const emitter: ServeEmitter = new EventEmitter();
+  const workflow = createWorkflowController({
+    emitFrame: (frame) => emitter.emit("sse-frame", frame),
+    writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
+  });
   const sseClients = new Set<ServerResponse>();
   const emitSse = (frame: SseFrame): void => {
     emitter.emit("sse-frame", frame);
@@ -219,7 +226,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       task.replace(/\\/g, "\\\\").replace(/\r/g, "").replace(/\n/g, " ").replace(/"/g, '\\"');
     const trimmed = next.task.trim();
     const taskLine = trimmed.length > 0 ? `\n(scheduled task: "${escapeTask(trimmed)}")` : "";
-    const cronPrompt = `[TIME ${localHH}:${localMM}]\n[CRON_RUN_ID=${cronRunId}]${taskLine}`;
+    const cronPrompt = `${soulModeFragment("auto")}\n\n[TIME ${localHH}:${localMM}]\n[CRON_RUN_ID=${cronRunId}]${taskLine}`;
     const turnId = randomBytes(4).toString("hex");
     const abortController = new AbortController();
     currentTurn = { turnId, abortController };
@@ -256,6 +263,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         emitFrame: (frame) => emitter.emit("sse-frame", frame),
         session,
         getOverlayContextId: () => overlayContextId,
+        workflow,
+        isCronTurn: true,
       });
       const all = readSchedule(schedulePath);
       const idx = all.findIndex((record) => record.id === next.id);
@@ -381,6 +390,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
           emitFrame: (frame) => emitter.emit("sse-frame", frame),
           session,
           getOverlayContextId: () => overlayContextId,
+          workflow,
+          isCronTurn: false,
         })
           .catch((e) => {
             emitter.emit("sse-frame", {
@@ -462,9 +473,19 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
           emitFrame: (frame) => emitter.emit("sse-frame", frame),
           session,
           getOverlayContextId: () => overlayContextId,
+          workflow,
+          isCronTurn: false,
         }).finally(() => {
           currentTurn = null;
         });
+        return;
+      }
+
+      if (method === "POST" && url.startsWith("/workflow/")) {
+        const body = await readJsonBody(req);
+        const r = workflow.handleEndpoint(url, body);
+        if (r.resumePrompt) void resumeWorkflowTurn(r.resumePrompt);
+        sendJson(res, r.status, r.response);
         return;
       }
 
@@ -838,6 +859,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         emitFrame: (frame) => emitter.emit("sse-frame", frame),
         session,
         getOverlayContextId: () => overlayContextId,
+        workflow,
+        isCronTurn: false,
       });
     } catch (e) {
       emitter.emit("sse-frame", {
@@ -898,6 +921,8 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
         emitFrame: (frame) => emitter.emit("sse-frame", frame),
         session,
         getOverlayContextId: () => overlayContextId,
+        workflow,
+        isCronTurn: false,
       });
     } catch (e) {
       emitter.emit("sse-frame", {
@@ -908,6 +933,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     } finally {
       currentTurn = null;
     }
+  }
+
+  async function resumeWorkflowTurn(prompt: string): Promise<void> {
+    await steerThenTrigger(prompt);
   }
 
   const shutdown = (signal: string) => {
@@ -968,6 +997,8 @@ interface RunOneTurnOpts {
   emitFrame: (frame: SseFrame) => void;
   session: ReturnType<typeof createLinkedinSession>;
   getOverlayContextId: () => number | undefined;
+  workflow: WorkflowController;
+  isCronTurn: boolean;
 }
 
 async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
@@ -989,7 +1020,8 @@ async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
         await opts.auditWriter(step);
         const toolCalls = step.toolCalls as unknown as Array<{ toolName: string }>;
         const toolResults =
-          (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown }> }).toolResults ?? [];
+          (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown; args?: unknown }> })
+            .toolResults ?? [];
         for (const tr of toolResults) {
           if (tr.toolName === "suggest_card") {
             const card = (tr.result as unknown as { ok: boolean }) ?? {};
@@ -1016,6 +1048,8 @@ async function runOneTurn(opts: RunOneTurnOpts): Promise<void> {
             }
           }
         }
+        const { abort } = opts.workflow.onToolResults(toolResults, { turnId, isCronTurn: opts.isCronTurn });
+        if (abort) opts.abortController.abort();
         emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
       },
       onText: (delta) => {

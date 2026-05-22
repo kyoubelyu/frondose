@@ -256,8 +256,8 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 27 keys including 'q
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 32 keys (P-44: was 24 in P-9; base 7 + browser 12 + persistence 8 + control 5)", () => {
-  // P-44 update: 7 base + 12 browser + 8 persistence + 5 control = 32 (was 24 in P-9).
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: was 24 in P-9; base 7 + browser 12 + persistence 8 + control 8)", () => {
+  // P-Y1 update: 7 base + 12 browser + 8 persistence + 8 control (was 5 in P-44, +suggest_card/suggest_next_actions/todo_write) = 35.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -308,20 +308,23 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 32 keys (P-
     "remember",
     "search_memory",
     "set_memory_note",
-    // control (5)
+    // control (8: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write)
     "escalate_for_capability",
     "gh_issue",
     "sleep",
     "stop",
     "telegram_notify",
+    "suggest_card",
+    "suggest_next_actions",
+    "todo_write",
   ].sort();
 
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 32 keys in P-44; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 35 keys in P-Y1; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 32, `T-M_p6.21: must have exactly 32 tools in P-44; got ${keys.length}`);
+  assert.equal(keys.length, 35, `T-M_p6.21: must have exactly 35 tools in P-Y1; got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -338,7 +341,13 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 32 keys (P-
   assert.ok("set_memory_note" in t, "T-M_p6.21: set_memory_note must be registered (P-39)");
   assert.ok("get_memory_note" in t, "T-M_p6.21: get_memory_note must be registered (P-39)");
 
-  console.log(`T-M_p6.21: makeAllTools(session, persistence, control) → 32 keys (P-44 updated) ✓`);
+  // Spot-check P-57a suggestion tools
+  assert.ok("suggest_card" in t, "T-M_p6.21: suggest_card must be registered (P-57a)");
+  assert.ok("suggest_next_actions" in t, "T-M_p6.21: suggest_next_actions must be registered (P-57a)");
+  // Spot-check P-Y1 workflow tool
+  assert.ok("todo_write" in t, "T-M_p6.21: todo_write must be registered (P-Y1)");
+
+  console.log(`T-M_p6.21: makeAllTools(session, persistence, control) → 35 keys (P-Y1 updated) ✓`);
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
@@ -367,8 +376,8 @@ test("T-M_p6.22: makeAllTools() returns 7 keys — P-44 update; base = echo+3 we
 
 // ─── T-M_p6.23 — session + control (no persistence) ──────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 24 keys — P-44 update (was 19 in P-9; base 7 + browser 12 + control 5)", () => {
-  // P-44 update: 7 base + 12 browser + 5 control = 24 (was 19 before P-26/P-31/P-28.5 additions).
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P-Y1 update (base 7 + browser 12 + control 8; was 24 in P-44)", () => {
+  // P-Y1 update: 7 base + 12 browser + 8 control (was 5 in P-44, +suggest_card/suggest_next_actions/todo_write) = 27.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -406,20 +415,23 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 24 keys — P
     "scroll",
     "type",
     "upload",
-    // control (5)
+    // control (8: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write)
     "escalate_for_capability",
     "gh_issue",
     "sleep",
     "stop",
     "telegram_notify",
+    "suggest_card",
+    "suggest_next_actions",
+    "todo_write",
   ].sort();
 
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 24 keys in P-44; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 27 keys in P-Y1; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 24, `T-M_p6.23: must have exactly 24 tools in P-44; got ${keys.length}`);
+  assert.equal(keys.length, 27, `T-M_p6.23: must have exactly 27 tools in P-Y1; got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");

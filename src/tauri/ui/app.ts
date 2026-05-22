@@ -25,6 +25,16 @@ type ChromeResp = ChromeOk | ChromeErr;
 type TurnOk = { ok: true; turnId: string };
 type TurnErr = { ok: false; reason: string; turnId?: string; attempts?: number };
 type TurnResp = TurnOk | TurnErr;
+type WorkflowStepState = "pending" | "in_progress" | "completed" | "failed";
+type WorkflowStepView = { id: string; title: string; requiresApproval: boolean; state: WorkflowStepState };
+type WorkflowView = {
+  workflowId: string;
+  title: string;
+  approvalMode: "manual" | "auto";
+  steps: WorkflowStepView[];
+  pendingStepId: string | null;
+  notice: string;
+};
 
 type SseFrame =
   | { type: "tool-call"; turnId: string; toolName: string }
@@ -41,7 +51,20 @@ type SseFrame =
   | { type: "cron-mode"; cronEnabled?: boolean }
   | { type: "passive-mode"; passiveEnabled?: boolean }
   | { type: "cron-tick"; cronRunId: string; taskHint?: string; ts: number }
-  | { type: "cron-done"; cronRunId: string; ts: number };
+  | { type: "cron-done"; cronRunId: string; ts: number }
+  | {
+      type: "workflow-proposed";
+      workflowId: string;
+      title: string;
+      approvalMode: "manual" | "auto";
+      steps: WorkflowStepView[];
+    }
+  | { type: "workflow-step-advanced"; workflowId: string; stepId: string; nextState: WorkflowStepState }
+  | { type: "workflow-approval-pending"; workflowId: string; stepId: string; stepTitle: string }
+  | { type: "workflow-approval-resolved"; workflowId: string; stepId: string; decision: "approved" | "declined" }
+  | { type: "workflow-mode-changed"; workflowId: string; approvalMode: "manual" | "auto" }
+  | { type: "workflow-completed"; workflowId: string; finalState: string }
+  | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" };
 
 interface ClassListLike {
   add(token: string): void;
@@ -52,6 +75,10 @@ interface ClassListLike {
 interface TextElementLike {
   classList: ClassListLike;
   textContent: string | null;
+}
+
+interface ElementLike extends TextElementLike {
+  appendChild(child: ElementLike): void;
 }
 
 interface ButtonElementLike extends TextElementLike {
@@ -68,6 +95,7 @@ interface InputElementLike extends TextElementLike {
 
 interface DocumentLike {
   getElementById(id: string): TextElementLike | null;
+  createElement(tagName: string): ElementLike;
 }
 
 const windowRef = globalThis as unknown as Window & { document: DocumentLike };
@@ -96,8 +124,17 @@ const outputEl = mustGet<TextElementLike>("output");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
+const workflowCardEl = mustGet<TextElementLike>("workflow-card");
+const workflowTitleEl = mustGet<TextElementLike>("workflow-title");
+const workflowModeEl = mustGet<TextElementLike>("workflow-mode");
+const workflowStepsEl = mustGet<ElementLike>("workflow-steps");
+const workflowNoticeEl = mustGet<TextElementLike>("workflow-notice");
+const workflowApproveBtnEl = mustGet<ButtonElementLike>("workflow-approve-btn");
+const workflowDeclineBtnEl = mustGet<ButtonElementLike>("workflow-decline-btn");
+const workflowHandoffBtnEl = mustGet<ButtonElementLike>("workflow-handoff-btn");
 let cronEnabled = true;
 let passiveEnabled = false; // P-57g — passive auto-react default OFF
+let workflowView: WorkflowView | null = null;
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
@@ -300,6 +337,61 @@ async function performRetry(): Promise<void> {
   }
 }
 
+function renderWorkflowCard(): void {
+  if (workflowView === null) {
+    workflowCardEl.classList.add("hidden");
+    return;
+  }
+  workflowCardEl.classList.remove("hidden");
+  workflowTitleEl.textContent = `mai · ${workflowView.title}`;
+  workflowModeEl.textContent = workflowView.approvalMode === "auto" ? "Auto" : "Manual";
+  workflowStepsEl.textContent = "";
+  for (const step of workflowView.steps) {
+    const item = windowRef.document.createElement("li") as unknown as ElementLike;
+    item.classList.toggle("pending-approval", step.id === workflowView.pendingStepId);
+    const marker = step.requiresApproval ? " approval" : "";
+    item.textContent = `${step.state.replace("_", " ")} · ${step.title}${marker}`;
+    workflowStepsEl.appendChild(item);
+  }
+  workflowNoticeEl.textContent = workflowView.notice;
+  workflowNoticeEl.classList.toggle("hidden", workflowView.notice.length === 0);
+  const waiting = workflowView.pendingStepId !== null;
+  workflowApproveBtnEl.classList.toggle("hidden", !waiting);
+  workflowDeclineBtnEl.classList.toggle("hidden", !waiting);
+  workflowHandoffBtnEl.classList.toggle("hidden", workflowView.approvalMode === "auto");
+}
+
+function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepState, requiresApproval: boolean): void {
+  if (workflowView === null) return;
+  const existing = workflowView.steps.find((step) => step.id === stepId);
+  if (existing) {
+    existing.title = title;
+    existing.state = state;
+    existing.requiresApproval = existing.requiresApproval || requiresApproval;
+    return;
+  }
+  workflowView.steps.push({ id: stepId, title, state, requiresApproval });
+}
+
+async function approveWorkflowStep(): Promise<void> {
+  if (workflowView?.pendingStepId === null || workflowView === null) return;
+  await invoke("mai_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
+}
+
+async function declineWorkflowStep(): Promise<void> {
+  if (workflowView?.pendingStepId === null || workflowView === null) return;
+  await invoke("mai_workflow_decline", {
+    workflowId: workflowView.workflowId,
+    stepId: workflowView.pendingStepId,
+    reason: "operator_declined",
+  });
+}
+
+async function handoffWorkflow(): Promise<void> {
+  if (workflowView === null) return;
+  await invoke("mai_workflow_handoff", { workflowId: workflowView.workflowId });
+}
+
 function handleEvent(payload: SseFrame): void {
   switch (payload.type) {
     case "tool-call":
@@ -372,6 +464,69 @@ function handleEvent(payload: SseFrame): void {
       cronTickBannerEl.classList.add("hidden");
       cronTickBannerEl.textContent = "";
       break;
+    case "workflow-proposed":
+      workflowView = {
+        workflowId: payload.workflowId,
+        title: payload.title,
+        approvalMode: payload.approvalMode,
+        steps: payload.steps,
+        pendingStepId: null,
+        notice: "",
+      };
+      renderWorkflowCard();
+      break;
+    case "workflow-step-advanced":
+      if (workflowView?.workflowId === payload.workflowId) {
+        const step = workflowView.steps.find((item) => item.id === payload.stepId);
+        if (step) step.state = payload.nextState;
+        renderWorkflowCard();
+      }
+      break;
+    case "workflow-approval-pending":
+      if (workflowView === null) {
+        workflowView = {
+          workflowId: payload.workflowId,
+          title: "workflow",
+          approvalMode: "manual",
+          steps: [],
+          pendingStepId: null,
+          notice: "",
+        };
+      }
+      workflowView.pendingStepId = payload.stepId;
+      workflowView.notice = "Approval required before outbound action.";
+      upsertWorkflowStep(payload.stepId, payload.stepTitle, "in_progress", true);
+      renderWorkflowCard();
+      break;
+    case "workflow-approval-resolved":
+      if (workflowView?.workflowId === payload.workflowId) {
+        workflowView.pendingStepId = null;
+        workflowView.notice = payload.decision === "approved" ? "Approved. Resuming workflow." : "Declined.";
+        renderWorkflowCard();
+      }
+      break;
+    case "workflow-mode-changed":
+      if (workflowView?.workflowId === payload.workflowId) {
+        workflowView.approvalMode = payload.approvalMode;
+        workflowView.pendingStepId = null;
+        workflowView.notice = "Auto mode enabled.";
+        renderWorkflowCard();
+      }
+      break;
+    case "workflow-completed":
+      if (workflowView?.workflowId === payload.workflowId) {
+        workflowView = null;
+        renderWorkflowCard();
+      }
+      break;
+    case "commit-warning":
+      if (workflowView !== null && (payload.workflowId === null || payload.workflowId === workflowView.workflowId)) {
+        workflowView.notice = `Advisory: possible outbound click (${payload.label}).`;
+        renderWorkflowCard();
+      } else {
+        statusEl.textContent = `Advisory: possible outbound click (${payload.label})`;
+      }
+      break;
   }
 }
 
@@ -383,6 +538,15 @@ sendEl.addEventListener("click", () => {
 });
 retryBtnEl.addEventListener("click", () => {
   void performRetry();
+});
+workflowApproveBtnEl.addEventListener("click", () => {
+  void approveWorkflowStep();
+});
+workflowDeclineBtnEl.addEventListener("click", () => {
+  void declineWorkflowStep();
+});
+workflowHandoffBtnEl.addEventListener("click", () => {
+  void handoffWorkflow();
 });
 autoModeBtnEl.addEventListener("click", () => {
   void toggleAutoMode();
