@@ -32,34 +32,38 @@ const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" 
 // ─── T-MODE / T-CONTRACT ──────────────────────────────────────────────────────
 
 describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
-  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 32 tools; no 'list_workers'", () => {
+  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 35 tools; no 'list_workers'", () => {
     // Given: full worker startup path — session present, persistence present, mode defaults to "worker"
     // When:  makeAllTools(session, persistence, control, undefined) — no 5th opts arg
-    // Then:  returns ToolSet with 32 keys (P-44: updated from 28 — P-39 adds search_memory/set_memory_note/get_memory_note +3; P-26 adds query_lead_globally/publish_event +2; already counted schedule_task)
+    // Then:  returns ToolSet with 35 keys (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions;
+    //        P-44: P-39 +search_memory/set_memory_note/get_memory_note +3; P-26 +query_lead_globally/publish_event +2)
     //        does NOT include "list_workers"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl, undefined);
       const count = Object.keys(tools).length;
-      assert.equal(count, 32, `worker mode must have 32 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 35, `worker mode must have 35 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok(!("list_workers" in tools), "worker mode must NOT include 'list_workers'");
     } finally {
       cleanup();
     }
   });
 
-  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 23 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
+  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 26 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
     // Given: makeAllTools called with mode='server' (5th opts arg)
     // When:  makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
-    // Then:  Object.keys result has length 23 (P-44: updated from 19 — P-39 adds search_memory/set_memory_note/get_memory_note +3; schedule_task already counted);
+    // Then:  Object.keys result has length 26 (P-Y1: +todo_write → 26; P-57a: +suggest_card/suggest_next_actions → +2;
+    //        P-44: P-39 +3 memory; P-28.5 +dispatch_google_login; P-31 +schedule_task);
+    //        NOTE: CLAUDE.md L70 says server=24 — off-by-2 (suggest_card+suggest_next_actions in makeControlTools
+    //        unconditional since P-57a but not reflected in CLAUDE.md server formula; pre-existing doc gap).
     //        includes "echo", "recall", "remember", "telegram_notify", "list_workers";
     //        does NOT include "launch", "inspect", "qualify_profile"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 23, `server mode must have 23 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 26, `server mode must have 26 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok("echo" in tools, "server must include 'echo'");
       assert.ok("getMemory" in tools, "server must include 'getMemory'");
       assert.ok("remember" in tools, "server must include 'remember'");
@@ -107,30 +111,32 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 32", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 35", () => {
     // Given: worker startup path — session present, persistence present, mode not set
     // When:  Object.keys(makeAllTools(session, persistence, control)).length checked
-    // Then:  32 (P-44: updated from 28 — P-39 +3 memory tools; P-26 +2 coords; P-31 +1 cron)
+    // Then:  35 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: P-39 +3; P-26 +2; P-31 +1)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl);
       const count = Object.keys(tools).length;
-      assert.equal(count, 32, `worker tool count must be 32; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 35, `worker tool count must be 35; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 23", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 26", () => {
     // Given: server startup path — no session, persistence present, mode='server'
     // When:  Object.keys(tools).length checked
-    // Then:  23 (P-44: updated from 19 — P-39 +3 memory tools; P-31 +1 cron)
+    // Then:  26 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions unconditionally in makeControlTools;
+    //        P-44: P-39 +3 memory; P-28.5 +dispatch_google_login; P-31 +schedule_task)
+    //        NOTE: CLAUDE.md says server=24; off-by-2 pre-existing doc gap (P-57a tools in makeControlTools unconditional).
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 23, `server tool count must be 23; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 26, `server tool count must be 26; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }
