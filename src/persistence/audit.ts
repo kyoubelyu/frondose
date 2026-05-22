@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { StepResult, ToolSet } from "ai";
+import type { WorkflowAuditEntry } from "../agent/workflow/types.js";
 
 export interface AuditEntry {
   ts: string; // ISO-8601 timestamp
@@ -93,6 +94,23 @@ export function writeAuditRow(auditPath: string, row: AuditEntry): void {
   } catch (e) {
     process.stderr.write(
       `[mai] writeAuditRow: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
+  }
+}
+
+/**
+ * P-Y1 workflow event audit. Writes to the same audit.jsonl as tool rows.
+ * Backward-compat: tool rows have no `type`; workflow rows use type:"workflow_event".
+ */
+export function writeWorkflowAudit(auditPath: string, event: WorkflowAuditEntry["event"]): void {
+  try {
+    const dir = dirname(auditPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const row: WorkflowAuditEntry = { ts: new Date().toISOString(), type: "workflow_event", event };
+    appendFileSync(auditPath, `${JSON.stringify(row)}\n`, "utf-8");
+  } catch (e) {
+    process.stderr.write(
+      `[mai] writeWorkflowAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
 }

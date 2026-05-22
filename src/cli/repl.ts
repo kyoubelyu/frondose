@@ -7,6 +7,7 @@ import { DEFAULT_MAX_STEPS } from "../agent/maxSteps.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import type { LinkedinSession } from "../linkedin/types.js";
+import { getHomeBase } from "../persistence/paths.js";
 import {
   acquireTurnLock,
   isPidAlive,
@@ -18,7 +19,6 @@ import {
 import { appendMessages, rewriteSession, writeCompactionMarker } from "../persistence/session.js";
 import { appendMessagesShared } from "../persistence/sharedSession.js";
 import { readTelegramConfig } from "../persistence/telegramConfig.js";
-import { getHomeBase } from "../persistence/paths.js";
 import { WORKER_INBOX_DB_PATH } from "../persistence/workerInbox.js";
 import type { ControlSignals } from "../tools/control/stop.js";
 import { renderMarkdown } from "./markdown.js";

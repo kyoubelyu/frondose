@@ -35,10 +35,11 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 32 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 35 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  32 (P-44: updated from 28 — P-39 adds search_memory/set_memory_note/get_memory_note +3; P-26 +query_lead_globally/publish_event; P-31 +schedule_task)
+    // Then:  35 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions;
+    //        P-44: P-39 +search_memory/set_memory_note/get_memory_note +3; P-26 +query_lead_globally/publish_event; P-31 +schedule_task)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -49,18 +50,20 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        32, // P-44: correct current count (worker 32)
-        `T-CONTRACT.WORKER.TOOLS: expected 32 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        35, // P-Y1: correct current count (worker 35)
+        `T-CONTRACT.WORKER.TOOLS: expected 35 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 23 tools", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 26 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
-    // Then:  23 (P-44: updated from 19 — P-39 adds search_memory/set_memory_note/get_memory_note +3; P-31 +schedule_task)
+    // Then:  26 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions via unconditional makeControlTools → also in server;
+    //        P-44: P-39 +3; P-28.5 +dispatch_google_login; P-31 +schedule_task)
+    //        NOTE: CLAUDE.md says server=24; off-by-2 doc gap (suggest_card+suggest_next_actions in server since P-57a).
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -71,8 +74,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        23, // P-44: correct current count (server 23)
-        `T-CONTRACT.SERVER.TOOLS: expected 23 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        26, // P-Y1: correct current count (server 26; CLAUDE.md says 24 — off-by-2 pre-existing doc gap)
+        `T-CONTRACT.SERVER.TOOLS: expected 26 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

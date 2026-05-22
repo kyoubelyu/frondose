@@ -57,8 +57,8 @@ function makeMockSession() {
 
 // ─── T-Inv.1 — 34 worker tools; key scope-relevant tools present ────────────
 
-describe("makeAllTools() worker mode — 34-tool inventory snapshot (G-P57d.9)", () => {
-  it("T-Inv.1: given makeAllTools(session, persistence, control, hookRunner, {mode:'worker'}) called with mock session + tmp persistence, WHEN enumerating Object.keys(tools), THEN length === 34; tools.web_search exists + tools.analyze_screenshot exists (still REGISTERED, not removed — just behaviorally scope-graceful); tools.telegram_notify exists + tools.gh_issue exists (approved-external per A-1)", () => {
+describe("makeAllTools() worker mode — 35-tool inventory snapshot (G-P57d.9, updated P-Y1 +todo_write)", () => {
+  it("T-Inv.1: given makeAllTools(session, persistence, control, hookRunner, {mode:'worker'}) called with mock session + tmp persistence, WHEN enumerating Object.keys(tools), THEN length === 35 (P-Y1 +todo_write); tools.web_search exists + tools.analyze_screenshot exists (still REGISTERED, not removed — just behaviorally scope-graceful); tools.telegram_notify exists + tools.gh_issue exists (approved-external per A-1); tools.todo_write exists (P-Y1 workflow tool)", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -74,8 +74,8 @@ describe("makeAllTools() worker mode — 34-tool inventory snapshot (G-P57d.9)",
     const tools = makeAllTools(makeMockSession(), persistence, control, undefined, { mode: "worker" });
     const names = Object.keys(tools);
 
-    // Plan §1 A-1: 34 worker tools per CLAUDE.md L66.
-    assert.equal(names.length, 34, `Expected 34 worker tools; got ${names.length}. Names: ${names.sort().join(", ")}`);
+    // Plan §1 A-1: 35 worker tools per CLAUDE.md L70 (updated P-Y1 +todo_write).
+    assert.equal(names.length, 35, `Expected 35 worker tools; got ${names.length}. Names: ${names.sort().join(", ")}`);
 
     // 2 scope-graceful tools (P-57d items b + c)
     assert.ok("web_search" in tools, "tools.web_search must exist (P-57d cleanup keeps tool registered)");
@@ -87,5 +87,7 @@ describe("makeAllTools() worker mode — 34-tool inventory snapshot (G-P57d.9)",
     // 2 approved-external tools (per plan §1 A-1)
     assert.ok("telegram_notify" in tools, "tools.telegram_notify must exist (approved-external)");
     assert.ok("gh_issue" in tools, "tools.gh_issue must exist (approved-external)");
+    // P-Y1 workflow tool
+    assert.ok("todo_write" in tools, "tools.todo_write must exist (P-Y1 workflow)");
   });
 });
