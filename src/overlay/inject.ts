@@ -10,9 +10,14 @@ export const OVERLAY_BOOTSTRAP_JS = `
     return;
   }
 
+  // P-57e rev-2 (item a): HOST_STYLE constant — single source of truth for the
+  // host's inline style attribute. Used by both initial set + MutationObserver
+  // self-heal at L80+ below. LinkedIn SPA-nav wipes this attribute (2026-05-22
+  // CDP probe confirmed); self-heal re-asserts on every wipe.
+  var HOST_STYLE = 'all:initial; position:fixed; bottom:72px; right:16px; z-index:2147483647;';
   const host = document.createElement('div');
   host.id = '__mai_root';
-  host.style.cssText = 'all:initial; position:fixed; bottom:72px; right:16px; z-index:2147483647;';
+  host.style.cssText = HOST_STYLE;
   const shadow = host.attachShadow({ mode: 'open' });
 
   var pillStyle = 'background:#0a66c2; color:white; padding:8px 12px; border-radius:16px; font:14px/1.2 system-ui; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.15);';
@@ -78,6 +83,27 @@ export const OVERLAY_BOOTSTRAP_JS = `
       document.documentElement.appendChild(host);
     }
   }).observe(document.documentElement, { childList: true });
+
+  // P-57e rev-2 (item a) — MutationObserver self-heal on host's \`style\` attribute.
+  // LinkedIn SPA-nav wipes the inline style attribute (host stays in DOM with
+  // shadow + children, but bbox becomes 0x0 → dialog invisible). Re-assert on
+  // every wipe. Equality-check guards against infinite loop (R-10): if style is
+  // already HOST_STYLE, skip the re-assert (browsers no-op identity sets, but
+  // explicit guard documents intent + prevents observer self-fire).
+  new MutationObserver(() => {
+    // P-57e Step 5a (D-P57e-01 fix): guard on load-bearing CSSOM properties, NOT
+    // the serialized style attribute. Setting host.style.cssText = HOST_STYLE (which
+    // contains all:initial) makes Chrome expand all:initial into ~250 longhand
+    // declarations when serializing getAttribute('style')/cssText getter — so a
+    // string compare against the literal HOST_STYLE is PERMANENTLY unequal → infinite
+    // re-assert loop → page freeze. host.style.position / host.style.zIndex are stable
+    // single-value reads: after re-assert they read 'fixed' / '2147483647', so the
+    // guard is false on the observer's own self-fire → loop terminates. On a real
+    // LinkedIn wipe (removeAttribute('style')) they read '' → guard true → heal once.
+    if (host.style.position !== 'fixed' || host.style.zIndex !== '2147483647') {
+      host.style.cssText = HOST_STYLE;
+    }
+  }).observe(host, { attributes: true, attributeFilter: ['style'] });
 
   function post(payload) {
     var json = JSON.stringify(payload);
@@ -536,24 +562,72 @@ export const OVERLAY_BOOTSTRAP_JS = `
       };
     }
 
+    // P-57e rev-2 (item c) — getElementRef: walk up DOM tree to nearest interactive
+    // ancestor (depth=8). Returns null if no interactive ancestor found within
+    // depth budget OR if target is <input>/<textarea> (handled by separate input
+    // observer; avoid double-fire per OQ-3).
+    function getElementRef(target) {
+      var node = target;
+      var matched = false;
+      for (var i = 0; i < 8 && node; i++) {
+        if (node === document.documentElement || node === document.body) break;
+        // OQ-3: skip input/textarea — handled by input observer; avoid double-fire
+        if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') return null;
+        if (node.tagName === 'BUTTON') {
+          matched = true;
+          break;
+        }
+        if (node.tagName === 'A' && node.hasAttribute && node.hasAttribute('href')) {
+          matched = true;
+          break;
+        }
+        if (node.getAttribute) {
+          if (node.getAttribute('role') === 'button' ||
+              node.hasAttribute('aria-label') ||
+              node.hasAttribute('data-control-name') ||
+              node.hasAttribute('data-test-id')) {
+            matched = true;
+            break;
+          }
+        }
+        node = node.parentElement;
+      }
+      if (!node || !matched || node === document.documentElement || node === document.body) {
+        return null;
+      }
+      var text = '';
+      try { text = (node.textContent || '').trim().slice(0, 100); } catch (e) { text = ''; }
+      var ref = { tag: node.tagName, text: text };
+      var ariaLabel = node.getAttribute ? node.getAttribute('aria-label') : null;
+      var controlName = node.getAttribute ? node.getAttribute('data-control-name') : null;
+      var testId = node.getAttribute ? node.getAttribute('data-test-id') : null;
+      var href = (node.tagName === 'A' && node.getAttribute) ? node.getAttribute('href') : null;
+      var role = node.getAttribute ? node.getAttribute('role') : null;
+      if (ariaLabel) ref.ariaLabel = ariaLabel;
+      if (controlName) ref.controlName = controlName;
+      if (testId) ref.testId = testId;
+      if (href) ref.href = href;
+      if (role) ref.role = role;
+      return ref;
+    }
+
     var debouncedClick = debounce(function(event) {
       var target = event.target;
       if (!target || !target.closest) return;
       if (target.closest('#__mai_root') !== null) return;
       if (target.closest('#__mai_collapsed_card') !== null) return;
-      var targetText = '';
-      try {
-        targetText = (target.textContent || '').slice(0, 100);
-      } catch (e) {
-        targetText = '';
-      }
+      // P-57e rev-2 (item c): use getElementRef to find nearest interactive ancestor.
+      // Returns null if no ref found (within depth=8) OR if target is input/textarea.
+      // Null-ref clicks are SKIPPED — no SSE emit (saves cost; agent only sees
+      // interactive UI interactions).
+      var ref = getElementRef(target);
+      if (ref === null) return;
       window.__maiPost(JSON.stringify({
         type: 'observe',
         event_type: 'click',
         ctx: {
           url: location.href,
-          targetTag: target.tagName,
-          targetText: targetText,
+          ref: ref,
           x: event.clientX,
           y: event.clientY,
         },

@@ -27,7 +27,6 @@ import { CHECKPOINT } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
 import { resolveSoulBand } from "../../agent/systemPrompt/soul.js";
 import { createLinkedinSession } from "../../linkedin/session.js";
-import { matchIcp } from "../../methodology/icpMatcher.js";
 import { attachEventBus, type OverlayEvent } from "../../overlay/eventBus.js";
 import { callInOverlay, subscribeContextId } from "../../overlay/inject.js";
 import { makeAuditWriter } from "../../persistence/audit.js";
@@ -647,21 +646,13 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     const ctxRecord = ctx as Record<string, unknown>;
 
     if (eventType === "click") {
-      const url = typeof ctxRecord.url === "string" ? ctxRecord.url : "";
-      const targetText = typeof ctxRecord.targetText === "string" ? ctxRecord.targetText : "";
-      const profilePageHit = /\/in\/[^/]+/.test(url);
-      const icpRoleHit =
-        identity?.icp !== undefined &&
-        matchIcp(identity.icp, {
-          role: targetText,
-          industry: null,
-          region: null,
-          companyName: null,
-        }).role.status === "match";
-      if (!profilePageHit && !icpRoleHit) {
-        emitSse({ type: "passive-skipped", ts, reason: "icp_mismatch", ctx: ctxRecord });
-        return;
-      }
+      // P-57e rev-2 (item d): tier-2 ICP-text filter REMOVED. Client-side
+      // getElementRef (inject.ts) already filters non-interactive clicks at
+      // the observer; null-ref clicks never reach serve.ts. Rate-limit (1/30s
+      // + 5/60s) + profile-cache dedup are sufficient cost-control.
+      // Removed: profilePageHit, icpRoleHit, matchIcp call — operator framing
+      // 2026-05-22 "any refable click → agent + ref name" — every interactive
+      // click is intent-bearing.
       if (!passiveLimiter.tryConsume()) {
         emitSse({ type: "passive-skipped", ts, reason: "rate_limit", ctx: ctxRecord });
         return;
@@ -681,15 +672,44 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   function buildPassivePrompt(eventType: string, ctx: Record<string, unknown>): string {
     if (eventType === "profile-nav") {
-      return `You just navigated to a LinkedIn profile. Handle: ${ctx.handle}. Silently analyse whether this person matches your ICP. If yes call suggest_card with a single insight. If not a match, call stop.`;
+      // P-57e rev-2 (item e): memory-first; default-to-remember+stop for already-known
+      // profiles; suggest_card reserved for fresh ICP matches with Pain-Chain insight.
+      return [
+        `Operator viewed LinkedIn profile: ${ctx.handle} (${ctx.url}).`,
+        ``,
+        `Default response: if you have NO memory of this person → call \`remember\` (interaction kind: at) to record the profile-view footprint, then \`stop\`.`,
+        `If you ALREADY have memory of this person → \`stop\` directly (avoid duplicate footprint).`,
+        `Call \`suggest_card\` ONLY if this person qualifies as a fresh ICP match AND you have a Pain-Chain insight worth surfacing (use \`qualify_profile\` + \`inspect\` first).`,
+      ].join("\n");
     }
     if (eventType === "click") {
-      const targetText = typeof ctx.targetText === "string" ? ctx.targetText.slice(0, 80) : undefined;
-      return `The operator clicked: ${ctx.targetTag} ${JSON.stringify(targetText)}. URL: ${ctx.url}. Silently assess whether this signals a sales intent. If actionable, call suggest_card. Otherwise call stop.`;
+      // P-57e rev-2 (items c+e): ctx.ref from getElementRef; memory-first default.
+      const ref = ctx.ref && typeof ctx.ref === "object" ? (ctx.ref as Record<string, unknown>) : {};
+      // rev-1 MR fix: ariaLabel FIRST (most human-readable headline — natural language
+      // describing action + target aids LLM comprehension). controlName + all other
+      // fields stay fully visible to the LLM via the `ctx.ref: ${JSON.stringify(ref)}`
+      // dump on the line below — nothing lost; headline just reads naturally.
+      const refSummary =
+        [ref.ariaLabel, ref.controlName, ref.text].filter(
+          (v) => typeof v === "string" && (v as string).length > 0,
+        )[0] ?? "(unlabelled)";
+      return [
+        `Operator clicked: ${ref.tag ?? "?"} "${String(refSummary).slice(0, 80)}" at ${ctx.url}.`,
+        `ctx.ref: ${JSON.stringify(ref)}.`,
+        ``,
+        `Default response is memory-first: call \`remember\` to record this footprint (interaction kind matching the click intent — like, comment, connect, message, post, etc. — derived from ref.ariaLabel/controlName), then \`stop\`.`,
+        `Call \`suggest_card\` ONLY when this click signals a Pain-Chain-suggestion-worthy moment: e.g. operator is reading a NEW ICP-match profile and you have a methodology insight worth surfacing.`,
+        `Routine engagement clicks (Like / Comment / Connect / Send / Follow buttons) → remember+stop. Composer interactions (input/textarea typing) → remember the draft snippet + stop. Profile-nav footprint where you already have memory → remember-or-stop (don't re-suggest_card the same profile).`,
+      ].join("\n");
     }
     if (eventType === "input") {
-      const snippet = typeof ctx.snippet === "string" ? ctx.snippet.slice(0, 60) : undefined;
-      return `The operator is composing a message (${ctx.charCount} chars). Opening: ${JSON.stringify(snippet)}. Silently assess and suggest improvements via suggest_card if helpful. Otherwise call stop.`;
+      const snippet = typeof ctx.snippet === "string" ? (ctx.snippet as string).slice(0, 100) : undefined;
+      return [
+        `Operator is composing a message (${ctx.charCount} chars). Snippet: ${JSON.stringify(snippet)}.`,
+        ``,
+        `Default response: call \`remember\` to record this draft moment (interaction kind: message; note the snippet preview + person context if visible), then \`stop\`.`,
+        `Call \`suggest_card\` ONLY if the draft is incomplete/struggling AND you have a strong methodology-aligned rephrase to offer.`,
+      ].join("\n");
     }
     return "";
   }
