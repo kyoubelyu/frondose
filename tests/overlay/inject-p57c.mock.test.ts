@@ -55,10 +55,12 @@ describe("OVERLAY_BOOTSTRAP_JS — cron-banner + retry-button TT-safe + state-aw
       "(d) must contain 'window.__maiHideRetry = function' (retry surface hide fn)",
     );
 
-    // rev-1 MR-5 — pre-created __mai_cron_slot + appendChild-only mount pattern
+    // rev-1 MR-5 — pre-created cron slot + appendChild-only mount pattern
+    // P-Y2.2a RECONCILED: the frondose skeleton renamed the slot id '__mai_cron_slot' → 'cron-slot'
+    // (the cron-banner feature + appendChild-only mount are preserved+recolored in bootstrapLegacy).
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("__mai_cron_slot"),
-      "(e) must contain '__mai_cron_slot' id (pre-created body cronSlot per rev-1 MR-5)",
+      OVERLAY_BOOTSTRAP_JS.includes("cron-slot"),
+      "(e) must contain the pre-created cron slot id (P-Y2.2a: '__mai_cron_slot' → 'cron-slot'; appendChild-only mount preserved)",
     );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("cronSlot.appendChild") || OVERLAY_BOOTSTRAP_JS.includes(".cronSlot.appendChild"),
@@ -97,10 +99,19 @@ describe("OVERLAY_BOOTSTRAP_JS — cron-banner + retry-button TT-safe + state-aw
       !OVERLAY_BOOTSTRAP_JS.includes("insertBefore(cronBannerEl"),
       "(n) must NOT contain 'insertBefore(cronBannerEl' (rev-1 MR-5: appendChild-only mount)",
     );
-    // JS-driven pulse is used instead of CSS @keyframes (scout C-2 CSP risk)
-    assert.ok(
-      !OVERLAY_BOOTSTRAP_JS.includes("@keyframes"),
-      "(o) must NOT contain '@keyframes' (CSS animation; JS-driven pulse used instead per scout C-2)",
+    // (o) JS-driven pulse for the CRON BANNER (scout C-2: no CSS animation for the cron pulse).
+    // P-Y2.2a RECONCILED: the reskin now embeds the SHARED index.html stylesheet, which legitimately
+    // carries design @keyframes (pulseSubtle / ringPulse) for OTHER components. The original global
+    // !@keyframes ban is therefore over-broad. The cron-pulse intent is preserved: the cron banner uses
+    // setInterval (asserted (g)) and adds NO cron-specific @keyframes — so the only @keyframes present
+    // must be the known shared-design ones.
+    const keyframeNames = [...OVERLAY_BOOTSTRAP_JS.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
+    const allowedDesignKeyframes = new Set(["pulseSubtle", "ringPulse"]);
+    const unexpected = keyframeNames.filter((n) => !allowedDesignKeyframes.has(n ?? ""));
+    assert.deepEqual(
+      unexpected,
+      [],
+      `(o) the only @keyframes may be the shared-design ones (pulseSubtle/ringPulse); the cron pulse is JS-driven (setInterval). Unexpected: ${JSON.stringify(unexpected)}`,
     );
   });
 });

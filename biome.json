@@ -10,7 +10,9 @@
       "!src/web/vendor",
       "!.claude",
       "!.omx",
-      "!src/tauri"
+      "!src/tauri",
+      "!src/overlay/sharedRenderBundle.generated.ts",
+      "!src/overlay/frondoseCss.generated.ts"
     ]
   },
   "formatter": {
