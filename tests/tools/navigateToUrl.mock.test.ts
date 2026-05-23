@@ -198,10 +198,7 @@ describe("T-Nav.1 (G-P47.1): navigate_to_url dwells after page load on success p
       // to execute in that order. No spy injection hook was added by builder (Step 4b).
       const { session, navigateCalls } = makeSuccessSession();
       const tool = makeNavigateToUrlTool(session);
-      const result = await tool.execute(
-        { url: "https://example.com/" },
-        { messages: [], toolCallId: "tnav-p47-1" },
-      );
+      const result = await tool.execute({ url: "https://example.com/" }, { messages: [], toolCallId: "tnav-p47-1" });
 
       // (a) navigate called once
       assert.equal(navigateCalls.length, 1, "T-Nav.1: client.navigate must be called exactly once");
@@ -242,10 +239,7 @@ describe("T-Nav.2 (G-P47.1): navigate_to_url does NOT call applyPacing when clie
       getLastContext: () => undefined,
     };
     const tool = makeNavigateToUrlTool(failSession);
-    const result = await tool.execute(
-      { url: "https://example.com/" },
-      { messages: [], toolCallId: "tnav-p47-2" },
-    );
+    const result = await tool.execute({ url: "https://example.com/" }, { messages: [], toolCallId: "tnav-p47-2" });
 
     // (a) result.ok === false (failFromError envelope from navigate throw)
     assert.equal((result as { ok: boolean }).ok, false, "T-Nav.2: result.ok must be false when navigate throws");
@@ -254,6 +248,9 @@ describe("T-Nav.2 (G-P47.1): navigate_to_url does NOT call applyPacing when clie
     //     (result.ok===false proves the catch branch ran, not the success branch where pacing lives)
     // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
     const data = (result as any).data;
-    assert.ok(data === undefined || !("pacing" in data), "T-Nav.2: data.pacing must be absent (no dwell on failure path)");
+    assert.ok(
+      data === undefined || !("pacing" in data),
+      "T-Nav.2: data.pacing must be absent (no dwell on failure path)",
+    );
   });
 });

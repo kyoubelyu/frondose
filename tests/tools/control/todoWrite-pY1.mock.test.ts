@@ -51,7 +51,11 @@ describe("todo_write — pure tool: 1-20 step schema + step-id generation + zero
         { title: "Review profile", requiresApproval: false },
         { title: "Send DM", requiresApproval: true, state: "in_progress" },
       ],
-    })) as { ok: boolean; workflowTitle: string; steps: Array<{ id: string; title: string; requiresApproval: boolean; state: string }> };
+    })) as {
+      ok: boolean;
+      workflowTitle: string;
+      steps: Array<{ id: string; title: string; requiresApproval: boolean; state: string }>;
+    };
 
     assert.equal(out.ok, true, "execute → ok:true");
     assert.equal(out.workflowTitle, "Outreach", "echoes workflowTitle");

@@ -50,7 +50,11 @@ describe("T-MaxSteps.1: resolveMaxSteps precedence — flag > MAI_MAX_STEPS env 
     // When:  resolveMaxSteps(undefined) is called
     // Then:  result is DEFAULT_MAX_STEPS = 200 (hardcoded default)
     delete process.env.MAI_MAX_STEPS;
-    assert.equal(resolveMaxSteps(undefined), DEFAULT_MAX_STEPS, "DEFAULT_MAX_STEPS must be used when no flag and no env");
+    assert.equal(
+      resolveMaxSteps(undefined),
+      DEFAULT_MAX_STEPS,
+      "DEFAULT_MAX_STEPS must be used when no flag and no env",
+    );
     assert.equal(resolveMaxSteps(undefined), 200, "default must equal 200 (D-1 P-46 raise from 10)");
   });
 });
@@ -82,15 +86,15 @@ describe("T-MaxSteps.2: parseMaxSteps rejects invalid inputs; accepts valid posi
     // When:  parseMaxSteps() is called on each
     // Then:  every call returns null (not a positive integer)
     const invalid = [
-      "abc",       // non-numeric
-      "0",         // zero — not positive
-      "-5",        // negative
-      "3.5",       // decimal
-      "",          // empty
-      "1e3",       // exponent notation — rejected by N-2 guard
-      "007",       // leading zero — rejected by /^[1-9]\d*$/ guard
-      "+5",        // plus-prefixed
-      " ",         // whitespace only
+      "abc", // non-numeric
+      "0", // zero — not positive
+      "-5", // negative
+      "3.5", // decimal
+      "", // empty
+      "1e3", // exponent notation — rejected by N-2 guard
+      "007", // leading zero — rejected by /^[1-9]\d*$/ guard
+      "+5", // plus-prefixed
+      " ", // whitespace only
     ];
     for (const v of invalid) {
       assert.equal(parseMaxSteps(v), null, `parseMaxSteps('${v}') must return null (rejected input)`);

@@ -17,9 +17,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { promisify } from "node:util";
-import { describe, it } from "node:test";
 import { createRequire } from "node:module";
+import { describe, it } from "node:test";
+import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -77,10 +77,7 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
       "--max-steps",
     ];
     for (const flag of ROOT_FLAGS) {
-      assert.ok(
-        stdout.includes(flag),
-        `T-CMD.1: root flag '${flag}' must appear in --help output; got:\n${stdout}`,
-      );
+      assert.ok(stdout.includes(flag), `T-CMD.1: root flag '${flag}' must appear in --help output; got:\n${stdout}`);
     }
   });
 
@@ -90,7 +87,11 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     // Then:  output === package.json version + newline
     assert.ok(existsSync(CLI), "T-CMD.2: dist/cli/main.js must exist");
     const { stdout } = await execFileAsync("node", [CLI, "--version"]);
-    assert.equal(stdout, `${pkgVersion()}\n`, `T-CMD.2: --version output must equal '${pkgVersion()}\\n'; got ${JSON.stringify(stdout)}`);
+    assert.equal(
+      stdout,
+      `${pkgVersion()}\n`,
+      `T-CMD.2: --version output must equal '${pkgVersion()}\\n'; got ${JSON.stringify(stdout)}`,
+    );
   });
 
   it("T-CMD.3: WHEN node dist/cli/main.js version (subcommand) is run, THEN exit 0 AND prints same version as --version", async () => {
@@ -174,7 +175,12 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     );
 
     // Suppress unused-import diagnostics from helper imports.
-    void mkdtempSync; void mkdirSync; void cpSync; void tmpdir; void path; void os;
+    void mkdtempSync;
+    void mkdirSync;
+    void cpSync;
+    void tmpdir;
+    void path;
+    void os;
   });
 
   it("T-CMD.6: GIVEN pre-P-45 auth-set-help baseline fixture, WHEN post-P-45 auth set --help captured, THEN byte-equal to baseline (nested --model-id preserved)", async () => {
@@ -187,23 +193,28 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     const { stdout } = await execFileAsync("node", [CLI, "auth", "set", "--help"]);
     const baseline = readFileSync(baselinePath, "utf-8");
     // TODO Step 5: G-P45.3 — T-CMD.6: fill byte-equal assertion
-    assert.equal(stdout, baseline, `T-CMD.6: post-P-45 auth set --help byte-diff (len ${stdout.length} vs ${baseline.length})`);
+    assert.equal(
+      stdout,
+      baseline,
+      `T-CMD.6: post-P-45 auth set --help byte-diff (len ${stdout.length} vs ${baseline.length})`,
+    );
   });
 
   it("T-CMD.7: GIVEN pre-P-45 server-worker-provision-help baseline fixture, WHEN post-P-45 server worker provision --help captured, THEN byte-equal to baseline (--hostname + --worker-id preserved)", async () => {
     // Given: tests/fixtures/p45-server-worker-provision-help-baseline.txt committed at Step 4a
     // When:  node dist/cli/main.js server worker provision --help run post-build
     // Then:  output byte-equal to baseline
-    const baselinePath = new URL(
-      "../fixtures/p45-server-worker-provision-help-baseline.txt",
-      import.meta.url,
-    ).pathname;
+    const baselinePath = new URL("../fixtures/p45-server-worker-provision-help-baseline.txt", import.meta.url).pathname;
     assert.ok(existsSync(baselinePath), `T-CMD.7: server-worker-provision baseline must exist at ${baselinePath}`);
     assert.ok(existsSync(CLI), "T-CMD.7: dist/cli/main.js must exist");
     const { stdout } = await execFileAsync("node", [CLI, "server", "worker", "provision", "--help"]);
     const baseline = readFileSync(baselinePath, "utf-8");
     // TODO Step 5: G-P45.3 — T-CMD.7: fill byte-equal assertion
-    assert.equal(stdout, baseline, `T-CMD.7: post-P-45 server worker provision --help byte-diff (len ${stdout.length} vs ${baseline.length})`);
+    assert.equal(
+      stdout,
+      baseline,
+      `T-CMD.7: post-P-45 server worker provision --help byte-diff (len ${stdout.length} vs ${baseline.length})`,
+    );
   });
 
   it("T-CMD.8: GIVEN pre-P-45 cron-schedule-help baseline fixture, WHEN post-P-45 cron schedule --help captured, THEN byte-equal to baseline (--cron + --at preserved)", async () => {
@@ -216,6 +227,10 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     const { stdout } = await execFileAsync("node", [CLI, "cron", "schedule", "--help"]);
     const baseline = readFileSync(baselinePath, "utf-8");
     // TODO Step 5: G-P45.3 — T-CMD.8: fill byte-equal assertion
-    assert.equal(stdout, baseline, `T-CMD.8: post-P-45 cron schedule --help byte-diff (len ${stdout.length} vs ${baseline.length})`);
+    assert.equal(
+      stdout,
+      baseline,
+      `T-CMD.8: post-P-45 cron schedule --help byte-diff (len ${stdout.length} vs ${baseline.length})`,
+    );
   });
 });

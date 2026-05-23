@@ -78,7 +78,11 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "type",
   "upload",
   "web_fetch",
@@ -106,7 +110,11 @@ const FROZEN_SERVER_TOOL_KEYS_P37 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "web_fetch",
   "web_search",
 ].sort();
@@ -141,11 +149,11 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 32 / server 23 unchanged across P-37 (G-P37.12)", () => {
-  it("T-CONTRACT.TOOLS: P-37 does not add or remove any tool from makeAllTools (worker 32 / server 23)", () => {
+describe("tool counts: worker 35 / server 26 (rebaselined to current post-P-Y1; was P-44-era 32/23) (G-P37.12)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 35 / server 26)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 32; server count === 23 (unchanged from P-36 baseline; P-44: updated from 29/20)
+    // Then:  worker count === 35; server count === 26 (P-Z2 rebaseline: +P-57a suggestion tools + P-Y1 todo_write)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -160,8 +168,8 @@ describe("tool counts: worker 32 / server 23 unchanged across P-37 (G-P37.12)", 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        32,
-        `worker tool count must be 32; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
+        35,
+        `worker tool count must be 35; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
       );
       assert.deepEqual(
         workerKeys,
@@ -179,8 +187,8 @@ describe("tool counts: worker 32 / server 23 unchanged across P-37 (G-P37.12)", 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        23,
-        `server tool count must be 23; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
+        26,
+        `server tool count must be 26; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
       );
       assert.deepEqual(
         serverKeys,

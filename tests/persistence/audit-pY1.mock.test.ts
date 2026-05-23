@@ -27,11 +27,31 @@ describe("writeWorkflowAudit — appends type:'workflow_event' row; coexists wit
     const dir = mkdtempSync(join(tmpdir(), "pY1-audit-"));
     const auditPath = join(dir, "audit.jsonl");
 
-    writeWorkflowAudit(auditPath, { kind: "proposed", workflowId: "wf_x", title: "T", approvalMode: "manual", stepCount: 3 });
-    writeWorkflowAudit(auditPath, { kind: "always_ask", workflowId: "wf_x", toolName: "telegram_notify", turnId: "t1" });
-    writeWorkflowAudit(auditPath, { kind: "commit_warning", workflowId: "wf_x", detectedLabel: "Send", stepId: "step_1" });
+    writeWorkflowAudit(auditPath, {
+      kind: "proposed",
+      workflowId: "wf_x",
+      title: "T",
+      approvalMode: "manual",
+      stepCount: 3,
+    });
+    writeWorkflowAudit(auditPath, {
+      kind: "always_ask",
+      workflowId: "wf_x",
+      toolName: "telegram_notify",
+      turnId: "t1",
+    });
+    writeWorkflowAudit(auditPath, {
+      kind: "commit_warning",
+      workflowId: "wf_x",
+      detectedLabel: "Send",
+      stepId: "step_1",
+    });
     // A raw tool-style row (no `type` field — mirrors AuditEntry shape) appended directly.
-    writeFileSync(auditPath, `${JSON.stringify({ ts: new Date().toISOString(), command: "click", output: { ok: true } })}\n`, { flag: "a" });
+    writeFileSync(
+      auditPath,
+      `${JSON.stringify({ ts: new Date().toISOString(), command: "click", output: { ok: true } })}\n`,
+      { flag: "a" },
+    );
 
     const lines = readFileSync(auditPath, "utf-8").split("\n").filter(Boolean);
     assert.equal(lines.length, 4, "4 rows total (3 workflow + 1 tool)");
@@ -45,7 +65,11 @@ describe("writeWorkflowAudit — appends type:'workflow_event' row; coexists wit
     const workflowRows = lines.map((l) => JSON.parse(l)).filter((r) => r.type === "workflow_event");
     assert.equal(workflowRows.length, 3, "exactly 3 workflow_event rows (tool row excluded)");
     const kinds = workflowRows.map((r) => r.event.kind).sort();
-    assert.deepEqual(kinds, ["always_ask", "commit_warning", "proposed"], "all 3 kinds incl always_ask + commit_warning");
+    assert.deepEqual(
+      kinds,
+      ["always_ask", "commit_warning", "proposed"],
+      "all 3 kinds incl always_ask + commit_warning",
+    );
 
     // The tool row has NO type field (backward-compat — old readers ignore it as non-workflow).
     const toolRow = lines.map((l) => JSON.parse(l)).find((r) => r.command === "click");

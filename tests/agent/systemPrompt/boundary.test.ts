@@ -146,7 +146,10 @@ describe("BOUNDARY band — new **Chrome state** paragraph (P-52 G-P52.3)", () =
     const chromeStateIdx = text.indexOf("**Chrome state:**");
     const toolBoundaryIdx = text.indexOf("**Tool boundary:**");
     assert.ok(chromeStateIdx >= 0, "BOUNDARY must contain a paragraph headed `**Chrome state:**`");
-    assert.ok(toolBoundaryIdx > chromeStateIdx, "**Chrome state:** paragraph must precede **Tool boundary:** paragraph");
+    assert.ok(
+      toolBoundaryIdx > chromeStateIdx,
+      "**Chrome state:** paragraph must precede **Tool boundary:** paragraph",
+    );
 
     // Extract the Chrome-state paragraph (from its heading up to the next \n\n** marker).
     const chromeStatePara = text.slice(chromeStateIdx, toolBoundaryIdx);

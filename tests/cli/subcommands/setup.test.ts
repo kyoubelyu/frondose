@@ -17,8 +17,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { runSetupSubcommand } from "../../../src/cli/subcommands/setup.js";
 import type { Prompter } from "../../../src/cli/subcommands/_prompts.js";
+import { runSetupSubcommand } from "../../../src/cli/subcommands/setup.js";
 
 /** Stubbed Prompter — only `checkboxSections` returns soul; axisSelect throws
  *  to make any accidental invocation visible to the test. */

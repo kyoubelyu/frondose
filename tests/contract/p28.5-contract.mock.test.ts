@@ -52,10 +52,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
 describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)", () => {
-  it("T-CONTRACT.WORKER: worker mode → exactly 32 tools; includes 'navigate_to_url' and 'clear_cookies'", () => {
+  it("T-CONTRACT.WORKER: worker mode → exactly 35 tools; includes 'navigate_to_url' and 'clear_cookies'", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length + includes check for new tool names
-    // Then:  32 (P-44: updated from 28 — P-39 +3 memory; P-26 +2 coords; P-31 +1 cron); both new tool names present
+    // Then:  35 (P-Z2 rebaseline: was P-44-era 32; +suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]); both new tool names present
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -68,7 +68,7 @@ describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)",
       });
       const keys = Object.keys(tools);
       const count = keys.length;
-      assert.equal(count, 32, "T-CONTRACT.WORKER: worker mode has exactly 32 tools");
+      assert.equal(count, 35, "T-CONTRACT.WORKER: worker mode has exactly 35 tools");
       assert.ok(keys.includes("navigate_to_url"), "T-CONTRACT.WORKER: navigate_to_url present (P-28.5 new)");
       assert.ok(keys.includes("clear_cookies"), "T-CONTRACT.WORKER: clear_cookies present (P-28.5 new)");
     } finally {
@@ -80,11 +80,11 @@ describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)",
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
 describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)", () => {
-  it("T-CONTRACT.SERVER: server mode → exactly 23 tools; includes 'dispatch_google_login'", () => {
+  it("T-CONTRACT.SERVER: server mode → exactly 26 tools; includes 'dispatch_google_login'", () => {
     // Given: makeAllTools(undefined, persistence {+credentialsDbPath}, control, undefined, {mode:'server'})
     //        credentialsDbPath supplied so the server block opens credentialsDb and registers the tool
     // When:  Object.keys(tools).length + includes check for 'dispatch_google_login'
-    // Then:  23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron); 'dispatch_google_login' key present
+    // Then:  26 (P-Z2 rebaseline: was P-44-era 23; +suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]); 'dispatch_google_login' key present
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -98,7 +98,7 @@ describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)",
       const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const keys = Object.keys(tools);
       const count = keys.length;
-      assert.equal(count, 23, "T-CONTRACT.SERVER: server mode has exactly 23 tools");
+      assert.equal(count, 26, "T-CONTRACT.SERVER: server mode has exactly 26 tools");
       assert.ok(
         keys.includes("dispatch_google_login"),
         "T-CONTRACT.SERVER: dispatch_google_login present (P-28.5 new)",

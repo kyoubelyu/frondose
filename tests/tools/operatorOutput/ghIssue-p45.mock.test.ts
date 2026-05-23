@@ -93,7 +93,11 @@ describe("gh_issue same-turn dedup cache (G-P45.1)", () => {
             "https://github.com/owner/repo-p45-t1/issues/101",
             "T-GH.1: cached existingUrl must equal first call's created URL",
           );
-          assert.equal(secondData.existingNumber, 101, "T-GH.1: cached existingNumber must equal first call's created number");
+          assert.equal(
+            secondData.existingNumber,
+            101,
+            "T-GH.1: cached existingNumber must equal first call's created number",
+          );
         },
       );
     } finally {
@@ -196,16 +200,21 @@ describe("gh_issue same-turn dedup cache (G-P45.1)", () => {
           (globalThis as any).fetch = async (url: string) => {
             fetchCount++;
             if (url.includes("/search/issues")) return makeJsonResponse(500, { message: "internal error" });
-            if (url.includes("/repos/")) return makeJsonResponse(201, {
-              html_url: "https://github.com/owner/repo-p45-t3/issues/300",
-              number: 300,
-            });
+            if (url.includes("/repos/"))
+              return makeJsonResponse(201, {
+                html_url: "https://github.com/owner/repo-p45-t3/issues/300",
+                number: 300,
+              });
             throw new Error(`T-GH.3 unexpected url ${url}`);
           };
           try {
             const first = await tool.execute(params, { toolCallId: "t-gh-3-first", messages: [] });
             const firstData = (first as Record<string, unknown>).data as Record<string, unknown>;
-            assert.equal(firstData.skipped, false, "T-GH.3: must NOT be skipped — search threw, fell through to create");
+            assert.equal(
+              firstData.skipped,
+              false,
+              "T-GH.3: must NOT be skipped — search threw, fell through to create",
+            );
             assert.equal(
               firstData.issueUrl,
               "https://github.com/owner/repo-p45-t3/issues/300",

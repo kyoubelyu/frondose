@@ -56,10 +56,41 @@ before(() => {
           if (mockChromeFailMode) {
             return { ok: false, error: "chrome_unavailable", message: "busy" };
           }
-          // Minimal client stub — serve.ts only reads result.ok, never uses result.client
-          return { ok: true, client: { isConnected: () => true } };
+          // P-Z2: /chrome/ensure gained overlay wiring since P-56a (subscribeContextId +
+          // attachEventBus, both real/un-mocked) — they read result.client.handle's CDP
+          // methods. Provide a fake CdpHandle (Runtime/Page stubs) mirroring sibling
+          // serve-p57b so the success path reaches 200 {overlayInstalled:true}.
+          const handle = {
+            Runtime: {
+              enable: async () => undefined,
+              addBinding: async () => undefined,
+              executionContextCreated: () => () => undefined,
+              bindingCalled: () => () => undefined,
+              callFunctionOn: async () => ({ result: { value: null } }),
+            },
+            Page: {
+              enable: async () => undefined,
+              addScriptToEvaluateOnNewDocument: async () => ({ identifier: "id-1" }),
+              getFrameTree: async () => ({ frameTree: { frame: { id: "main-1" } } }),
+            },
+          };
+          return { ok: true, client: { isConnected: () => true, handle } };
         },
       }),
+    },
+  });
+
+  // P-Z2 (bucket 2b): once HOME is isolated there is no provider config, so
+  // resolveModel({}) throws at modelResolver.ts:178 and the server never boots.
+  // serve-p56b/p57a/p57c already mock this; serve-p56a is the latent hole the
+  // npm-script footgun masked. Stub the resolver so the server boots cleanly.
+  const modelResolverUrl = pathToFileURL(resolve(process.cwd(), "src/agent/modelResolver.js")).href;
+  mock.module(modelResolverUrl, {
+    namedExports: {
+      // biome-ignore lint/suspicious/noExplicitAny: minimal stub
+      resolveModel: (): any => ({}),
+      resolveModelSpec: () => "mock:stub",
+      resolveModelOrNull: () => null,
     },
   });
 });

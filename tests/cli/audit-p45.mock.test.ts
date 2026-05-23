@@ -55,7 +55,7 @@ describe("Dead code removal + file size compliance (G-P45.7)", () => {
     // Then:  empty output
     // Check src/tools/index.ts for any `from "node:os"` import — should be zero
     // after A-2 migration (the file no longer needs homedir).
-    const result = run('grep -nE \'from "node:os"\' src/tools/index.ts || true');
+    const result = run("grep -nE 'from \"node:os\"' src/tools/index.ts || true");
     assert.equal(
       result,
       "",
@@ -75,10 +75,11 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
     // Exit-code 0 = no errors; non-zero = errors. Use spawnSync-equivalent.
     let exit = 0;
     try {
-      execSync(
-        "npx biome check src/agent/loop.ts src/linkedin/inspectSummary.ts src/tools/control/escalate.ts 2>&1",
-        { cwd: ROOT, encoding: "utf-8", stdio: "pipe" },
-      );
+      execSync("npx biome check src/agent/loop.ts src/linkedin/inspectSummary.ts src/tools/control/escalate.ts 2>&1", {
+        cwd: ROOT,
+        encoding: "utf-8",
+        stdio: "pipe",
+      });
     } catch (e: unknown) {
       exit = (e as { status?: number }).status ?? -1;
     }
@@ -132,7 +133,10 @@ describe("CLAUDE.md Hard Rule 8 amendment (G-P45.10)", () => {
     // When:  grep -n "subcommands/soul.ts" CLAUDE.md
     // Then:  at least 1 match; line is inside the approved-sites enumeration
     const matches = run("grep -n 'subcommands/soul.ts' CLAUDE.md || true");
-    assert.ok(matches.length > 0, `T-DOC.1: CLAUDE.md must mention 'subcommands/soul.ts' (Hard Rule 8); got: ${matches}`);
+    assert.ok(
+      matches.length > 0,
+      `T-DOC.1: CLAUDE.md must mention 'subcommands/soul.ts' (Hard Rule 8); got: ${matches}`,
+    );
   });
 
   it("T-DOC.2: WHEN grep for '2026-05-20' in CLAUDE.md, THEN MUST include the new approval-date marker for BOTH soul.ts AND server.ts:233 sites", () => {
@@ -207,7 +211,7 @@ describe("No-bash boundary regression guard (G-P45.11)", () => {
     // When:  grep -rE "from ['\"](node:)?child_process['\"]" src/tools/
     // Then:  empty output (zero matches)
     const result = run(
-      "grep -rE \"from '(node:)?child_process'|from \\\"(node:)?child_process\\\"\" src/tools/ 2>/dev/null || true",
+      'grep -rE "from \'(node:)?child_process\'|from \\"(node:)?child_process\\"" src/tools/ 2>/dev/null || true',
     );
     assert.equal(
       result,

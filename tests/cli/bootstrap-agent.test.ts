@@ -246,7 +246,10 @@ describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled s
       // assertion will tighten automatically.
       if (thrown instanceof mod.BootstrapTimeoutError!) {
         const msg = (thrown as Error).message;
-        assert.ok(msg.includes("stalled"), `BootstrapTimeoutError.message must include 'stalled'; got: ${msg.slice(0, 240)}`);
+        assert.ok(
+          msg.includes("stalled"),
+          `BootstrapTimeoutError.message must include 'stalled'; got: ${msg.slice(0, 240)}`,
+        );
         const hasActionable = msg.includes("network") || msg.includes("proxy") || msg.includes("retry");
         assert.ok(
           hasActionable,

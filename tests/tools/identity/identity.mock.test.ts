@@ -69,7 +69,9 @@ test("T-M112: identity tool execute merges patch over existing identity and writ
   // resolves to HOME-relative path. Without override, operator's real identity leaks in.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   const idPath = uniqueIdPath();
   try {
     // Pre-seed an existing identity
@@ -102,6 +104,8 @@ test("T-M112: identity tool execute merges patch over existing identity and writ
     cleanupDir(idPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+    else delete process.env.MAI_HOME_BASE;
     rmSync(tmpHome, { recursive: true, force: true });
   }
 });
@@ -112,7 +116,9 @@ test("T-M113: identity tool execute refreshes updatedAt on every save", async ()
   // HOME override: prevents writeIdentity from mutating the operator's real config.json.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   const idPath = uniqueIdPath();
   try {
     const past = new Date("2024-01-01T00:00:00.000Z").toISOString();
@@ -133,6 +139,8 @@ test("T-M113: identity tool execute refreshes updatedAt on every save", async ()
     cleanupDir(idPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+    else delete process.env.MAI_HOME_BASE;
     rmSync(tmpHome, { recursive: true, force: true });
   }
 });
@@ -144,7 +152,9 @@ test("T-M114: identity tool execute does NOT include data.hint (identity is not 
   // operator's real identity would be returned, making missing-field assertions unpredictable.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   const idPath = uniqueIdPath();
   try {
     const tool = makeIdentityTool(idPath);
@@ -172,6 +182,8 @@ test("T-M114: identity tool execute does NOT include data.hint (identity is not 
     cleanupDir(idPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+    else delete process.env.MAI_HOME_BASE;
     rmSync(tmpHome, { recursive: true, force: true });
   }
 });

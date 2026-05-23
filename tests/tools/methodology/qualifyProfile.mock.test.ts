@@ -39,7 +39,9 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
   // be used instead of the fixture ICP, making qualification assertions unpredictable.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   const identityPath = makeTempPath("envelope");
   try {
     // Write identity with ICP
@@ -92,6 +94,8 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
     cleanup(identityPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+    else delete process.env.MAI_HOME_BASE;
     rmSync(tmpHome, { recursive: true, force: true });
   }
 });
@@ -103,7 +107,9 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
   // Without override, operator's ICP shadows the fixture ICP, breaking T-M_p5.15a.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   const identityPath = makeTempPath("default-icp");
   try {
     // Identity has ICP: targetRole = ["VP Engineering"]
@@ -182,6 +188,8 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
     cleanup(identityPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+    else delete process.env.MAI_HOME_BASE;
     rmSync(tmpHome, { recursive: true, force: true });
   }
 });

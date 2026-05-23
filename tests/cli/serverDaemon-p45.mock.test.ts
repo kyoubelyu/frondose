@@ -22,8 +22,8 @@
 
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 function makeSandbox(prefix: string): { dir: string; cleanup: () => void } {
@@ -166,7 +166,9 @@ describe("serverDaemon DI hook for test teardown (G-P45.9)", () => {
       const ROOT = path.resolve(HERE, "..", "..");
       const src = read(path.join(ROOT, "src/cli/serverDaemon.ts"), "utf-8");
       assert.ok(
-        /export interface DaemonHandles\s*\{[\s\S]{0,400}httpServer[\s\S]{0,200}webServer[\s\S]{0,200}abort[\s\S]{0,200}drainPoller/.test(src),
+        /export interface DaemonHandles\s*\{[\s\S]{0,400}httpServer[\s\S]{0,200}webServer[\s\S]{0,200}abort[\s\S]{0,200}drainPoller/.test(
+          src,
+        ),
         "T-SRV.DAEMON.P45.3: DaemonHandles interface must declare httpServer + webServer + abort + drainPoller fields",
       );
       // (b) captureFn module-private variable is declared.
@@ -181,7 +183,9 @@ describe("serverDaemon DI hook for test teardown (G-P45.9)", () => {
       );
       // (d) The captureFn invocation passes ALL 4 required handles.
       assert.ok(
-        /captureFn\s*\(\s*\{[\s\S]{0,300}httpServer[\s\S]{0,200}webServer[\s\S]{0,200}abort[\s\S]{0,200}drainPoller/.test(src),
+        /captureFn\s*\(\s*\{[\s\S]{0,300}httpServer[\s\S]{0,200}webServer[\s\S]{0,200}abort[\s\S]{0,200}drainPoller/.test(
+          src,
+        ),
         "T-SRV.DAEMON.P45.3: captureFn must receive {httpServer, webServer, abort, drainPoller} per the DaemonHandles contract",
       );
       // (e) The terminal await-promise that holds the daemon alive until abort
@@ -228,11 +232,17 @@ describe("serverDaemon DI hook for test teardown (G-P45.9)", () => {
     // (c) Install a callback, then reset — verifies the round-trip without throwing.
     let captured = false;
     // biome-ignore lint/suspicious/noExplicitAny: DaemonHandles type not imported here
-    mod.__captureDaemonHandles((_handles: any) => { captured = true; });
+    mod.__captureDaemonHandles((_handles: any) => {
+      captured = true;
+    });
     mod.__resetCaptureDaemonHandles();
     // captured remains false because we reset before any daemon run — confirms
     // the reset wipes the captureFn before it can be invoked.
-    assert.equal(captured, false, "T-SRV.DAEMON.P45.4: callback must NOT have been invoked via __resetCaptureDaemonHandles (reset clears the fn, not fires it)");
+    assert.equal(
+      captured,
+      false,
+      "T-SRV.DAEMON.P45.4: callback must NOT have been invoked via __resetCaptureDaemonHandles (reset clears the fn, not fires it)",
+    );
 
     // (d) Source confirms __resetCaptureDaemonHandles body sets captureFn = null.
     const { readFileSync: read } = await import("node:fs");

@@ -52,7 +52,10 @@ describe("install.sh post-install message advises `mai setup` (G-P52.4)", () => 
     // (e.g. inside a script comment) doesn't false-positive.
     const completeAnchor = "=== Install complete ===";
     const anchorIdx = text.indexOf(completeAnchor);
-    assert.ok(anchorIdx > 0, "install.sh must still contain '=== Install complete ===' anchor (unchanged rest of script)");
+    assert.ok(
+      anchorIdx > 0,
+      "install.sh must still contain '=== Install complete ===' anchor (unchanged rest of script)",
+    );
     const postInstallRegion = text.slice(anchorIdx);
     assert.ok(
       !postInstallRegion.includes("mai auth set"),

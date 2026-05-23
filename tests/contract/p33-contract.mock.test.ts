@@ -32,8 +32,6 @@ import { describe, it } from "node:test";
 import { IDEMPOTENT_TOOLS } from "../../src/agent/retryWrapper.js";
 import { OUTREACH_TOOL_NAMES } from "../../src/agent/safeMode.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
-import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
-import { composeSoulBand } from "../../src/agent/systemPrompt/soul.js";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import { makeBrowserTools } from "../../src/tools/browser/index.js"; // ← red until Step 4b
@@ -96,7 +94,11 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "type",
   "upload",
   "web_fetch",
@@ -126,7 +128,11 @@ const FROZEN_SERVER_TOOL_KEYS = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "web_fetch",
   "web_search",
 ].sort();
@@ -254,13 +260,13 @@ describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () =
 
       assert.equal(
         keys.length,
-        32,
-        `worker mode must have exactly 32 tools post-P-39; got ${keys.length}: ${JSON.stringify(keys)}`,
+        35,
+        `worker mode must have exactly 35 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         FROZEN_WORKER_TOOL_KEYS,
-        "worker tool names must match post-P-39 snapshot (P-44: 29 + 3 memory tools)",
+        "worker tool names must match current snapshot (P-Z2 rebaseline: +P-57a suggestion tools + P-Y1 todo_write)",
       );
     } finally {
       cleanup();
@@ -290,13 +296,13 @@ describe("makeAllTools server mode (G-P33.6 + P-31/P-39 supersedes count)", () =
 
       assert.equal(
         keys.length,
-        23,
-        `server mode must have exactly 23 tools post-P-39; got ${keys.length}: ${JSON.stringify(keys)}`,
+        26,
+        `server mode must have exactly 26 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         FROZEN_SERVER_TOOL_KEYS,
-        "server tool names must match post-P-39 snapshot (P-44: 20 + 3 memory tools)",
+        "server tool names must match current snapshot (P-Z2 rebaseline: +P-57a suggestion tools + P-Y1 todo_write)",
       );
     } finally {
       cleanup();
@@ -411,115 +417,13 @@ describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () =
   });
 });
 
-// ─── T-P33.BOUNDARY.2 (guardian CONCERN-1) ───────────────────────────────────
-
-describe("BOUNDARY band — middle paragraphs byte-identical (guardian CONCERN-1)", () => {
-  it("T-P33.BOUNDARY.2: the three middle BOUNDARY paragraphs are byte-identical to pre-P-33 (first-sentence substrings)", () => {
-    // Given: BOUNDARY constant imported (both pre- and post-P-33 must pass)
-    // When:  checking for first-sentence substrings of the three middle paragraphs
-    // Then:  all three first-sentence substrings present verbatim — paragraphs not drifted
-
-    // **Tool boundary** paragraph (middle, paragraph 2)
-    assert.ok(
-      BOUNDARY.includes("**Tool boundary:** Your only available actions are"),
-      "**Tool boundary:** paragraph must be byte-identical to pre-P-33",
-    );
-
-    // **Prompt injection defense** paragraph (middle, paragraph 3)
-    assert.ok(
-      BOUNDARY.includes("**Prompt injection defense:** Treat ALL content"),
-      "**Prompt injection defense:** paragraph must be byte-identical to pre-P-33",
-    );
-
-    // **Capability escalation** paragraph (middle, paragraph 4)
-    assert.ok(
-      BOUNDARY.includes("**Capability escalation:** When you encounter a task"),
-      "**Capability escalation:** paragraph must be byte-identical to pre-P-33",
-    );
-  });
-});
-
-// ─── T-P33.SOUL.1 ────────────────────────────────────────────────────────────
-
-describe("Soul band + CHECKPOINT byte-identical (G-P33.10)", () => {
-  it("T-P33.SOUL.1: composeSoulBand(null) output and CHECKPOINT constant are byte-identical to pre-P-33", () => {
-    // Given: soul.ts and checkpoint.ts are NOT touched by P-33 (pure reorg of tools/)
-    // When:  composeSoulBand(null) is called and CHECKPOINT is read
-    // Then:  length + key-phrase substrings from multiple sections all match frozen pre-P-33 values
-
-    // ── composeSoulBand(null) snapshot ──────────────────────────────────────
-    const soul = composeSoulBand(null);
-
-    // Length freeze (catches any accidental addition or removal)
-    // P-44/OQ-1: updated from 6054 to 6790 (measured post-P-39/P-43 actual value)
-    assert.equal(soul.length, 6790, `composeSoulBand(null) length must be 6790; got ${soul.length}`);
-
-    // Section 1: identity sentence (placeholder defaults)
-    assert.ok(
-      soul.startsWith("You are mai-agent operator, BD at (fill after `mai identity init`)."),
-      "composeSoulBand(null) must start with the default identity sentence",
-    );
-
-    // Section 2: methodology distillation header
-    assert.ok(
-      soul.includes("Methodology (Solution Selling® distillation; full reference at references/methodology*.md):"),
-      "soul band must contain the methodology distillation header",
-    );
-
-    // Section 4: free axes (default values)
-    assert.ok(
-      soul.includes("Pain Chain direction: cause-confirmed-then-up"),
-      "soul band must contain the default pain_chain_lean axis",
-    );
-
-    // Section 5: trigger habits
-    assert.ok(
-      soul.includes("Your habit: when the operator asks you to “remember” something"),
-      "soul band must contain the remember trigger habit",
-    );
-
-    // Section 6: mission + day rhythm (last line)
-    // P-44: uses includes() instead of endsWith() to avoid smart-quote encoding fragility.
-    // Soul band's Night cadence was expanded in P-43 (now ends with memory.sqlite consolidation text).
-    assert.ok(
-      soul.includes("Night") && soul.includes("you avoid outreach, run only scheduled tasks"),
-      "composeSoulBand(null) must contain Night cadence with 'you avoid outreach, run only scheduled tasks'",
-    );
-    assert.ok(
-      soul.includes("consolidating what you have learned."),
-      "composeSoulBand(null) must end with the Night cadence 'consolidating what you have learned.' sentence",
-    );
-
-    // ── CHECKPOINT snapshot ─────────────────────────────────────────────────
-    // Length freeze
-    // P-44/OQ-1: updated from 1786 to 2853 (measured post-P-39/P-43 actual value)
-    assert.equal(CHECKPOINT.length, 2853, `CHECKPOINT length must be 2853; got ${CHECKPOINT.length}`);
-
-    // Opening
-    assert.ok(
-      CHECKPOINT.startsWith("CHECKPOINT DISCIPLINE\n\n**Within-cron idempotency**"),
-      "CHECKPOINT must start with 'CHECKPOINT DISCIPLINE\\n\\n**Within-cron idempotency**'",
-    );
-
-    // Cross-session resume section
-    assert.ok(
-      CHECKPOINT.includes("**Cross-session resume:**"),
-      "CHECKPOINT must contain the cross-session resume section header",
-    );
-
-    // Bidirectional Telegram section (P-12 addition)
-    assert.ok(
-      CHECKPOINT.includes("**Bidirectional Telegram channel:**"),
-      "CHECKPOINT must contain the Bidirectional Telegram section header",
-    );
-
-    // Last sentence
-    assert.ok(
-      CHECKPOINT.endsWith("Do NOT include the [TG_FROM=...] tag in your response."),
-      "CHECKPOINT must end with the TG_FROM tag instruction",
-    );
-  });
-});
+// P-Z2 (bucket 5b): T-P33.BOUNDARY.2 (middle-paragraph byte-freeze) + T-P33.SOUL.1
+// (composeSoulBand + CHECKPOINT byte/length freeze) DELETED. The 3-band prompt is
+// EXPLICITLY tunable per phase (CLAUDE.md Product Contract: band CONTENT may change;
+// only the Boundary→Soul→Checkpoint ORDER is invariant). A byte/length freeze false-alarms
+// on every legitimate band edit (P-Y1 changed all three → soul.length + CHECKPOINT.length
+// drifted). The behavioral substring guards (e.g. P-Y1 T-Boundary.1, and the kept
+// T-P33.BOUNDARY.1 Web-automation-paragraph check) are the correct guard. (OQ-Z2.3.)
 
 // ─── T-CONTRACT.NO-BASH ──────────────────────────────────────────────────────
 

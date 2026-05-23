@@ -164,10 +164,7 @@ function makeNaturalStopModel(): { model: MockLanguageModelV1; callCount: () => 
 /** Predicate: does `messages` contain exactly one STEP-BUDGET WARNING user turn? */
 function hasStepBudgetWarning(msgs: CoreMessage[]): boolean {
   return msgs.some(
-    (m) =>
-      m.role === "user" &&
-      typeof m.content === "string" &&
-      m.content.includes("[STEP-BUDGET WARNING]"),
+    (m) => m.role === "user" && typeof m.content === "string" && m.content.includes("[STEP-BUDGET WARNING]"),
   );
 }
 
@@ -229,10 +226,7 @@ describe("T-Loop.3: when Phase 1 genuinely cut off (tool-calls + stepCount>=soft
     await runAgentLoop({ model, system: "test", messages, tools, maxSteps: 6 });
 
     const warningMsgs = messages.filter(
-      (m) =>
-        m.role === "user" &&
-        typeof m.content === "string" &&
-        m.content.includes("[STEP-BUDGET WARNING]"),
+      (m) => m.role === "user" && typeof m.content === "string" && m.content.includes("[STEP-BUDGET WARNING]"),
     );
     assert.equal(warningMsgs.length, 1, "exactly one STEP-BUDGET WARNING message must be injected");
 
@@ -331,11 +325,7 @@ describe("T-Loop.7 (C-2): maxSteps=2 → remaining=1 < 2 → single phase; no ST
 
     // twoPhase=false → runPhase(maxSteps=2), not runPhase(softCap=1)
     // If softCap=1 was accidentally used, callCount would be 1 (not 2)
-    assert.equal(
-      callCount(),
-      2,
-      "maxSteps=2: exactly 2 doStream calls (full budget used, not truncated softCap=1)",
-    );
+    assert.equal(callCount(), 2, "maxSteps=2: exactly 2 doStream calls (full budget used, not truncated softCap=1)");
     assert.equal(
       hasStepBudgetWarning(messages),
       false,
