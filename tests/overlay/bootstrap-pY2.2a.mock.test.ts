@@ -131,24 +131,25 @@ describe("OVERLAY_BOOTSTRAP_JS — no innerHTML sink anywhere (TT-safe; G-PY2.2a
   });
 });
 
-describe("OVERLAY_BOOTSTRAP_JS — overlay-callable render fns + LOCAL-only mode wiring (transport-out; G-PY2.2a.4)", () => {
+describe("OVERLAY_BOOTSTRAP_JS — overlay-callable render fns + mode wiring (P-Y2.2b FLIP; G-PY2.2a.4)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
-  // Then: window.__maiShowWorkflow + window.__maiSetMode; mode tabs call __maiSetMode( ; NO post({type:'workflow-'/
-  //       'mode'/'abort'}) literals (transport is 2.2b). The existing prompt post is KEPT (not asserted absent).
-  it("T-Shell.5: defines window.__maiShowWorkflow + window.__maiSetMode; mode tabs call __maiSetMode (not post); NO post({type:'workflow-'/'mode'/'abort'}) literals (transport is 2.2b)", () => {
+  // Then: window.__maiShowWorkflow + window.__maiSetMode; mode tabs keep local __maiSetMode; the existing
+  //       'prompt' post is retained.
+  // ★ P-Y2.2b RECONCILED: this was the 2.2a "render-only-pending" guard asserting NO workflow/mode/abort post
+  //   literals. P-Y2.2b WIRED the transport (the buttons now ACT), so that negative is INVERTED — the literals
+  //   ARE present now. The canonical transport assertion lives in tests/overlay/bootstrap-pY2.2b.mock.test.ts
+  //   T-Wire.1 (this kept here, inverted, as the historical 2.2a guard's continuation).
+  it("T-Shell.5 (P-Y2.2b FLIP): defines window.__maiShowWorkflow + window.__maiSetMode; mode tabs keep local __maiSetMode + the existing 'prompt' post; transport literals are NOW present (wired in 2.2b — superseded by T-Wire.1)", () => {
     assert.ok(BOOTSTRAP.includes("window.__maiShowWorkflow"), "must define window.__maiShowWorkflow");
     assert.ok(BOOTSTRAP.includes("window.__maiSetMode"), "must define window.__maiSetMode");
+    assert.ok(BOOTSTRAP.includes("__maiSetMode("), "mode tabs keep local __maiSetMode");
+    // FLIP: 2.2b added the transport — the workflow/mode/abort post literals ARE present now.
+    const transport = BOOTSTRAP.match(/post\(\s*\{\s*type:\s*['"](workflow-|mode|abort)/g) ?? [];
     assert.ok(
-      BOOTSTRAP.includes("__maiSetMode('manual')") || BOOTSTRAP.includes("__maiSetMode("),
-      "mode tabs call __maiSetMode locally",
+      transport.length > 0,
+      "P-Y2.2b wired the transport: workflow/mode/abort post literals must now be present (was the 2.2a no-transport guard; see bootstrap-pY2.2b T-Wire.1)",
     );
-    const transportLeak = BOOTSTRAP.match(/post\(\s*\{\s*type:\s*['"](workflow-|mode|abort)/g) ?? [];
-    assert.deepEqual(
-      transportLeak,
-      [],
-      `transport-out: no workflow/mode/abort post literals in 2.2a; found ${JSON.stringify(transportLeak)}`,
-    );
-    // the existing prompt transport is KEPT (restyled, not new)
+    // the existing prompt transport is KEPT
     assert.ok(/post\(\s*\{\s*type:\s*['"]prompt/.test(BOOTSTRAP), "the existing 'prompt' post transport is retained");
   });
 });
@@ -209,17 +210,22 @@ describe("extraction — every split file ≤ 800 lines (G-PY2.2a.3)", () => {
 });
 
 describe("scope — production write-range confined to the allowed paths (G-PY2.2a.9)", () => {
-  // Given: git status (P-Y4/P-Y5 are committed at HEAD; P-Y2.2a is the uncommitted working tree).
-  // When: production paths (non-tests/non-docs) are listed.
+  // Given: the COMMITTED P-Y2.2a diff (pinned by commit message).  When: production paths are listed.
   // Then: each ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json};
   //       none matches serve/turn/dispatch/routes/cron/passive/context/eventBus/main.rs/app.ts/index.html/tools.
-  it("T-Scope.1: P-Y2.2a production write-range ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json}; no serve/turn/dispatch/main.rs/app.ts/index.html/tools", () => {
-    const raw = execSync("git status --porcelain -uall", { cwd: REPO, encoding: "utf8" });
-    // Scope to the PRODUCTION-CODE surface only. ROADMAP.md (orchestrator Step-0 doc, builder drift #4),
-    // website/** (pre-existing mockups), tests/**, docs/** are not the builder's production-code write-range.
+  // ★ P-Y2.2b RECONCILED: this was a `git status` (working-tree) check — point-in-time, so once P-Y2.2b started
+  //   the working tree carried later-phase serve files and the guard false-flagged them. P-Y2.2a is now COMMITTED,
+  //   so pin to the COMMITTED 2.2a diff (by message) — stable across all future phases.
+  it("T-Scope.1: the COMMITTED P-Y2.2a diff ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json}; no serve/turn/dispatch/main.rs/app.ts/index.html/tools", () => {
+    const sha = execSync('git log --grep="render the shared UI in the in-page CDP host" --format=%H -1', {
+      cwd: REPO,
+      encoding: "utf8",
+    }).trim();
+    assert.ok(sha, "the P-Y2.2a commit must be findable by message");
+    const raw = execSync(`git show --name-only --format= ${sha}`, { cwd: REPO, encoding: "utf8" });
     const paths = raw
       .split("\n")
-      .map((l) => l.slice(3).trim())
+      .map((l) => l.trim())
       .filter(Boolean)
       .filter((p) => /^(src\/|scripts\/|package\.json|biome\.json)/.test(p));
     const allow = (p: string) =>

@@ -39,6 +39,7 @@ import { removeSocket } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
 import { createTurnRunner } from "./serve/turn.js";
+import { pushWorkflowToOverlay } from "./serve/workflowOverlay.js";
 
 export interface ServeOpts {
   sockPath: string;
@@ -108,7 +109,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   const emitter: ServeEmitter = new EventEmitter();
   const workflow = createWorkflowController({
-    emitFrame: (frame) => emitter.emit("sse-frame", frame),
+    emitFrame: (frame) => {
+      emitter.emit("sse-frame", frame);
+      pushWorkflowToOverlay(state, session, workflow, frame);
+    },
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
   });
   const broadcast = (frame: SseFrame): void => {
