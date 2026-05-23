@@ -74,7 +74,11 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "type",
   "upload",
   "web_fetch",
@@ -104,7 +108,11 @@ const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "web_fetch",
   "web_search",
 ].sort();
@@ -158,8 +166,8 @@ describe("tool counts: worker 32 / server 23 unchanged across P-36 (G-P36.14)", 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        32,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 32 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        35,
+        `T-CONTRACT.TOOLS: worker mode must have exactly 35 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
       );
       assert.deepEqual(
         workerKeys,
@@ -178,8 +186,8 @@ describe("tool counts: worker 32 / server 23 unchanged across P-36 (G-P36.14)", 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        23,
-        `T-CONTRACT.TOOLS: server mode must have exactly 23 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
+        26,
+        `T-CONTRACT.TOOLS: server mode must have exactly 26 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
       );
       assert.deepEqual(
         serverKeys,

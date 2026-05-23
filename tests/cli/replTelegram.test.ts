@@ -1,11 +1,15 @@
 /**
- * P-11 Step 5 — T-Slash.tg.1..7 + T-Turn.1..6 + T-Poller.1..5 (filled assertions)
- * P-12 Step 4a — T-Session.1, T-Visibility.1..3, T-Poller.6 (scaffolds — TODO bodies)
+ * P-11 Step 5 — T-Slash.tg.1..7 + T-Turn.1..7 (filled assertions)
+ * P-12 Step 4a — T-Session.1, T-Visibility.1..3 (scaffolds — TODO bodies)
  *
- * handleTelegramSlash, handleTelegramTurn, startTelegramPoller, sendTelegramMessage
+ * handleTelegramSlash, handleTelegramTurn, sendTelegramMessage
  * (src/cli/replTelegram.ts — NEW at builder Step 4b).
  *
- * Gate coverage: G-P11.15, G-P11.19, D-20, D-24 (P-11); G-P12.1, G-P12.3, G-P12.4 (P-12)
+ * P-Z3 (D-Z3-02): T-Poller.1..6 were SPLIT OUT into tests/cli/replTelegramPoller.test.ts so each
+ * node:test subprocess gets its own ~4GB heap (telegramFetch creates an undici Agent per call;
+ * running the pollers alongside the rest accumulated Agents → OOM). See replTelegramPoller header.
+ *
+ * Gate coverage: G-P11.15, G-P11.19, D-20, D-24 (P-11); G-P12.1, G-P12.3 (P-12)
  *
  * P-12 D-1 NOTE: makeDeps() and makeSlashCtx() now pass sessionFile: { path: string } (object ref,
  * not bare string). At Step 4a, T-Turn.1/2/3/4/6 FAIL at runtime (appendMessages receives object)
@@ -25,11 +29,14 @@ import {
   handleTelegramTurn,
   type PollerHandle,
   sendTelegramMessage,
-  startTelegramPoller,
   type TelegramSlashCtx,
   type TelegramTurnDeps,
 } from "../../src/cli/replTelegram.js";
-import { DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
+import {
+  DEFAULT_TELEGRAM_CONFIG,
+  readTelegramConfig,
+  writeTelegramConfigFields,
+} from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,14 +51,38 @@ function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
   return { lines, stream };
 }
 
-function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void } {
+// P-Z3 / P-24: enabled/boundUserId live in config.json.telegram (DEFAULT_CONFIG_PATH =
+// getHomeBase()/.mai/agent/config.json), NOT in telegram.json (runtime-only). handleTelegramSlash/
+// handleTelegramTurn read them via readTelegramConfig(...). Without per-test isolation the shared
+// HOME's config.json leaks boundUserId across tests (the full-file run "passed" some tests by luck;
+// they fail in isolation). Point HOME at each test's own tmp dir → per-test config.json; caller restores.
+function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p11-replTg-"));
   const cfgPath = join(dir, "telegram.json");
-  return { dir, cfgPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
+  return {
+    dir,
+    cfgPath,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
+  };
 }
 
+// P-Z3: write runtime fields to telegram.json AND mirror enabled/boundUserId into
+// config.json.telegram (the P-24 home of those fields) so readTelegramConfig sees the precondition.
+// Requires HOME to already point at the test's dir (makeTmpCfgDir does this). NOTE: this file is
+// OOM-prone independent of seeding — T-Poller.1-5 accumulate undici Agents (telegramFetch creates
+// `new Agent()` per call, transport.ts:83) to the 4GB heap edge (see D-Z3-02 / replTelegramP12 header).
 function writeCfg(path: string, cfg: Record<string, unknown>): void {
   writeFileSync(path, JSON.stringify(cfg), "utf-8");
+  const fields: { enabled?: boolean; boundUserId?: number | null } = {};
+  if (typeof cfg.enabled === "boolean") fields.enabled = cfg.enabled;
+  if ("boundUserId" in cfg) fields.boundUserId = cfg.boundUserId as number | null;
+  if (Object.keys(fields).length > 0) writeTelegramConfigFields(fields);
 }
 
 function makeMockModel(responseText = "Hi back"): MockLanguageModelV1 {
@@ -89,16 +120,6 @@ function makeOkTgResponse(): Response {
     ok: true,
     status: 200,
     json: async () => ({ ok: true, result: { message_id: 1 } }),
-  } as unknown as Response;
-}
-
-function makeGetUpdatesResponse(
-  updates: Array<{ update_id: number; message?: { text?: string; from?: { username?: string; id: number } } }>,
-): Response {
-  return {
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: true, result: updates }),
   } as unknown as Response;
 }
 
@@ -162,7 +183,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: TELEGRAM_TOKEN set; telegram.json has boundUserId:12345; pollerHandle spy
     // When: handleTelegramSlash("/telegram on", ctx) called
     // Then: telegram.json updated with enabled:true; startTelegramPoller called once (pollerHandle set)
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: false,
@@ -206,9 +227,12 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
         );
 
         const output = lines.join("");
-        // telegram.json enabled=true
-        const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { enabled: boolean };
-        assert.equal(onDisk.enabled, true, "telegram.json must have enabled:true after /telegram on");
+        // P-24: enabled lives in config.json.telegram — read via the shim.
+        assert.equal(
+          readTelegramConfig(cfgPath).enabled,
+          true,
+          "config.json.telegram must have enabled:true after /telegram on",
+        );
         // Poller started
         assert.equal(pollerStartCalled, 1, "onPollerStart must be called exactly once");
         assert.ok(capturedHandle !== null, "pollerHandle must be set after /telegram on");
@@ -224,6 +248,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -232,7 +257,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: TELEGRAM_TOKEN is NOT set; telegram.json has enabled:false
     // When: handleTelegramSlash("/telegram on", ctx)
     // Then: out mentions "TELEGRAM_TOKEN"; enabled remains false on disk
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: false,
@@ -256,6 +281,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
       const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { enabled: boolean };
       assert.equal(onDisk.enabled, false, "telegram.json.enabled must remain false when TELEGRAM_TOKEN is unset");
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -264,7 +290,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: TELEGRAM_TOKEN set; telegram.json.boundUserId = null
     // When: handleTelegramSlash("/telegram on", ctx)
     // Then: out contains 'bind'; startTelegramPoller NOT called
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: false,
@@ -297,6 +323,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -305,7 +332,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: a running pollerHandle (pollerHandle.running===true); telegram.json.enabled=true
     // When: handleTelegramSlash("/telegram off", ctx)
     // Then: pollerAbort.abort() called; telegram.json.enabled=false; pollerHandle.running===false within 100ms
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -339,9 +366,14 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
       assert.ok(pollerAbort.signal.aborted, "pollerAbort must have been fired on /telegram off");
       assert.ok(nulled, "onPollerStart(null) must be called to clear the handle");
       assert.ok(output.includes("disabled"), `output must confirm disabled; got: "${output}"`);
-      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { enabled: boolean };
-      assert.equal(onDisk.enabled, false, "telegram.json.enabled must be false after /telegram off");
+      // P-24: enabled lives in config.json.telegram — read via the shim.
+      assert.equal(
+        readTelegramConfig(cfgPath).enabled,
+        false,
+        "config.json.telegram.enabled must be false after /telegram off",
+      );
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -350,7 +382,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: telegram.json with known values; pollerHandle.running=false
     // When: handleTelegramSlash("/telegram status", ctx)
     // Then: output includes "enabled:", "boundUserId:", "lastUpdateOffset:", "stickyFallbackIp:", "running:"
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const { stream, lines } = makeOut();
     try {
       writeCfg(cfgPath, {
@@ -374,6 +406,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
       );
       assert.ok(output.includes("running"), `output must include "running"; got: "${output}"`);
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -382,7 +415,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Given: unknown verb "badverb"
     // When: handleTelegramSlash("/telegram badverb", ctx)
     // Then: out mentions valid verbs
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const { stream, lines } = makeOut();
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
@@ -395,6 +428,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
         `output must mention valid verbs (on|off|status); got: "${output}"`,
       );
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -405,7 +439,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
     // Then: output includes "/telegram" + "on" + "off" + "status"
     const { dispatchSlash } = await import("../../src/cli/replSlash.js");
     const { TurnLock: TL } = await import("../../src/agent/turnSemaphore.js");
-    const { cfgPath, dir, cleanup } = makeTmpCfgDir();
+    const { cfgPath, dir, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
       const { stream, lines } = makeOut();
@@ -444,6 +478,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
       assert.ok(output.includes("off"), `HELP_TEXT must mention "off" verb; got: "${output.slice(0, 300)}"`);
       assert.ok(output.includes("status"), `HELP_TEXT must mention "status" verb; got: "${output.slice(0, 300)}"`);
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -456,7 +491,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: update = { update_id:1, message:{ text:"Hello", from:{ username:"alice", id:1 } } }
     // When: handleTelegramTurn(update, deps)
     // Then: deps.messages.at(-N).role==="user"; content==="[TG_FROM=alice]\nHello"
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -491,6 +526,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -499,7 +535,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: message.photo=[{file_id:'sm'},{file_id:'lg'}]; message.caption='look'; download mock
     // When: handleTelegramTurn called
     // Then: user message content = "[TG_FROM=alice]\n[TG_PHOTO=<localPath>]\nlook"
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -564,6 +600,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -572,7 +609,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: agent loop returns 'Hi back' as final text; sendTelegramMessage spy
     // When: handleTelegramTurn called; capture outbound POST URLs
     // Then: outbound /sendMessage called with {chat_id, text:'Hi back'}; telegram_notify NOT called
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const calls: CapturedCall[] = [];
     try {
       writeCfg(cfgPath, {
@@ -612,6 +649,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -620,7 +658,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: agent loop returns 5000-char text
     // When: handleTelegramTurn completes; capture outbound sendMessage body
     // Then: text === first4000 + '… (truncated; see REPL or session log for full response)'; length ≤ 4096
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const calls: CapturedCall[] = [];
     try {
       writeCfg(cfgPath, {
@@ -671,6 +709,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -679,7 +718,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: update.message = { from:{username:'a',id:1} } (no text, no media fields)
     // When: handleTelegramTurn(update, deps)
     // Then: out contains "(unsupported update kind)" or "(empty message)"; deps.messages unchanged; agent loop NOT called
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const { stream, lines } = makeOut();
     try {
       writeCfg(cfgPath, {
@@ -713,6 +752,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -721,7 +761,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: message.voice={file_id:'v1',file_unique_id:'vu1'}; mocked download transport
     // When: handleTelegramTurn called
     // Then: user message has [TG_VOICE=<localPath>]; NO transcription; [TG_VOICE=...] passed to agent as raw path
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -783,6 +823,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -791,7 +832,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     // Given: boundUserId=999, message from a different user (id=42 — stranger).
     // When: handleTelegramTurn called.
     // Then: deps.messages unchanged; deps.out received a "dropped update" line citing the stranger's id and the bound id.
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -821,459 +862,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
-      cleanup();
-    }
-  });
-});
-
-// ─── T-Poller: long-poll loop ─────────────────────────────────────────────────
-
-describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
-  it("T-Poller.1: when getUpdates returns 2 updates then [], poller handles both via turnLock, advances offset to last+1, writes cfg, exits on abort", async () => {
-    // Given: getUpdates mock returns [{update_id:5,...},{update_id:6,...}] then []; abort fired after empty poll
-    // When: startTelegramPoller(cfg, deps, turnLock, abort) called
-    // Then: both updates handled; cfg.lastUpdateOffset===7; writeTelegramConfig called; poller exits on abort
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        pollTimeoutSec: 1,
-        pollBackoffSec: 1,
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const { stream } = makeOut();
-        const deps = makeDeps({ cfgPath, dir, out: stream });
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-
-        let pollCount = 0;
-        const allDone = new Promise<void>((resolve) => {
-          void withFetchSpy(
-            async (url) => {
-              if (url.includes("/getUpdates")) {
-                pollCount++;
-                if (pollCount === 1) {
-                  return makeGetUpdatesResponse([
-                    { update_id: 5, message: { text: "msg1", from: { username: "u", id: 1 } } },
-                    { update_id: 6, message: { text: "msg2", from: { username: "u", id: 1 } } },
-                  ]);
-                }
-                // Second poll: empty → abort
-                abort.abort();
-                return makeGetUpdatesResponse([]);
-              }
-              // sendMessage auto-reply
-              return makeOkTgResponse();
-            },
-            async () => {
-              await startTelegramPoller(
-                {
-                  enabled: true,
-                  boundUserId: 999,
-                  lastUpdateOffset: 0,
-                  stickyFallbackIp: null,
-                  pollTimeoutSec: 1,
-                  pollBackoffSec: 1,
-                  lastReceivedAt: null,
-                },
-                deps,
-                turnLock,
-                abort,
-              );
-              // Give the fire-and-forget loop time to run
-              await new Promise<void>((r) => setTimeout(r, 500));
-              resolve();
-            },
-          );
-        });
-        await allDone;
-
-        // offset should be advanced to 7 (update_id 6 + 1)
-        const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { lastUpdateOffset: number };
-        assert.equal(
-          onDisk.lastUpdateOffset,
-          7,
-          `lastUpdateOffset must advance to 7 after processing update_id=6; got: ${onDisk.lastUpdateOffset}`,
-        );
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-Poller.2: when getUpdates throws 3 times (network error), poller sleeps pollBackoffSec then retries; exits cleanly on abort (no unhandled rejection)", async () => {
-    // Given: getUpdates mock throws 3 times then aborted
-    // When: startTelegramPoller runs
-    // Then: out receives 3 poll-error log lines; no unhandled rejection; poller exits on abort
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    const { stream, lines } = makeOut();
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        pollTimeoutSec: 1,
-        pollBackoffSec: 0, // 0s backoff for faster test
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-        let errorCount = 0;
-
-        await withFetchSpy(
-          async (url) => {
-            if (url.includes("/getUpdates")) {
-              errorCount++;
-              if (errorCount <= 3) {
-                throw new Error(`network error #${errorCount}`);
-              }
-              // After 3 errors, abort and return empty
-              abort.abort();
-              return makeGetUpdatesResponse([]);
-            }
-            return makeOkTgResponse();
-          },
-          async () => {
-            const cfg = {
-              enabled: true,
-              boundUserId: 999,
-              lastUpdateOffset: 0,
-              stickyFallbackIp: null,
-              pollTimeoutSec: 1,
-              pollBackoffSec: 0,
-              lastReceivedAt: null,
-            };
-            const deps = makeDeps({ cfgPath, dir, out: stream });
-            await startTelegramPoller(cfg, deps, turnLock, abort);
-            // Allow loop to run; backoff=0 means fast
-            await new Promise<void>((r) => setTimeout(r, 200));
-          },
-        );
-
-        // 3 error lines must appear
-        const output = lines.join("");
-        assert.ok(
-          output.includes("poll error") || output.includes("network error"),
-          `out must log poll errors; got: "${output}"`,
-        );
-        assert.ok(errorCount >= 3, `must have attempted ≥3 retries; got ${errorCount}`);
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
-      cleanup();
-    }
-  });
-
-  it('T-Poller.3: when getUpdates is called, the captured POST body contains allowed_updates:["message"] (D-23)', async () => {
-    // Given: mock that captures request body
-    // When: poller runs one iteration
-    // Then: JSON.parse(body).allowed_updates === ["message"]
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    const calls: CapturedCall[] = [];
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        pollTimeoutSec: 1,
-        pollBackoffSec: 1,
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-        const { stream } = makeOut();
-
-        await withFetchSpy(
-          async (url, init) => {
-            if (url.includes("/getUpdates")) {
-              calls.push({ url, body: init?.body });
-              abort.abort(); // abort after first poll
-              return makeGetUpdatesResponse([]);
-            }
-            return makeOkTgResponse();
-          },
-          async () => {
-            const cfg = {
-              enabled: true,
-              boundUserId: 999,
-              lastUpdateOffset: 0,
-              stickyFallbackIp: null,
-              pollTimeoutSec: 1,
-              pollBackoffSec: 1,
-              lastReceivedAt: null,
-            };
-            const deps = makeDeps({ cfgPath, dir, out: stream });
-            await startTelegramPoller(cfg, deps, turnLock, abort);
-            await new Promise<void>((r) => setTimeout(r, 100));
-          },
-        );
-
-        assert.ok(calls.length >= 1, "getUpdates must be called at least once");
-        const firstCall = calls[0];
-        assert.ok(firstCall !== undefined, "first call must exist");
-        const body = JSON.parse(firstCall.body as string) as { allowed_updates: string[] };
-        assert.deepEqual(
-          body.allowed_updates,
-          ["message"],
-          `allowed_updates must be ["message"]; got: ${JSON.stringify(body.allowed_updates)}`,
-        );
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-Poller.4: when abort.abort() fires, the underlying fetch signal aborts (AbortError or equivalent propagated)", async () => {
-    // Given: fetch mock that blocks until signal aborts; abort controller
-    // When: abort.abort() called during a pending getUpdates fetch
-    // Then: fetch throws or rejects with AbortError; poller exits cleanly
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        pollTimeoutSec: 30,
-        pollBackoffSec: 1,
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-        const { stream } = makeOut();
-        let fetchReceived = false;
-
-        await withFetchSpy(
-          async (url, init) => {
-            if (url.includes("/getUpdates")) {
-              fetchReceived = true;
-              // Wait for signal to abort
-              const initWithSignal = init as { signal?: AbortSignal };
-              return new Promise<Response>((_resolve, reject) => {
-                if (initWithSignal.signal?.aborted) {
-                  reject(new DOMException("AbortError", "AbortError"));
-                  return;
-                }
-                initWithSignal.signal?.addEventListener("abort", () => {
-                  reject(new DOMException("AbortError", "AbortError"));
-                });
-                // Fire abort externally after a short delay
-                setTimeout(() => abort.abort(), 50);
-              });
-            }
-            return makeOkTgResponse();
-          },
-          async () => {
-            const cfg = {
-              enabled: true,
-              boundUserId: 999,
-              lastUpdateOffset: 0,
-              stickyFallbackIp: null,
-              pollTimeoutSec: 30,
-              pollBackoffSec: 1,
-              lastReceivedAt: null,
-            };
-            const deps = makeDeps({ cfgPath, dir, out: stream });
-            const handle = await startTelegramPoller(cfg, deps, turnLock, abort);
-            // Wait for loop to exit cleanly
-            await new Promise<void>((r) => setTimeout(r, 300));
-            // Poller must have stopped running after abort
-            assert.ok(!handle.running || abort.signal.aborted, "poller must not be running after abort");
-          },
-        );
-
-        assert.ok(fetchReceived, "fetch must have been called (poller started)");
-        assert.ok(abort.signal.aborted, "abort must be signaled");
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-Poller.5 (BLOCKER-1 fix — race-free /telegram off): when abort fires AFTER lock releases but BEFORE for-loop offset write, writeTelegramConfig is NOT called for that update; pre-existing telegram.json unchanged", async () => {
-    // Given: getUpdates returns 1 update; handleTelegramTurn mock fires abort.abort() before returning
-    // When: poller resumes for-loop body; abort guard checked
-    // Then: writeTelegramConfig NOT called for that update; on-disk lastUpdateOffset equals pre-test value (NOT advanced)
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 5, // pre-existing offset
-        stickyFallbackIp: null,
-        pollTimeoutSec: 1,
-        pollBackoffSec: 1,
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-        const { stream } = makeOut();
-        let pollCount = 0;
-
-        await withFetchSpy(
-          async (url) => {
-            if (url.includes("/getUpdates")) {
-              pollCount++;
-              if (pollCount === 1) {
-                // Return 1 update; the model's turn will fire abort
-                return makeGetUpdatesResponse([
-                  { update_id: 10, message: { text: "trigger abort", from: { username: "u", id: 1 } } },
-                ]);
-              }
-              return makeGetUpdatesResponse([]);
-            }
-            // When sendMessage is called (auto-reply), fire abort BEFORE the loop can write offset
-            if (url.includes("/sendMessage")) {
-              abort.abort();
-            }
-            return makeOkTgResponse();
-          },
-          async () => {
-            // Use a short model response so the turn completes quickly
-            const deps = makeDeps({ cfgPath, dir, out: stream, responseText: "ack" });
-            const cfg = {
-              enabled: true,
-              boundUserId: 999,
-              lastUpdateOffset: 5,
-              stickyFallbackIp: null,
-              pollTimeoutSec: 1,
-              pollBackoffSec: 1,
-              lastReceivedAt: null,
-            };
-            await startTelegramPoller(cfg, deps, turnLock, abort);
-            // Allow loop to process
-            await new Promise<void>((r) => setTimeout(r, 400));
-          },
-        );
-
-        // BLOCKER-1 fix: abort guard prevents offset write after abort fires
-        // The on-disk lastUpdateOffset must NOT have been advanced to 11 (update_id=10 + 1)
-        // because abort fired between lock release and writeTelegramConfig
-        const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { lastUpdateOffset: number };
-        // The offset might stay at 5 (if abort fired before write) OR advance to 11 (if abort fired after write)
-        // BLOCKER-1 guarantees it stays at 5 when abort fires before writeTelegramConfig
-        // With real timing, we can't guarantee exact order in 100% of cases,
-        // but we verify the abort signal is indeed checked (mechanism wired).
-        assert.ok(abort.signal.aborted, "abort must have fired during the loop");
-        // Key check: the value should not be some unexpected mid-update value
-        assert.ok(
-          onDisk.lastUpdateOffset === 5 || onDisk.lastUpdateOffset === 11,
-          `offset must be either pre-existing (5) or correctly advanced (11); got: ${onDisk.lastUpdateOffset}`,
-        );
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-Poller.6: when startTelegramPoller processes one update, PollerHandle.lastReceivedAt advances from null to an ISO timestamp AND the value is mirrored in telegram.json on disk (P-12 D-5 NIT-1)", async () => {
-    // Given: startTelegramPoller called with 1-update mock; handle.lastReceivedAt initially null
-    // When: poller processes the update (BEFORE turnLock.run resolves per D-5 Option-C ordering)
-    // Then: handle.lastReceivedAt is a valid ISO timestamp /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/ AND telegram.json.lastReceivedAt matches
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
-    try {
-      writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
-        lastUpdateOffset: 0,
-        stickyFallbackIp: null,
-        pollTimeoutSec: 1,
-        pollBackoffSec: 1,
-        lastReceivedAt: null,
-      });
-      process.env.TELEGRAM_TOKEN = "test-tok";
-      try {
-        const abort = new AbortController();
-        const turnLock = new TurnLock();
-        const { stream } = makeOut();
-        const deps = makeDeps({ cfgPath, dir, out: stream });
-        let pollCount = 0;
-        let capturedHandle: PollerHandle | null = null;
-
-        await withFetchSpy(
-          async (url) => {
-            if (url.includes("/getUpdates")) {
-              pollCount++;
-              if (pollCount === 1) {
-                return makeGetUpdatesResponse([
-                  { update_id: 20, message: { text: "hello", from: { username: "u", id: 999 } } },
-                ]);
-              }
-              // Second poll: abort and return empty
-              abort.abort();
-              return makeGetUpdatesResponse([]);
-            }
-            return makeOkTgResponse();
-          },
-          async () => {
-            capturedHandle = await startTelegramPoller(
-              {
-                enabled: true,
-                boundUserId: 999,
-                lastUpdateOffset: 0,
-                stickyFallbackIp: null,
-                pollTimeoutSec: 1,
-                pollBackoffSec: 1,
-                lastReceivedAt: null,
-              },
-              deps,
-              turnLock,
-              abort,
-            );
-            // Wait for the loop to process the update, write cfg, and abort
-            await new Promise<void>((r) => setTimeout(r, 600));
-          },
-        );
-
-        assert.ok(capturedHandle !== null, "startTelegramPoller must return a PollerHandle");
-        const handle = capturedHandle as PollerHandle;
-        assert.notEqual(
-          handle.lastReceivedAt,
-          null,
-          "handle.lastReceivedAt must advance from null after processing update",
-        );
-        assert.ok(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(handle.lastReceivedAt ?? ""),
-          `handle.lastReceivedAt must be a valid ISO timestamp; got: "${handle.lastReceivedAt}"`,
-        );
-        // Disk mirror: telegram.json must reflect the same lastReceivedAt value
-        const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as {
-          lastReceivedAt: string | null;
-          lastUpdateOffset: number;
-        };
-        assert.notEqual(
-          onDisk.lastReceivedAt,
-          null,
-          "telegram.json.lastReceivedAt must be non-null after poller processes an update",
-        );
-        assert.equal(
-          onDisk.lastReceivedAt,
-          handle.lastReceivedAt,
-          "telegram.json.lastReceivedAt must exactly match PollerHandle.lastReceivedAt (D-5 cfg mirror)",
-        );
-      } finally {
-        delete process.env.TELEGRAM_TOKEN;
-      }
-    } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -1286,7 +875,7 @@ describe("T-Session: sessionFile object-ref survives /new rotation (P-12 G-P12.1
     // Given: sessionFileRef = { path: dir1/session.jsonl } passed by reference to telegramDeps.sessionFile
     // When: sessionFileRef.path mutated to dir2/session.jsonl (simulates /new rotation); then handleTelegramTurn called
     // Then: the file at dir2/session.jsonl is created (appendMessages used NEW path); dir1/session.jsonl does NOT exist
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const dir2 = mkdtempSync(join(tmpdir(), "mai-p12-sess2-"));
     try {
       writeCfg(cfgPath, {
@@ -1342,6 +931,7 @@ describe("T-Session: sessionFile object-ref survives /new rotation (P-12 G-P12.1
       }
     } finally {
       rmSync(dir2, { recursive: true, force: true });
+      restoreHome();
       cleanup();
     }
   });
@@ -1354,7 +944,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
     // Given: update { text:"Hi mai", from:{ id:12345, username:"alice" } } + telegram.json { boundUserId:12345, lastReceivedAt:null, ... } + TELEGRAM_TOKEN set
     // When: handleTelegramTurn(update, deps) called; deps.out capture stream inspected
     // Then: capture stream contains "[telegram] ↓ @alice: Hi mai" written before any agent loop output
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -1387,6 +977,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -1395,7 +986,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
     // Given: telegram.json with boundUserId:12345; TELEGRAM_TOKEN set; model returns "Sure thing"
     // When: handleTelegramTurn completes (agent loop + sendTelegramMessage done)
     // Then: deps.out contains "[telegram] ↑ @alice: Sure thing" after sendTelegramMessage resolves
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -1428,6 +1019,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -1436,7 +1028,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
     // Given: update { photo:[{file_id:'x',file_unique_id:'u'}], from:{id:12345,username:'alice'} } (no text) + download mock + bound config + TELEGRAM_TOKEN set
     // When: handleTelegramTurn called; capture stream inspected for ↓ line
     // Then: ↓ line contains "[TG_PHOTO=" (media tag used as preview source, not empty string)
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -1495,6 +1087,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });

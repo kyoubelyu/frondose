@@ -23,7 +23,8 @@ import { makeMockPrompter, stubInteractive, stubProcessExit } from "./_mockPromp
 
 describe("ExitPromptError — clean exit via canonical D-2 catch pattern", () => {
   it("T-Exit.1: when prompter throws ExitPromptError and call is wrapped in D-2 try/catch, process.exit(0) is called", async () => {
-    // Given: throwingPrompter.providerSelect throws new ExitPromptError("User exited")
+    // Given: throwingPrompter.input throws new ExitPromptError on the first set prompt ("API base URL:")
+    //        (P-21 — the URL set flow prompts input() first; providerSelect is no longer used in set)
     // When:  runAuthSubcommand("set", {}, throwingPrompter) wrapped in canonical try/catch
     // Then:  catch branch reached; process.exit(0) called (captured exit code === 0)
 
@@ -32,9 +33,9 @@ describe("ExitPromptError — clean exit via canonical D-2 catch pattern", () =>
     const restore = stubInteractive(true);
     const exitStub = stubProcessExit();
 
-    // Throwing prompter: providerSelect throws ExitPromptError
+    // Throwing prompter: input (the first prompt in the URL set flow) throws ExitPromptError
     const throwingPrompter = makeMockPrompter({
-      providerSelect: async () => {
+      input: async () => {
         throw new ExitPromptError("User pressed Ctrl-C");
       },
     });

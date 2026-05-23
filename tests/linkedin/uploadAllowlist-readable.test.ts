@@ -120,17 +120,25 @@ test("T-Sandbox.6: path inside MAI_UPLOAD_ALLOWLIST custom dir → allowed", () 
 // ─── T-Sandbox.7: Exact boundary — home dir vs .mai/agent prefix ─────────────
 
 test("T-Sandbox.7: exact boundary — home dir itself is NOT allowed; ~/.mai/agent/x IS allowed", () => {
-  withEnv("MAI_UPLOAD_ALLOWLIST", undefined, () => {
-    // The home dir itself (not ~/.mai/agent/) must NOT be allowed
-    const homePath = join(homedir(), "secret.txt");
-    assert.throws(
-      () => assertFileReadable(homePath),
-      /File read denied/i,
-      "home dir root path must be denied (only ~/.mai/agent/** is allowed)",
-    );
+  // P-Z3: under the clean-room HOME=$(mktemp -d) gate, homedir() falls INSIDE os.tmpdir(), so the
+  // "home root" path would be allowed via the tmpdir rule — masking the boundary this test guards.
+  // assertFileReadable derives the ~/.mai/agent prefix from getHomeBase() (= MAI_HOME_BASE ?? homedir);
+  // pin it to a synthetic root OUTSIDE tmpdir (prefix-only check — the dir need not exist) so the
+  // home-root-denied vs ~/.mai/agent-allowed boundary is exercised deterministically. Restored after.
+  const SYNTH_HOME = "/mai-z3-home-root";
+  withEnv("MAI_UPLOAD_ALLOWLIST", undefined, () =>
+    withEnv("MAI_HOME_BASE", SYNTH_HOME, () => {
+      // The home dir itself (not ~/.mai/agent/) must NOT be allowed
+      const homePath = join(SYNTH_HOME, "secret.txt");
+      assert.throws(
+        () => assertFileReadable(homePath),
+        /File read denied/i,
+        "home dir root path must be denied (only ~/.mai/agent/** is allowed)",
+      );
 
-    // ~/.mai/agent/ subtree IS allowed
-    const agentPath = join(homedir(), ".mai", "agent", "memory.sqlite");
-    assert.doesNotThrow(() => assertFileReadable(agentPath), "~/.mai/agent/ path must be allowed");
-  });
+      // ~/.mai/agent/ subtree IS allowed
+      const agentPath = join(SYNTH_HOME, ".mai", "agent", "memory.sqlite");
+      assert.doesNotThrow(() => assertFileReadable(agentPath), "~/.mai/agent/ path must be allowed");
+    }),
+  );
 });

@@ -25,6 +25,7 @@ import {
   startTelegramPoller,
   type TelegramTurnDeps,
 } from "../../src/cli/replTelegram.js";
+import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -39,14 +40,34 @@ function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
   return { lines, stream };
 }
 
-function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void } {
+// P-Z3 / P-24: enabled/boundUserId live in config.json.telegram (DEFAULT_CONFIG_PATH =
+// getHomeBase()/.mai/agent/config.json), NOT in telegram.json. handleTelegramTurn reads boundUserId
+// via readTelegramConfig (the auto-reply ↑ line requires it). Point HOME at the test's tmp dir →
+// per-test config.json; caller restores.
+function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p12-new-"));
   const cfgPath = join(dir, "telegram.json");
-  return { dir, cfgPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
+  return {
+    dir,
+    cfgPath,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
+  };
 }
 
+// P-Z3: write runtime fields to telegram.json AND mirror enabled/boundUserId into
+// config.json.telegram so readTelegramConfig sees the precondition. Requires HOME already set.
 function writeCfg(path: string, cfg: Record<string, unknown>): void {
   writeFileSync(path, JSON.stringify(cfg), "utf-8");
+  const fields: { enabled?: boolean; boundUserId?: number | null } = {};
+  if (typeof cfg.enabled === "boolean") fields.enabled = cfg.enabled;
+  if ("boundUserId" in cfg) fields.boundUserId = cfg.boundUserId as number | null;
+  if (Object.keys(fields).length > 0) writeTelegramConfigFields(fields);
 }
 
 function makeMockModel(responseText = "Hi back"): MockLanguageModelV1 {
@@ -121,7 +142,7 @@ describe("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => {
     // Given: startTelegramPoller called with 1-update mock; handle.lastReceivedAt initially null
     // When: poller processes the update; second poll → abort; timeout after 600ms
     // Then: handle.lastReceivedAt is ISO timestamp; telegram.json.lastReceivedAt matches
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -192,6 +213,7 @@ describe("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -204,7 +226,7 @@ describe("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
     // Given: sessionFileRef = { path: dir1/session.jsonl } passed by reference
     // When: path mutated to dir2/session.jsonl before handleTelegramTurn call
     // Then: dir2/session.jsonl created; dir1/session.jsonl does NOT exist
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const dir2 = mkdtempSync(join(tmpdir(), "mai-p12-sess2-"));
     try {
       writeCfg(cfgPath, {
@@ -256,6 +278,7 @@ describe("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
       }
     } finally {
       rmSync(dir2, { recursive: true, force: true });
+      restoreHome();
       cleanup();
     }
   });
@@ -268,7 +291,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
     // Given: boundUserId:12345, update from alice (id:12345), text "Hi mai"
     // When: handleTelegramTurn called
     // Then: deps.out contains "[telegram] ↓ @alice: Hi mai"
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -301,6 +324,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -309,7 +333,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
     // Given: boundUserId:12345, model returns "Sure thing"
     // When: handleTelegramTurn completes (agent loop + sendTelegramMessage done)
     // Then: deps.out contains "[telegram] ↑ @alice: Sure thing"
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -342,6 +366,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -350,7 +375,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
     // Given: photo-only update (no text), download mock, boundUserId:12345
     // When: handleTelegramTurn called
     // Then: ↓ line preview contains "[TG_PHOTO=" (media tag used as preview, not empty)
-    const { dir, cfgPath, cleanup } = makeTmpCfgDir();
+    const { dir, cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -407,6 +432,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });

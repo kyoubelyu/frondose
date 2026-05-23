@@ -88,8 +88,8 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        32,
-        `T-CONTRACT.TOOLS worker: expected 32 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        35,
+        `T-CONTRACT.TOOLS worker: expected 35 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
@@ -111,8 +111,8 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        23,
-        `T-CONTRACT.TOOLS server: expected 23 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        26,
+        `T-CONTRACT.TOOLS server: expected 26 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

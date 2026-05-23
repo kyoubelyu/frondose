@@ -20,7 +20,12 @@ import type { TurnLock } from "../agent/turnSemaphore.js";
 import { getHomeBase } from "../persistence/paths.js";
 import { acquireTurnLock, isPidAlive, releaseTurnLock } from "../persistence/processLock.js";
 import { appendMessages as appendMessagesPerCwd } from "../persistence/session.js";
-import { readTelegramConfig, type TelegramConfig, writeTelegramConfig } from "../persistence/telegramConfig.js";
+import {
+  readTelegramConfig,
+  type TelegramConfig,
+  writeTelegramConfig,
+  writeTelegramConfigFields,
+} from "../persistence/telegramConfig.js";
 import { downloadTelegramFile, mediaTagFor } from "../tools/telegram/inboundMedia.js";
 import { telegramFetch } from "../tools/telegram/transport.js";
 
@@ -328,7 +333,7 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
       return;
     }
     cfg.enabled = true;
-    writeTelegramConfig(cfg, ctx.configPath);
+    writeTelegramConfigFields({ enabled: true });
     if (ctx.pollerHandle?.running === true) {
       ctx.out.write("[telegram] already running\n");
       return;
@@ -341,7 +346,7 @@ export async function handleTelegramSlash(line: string, ctx: TelegramSlashCtx): 
   }
   if (verb === "off") {
     cfg.enabled = false;
-    writeTelegramConfig(cfg, ctx.configPath);
+    writeTelegramConfigFields({ enabled: false });
     if (ctx.pollerHandle) {
       ctx.pollerHandle.abort.abort();
       ctx.onPollerStart(null);

@@ -79,6 +79,20 @@ function mockProcessExit(): { captured: { value: number | null }; restore: () =>
   };
 }
 
+// P-Z3 (cat-10): each test boots its own server REST listener; the config default
+// rest_port (3031) collides → EADDRINUSE when multiple tests run in one process.
+// Seed a UNIQUE ≥1024 port per writeServerEnv call (schema requires min 1024; true
+// listen(0) is not expressible without a src affordance — §6.4). Collision-proof.
+let pZ3RestPort = 31000;
+function nextRestPort(): number {
+  return ++pZ3RestPort; // 31001, 31002, … (≤ 65535, well clear of the 3031 default)
+}
+// NIT-2: serverRepl ALSO binds the web dashboard port (default 8090) → seed it unique too.
+let pZ3WebPort = 38000;
+function nextWebPort(): number {
+  return ++pZ3WebPort; // 38001, 38002, … (well clear of the 8090 default)
+}
+
 /**
  * Write the minimal file tree under dir for a valid server environment:
  *   - .mai/server/identity.json
@@ -124,7 +138,12 @@ function writeServerEnv(dir: string): void {
   // SERVER_CONFIG_PATH = ~/.mai/server/config.json. Write it there.
   writeFileSync(
     join(maiServerDir, "config.json"),
-    JSON.stringify({ schema_version: 1, telegram: { boundUserId: null } }),
+    // P-Z3 (cat-10 + NIT-2): unique rest_port + web_port per test → no EADDRINUSE.
+    JSON.stringify({
+      schema_version: 1,
+      telegram: { boundUserId: null },
+      server: { rest_port: nextRestPort(), web_port: nextWebPort() },
+    }),
     "utf-8",
   );
 

@@ -567,16 +567,12 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: tool() count is 38 after P-39 (P-39 added search_memory + set_memory_note + get_memory_note)", () => {
+  it("T-CONTRACT: tool() count in src/tools/ (P-Z3 rebaseline → 41)", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  38 — baseline 28 at P-26, +3 P-27, +3 P-28.5, +1 P-31 (schedule_task), +3 P-39 (memory tools)
+    // Then:  41 — P-Z3 rebaseline from P-39-era 38; +suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(
-      count,
-      38,
-      `Expected exactly 38 tool() calls in src/tools/, got ${count}. P-39 added search_memory, set_memory_note, get_memory_note.`,
-    );
+    assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
   });
 });
