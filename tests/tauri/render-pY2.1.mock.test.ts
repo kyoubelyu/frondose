@@ -19,10 +19,28 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeProgress, stepChipLabel, stepVisualState } from "../../src/tauri/ui/render.js";
+import { buildSwitcher, computeProgress, stepChipLabel, stepVisualState } from "../../src/tauri/ui/render.js";
 
 type StepState = "pending" | "in_progress" | "completed" | "failed";
 const step = (id: string, state: StepState, requiresApproval = false) => ({ id, title: id, state, requiresApproval });
+
+// Minimal fake of TextElementLike with a class-tracking classList (buildSwitcher only calls toggle).
+function fakeTab() {
+  const classes = new Set<string>();
+  return {
+    classList: {
+      add: (t: string) => void classes.add(t),
+      remove: (t: string) => void classes.delete(t),
+      toggle: (t: string, force?: boolean) => {
+        const on = force ?? !classes.has(t);
+        if (on) classes.add(t);
+        else classes.delete(t);
+      },
+    },
+    textContent: null as string | null,
+    has: (t: string) => classes.has(t),
+  };
+}
 
 describe("render.computeProgress (G-PY2.1.4)", () => {
   it("T-Render.1: when 7 steps with exactly 2 completed, returns { done:2, total:7, fraction:2/7 }; empty → {0,0,0}", () => {
@@ -62,6 +80,22 @@ describe("render.stepChipLabel (G-PY2.1.4, G-PY2.1.5)", () => {
     // Then:  'done' (manual never auto-approves); 'needs you' (shipped checks pendingStepId before failed — §6.4 deviation, behaviorally equiv for spec cases)
     assert.equal(stepChipLabel(step("m", "completed", true), null, "manual"), "done");
     assert.equal(stepChipLabel(step("fp", "failed"), "fp", "manual"), "needs you");
+  });
+});
+
+describe("render.buildSwitcher — switcher active-highlight tracks mode (G-PY2.1.3, G-PY2.1.5)", () => {
+  it("T-Switcher.4: when buildSwitcher(manualTab, autoTab, mode) runs, exactly the active mode's tab carries 'active'", () => {
+    // Given: two fake switcher tabs + buildSwitcher (render.ts L153)
+    // When:  called with 'manual' then with 'auto' (a mode switch)
+    // Then:  manual ⇒ manualTab.active && !autoTab.active; auto ⇒ autoTab.active && !manualTab.active (highlight follows mode, no stale active)
+    const manual = fakeTab();
+    const auto = fakeTab();
+    buildSwitcher(manual, auto, "manual");
+    assert.ok(manual.has("active"), "manual tab must be 'active' in manual mode");
+    assert.ok(!auto.has("active"), "auto tab must NOT be 'active' in manual mode");
+    buildSwitcher(manual, auto, "auto");
+    assert.ok(auto.has("active"), "auto tab must be 'active' after switching to auto");
+    assert.ok(!manual.has("active"), "manual tab must lose 'active' after switching to auto (no stale highlight)");
   });
 });
 

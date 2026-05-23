@@ -4,397 +4,362 @@
   <meta charset="UTF-8" />
   <title>Frondose</title>
   <style>
+    /* ============================================================
+       Frondose tokens — SINGLE place for raw hex (mirrors frondoseTokens.ts).
+       OQ-Y2.7 BLEND: navy brand · green agent/done · sand running.
+       Component rules below are var()-only. body.mode-auto re-points the semantic vars to dark.
+       ============================================================ */
     :root {
-      --brand-50: #EAF0F6;
-      --brand-100: #CFE0EE;
-      --brand-400: #3D74A8;
+      /* anchors */
       --brand-600: #15487B;
-      --brand-900: #0E2E50;
-      --accent-50: #F8F1E3;
-      --accent-100: #F4E5C9;
-      --accent-400: #E3B972;
-      --accent-500: #D9A75F;
-      --accent-900: #80601E;
       --success: #46B54A;
-      --warning: #D9A75F;
-      --error: #B85547;
-      --text-primary: #2A2A22;
-      --text-secondary: #625E53;
-      --text-muted: #8B8475;
-      --text-inverse: #F7F1DA;
-      --surface-bg: #F4F2EB;
-      --surface-deep: #161A14;
-      --surface-card: #FFFFFF;
-      --surface-overlay: #232620;
-      --line: var(--brand-100);
-      --page-bg: var(--surface-bg);
-      --panel-bg: var(--surface-card);
-      --panel-ink: var(--text-primary);
-      --panel-muted: var(--text-muted);
-      --button-bg: var(--brand-600);
-      --button-hover: var(--brand-900);
+      --success-deep: #3A9C43;
+      --accent-500: #D9A75F;
+      --accent-300: #F0C285;
+      --accent-700: #B58740;
+      --accent-900: #9A6F1F;
+      --accent-soft: #F2DCAE;
+      --info: #4A6E9B;
+      --info-bg: #E3ECF6;
+      --info-border: #B5C6DC;
+      --danger: #B85547;
+      --danger-soft: #E8A095;
+      /* semantic surfaces (light / Manual) */
+      --page-bg: #F4F2EB;
+      --bar-bg: #EBE7DC;
+      --card-bg: #FFFFFF;
+      --line: #E0DDD2;
+      --line-soft: #EFEAE0;
+      --ink: #2A2A22;
+      --ink-soft: #4A4A40;
+      --ink-muted: #8B8475;
+      --tab-bar-bg: #DAD5C5;
+      --tab-inactive: #7A7468;
+      --tab-active-bg: #FFFFFF;
+      --tab-active-ink: #2A2A22;
+      --idle-dot: #EFEAE0;
+      --user-bubble-bg: #2A2A22;
+      --user-bubble-ink: #FFFFFF;
+      --on-accent: #3A2A0A;
+      --on-brand: #FFFFFF;
+      --glass-input: #FFFFFF;
+      --hero-btn-bg: #FFFFFF;
+      --ticker-bg: #FAFAF5;
+      /* gradients */
+      --grad-agent: linear-gradient(135deg, #46B54A, #3A9C43);
+      --grad-progress: linear-gradient(90deg, #46B54A, #6FBF6A);
+      --grad-handoff: linear-gradient(180deg, #E0B070, #C8943A);
+      --grad-switcher-auto: linear-gradient(135deg, #D9A75F, #B58740);
+      --grad-card-head: linear-gradient(180deg, #FAFAF5, #FFFFFF);
+      --grad-current-h: linear-gradient(90deg, #D9A75F, #F0C285);
+      --grad-done-v: linear-gradient(180deg, #46B54A, #2C7C36);
+      --grad-current-v: linear-gradient(180deg, #D9A75F, #2A2E26);
+      /* tints (rgba — role: chips/glass) */
+      --chip-accent-bg: rgba(217, 167, 95, 0.12);
+      --chip-success-bg: rgba(70, 181, 74, 0.16);
+      --glow-accent: rgba(217, 167, 95, 0.45);
+      /* geometry */
+      --r-window: 14px; --r-card: 12px; --r-inner: 10px; --r-btn: 7px; --r-pill: 999px; --r-chip: 4px;
     }
-
-    html.mode-auto,
     body.mode-auto {
-      --page-bg: var(--surface-deep);
-      --panel-bg: var(--surface-overlay);
-      --panel-ink: var(--text-inverse);
-      --panel-muted: var(--accent-100);
-      --line: var(--accent-900);
-      --button-bg: var(--accent-500);
-      --button-hover: var(--accent-400);
+      --page-bg: #161A14;
+      --bar-bg: rgba(15, 18, 13, 0.7);
+      --card-bg: rgba(32, 35, 27, 0.5);
+      --line: #2A2E26;
+      --line-soft: #2A2E26;
+      --ink: #ECE6CC;
+      --ink-soft: #B5BEA8;
+      --ink-muted: #8B8674;
+      --tab-bar-bg: #1F231C;
+      --tab-inactive: #6A7062;
+      --idle-dot: #2A2E26;
+      --user-bubble-bg: #2A2E26;
+      --user-bubble-ink: #ECE6CC;
+      --glass-input: rgba(42, 46, 38, 0.6);
+      --hero-btn-bg: rgba(35, 38, 30, 0.6);
+      --success-deep: #2C7C36;
+      --grad-card-head: linear-gradient(180deg, #1F231C, #232620);
+      --ticker-bg: #1F231C;
     }
 
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      min-height: 100vh;
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       background: var(--page-bg);
-      color: var(--panel-ink);
-      padding: 18px;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
     }
-    .shell {
-      max-width: 920px;
-      margin: 0 auto;
-    }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 18px;
-    }
-    .brand-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .brand-logo {
-      width: 30px;
-      height: 30px;
-      flex: 0 0 auto;
-    }
-    .brand-word {
-      color: var(--brand-600);
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0;
-    }
-    html.mode-auto .brand-word { color: var(--text-inverse); }
-    .mode-switcher {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3px;
-      padding: 3px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-bg);
-      min-width: 172px;
-    }
-    .mode-tab {
-      min-height: 34px;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--panel-muted);
-      font: inherit;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .mode-tab.active {
-      background: var(--button-bg);
-      color: var(--text-inverse);
-      font-weight: 700;
-    }
-    .identity-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-    #name {
-      font-size: 18px;
-      font-weight: 700;
-      min-width: 0;
-    }
-    #name.error {
-      color: var(--error);
-      font-size: 14px;
-      font-weight: 500;
-    }
-    #status {
-      color: var(--text-secondary);
-      font-size: 13px;
-      min-height: 18px;
-    }
-    html.mode-auto #status { color: var(--accent-100); }
-    button {
-      min-height: 36px;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 14px;
-      background: var(--button-bg);
-      color: var(--text-inverse);
-      font: inherit;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    button:hover:not(:disabled) { background: var(--button-hover); }
-    button:disabled {
-      background: var(--text-muted);
-      cursor: not-allowed;
-    }
-    .workspace {
-      display: grid;
-      gap: 12px;
-    }
-    .composer {
-      display: grid;
-      gap: 8px;
-    }
-    #command-input {
-      width: 100%;
-      min-height: 74px;
-      resize: vertical;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px;
-      background: var(--panel-bg);
-      color: var(--panel-ink);
-      font: inherit;
-      font-size: 14px;
-    }
-    #command-input:disabled {
-      color: var(--text-muted);
-      background: var(--accent-50);
-    }
-    .send-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    #ticker,
-    #cron-tick-banner {
-      color: var(--brand-600);
-      background: var(--brand-50);
-      border: 1px solid var(--brand-100);
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-    html.mode-auto #ticker,
-    html.mode-auto #cron-tick-banner {
-      color: var(--accent-100);
-      background: var(--surface-overlay);
-      border-color: var(--accent-900);
-    }
-    #output {
-      min-height: 50px;
-      max-height: 300px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px;
-      background: var(--panel-bg);
-      color: var(--panel-ink);
-      font-size: 13px;
-    }
-    #error-banner {
-      color: var(--error);
-      background: var(--accent-50);
-      border: 1px solid var(--warning);
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-    .workflow-card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px;
-      background: var(--panel-bg);
-      color: var(--panel-ink);
-      font-size: 13px;
-    }
-    .workflow-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    #workflow-title {
-      font-size: 14px;
-      font-weight: 700;
-    }
-    #workflow-mode {
-      color: var(--panel-muted);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    #workflow-steps {
-      display: grid;
-      gap: 6px;
-      margin: 0;
-      padding-left: 18px;
-    }
-    .workflow-step {
-      padding: 4px 0;
-      color: var(--panel-muted);
-    }
-    .workflow-step.success,
-    .workflow-step.auto-approved { color: var(--success); }
-    .workflow-step.current { color: var(--brand-600); }
-    .workflow-step.needs-you { color: var(--warning); font-weight: 700; }
-    .workflow-step.failed { color: var(--error); }
-    .workflow-progress-row {
-      color: var(--text-secondary);
-      font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", monospace;
-    }
-    .workflow-notice {
-      margin-top: 10px;
-      border: 1px solid var(--warning);
-      border-radius: 6px;
-      padding: 8px;
-      background: var(--accent-50);
-      color: var(--text-primary);
-    }
-    .workflow-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .auto-stage {
-      display: grid;
-      gap: 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      background: var(--panel-bg);
-      color: var(--panel-ink);
-    }
-    .auto-hero {
-      display: grid;
-      grid-template-columns: 40px 1fr;
-      gap: 10px;
-      align-items: center;
-    }
-    .leaf-logo,
-    .icon {
-      width: 24px;
-      height: 24px;
-    }
-    .auto-title {
-      margin: 0;
-      font-size: 18px;
-    }
-    .auto-meta {
-      grid-column: 2;
-      margin: 0;
-      color: var(--panel-muted);
-      font-size: 13px;
-    }
-    .auto-progress-strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-      gap: 6px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .auto-progress-strip li {
-      min-height: 8px;
-      border-radius: 6px;
-      overflow: hidden;
-      text-indent: 100%;
-      white-space: nowrap;
-      background: var(--line);
-    }
-    .auto-progress-strip li.success,
-    .auto-progress-strip li.auto-approved { background: var(--success); }
-    .auto-progress-strip li.current,
-    .auto-progress-strip li.needs-you { background: var(--accent-500); }
-    .auto-timeline {
-      display: grid;
-      gap: 8px;
-    }
-    .timeline-row {
-      display: grid;
-      grid-template-columns: 14px 1fr auto;
-      gap: 8px;
-      align-items: center;
-      font-size: 13px;
-    }
-    .timeline-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: var(--line);
-    }
-    .timeline-row.success .timeline-dot,
-    .timeline-row.auto-approved .timeline-dot { background: var(--success); }
-    .timeline-row.current .timeline-dot,
-    .timeline-row.needs-you .timeline-dot { background: var(--accent-500); }
-    .timeline-chip {
-      color: var(--panel-muted);
-      font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", monospace;
-      font-size: 12px;
-    }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .hidden { display: none !important; }
+
+    .app { display: flex; flex-direction: column; height: 100vh; position: relative; background: var(--page-bg); }
+    body.mode-auto .app::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(circle at 85% 5%, rgba(217, 167, 95, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 5% 95%, rgba(90, 128, 67, 0.07) 0%, transparent 40%);
+    }
+    .app > * { position: relative; z-index: 1; }
+
+    /* topbar */
+    .topbar { display: flex; align-items: center; gap: 12px; padding: 9px 14px; background: var(--bar-bg); border-bottom: 0.5px solid var(--line); backdrop-filter: blur(20px); }
+    .brand { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .brand-logo { width: 19px; height: 19px; display: block; }
+    .brand-word { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: var(--ink-soft); }
+    .switcher { margin-left: auto; display: flex; gap: 2px; padding: 2px; border-radius: var(--r-btn); background: var(--tab-bar-bg); }
+    .seg-tab { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border: 0; border-radius: 5px; background: transparent; color: var(--tab-inactive); font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; }
+    .seg-tab .seg-icon { width: 12px; height: 12px; }
+    .seg-tab.active { background: var(--tab-active-bg); color: var(--tab-active-ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+    body.mode-auto .seg-tab.active { background: var(--grad-switcher-auto); color: var(--on-accent); box-shadow: 0 0 12px var(--glow-accent); }
+
+    /* surfaces */
+    .scroll-area { flex: 1 1 auto; overflow-y: auto; }
+    body.mode-auto #manual-surface { display: none; }
+    body:not(.mode-auto) #auto-stage { display: none; }
+    .conv { display: flex; flex-direction: column; gap: 16px; padding: 18px 22px 24px; }
+
+    .status-line { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--success); }
+    body.mode-auto .status-dot { background: var(--accent-500); box-shadow: 0 0 8px var(--glow-accent); animation: pulseSubtle 1.6s infinite; }
+
+    .msg-user { align-self: flex-end; max-width: 75%; padding: 9px 14px; border-radius: 14px 14px 4px 14px; background: var(--user-bubble-bg); color: var(--user-bubble-ink); font-size: 13.5px; line-height: 1.5; }
+    .msg-agent { display: flex; gap: 11px; align-items: flex-start; }
+    .avatar { flex-shrink: 0; width: 26px; height: 26px; margin-top: 2px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--grad-agent); color: var(--on-brand); box-shadow: 0 0 10px rgba(70, 181, 74, 0.28); }
+    .avatar svg { width: 14px; height: 14px; }
+    .msg-agent-body { max-width: 88%; }
+    .msg-agent-text { font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+
+    .start-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 0.5px solid var(--line); border-radius: var(--r-card); background: var(--card-bg); box-shadow: 0 1px 2px rgba(58, 90, 44, 0.05); }
+    .start-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .start-name.error { color: var(--danger); font-size: 13px; font-weight: 500; }
+    .start-hint { margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
+    .btn-primary { margin-left: auto; border: none; border-radius: var(--r-btn); padding: 8px 16px; background: var(--grad-agent); color: var(--on-brand); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 3px rgba(58, 90, 44, 0.25); }
+    .btn-primary:disabled { background: var(--ink-muted); cursor: not-allowed; box-shadow: none; }
+
+    .ticker { align-self: flex-start; font-size: 11.5px; color: var(--ink-muted); background: var(--ticker-bg); border: 0.5px solid var(--line-soft); border-radius: var(--r-btn); padding: 5px 10px; }
+
+    /* inline workflow card */
+    .iwf-card { border: 0.5px solid var(--line); border-radius: var(--r-card); overflow: hidden; background: var(--card-bg); box-shadow: 0 1px 2px rgba(58, 90, 44, 0.05); }
+    .iwf-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--grad-card-head); border-bottom: 0.5px solid var(--line-soft); }
+    .iwf-icon { flex-shrink: 0; width: 26px; height: 26px; border-radius: var(--r-btn); display: flex; align-items: center; justify-content: center; background: var(--grad-agent); color: var(--on-brand); }
+    .iwf-icon svg { width: 15px; height: 15px; }
+    .iwf-head-text { min-width: 0; }
+    .iwf-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+    .iwf-sub { margin-top: 1px; font-size: 10.5px; color: var(--ink-muted); }
+    .iwf-progress-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .iwf-progress-bar { width: 70px; height: 3px; border-radius: 2px; overflow: hidden; background: var(--line-soft); }
+    .iwf-progress-fill { height: 100%; width: 0; background: var(--grad-progress); transition: width 200ms ease-out; }
+    .iwf-progress-text { font-size: 10.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+    .iwf-steps { padding: 8px 0; }
+    .iwf-step { display: flex; align-items: center; gap: 10px; padding: 6px 14px; font-size: 12px; }
+    .iwf-step-dot { flex-shrink: 0; width: 14px; height: 14px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--idle-dot); }
+    .iwf-step-dot.success { background: var(--success); }
+    .iwf-step-dot.auto-approved { background: var(--accent-500); }
+    .iwf-step-dot.current { background: var(--accent-soft); border: 1.5px solid var(--accent-500); }
+    .iwf-step-dot.needs-you { background: var(--info-bg); border: 1.5px solid var(--info-border); }
+    .iwf-step-dot.failed { background: var(--danger); }
+    .iwf-step-check { width: 8px; height: 8px; color: var(--on-brand); }
+    .iwf-step-dot-inner { width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--accent-900); }
+    .iwf-step-text { flex: 1; color: var(--ink); }
+    .iwf-step-text.muted { color: var(--ink-muted); }
+    .iwf-step-time { font-size: 10.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+    .iwf-step-time.current { color: var(--accent-900); }
+    .iwf-step-time.needs-you { color: var(--info); }
+
+    .iwf-notice { margin: 0 14px 8px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); padding: 8px 10px; font-size: 11.5px; color: var(--ink); background: var(--chip-accent-bg); }
+    .iwf-actions { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 0.5px solid var(--line-soft); background: var(--grad-card-head); }
+    .iwf-actions-right { margin-left: auto; display: flex; gap: 6px; }
+    .iwf-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 0.5px solid var(--line); border-radius: var(--r-btn); background: var(--card-bg); color: var(--ink); font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; }
+    .iwf-btn-primary { border-color: transparent; background: var(--grad-handoff); color: var(--on-accent); box-shadow: 0 1px 2px rgba(200, 148, 58, 0.25); }
+    .iwf-btn-approve { border-color: transparent; background: var(--success); color: var(--on-brand); }
+    .iwf-btn-ghost { border: none; background: transparent; color: var(--ink-muted); font: inherit; font-size: 11px; cursor: pointer; padding: 5px 8px; }
+
+    /* auto stage (built by render.ts) */
+    .auto-stage { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 8px; }
+    .hero { display: flex; align-items: center; gap: 14px; padding: 4px 4px 0; }
+    .hero-icon-wrap { position: relative; flex-shrink: 0; }
+    .hero-icon { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--grad-switcher-auto); color: var(--on-accent); box-shadow: 0 0 20px var(--glow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+    .hero-icon svg { width: 19px; height: 19px; }
+    .hero-icon-ring { position: absolute; inset: -4px; border-radius: 14px; border: 1.5px solid var(--accent-500); opacity: 0.45; animation: ringPulse 2s ease-in-out infinite; }
+    .hero-text { flex: 1; min-width: 0; }
+    .hero-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .hero-sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 11.5px; color: var(--ink-muted); }
+    .hero-sub-dot { width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--ink-muted); opacity: 0.6; }
+    .hero-actions { display: flex; gap: 6px; }
+    .hero-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 0.5px solid var(--line); border-radius: var(--r-btn); background: var(--hero-btn-bg); color: var(--ink-soft); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer; backdrop-filter: blur(10px); }
+    .hero-btn svg { width: 12px; height: 12px; }
+    .hero-btn-stop { border-color: var(--danger); color: var(--danger-soft); }
+
+    .progress-strip { padding: 14px 16px; border: 0.5px solid var(--line); border-radius: 11px; background: var(--card-bg); backdrop-filter: blur(10px); }
+    .ps-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .ps-step-label { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-muted); }
+    .ps-current { margin-top: 3px; font-size: 13px; font-weight: 500; color: var(--ink); }
+    .ps-elapsed { margin-left: auto; font-size: 11px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+    .ps-bar-wrap { display: flex; gap: 4px; height: 4px; }
+    .ps-seg { flex: 1; border-radius: 2px; background: var(--idle-dot); }
+    .ps-seg.done { background: var(--grad-progress); }
+    .ps-seg.current { background: var(--grad-current-h); box-shadow: 0 0 8px var(--glow-accent); }
+
+    .timeline { flex: 1; padding: 4px 0; border: 0.5px solid var(--line); border-radius: 11px; background: var(--card-bg); backdrop-filter: blur(10px); }
+    .timeline-empty { padding: 16px; font-size: 12px; color: var(--ink-muted); }
+    .tlA-step { display: flex; gap: 12px; padding: 9px 16px; align-items: flex-start; }
+    .tlA-rail { display: flex; flex-direction: column; align-items: center; padding-top: 2px; align-self: stretch; }
+    .tlA-dot { flex-shrink: 0; width: 16px; height: 16px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--idle-dot); }
+    .tlA-dot.success, .tlA-dot.auto-approved { background: var(--success-deep); }
+    .tlA-dot.current { background: var(--accent-500); box-shadow: 0 0 10px var(--glow-accent); }
+    .tlA-check { width: 9px; height: 9px; color: var(--on-brand); }
+    .tlA-dot-inner { width: 5px; height: 5px; border-radius: var(--r-pill); background: var(--on-brand); }
+    .tlA-line { width: 1.5px; flex: 1; min-height: 8px; margin: 3px 0; background: var(--line); }
+    .tlA-line.done { background: var(--grad-done-v); }
+    .tlA-line.current { background: var(--grad-current-v); }
+    .tlA-body { flex: 1; min-width: 0; padding-bottom: 2px; }
+    .tlA-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink); }
+    .tlA-title.muted { color: var(--ink-muted); }
+    .tlA-title.done { color: var(--ink-soft); }
+    .tlA-chip { font-size: 9.5px; font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; padding: 1px 6px; border-radius: var(--r-chip); background: var(--chip-accent-bg); color: var(--accent-500); }
+    .tlA-chip-success { background: var(--chip-success-bg); color: var(--success); }
+
+    /* footer / composer / dock */
+    .footer { flex: 0 0 auto; border-top: 0.5px solid var(--line); background: var(--bar-bg); backdrop-filter: blur(24px); }
+    .dock-tab { display: none; align-items: center; gap: 8px; padding: 9px 16px; border-bottom: 0.5px solid var(--line); font-size: 11.5px; color: var(--ink-muted); }
+    .dock-conv { display: none; flex-direction: column; gap: 8px; padding: 10px 16px; max-height: 120px; overflow-y: auto; }
+    body.mode-auto .dock-tab { display: flex; }
+    body.mode-auto .dock-conv { display: flex; }
+    .dock-grip { display: flex; flex-direction: column; gap: 1.5px; }
+    .dock-grip span { display: block; width: 14px; height: 1px; border-radius: 1px; background: var(--ink-muted); }
+    .dock-tab-ic { width: 13px; height: 13px; color: var(--success); }
+    .dock-tab-label { color: var(--ink); font-weight: 500; }
+    .dmsg-agent { display: flex; gap: 8px; align-items: flex-start; }
+    .dmsg-avatar { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--grad-agent); color: var(--on-brand); }
+    .dmsg-avatar svg { width: 10px; height: 10px; }
+    .dmsg-text { font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
+
+    .composer { padding: 12px 18px 16px; }
+    .composer-inner { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 0.5px solid var(--line); border-radius: var(--r-card); background: var(--glass-input); }
+    .composer-clip { width: 16px; height: 16px; color: var(--ink-muted); flex-shrink: 0; }
+    #command-input { flex: 1; min-width: 0; border: none; background: transparent; outline: none; color: var(--ink); font: inherit; font-size: 13px; }
+    #command-input::placeholder { color: var(--ink-muted); }
+    .composer-kbd { font-size: 10px; color: var(--ink-muted); background: var(--line-soft); border-radius: var(--r-chip); padding: 2px 5px; }
+    .composer-send { flex-shrink: 0; width: 26px; height: 26px; border: none; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--grad-agent); color: var(--on-brand); cursor: pointer; box-shadow: 0 1px 3px rgba(58, 90, 44, 0.25); }
+    .composer-send svg { width: 13px; height: 13px; }
+    .composer-send.is-cancel { background: var(--danger); }
+
+    /* shared banners */
+    .banners { padding: 0 18px; }
+    .banner-error { margin: 8px 18px 0; padding: 8px 10px; border: 0.5px solid var(--danger); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--danger); font-size: 12.5px; }
+    .btn-retry { margin: 8px 18px 0; border: none; border-radius: var(--r-btn); padding: 6px 14px; background: var(--brand-600); color: var(--on-brand); font: inherit; font-size: 12.5px; cursor: pointer; }
+    .cron-banner { margin: 8px 18px 12px; padding: 8px 10px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--accent-900); font-size: 12px; }
+    body.mode-auto .cron-banner { color: var(--accent-500); }
+
+    @keyframes pulseSubtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse { animation: pulseSubtle 1.6s infinite; }
+    @keyframes ringPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.15; transform: scale(1.08); } }
   </style>
 </head>
 <body>
-  <main class="shell">
+  <h1 class="sr-only">Frondose</h1>
+  <div class="app">
     <header class="topbar">
-      <div id="brand-bar" class="brand-bar">
+      <div class="brand">
         <img class="brand-logo" src="./frondose-logo-mark.svg" alt="Frondose" />
         <span class="brand-word">Frondose</span>
       </div>
-      <div class="mode-switcher" role="tablist" aria-label="Mode">
-        <button id="mode-manual-tab" class="mode-tab active" type="button" role="tab">Manual</button>
-        <button id="mode-auto-tab" class="mode-tab" type="button" role="tab">Auto</button>
+      <div class="switcher" role="tablist" aria-label="Mode">
+        <button id="mode-manual-tab" class="seg-tab active" type="button" role="tab">
+          <svg class="seg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-11.7 7.7L3 21l1.8-6.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
+          Manual
+        </button>
+        <button id="mode-auto-tab" class="seg-tab" type="button" role="tab">
+          <svg class="seg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7l1-7z"/></svg>
+          Auto
+        </button>
       </div>
     </header>
-    <section class="identity-row">
-      <div>
-        <div id="name">loading identity...</div>
-        <div id="status">Listening</div>
+
+    <div class="scroll-area">
+      <section id="manual-surface" class="conv">
+        <div class="status-line"><span class="status-dot"></span><span id="status">Listening</span></div>
+
+        <div class="msg-agent">
+          <div class="avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
+          <div class="msg-agent-body">
+            <div class="msg-agent-text">Hi — I'm Frondose. Tell me a LinkedIn goal and I'll plan it as steps, run it in your browser, and pause for your approval before anything goes out.</div>
+          </div>
+        </div>
+
+        <div id="start-card" class="start-card">
+          <div>
+            <div id="name" class="start-name">loading identity...</div>
+            <div class="start-hint">Connect your browser to begin.</div>
+          </div>
+          <button id="start" class="btn-primary" type="button">Start LinkedIn</button>
+        </div>
+
+        <div id="output-msg" class="msg-agent hidden">
+          <div class="avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
+          <div class="msg-agent-body"><div id="output" class="msg-agent-text"></div></div>
+        </div>
+
+        <div id="ticker" class="ticker hidden"></div>
+
+        <div id="workflow-card" class="iwf-card hidden">
+          <div class="iwf-head">
+            <div class="iwf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><path d="M6 8.2v7.6"/><path d="M18 6h-4.5a3 3 0 0 0-3 3v6.8"/><circle cx="18" cy="6" r="2.2"/></svg></div>
+            <div class="iwf-head-text">
+              <div id="workflow-title" class="iwf-title">workflow</div>
+              <div id="workflow-sub" class="iwf-sub"></div>
+            </div>
+            <div class="iwf-progress-wrap">
+              <div class="iwf-progress-bar"><div id="workflow-progress-fill" class="iwf-progress-fill"></div></div>
+              <div id="workflow-progress-text" class="iwf-progress-text">0 / 0</div>
+            </div>
+          </div>
+          <div id="workflow-steps" class="iwf-steps"></div>
+          <div id="workflow-notice" class="iwf-notice hidden"></div>
+          <div class="iwf-actions">
+            <button id="workflow-showall-btn" class="iwf-btn-ghost hidden" type="button">Show all steps</button>
+            <div class="iwf-actions-right">
+              <button id="workflow-approve-btn" class="iwf-btn iwf-btn-approve hidden" type="button">Approve</button>
+              <button id="workflow-decline-btn" class="iwf-btn hidden" type="button">Decline</button>
+              <button id="workflow-pause-btn" class="iwf-btn" type="button">Pause</button>
+              <button id="workflow-handoff-btn" class="iwf-btn iwf-btn-primary" type="button">Hand off to Auto</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="auto-stage" class="auto-stage hidden"></section>
+    </div>
+
+    <footer class="footer">
+      <div class="dock-tab">
+        <div class="dock-grip"><span></span><span></span><span></span></div>
+        <svg class="dock-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-11.7 7.7L3 21l1.8-6.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
+        <span class="dock-tab-label">Conversation</span>
       </div>
-      <button id="start" type="button">Start LinkedIn</button>
-    </section>
-    <section class="workspace">
-      <div class="composer">
-        <textarea id="command-input" class="hidden" placeholder="Ask Frondose"></textarea>
-        <div class="send-row">
-          <button id="send-btn" class="hidden" type="button">Send</button>
+      <div class="dock-conv">
+        <div class="dmsg-agent">
+          <div class="dmsg-avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
+          <div class="dmsg-text">I'll keep you posted here. Inject a rule or ask a question anytime.</div>
         </div>
       </div>
-      <div id="ticker" class="hidden"></div>
-      <div id="workflow-card" class="workflow-card hidden">
-        <div class="workflow-head">
-          <strong id="workflow-title">workflow</strong>
-          <span id="workflow-mode">Manual</span>
-        </div>
-        <ol id="workflow-steps"></ol>
-        <div id="workflow-notice" class="workflow-notice hidden"></div>
-        <div class="workflow-actions">
-          <button id="workflow-approve-btn" class="hidden" type="button">Approve</button>
-          <button id="workflow-decline-btn" class="hidden" type="button">Decline</button>
-          <button id="workflow-handoff-btn" class="hidden" type="button" title="Pre-approve remaining steps">Hand off to Auto</button>
+      <div id="composer" class="composer hidden">
+        <div class="composer-inner">
+          <svg class="composer-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 9l-9.5 9.5a4 4 0 0 1-5.7-5.7L14 4.6a2.6 2.6 0 0 1 3.7 3.7L9 16.9"/></svg>
+          <input id="command-input" class="hidden" type="text" placeholder="Reply, or press / for actions" />
+          <span class="composer-kbd">⌘↵</span>
+          <button id="send-btn" class="composer-send hidden" type="button" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
         </div>
       </div>
-      <div id="auto-stage" class="auto-stage hidden"></div>
-      <div id="output" class="hidden"></div>
-      <div id="error-banner" class="hidden">error</div>
-      <button id="retry-btn" class="hidden" type="button">Retry</button>
-      <div id="cron-tick-banner" class="hidden"></div>
-    </section>
-  </main>
+    </footer>
+
+    <div id="error-banner" class="banner-error hidden">error</div>
+    <button id="retry-btn" class="btn-retry hidden" type="button">Retry</button>
+    <div id="cron-tick-banner" class="cron-banner hidden"></div>
+  </div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

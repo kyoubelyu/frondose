@@ -154,6 +154,9 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       const lines = readFileSync(join(UI_DIR, f), "utf-8").split("\n").length;
       assert.ok(lines <= 800, `${f} must be ≤800 lines; got ${lines}`);
     }
+    // Operator-approved scope expansion (P-Y2.1 visual rework, 2026-05-23): the Tauri window/product
+    // brand rename ("mai" → "Frondose") lives in tauri.conf.json — whitelisted alongside src/tauri/ui/.
+    const SCOPE_WHITELIST = new Set(["src/tauri/src-tauri/tauri.conf.json"]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
     const srcPaths = status
       .split("\n")
@@ -161,7 +164,10 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       .filter((p) => p.length > 0)
       .flatMap((p) => (p.includes(" -> ") ? p.split(" -> ") : [p]));
     for (const p of srcPaths) {
-      assert.ok(p.startsWith("src/tauri/ui/"), `production change outside src/tauri/ui/ is out of scope: ${p}`);
+      assert.ok(
+        p.startsWith("src/tauri/ui/") || SCOPE_WHITELIST.has(p),
+        `production change outside src/tauri/ui/ (or the approved whitelist) is out of scope: ${p}`,
+      );
     }
   });
 });
