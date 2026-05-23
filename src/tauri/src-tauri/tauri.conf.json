@@ -5,7 +5,9 @@
   "identifier": "com.kyoube.mai",
   "build": {
     "frontendDist": "../ui",
-    "devUrl": null
+    "devUrl": null,
+    "beforeDevCommand": { "script": "npm run build:tauri", "wait": true },
+    "beforeBuildCommand": "npm run build:tauri"
   },
   "app": {
     "withGlobalTauri": true,

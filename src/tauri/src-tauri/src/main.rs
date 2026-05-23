@@ -13,7 +13,7 @@ use hyper::{Body, Client, Method, Request, StatusCode};
 use hyperlocal::{UnixClientExt, Uri};
 use rand::RngCore;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, RunEvent};
+use tauri::{AppHandle, Emitter, RunEvent, WindowEvent};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
@@ -377,12 +377,32 @@ async fn main() {
         }
     });
 
-    app.run(move |_app_handle, event| {
-        if let RunEvent::ExitRequested { .. } = event {
-            let state_for_shutdown = state_clone.clone();
-            tauri::async_runtime::block_on(async {
-                shutdown_sidecar(&state_for_shutdown).await;
-            });
+    app.run(move |app_handle, event| {
+        match event {
+            // D-RUN-1 (safety): macOS does NOT auto-exit when the last window closes
+            // (NSApplication convention), so RunEvent::ExitRequested never fires on a
+            // window-close — the spawned `mai serve` sidecar (+ agent loop + Chrome
+            // control) would survive and keep driving the browser. Kill the sidecar and
+            // force the app to exit so app-close reliably stops the agent.
+            RunEvent::WindowEvent {
+                event: WindowEvent::CloseRequested { .. },
+                ..
+            } => {
+                let state_for_shutdown = state_clone.clone();
+                tauri::async_runtime::block_on(async {
+                    shutdown_sidecar(&state_for_shutdown).await;
+                });
+                app_handle.exit(0);
+            }
+            // Cmd+Q / programmatic exit (incl. our SIGTERM handler). shutdown_sidecar is
+            // idempotent (child handle is take()n once) so double-invocation is safe.
+            RunEvent::ExitRequested { .. } => {
+                let state_for_shutdown = state_clone.clone();
+                tauri::async_runtime::block_on(async {
+                    shutdown_sidecar(&state_for_shutdown).await;
+                });
+            }
+            _ => {}
         }
     });
 }
