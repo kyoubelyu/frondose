@@ -28,6 +28,7 @@ Commands:
   server               Operator's orchestrator agent
   gh                   GitHub issue tool configuration
   search               Web search API key management
+  serve [options]      HTTP-over-UDS bridge for the v0.5 Tauri desktop shell
   update [options]     Check for mai-agent updates on GitHub Releases
   uninstall [options]  Remove the global mai install (bin + package symlink +
                        release dirs); --purge also removes ~/.mai/

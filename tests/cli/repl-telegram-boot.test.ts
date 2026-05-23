@@ -14,24 +14,42 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function makeTmpDir(): { dir: string; cleanup: () => void } {
+// P-Z3 / P-24: enabled/boundUserId live in config.json.telegram (DEFAULT_CONFIG_PATH =
+// getHomeBase()/.mai/agent/config.json), NOT in telegram.json (now runtime-only). These boot
+// tests assert readTelegramConfig(cfgPath).enabled/boundUserId, so the precondition must be seeded
+// into config.json. Point HOME at each test's own tmp dir → per-test config.json; caller restores.
+function makeTmpDir(): { dir: string; cleanup: () => void; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p11-replboot-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
+  return {
+    dir,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
+  };
 }
 
 function makeTgCfg(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
-    enabled: false,
-    boundUserId: null,
     lastUpdateOffset: 0,
     stickyFallbackIp: null,
     pollTimeoutSec: 1,
     pollBackoffSec: 1,
     ...overrides,
   };
+}
+
+// P-Z3: seed config.json.telegram (enabled/boundUserId) for the isolated HOME. Call AFTER
+// makeTmpDir has pointed HOME at the test's dir.
+function seedTelegramConfig(fields: { enabled?: boolean; boundUserId?: number | null }): void {
+  writeTelegramConfigFields(fields);
 }
 
 // ─── T-Boot: REPL boot-time poller ───────────────────────────────────────────
@@ -44,10 +62,11 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
     // NOTE: runRepl starts a readline loop and is hard to unit-test end-to-end without real stdin.
     // This test verifies the CONFIG-READING PATH using the replTelegram module directly,
     // which mirrors what repl.ts does at boot.
-    const { dir, cleanup } = makeTmpDir();
+    const { dir, cleanup, restoreHome } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: 12345 })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg()), "utf-8");
+      seedTelegramConfig({ enabled: true, boundUserId: 12345 });
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         // Import startTelegramPoller to verify the boot path works
@@ -118,6 +137,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -126,10 +146,11 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
     // Given: telegramConfigPath with {enabled:false}; spy on startTelegramPoller
     // When: repl.ts reads config and sees enabled=false
     // Then: config.enabled is false → poller not started (verified by config read)
-    const { dir, cleanup } = makeTmpDir();
+    const { dir, cleanup, restoreHome } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: false })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg()), "utf-8");
+      seedTelegramConfig({ enabled: false });
 
       const { readTelegramConfig } = await import("../../src/persistence/telegramConfig.js");
       const cfg = readTelegramConfig(cfgPath);
@@ -142,6 +163,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
       const wouldStart = cfg.enabled && tokenSet && cfg.boundUserId !== null;
       assert.equal(wouldStart, false, "poller must NOT be started when enabled=false");
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -150,10 +172,11 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
     // Given: {enabled:true, boundUserId:null}; TELEGRAM_TOKEN set
     // When: repl.ts reads config
     // Then: startTelegramPoller NOT called (bound condition fails; null userId)
-    const { dir, cleanup } = makeTmpDir();
+    const { dir, cleanup, restoreHome } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: null })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg()), "utf-8");
+      seedTelegramConfig({ enabled: true, boundUserId: null });
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         const { readTelegramConfig } = await import("../../src/persistence/telegramConfig.js");
@@ -176,6 +199,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -184,10 +208,11 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
     // Given: telegram poller running (enabled+boundUserId+token); REPL aborts via abortController
     // When: abortController.abort() called; REPL loop breaks
     // Then: pollerAbortController.aborted===true (poller cleanup on exit)
-    const { dir, cleanup } = makeTmpDir();
+    const { dir, cleanup, restoreHome } = makeTmpDir();
     try {
       const cfgPath = join(dir, "telegram.json");
-      writeFileSync(cfgPath, JSON.stringify(makeTgCfg({ enabled: true, boundUserId: 999 })), "utf-8");
+      writeFileSync(cfgPath, JSON.stringify(makeTgCfg()), "utf-8");
+      seedTelegramConfig({ enabled: true, boundUserId: 999 });
       process.env.TELEGRAM_TOKEN = "test-tok";
       try {
         const { startTelegramPoller } = await import("../../src/cli/replTelegram.js");
@@ -264,6 +289,7 @@ describe("T-Boot: REPL boot Telegram poller integration (G-P11.19)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });

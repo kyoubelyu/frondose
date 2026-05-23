@@ -48,8 +48,9 @@ test("T-Tools.1: all 24 tools registered with fake session", async () => {
   const tools = makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "" }, control);
   const toolNames = Object.keys(tools);
 
-  // Total count assertion
-  assert.equal(toolNames.length, 24, `Expected 24 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
+  // Total count assertion (P-Z3 rebaseline: was 24; default-mode makeAllTools is now 35
+  // post-P-Y1 — +memory/coords/cron/suggestion/todo_write tools accreted since P-16)
+  assert.equal(toolNames.length, 35, `Expected 35 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
 
   // All 10 LinkedIn tool names present
   const missing = LINKEDIN_TOOL_NAMES.filter((name) => !toolNames.includes(name));

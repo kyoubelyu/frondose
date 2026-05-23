@@ -24,13 +24,18 @@ import { STEALTH_INIT_SCRIPT } from "../../src/cdp/stealth.js";
  * Returns the sandbox object so tests can inspect navigator post-execution.
  */
 function makeStealthSandbox() {
+  // P-Z3 (cat-2): current mechanism (stealth.ts:20) DELETES `webdriver` from the
+  // Navigator prototype + step-4 captures Object.getPrototypeOf(navigator.plugins) —
+  // so navigator needs a prototype carrying `webdriver` + a `plugins` object.
+  const navProto: Record<string, unknown> = { webdriver: false };
   const nav: Record<string, unknown> & {
     permissions: { query: (p: unknown) => Promise<{ state: string }> };
-  } = {
+  } = Object.assign(Object.create(navProto), {
     permissions: {
       query: async (_p: unknown) => ({ state: "default" }),
     },
-  };
+    plugins: [],
+  });
 
   const win: Record<string, unknown> = {
     cdc_adoQpoasnfa76pfcZLmcfl_Array: 1,
@@ -45,6 +50,7 @@ function makeStealthSandbox() {
     Object: Object,
     Symbol: Symbol,
     Function: Function,
+    Promise: Promise,
   };
 
   vm.runInNewContext(STEALTH_INIT_SCRIPT, sandbox);
@@ -53,31 +59,35 @@ function makeStealthSandbox() {
 
 // ─── T-ST.1 ───────────────────────────────────────────────────────────────────
 
-describe("STEALTH_INIT_SCRIPT navigator.webdriver toString fix — G-P32.19", () => {
-  it("T-ST.1: after P-32 stealth edit, navigator.webdriver getter returns undefined", () => {
-    // Given: STEALTH_INIT_SCRIPT evaluated in a VM sandbox
-    // When:  navigator.webdriver is accessed
-    // Then:  returns undefined (existing P-2 behavior unchanged)
+describe("STEALTH_INIT_SCRIPT navigator.webdriver — prototype-delete mechanism (G-P32.19)", () => {
+  it("T-ST.1: after stealth, navigator.webdriver is absent (deleted from the prototype)", () => {
+    // Given: STEALTH_INIT_SCRIPT evaluated in a VM sandbox.
+    // When:  navigator.webdriver presence is checked.
+    // Then:  P-Z3 — the current mechanism (stealth.ts:20) DELETES `webdriver` from the
+    //        Navigator prototype, so `"webdriver" in navigator` is false (stronger than the
+    //        old getter-returns-undefined: Intoli "WebDriver New" checks property PRESENCE).
     const { nav } = makeStealthSandbox();
-    const descriptor = Object.getOwnPropertyDescriptor(nav, "webdriver");
-    assert.ok(descriptor?.get !== undefined, "T-ST.1: navigator must have a 'webdriver' getter installed");
-    const value = descriptor?.get?.call(nav);
-    assert.equal(value, undefined, "T-ST.1: navigator.webdriver must return undefined");
+    assert.ok(!("webdriver" in nav), "T-ST.1: navigator.webdriver must be absent after prototype-delete");
+    assert.equal(nav.webdriver, undefined, "T-ST.1: accessing navigator.webdriver yields undefined");
   });
 
-  it("T-ST.2: navigator.webdriver getter's own toString returns 'function get webdriver() { [native code] }' (1-level fix, OQ-5)", () => {
-    // Given: STEALTH_INIT_SCRIPT evaluated in a VM sandbox; P-32 applies 1-level toString patch
-    // When:  Object.getOwnPropertyDescriptor(navigator,"webdriver").get.toString() is called
-    // Then:  returns exactly "function get webdriver() { [native code] }"
-    //        (G-P32.19 — the 1-level fix; wd.toString.toString() residual is noted in R-8/OQ-5)
+  it("T-ST.2: no `webdriver` getter exists to fingerprint (prototype-delete supersedes the P-32 getter+toString fix)", () => {
+    // Given: STEALTH_INIT_SCRIPT evaluated in a VM sandbox.
+    // When:  the property descriptor for `webdriver` is sought on the instance AND prototype.
+    // Then:  P-Z3 — there is NO getter anywhere (the prototype-delete removed the property
+    //        entirely), so there is nothing whose `.toString()` could leak a fake getter —
+    //        the old P-32 1-level toString-fingerprint concern is moot by construction.
     const { nav } = makeStealthSandbox();
-    const descriptor = Object.getOwnPropertyDescriptor(nav, "webdriver");
-    assert.ok(descriptor?.get !== undefined, "T-ST.2: navigator must have a 'webdriver' getter");
-    const getterToString = descriptor?.get?.toString();
     assert.equal(
-      getterToString,
-      "function get webdriver() { [native code] }",
-      "T-ST.2: getter.toString() must return 'function get webdriver() { [native code] }' (1-level toString fix)",
+      Object.getOwnPropertyDescriptor(nav, "webdriver"),
+      undefined,
+      "T-ST.2: no own `webdriver` descriptor (no instance getter installed)",
+    );
+    const proto = Object.getPrototypeOf(nav);
+    assert.equal(
+      proto && Object.getOwnPropertyDescriptor(proto, "webdriver"),
+      undefined,
+      "T-ST.2: no prototype `webdriver` descriptor (deleted) → no getter to fingerprint",
     );
   });
 });

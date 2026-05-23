@@ -95,8 +95,8 @@ describe("tool count freeze — G-P32.21 / D-6", () => {
       const serverTools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const workerCount = Object.keys(workerTools).length;
       const serverCount = Object.keys(serverTools).length;
-      assert.equal(workerCount, 32, `T-CONTRACT.TOOLS: worker tool count must be 32, got ${workerCount}`);
-      assert.equal(serverCount, 23, `T-CONTRACT.TOOLS: server tool count must be 23, got ${serverCount}`);
+      assert.equal(workerCount, 35, `T-CONTRACT.TOOLS: worker tool count must be 35, got ${workerCount}`);
+      assert.equal(serverCount, 26, `T-CONTRACT.TOOLS: server tool count must be 26, got ${serverCount}`);
     } finally {
       cleanup();
     }

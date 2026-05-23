@@ -138,35 +138,37 @@ describe("main.ts P-11 wiring: MAI_TELEGRAM_CONFIG_PATH + TurnLock (G-P11.20)", 
     }
   });
 
-  it("T-Wiring.p11.3: a single TurnLock instance constructed in main.ts is passed into runRepl({turnLock}) — verified via static grep of src/cli/main.ts", () => {
-    // Given: post-Step-4b state of src/cli/main.ts (TurnLock instantiation + pass-through)
-    // When: readFileSync('src/cli/main.ts') and check for TurnLock construction + runRepl arg
-    // Then: main.ts contains 'new TurnLock()' AND 'turnLock' passed to runRepl
-    const mainSrc = readFileSync(path.join(process.cwd(), "src", "cli", "main.ts"), "utf-8");
+  it("T-Wiring.p11.3: a single TurnLock instance is constructed in the boot path and passed into runRepl({turnLock}) — static grep of src/cli/workerBoot.ts", () => {
+    // Given: post-P-45 state — the boot-then-run-agent sequence was extracted from main.ts
+    //        into src/cli/workerBoot.ts (P-45 C-1/F-8), which now constructs the TurnLock + calls runRepl.
+    // When: readFileSync('src/cli/workerBoot.ts') and check for TurnLock construction + runRepl arg.
+    // Then: workerBoot.ts contains 'new TurnLock()' AND passes 'turnLock' to runRepl AND imports TurnLock.
+    const bootSrc = readFileSync(path.join(process.cwd(), "src", "cli", "workerBoot.ts"), "utf-8");
     assert.ok(
-      mainSrc.includes("new TurnLock()"),
-      "src/cli/main.ts must contain 'new TurnLock()' (D-19: single binary-lifetime mutex)",
+      bootSrc.includes("new TurnLock()"),
+      "src/cli/workerBoot.ts must contain 'new TurnLock()' (D-19: single binary-lifetime mutex; P-Z3: moved from main.ts at P-45)",
     );
-    assert.ok(mainSrc.includes("turnLock"), "src/cli/main.ts must contain 'turnLock' (passed to runRepl)");
-    // Verify the TurnLock is imported from the correct module
-    assert.ok(
-      mainSrc.includes("TurnLock") && (mainSrc.includes("turnSemaphore") || mainSrc.includes("./turnSemaphore")),
-      "src/cli/main.ts must import TurnLock from turnSemaphore module",
-    );
+    assert.ok(bootSrc.includes("turnLock"), "src/cli/workerBoot.ts must contain 'turnLock' (passed to runRepl)");
+    assert.ok(bootSrc.includes("runRepl"), "src/cli/workerBoot.ts must call runRepl with the turnLock");
+    assert.ok(bootSrc.includes("TurnLock"), "src/cli/workerBoot.ts must import/use TurnLock");
   });
 
-  it("T-Wiring.p11.4 (TS/grep): CLAUDE.md contains ≥1 match for MAI_TELEGRAM_CONFIG_PATH AND 0 matches for MAI_NO_CHROME", () => {
-    // Given: post-D-11 + post-§6.13 state of CLAUDE.md
-    // When: readFileSync('CLAUDE.md') + search
-    // Then: MAI_TELEGRAM_CONFIG_PATH appears in env-var table; MAI_NO_CHROME does NOT appear (removed by D-11)
-    const claudeMd = readFileSync(path.join(process.cwd(), "CLAUDE.md"), "utf-8");
+  it("T-Wiring.p11.4 (TS/grep): the env-var reference (ROADMAP.md) lists MAI_TELEGRAM_CONFIG_PATH AND has no active MAI_NO_CHROME table row", () => {
+    // Given: P-Z3 — the MAI_* env-var enumeration moved from CLAUDE.md to ROADMAP.md § Env-var
+    //        reference (per the CLAUDE.md LLM-Configuration note: "MAI_* env-var enumeration moved
+    //        to ROADMAP.md"). MAI_NO_CHROME was removed (P-11) and now appears in ROADMAP only as
+    //        historical phase-completion prose, NOT as an active env-var table row.
+    // When:  readFileSync('ROADMAP.md') + search.
+    // Then:  MAI_TELEGRAM_CONFIG_PATH is documented (≥1, the active table row) AND there is no
+    //        active `| `MAI_NO_CHROME` |` table-row entry (historical prose mentions are allowed).
+    const roadmap = readFileSync(path.join(process.cwd(), "ROADMAP.md"), "utf-8");
     assert.ok(
-      claudeMd.includes("MAI_TELEGRAM_CONFIG_PATH"),
-      "CLAUDE.md must contain MAI_TELEGRAM_CONFIG_PATH in the env-var table (added in P-11)",
+      roadmap.includes("MAI_TELEGRAM_CONFIG_PATH"),
+      "ROADMAP.md § Env-var reference must contain MAI_TELEGRAM_CONFIG_PATH (added in P-11)",
     );
     assert.ok(
-      !claudeMd.includes("MAI_NO_CHROME"),
-      "CLAUDE.md must NOT contain MAI_NO_CHROME (removed by D-11 per plan §6.13)",
+      !roadmap.includes("| `MAI_NO_CHROME`"),
+      "ROADMAP.md must NOT have an active MAI_NO_CHROME env-var table row (removed P-11; only historical prose remains)",
     );
   });
 });

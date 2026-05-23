@@ -73,7 +73,11 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "type",
   "upload",
   "web_fetch",
@@ -101,7 +105,11 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "set_memory_note",
   "sleep",
   "stop",
+  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
+  "suggest_card",
+  "suggest_next_actions",
   "telegram_notify",
+  "todo_write",
   "web_fetch",
   "web_search",
 ].sort();
@@ -218,8 +226,8 @@ describe("tool counts: worker 32 / server 23 (G-P38.8/.11, updated at P-39 Step 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        32,
-        `worker tool count must be 32; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        35,
+        `worker tool count must be 35; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot");
 
@@ -233,8 +241,8 @@ describe("tool counts: worker 32 / server 23 (G-P38.8/.11, updated at P-39 Step 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        23,
-        `server tool count must be 23; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        26,
+        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
     } finally {

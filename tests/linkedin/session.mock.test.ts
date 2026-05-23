@@ -32,9 +32,21 @@ import type { ClientOrUnavailable, CurrentSurfaceContext } from "../../src/linke
  */
 function makeFakeCdpHandle() {
   return {
+    // P-Z3: getOrInitClient now also installOverlay()s + attachEventBus() after injectStealth
+    // (session.ts:67-70) — those need the Runtime domain + Page.getFrameTree. The P-v031-era
+    // Page-only fake predates the overlay-install step. Mirror the serve-p57b fake handle.
+    Runtime: {
+      enable: async () => {},
+      addBinding: async () => {},
+      executionContextCreated: () => () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: handler-capture stub
+      bindingCalled: (_h: any) => () => {},
+      callFunctionOn: async () => ({ result: { value: null } }),
+    },
     Page: {
       enable: async () => {},
       addScriptToEvaluateOnNewDocument: async (_args: unknown) => ({ identifier: "mock-id" }),
+      getFrameTree: async () => ({ frameTree: { frame: { id: "main-1" } } }),
     },
   };
 }
@@ -80,9 +92,18 @@ function installMockBootHooks(
     };
   });
 
-  // Monkey-patch CdpClient.connect: bypass waitForPageTarget + CDP WebSocket
-  (CdpClient as unknown as { connect: typeof CdpClient.connect }).connect = async (_port: number): Promise<CdpClient> =>
-    CdpClient.fromHandle(fakeHandle);
+  // Monkey-patch CdpClient.connect: bypass waitForPageTarget + CDP WebSocket.
+  // P-Z3: getOrInitClient's cache-reuse check is `cached?.isConnected()` (session.ts:53).
+  // A fromHandle() client has no real WebSocket so isConnected() is false → the 2nd call
+  // would re-boot. Override isConnected()=true on the returned client so the cache is
+  // reused (T-V031.7) and concurrent dedupe holds (T-V031.8).
+  (CdpClient as unknown as { connect: typeof CdpClient.connect }).connect = async (
+    _port: number,
+  ): Promise<CdpClient> => {
+    const c = CdpClient.fromHandle(fakeHandle);
+    (c as unknown as { isConnected: () => boolean }).isConnected = () => true;
+    return c;
+  };
 
   return () => {
     __setLaunchFn(chromeLaunch);

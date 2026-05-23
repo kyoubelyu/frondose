@@ -97,9 +97,12 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
     const { authPath, cleanup } = makeTmpAuthDir();
     try {
       const stdout = await captureStdout(() => runAuthSubcommand("list", { authPath }));
+      // P-Z3 rebaseline: P-36 NIT-1 changed the empty-state message to
+      // "No providers configured. Run `mai auth set <url> …`" (auth.ts:226-228).
       assert.ok(
         stdout.includes("No auth.json found") ||
           stdout.includes("not found") ||
+          stdout.includes("No providers configured") ||
           stdout.includes("none configured") ||
           stdout.includes("(none)"),
         `T-Nonint.1b: must print no-auth or no-providers message; got: "${stdout}"`,

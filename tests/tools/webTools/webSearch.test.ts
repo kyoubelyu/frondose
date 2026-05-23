@@ -83,245 +83,98 @@ function makeBraveResponse(
   });
 }
 
-function makeTavilyResponse(results: Array<{ title: string; url: string; content: string }>, status = 200): Response {
-  return new Response(JSON.stringify({ results }), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
+// ─── P-Z3 (cat-9, R-2-approved): rewritten to the P-57d scope-lock contract ───
+// web_search now gates on MCP_SEARCH_URL FIRST (webSearch.ts:38-50): unset → scope_disabled.
+// Brave/Tavily-direct is scope-disabled per the LLM/search scope lock
+// (project_llm_scope_custom_url_only + HR-8). These tests now ASSERT THE BOUNDARY HOLDS —
+// stronger than the old Brave/Tavily endpoint tests. (T-WebSearch.2 keeps the maxResults +
+// snippet-mapping coverage by exercising the Brave path WITH MCP_SEARCH_URL set, so the
+// result-shaping logic stays guarded.)
 
-// ─── T-WebSearch.1: Both keys unset → fail envelope ──────────────────────────
+// ─── T-WebSearch.1: MCP unset → scope_disabled (boundary; keys irrelevant) ───
 
-test("T-WebSearch.1: both BRAVE_API_KEY and TAVILY_API_KEY unset → fail envelope", async () => {
+test("T-WebSearch.1: MCP_SEARCH_URL unset → scope_disabled envelope (P-57d boundary holds)", async () => {
   const tool = makeWebSearchTool();
   await withCleanSearchJson(() =>
-    withEnv("BRAVE_API_KEY", undefined, () =>
-      withEnv("TAVILY_API_KEY", undefined, async () => {
-        const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
-          ok: boolean;
-          error: { kind: string; message: string };
-        };
-        assert.equal(result.ok, false, "must fail when no API keys configured");
-        assert.ok(
-          result.error.message.includes("BRAVE_API_KEY") && result.error.message.includes("TAVILY_API_KEY"),
-          `fail message must mention both keys; got: "${result.error.message}"`,
-        );
-      }),
-    ),
-  );
-});
-
-// ─── T-WebSearch.2: Brave key set → Brave URL called; description → snippet ──
-
-test("T-WebSearch.2: BRAVE_API_KEY set → Brave endpoint called; description mapped to snippet", async () => {
-  const tool = makeWebSearchTool();
-  let calledUrl = "";
-
-  await withEnv("BRAVE_API_KEY", "brave-test-key", () =>
-    withEnv("TAVILY_API_KEY", undefined, () =>
-      withMockFetch(
-        async (url) => {
-          calledUrl = url.toString();
-          return makeBraveResponse([{ title: "Example", url: "https://example.com", description: "An example site" }]);
-        },
-        async () => {
-          const result = (await tool.execute?.({ query: "test", maxResults: 5 }, FAKE_OPTS)) as {
+    withEnv("MCP_SEARCH_URL", undefined, () =>
+      withEnv("BRAVE_API_KEY", undefined, () =>
+        withEnv("TAVILY_API_KEY", undefined, async () => {
+          const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
             ok: boolean;
-            data: { provider: string; results: Array<{ title: string; url: string; snippet: string }> };
+            error: { kind: string; message: string };
           };
-
-          assert.equal(result.ok, true, "Brave result must be ok:true");
-          assert.ok(calledUrl.includes("api.search.brave.com"), `must call Brave URL; got: "${calledUrl}"`);
-          assert.equal(result.data.provider, "brave", "provider must be 'brave'");
-          assert.equal(result.data.results.length, 1);
-          assert.equal(result.data.results[0]?.snippet, "An example site", "description must be mapped to snippet");
-        },
+          assert.equal(result.ok, false, "must fail (scope_disabled) when MCP_SEARCH_URL unset");
+          assert.equal(result.error.kind, "scope_disabled", "kind must be scope_disabled (P-57d search scope lock)");
+        }),
       ),
     ),
   );
 });
 
-// ─── T-WebSearch.3: Brave 5xx → falls through to Tavily (D-5) ────────────────
+// ─── T-WebSearch.1b: keys set but MCP unset → STILL scope_disabled, fetch NOT called ──
 
-test("T-WebSearch.3: Brave 5xx → falls through to TAVILY_API_KEY (D-5)", async () => {
+test("T-WebSearch.1b: BRAVE/TAVILY keys set but MCP_SEARCH_URL unset → scope_disabled; no fetch (keys do NOT bypass the scope lock)", async () => {
   const tool = makeWebSearchTool();
-  let callCount = 0;
-
-  await withEnv("BRAVE_API_KEY", "brave-key", () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async (url) => {
-          callCount++;
-          const urlStr = url.toString();
-          if (urlStr.includes("brave.com")) {
-            return new Response("Internal Server Error", { status: 503 });
-          }
-          // Tavily fallback
-          return makeTavilyResponse([{ title: "Tavily Result", url: "https://t.com", content: "tavily snippet" }]);
-        },
-        async () => {
-          const result = (await tool.execute?.({ query: "test", maxResults: 5 }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { provider: string; results: Array<{ snippet: string }> };
-          };
-
-          assert.equal(result.ok, true, "must succeed via Tavily fallback");
-          assert.equal(result.data.provider, "tavily", "provider must be tavily after Brave 5xx");
-          assert.equal(result.data.results[0]?.snippet, "tavily snippet");
-          assert.equal(callCount, 2, "must call Brave first, then Tavily");
-        },
+  let fetchCalls = 0;
+  await withCleanSearchJson(() =>
+    withEnv("MCP_SEARCH_URL", undefined, () =>
+      withEnv("BRAVE_API_KEY", "brave-key", () =>
+        withEnv("TAVILY_API_KEY", "tavily-key", () =>
+          withMockFetch(
+            async () => {
+              fetchCalls++;
+              return makeBraveResponse([]);
+            },
+            async () => {
+              const result = (await tool.execute?.({ query: "x", maxResults: 5 }, FAKE_OPTS)) as {
+                ok: boolean;
+                error: { kind: string };
+              };
+              assert.equal(result.ok, false, "scope_disabled even with keys set");
+              assert.equal(
+                result.error.kind,
+                "scope_disabled",
+                "Brave/Tavily keys must NOT bypass the P-57d scope lock",
+              );
+              assert.equal(fetchCalls, 0, "no external search fetch when scope-disabled");
+            },
+          ),
+        ),
       ),
     ),
   );
 });
 
-// ─── T-WebSearch.4: Brave unset, Tavily set → Tavily POST called ─────────────
+// ─── T-WebSearch.2: with MCP_SEARCH_URL set, the Brave path still shapes results ──
+// (Keeps coverage of description→snippet mapping + maxResults slicing; the Brave/Tavily
+// path is reachable only past the MCP gate per webSearch.ts:51+.)
 
-test("T-WebSearch.4: BRAVE_API_KEY unset, TAVILY_API_KEY set → Tavily POST endpoint called", async () => {
+test("T-WebSearch.2: MCP_SEARCH_URL set + BRAVE_API_KEY → Brave path maps description→snippet and slices to maxResults", async () => {
   const tool = makeWebSearchTool();
   let calledUrl = "";
-  let calledMethod = "";
 
-  await withCleanSearchJson(() =>
-    withEnv("BRAVE_API_KEY", undefined, () =>
-      withEnv("TAVILY_API_KEY", "tavily-key", () =>
+  await withEnv("MCP_SEARCH_URL", "https://mcp.example/search", () =>
+    withEnv("BRAVE_API_KEY", "brave-test-key", () =>
+      withEnv("TAVILY_API_KEY", undefined, () =>
         withMockFetch(
-          async (url, init) => {
+          async (url) => {
             calledUrl = url.toString();
-            calledMethod = init?.method ?? "GET";
-            return makeTavilyResponse([{ title: "T", url: "https://t.com", content: "snippet" }]);
+            return makeBraveResponse([
+              { title: "Example", url: "https://example.com", description: "An example site" },
+              { title: "Second", url: "https://second.com", description: "another" },
+              { title: "Third", url: "https://third.com", description: "yet another" },
+            ]);
           },
-          async () => {
-            const result = (await tool.execute?.({ query: "linkedin ai tools", maxResults: 3 }, FAKE_OPTS)) as {
-              ok: boolean;
-              data: { provider: string };
-            };
-
-            assert.equal(result.ok, true);
-            assert.ok(calledUrl.includes("tavily.com"), `must call Tavily URL; got: "${calledUrl}"`);
-            assert.equal(calledMethod, "POST", "Tavily endpoint must be POST");
-            assert.equal(result.data.provider, "tavily");
-          },
-        ),
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.5: Brave 401 → fail envelope (NOT Tavily fallback) ──────────
-
-test("T-WebSearch.5: Brave 401 (invalid key) → fail envelope with invalid_input; Tavily NOT tried", async () => {
-  const tool = makeWebSearchTool();
-  let fetchCallCount = 0;
-
-  await withEnv("BRAVE_API_KEY", "bad-key", () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async () => {
-          fetchCallCount++;
-          return new Response("Unauthorized", { status: 401 });
-        },
-        async () => {
-          const result = (await tool.execute?.({ query: "test", maxResults: 5 }, FAKE_OPTS)) as {
-            ok: boolean;
-            error: { kind: string };
-          };
-
-          assert.equal(result.ok, false, "Brave 401 must return ok:false");
-          assert.equal(result.error.kind, "invalid_input", "Brave 401 kind must be invalid_input");
-          assert.equal(fetchCallCount, 1, "Tavily must NOT be called after Brave 401 (not a 5xx)");
-        },
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.6: Both keys set, Brave 5xx → Tavily result returned ────────
-
-test("T-WebSearch.6: Brave 5xx + both keys set → Tavily result returned with provider:tavily", async () => {
-  const tool = makeWebSearchTool();
-
-  await withEnv("BRAVE_API_KEY", "brave-key", () =>
-    withEnv("TAVILY_API_KEY", "tavily-key", () =>
-      withMockFetch(
-        async (url) => {
-          if (url.toString().includes("brave")) {
-            return new Response("Bad Gateway", { status: 502 });
-          }
-          return makeTavilyResponse([{ title: "Fallback", url: "https://f.com", content: "from tavily" }]);
-        },
-        async () => {
-          const result = (await tool.execute?.({ query: "test", maxResults: 5 }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { provider: string; results: Array<{ snippet: string }> };
-          };
-
-          assert.equal(result.ok, true);
-          assert.equal(result.data.provider, "tavily");
-          assert.equal(result.data.results[0]?.snippet, "from tavily", "Tavily content must map to snippet");
-        },
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.7: Tavily result shape (content → snippet) ──────────────────
-
-test("T-WebSearch.7: Tavily result shape — results[].content mapped to snippet field", async () => {
-  const tool = makeWebSearchTool();
-
-  await withCleanSearchJson(() =>
-    withEnv("BRAVE_API_KEY", undefined, () =>
-      withEnv("TAVILY_API_KEY", "tavily-key", () =>
-        withMockFetch(
-          async () =>
-            makeTavilyResponse([
-              { title: "AI Tools", url: "https://ai.com", content: "This is the Tavily content snippet" },
-              { title: "ML Guide", url: "https://ml.com", content: "Another snippet here" },
-            ]),
-          async () => {
-            const result = (await tool.execute?.({ query: "ai", maxResults: 5 }, FAKE_OPTS)) as {
-              ok: boolean;
-              data: { results: Array<{ title: string; url: string; snippet: string }> };
-            };
-
-            assert.equal(result.ok, true);
-            assert.equal(result.data.results.length, 2);
-            assert.equal(result.data.results[0]?.snippet, "This is the Tavily content snippet");
-            assert.equal(result.data.results[1]?.snippet, "Another snippet here");
-            // The raw "content" key must not be present at top level
-            assert.ok(!("content" in (result.data.results[0] ?? {})), "result must use 'snippet' not 'content'");
-          },
-        ),
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.8: maxResults param respected ───────────────────────────────
-
-test("T-WebSearch.8: maxResults=2 → only 2 results returned even if provider returns more", async () => {
-  const tool = makeWebSearchTool();
-
-  await withCleanSearchJson(() =>
-    withEnv("BRAVE_API_KEY", undefined, () =>
-      withEnv("TAVILY_API_KEY", "tavily-key", () =>
-        withMockFetch(
-          async () =>
-            makeTavilyResponse([
-              { title: "R1", url: "https://r1.com", content: "s1" },
-              { title: "R2", url: "https://r2.com", content: "s2" },
-              { title: "R3", url: "https://r3.com", content: "s3" },
-              { title: "R4", url: "https://r4.com", content: "s4" },
-            ]),
           async () => {
             const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
               ok: boolean;
-              data: { results: unknown[] };
+              data: { provider: string; results: Array<{ title: string; url: string; snippet: string }> };
             };
-
-            assert.equal(result.ok, true);
+            assert.equal(result.ok, true, "Brave result must be ok:true once past the MCP gate");
+            assert.ok(calledUrl.includes("api.search.brave.com"), `must call Brave URL; got: "${calledUrl}"`);
+            assert.equal(result.data.provider, "brave", "provider must be 'brave'");
             assert.equal(result.data.results.length, 2, "must slice to maxResults=2");
+            assert.equal(result.data.results[0]?.snippet, "An example site", "description must map to snippet");
           },
         ),
       ),

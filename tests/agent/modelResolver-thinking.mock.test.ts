@@ -258,8 +258,25 @@ test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageMod
 // ─── T-MR-FIX1.M10: resolveModel anthropic path unaffected ───────────────────
 
 test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — no fetch wrapper", () => {
-  const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY");
+  // P-Z3 / P-21: buildModel requires a configured provider ENTRY (the env key is consulted only
+  // AFTER the entry is found — modelResolver.ts:145,162). Seed a mock HOME + auth.json anthropic
+  // provider (mirrors M9/M11) so resolveModel resolves the RETAINED anthropic dispatch
+  // (modelResolver.ts:189-194, documented P-57d packages-remain state). The test still confirms
+  // the anthropic branch returns a model WITHOUT the deepseek no-thinking fetch wrapper.
+  const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME");
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m10-"));
   try {
+    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    writeFileSync(
+      join(tmpHome, ".mai", "auth.json"),
+      JSON.stringify({
+        providers: {
+          anthropic: { key: "sk-ant-stub", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
+        },
+      }),
+      "utf-8",
+    );
+    process.env.HOME = tmpHome;
     process.env.ANTHROPIC_API_KEY = "sk-ant-stub";
     const model = resolveModel({ factory: "anthropic:claude-sonnet-4-5" });
     assert.ok(model !== null && typeof model === "object", "must return LanguageModel object");
@@ -267,6 +284,7 @@ test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — 
     // Verified statically — this test confirms resolveModel doesn't throw.
   } finally {
     restore();
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 

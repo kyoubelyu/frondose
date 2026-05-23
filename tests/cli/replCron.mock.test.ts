@@ -734,8 +734,8 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
   it('T-CronTurn.8: when runCronTurn is called with a ScheduleRecord and fireDate in local timezone, the injected user message starts with "[TIME]" and contains human-readable local-time header, preserving [CRON_RUN_ID=...] on the second line', async () => {
     // Given: a ScheduleRecord with task="search VP Sales" and fireDate in local timezone
     // When:  runCronTurn(record, fireDate, schedulePath, deps) is called
-    // Then:  the injected user message starts with "[TIME]", contains date+local-time from Intl.DateTimeFormat,
-    //        and preserves "[CRON_RUN_ID=...]" on the second line, with task body on the third line
+    // Then:  the injected user message starts with the "[TIME HH:MM]" marker (local TZ), preserves
+    //        "[CRON_RUN_ID=...]" on the second line, and carries the task body on the third line
     const { dir, cleanup } = makeTempDir();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
@@ -755,36 +755,34 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
       const fireDate = new Date("2026-05-13T14:30:00+08:00");
       await runCronTurn(record, fireDate, schedulePath, deps);
 
-      // Find the user message with [TIME] header
+      // P-Z3 rebaseline: the cron-turn injection format is now `[TIME HH:MM]\n[CRON_RUN_ID=…]\n
+      // (scheduled task: "…")` (replCron.ts:120) — the Soul day-rhythm (soul.ts §7) reads the
+      // [TIME HH:MM] marker. The old Intl date string + "— autonomous check-in" were dropped.
+      // Find the user message with the [TIME HH:MM] header.
       const cronUserMsg = messages.find(
-        (m) => m.role === "user" && typeof m.content === "string" && (m.content as string).includes("[TIME]"),
+        (m) => m.role === "user" && typeof m.content === "string" && (m.content as string).includes("[TIME "),
       );
-      assert.ok(cronUserMsg !== undefined, "messages must contain a user message with [TIME] header");
+      assert.ok(cronUserMsg !== undefined, "messages must contain a user message with [TIME HH:MM] header");
       const content = cronUserMsg.content as string;
 
-      // Starts with "[TIME]"
-      assert.ok(content.startsWith("[TIME]"), `content must start with "[TIME]"; got: "${content.slice(0, 30)}"`);
-
-      // Contains the formatted date/time from Intl.DateTimeFormat
-      assert.ok(content.includes("May 13, 2026"), `content must include date; got: "${content.slice(0, 80)}"`);
-
-      // Contains " — autonomous check-in"
-      assert.ok(
-        content.includes("— autonomous check-in"),
-        `content must include "— autonomous check-in"; got: "${content.slice(0, 120)}"`,
+      // Starts with the "[TIME HH:MM]" marker (local-TZ time → assert the structure, not the value)
+      assert.match(
+        content,
+        /^\[TIME \d{2}:\d{2}\]/,
+        `content must start with "[TIME HH:MM]"; got: "${content.slice(0, 30)}"`,
       );
 
-      // Contains [CRON_RUN_ID=...] after [TIME] header
+      // Contains [CRON_RUN_ID=...] after the [TIME] header
       const expectedCronRunId = computeCronRunId(record, fireDate);
       assert.ok(
         content.includes(`[CRON_RUN_ID=${expectedCronRunId}]`),
         `content must include [CRON_RUN_ID=${expectedCronRunId}]; got: "${content}"`,
       );
-      const timeIdx = content.indexOf("[TIME]");
+      const timeIdx = content.indexOf("[TIME ");
       const cronRunIdIdx = content.indexOf("[CRON_RUN_ID=");
       assert.ok(cronRunIdIdx > timeIdx, "CRON_RUN_ID must appear after [TIME] header");
 
-      // Contains the task text
+      // Contains the task text (in the secondary "(scheduled task: …)" line)
       assert.ok(content.includes("search VP Sales"), `content must include task "search VP Sales"; got: "${content}"`);
     } finally {
       cleanup();

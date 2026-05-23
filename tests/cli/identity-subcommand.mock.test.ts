@@ -24,12 +24,24 @@ import { writeIdentity } from "../../src/persistence/identity.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function tmpDir(): { dir: string; idPath: string; wipPath: string } {
+// P-Z3: readIdentity/writeIdentity are P-28 shims over config.json.identity at
+// DEFAULT_CONFIG_PATH() = getHomeBase()/.mai/agent/config.json (getHomeBase→os.homedir()→$HOME).
+// runIdentitySubcommand reads/writes that DEFAULT config and accepts no configPath, so
+// without per-test isolation T-Identity1's writeIdentity bleeds "Alice Validator" into
+// T-Identity2's "missing-identity" read. Point HOME at each test's own tmp dir → config.json
+// is per-test. Caller MUST invoke restoreHome() in finally.
+function tmpDir(): { dir: string; idPath: string; wipPath: string; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p7-idcmd-"));
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
   return {
     dir,
     idPath: join(dir, "identity.json"),
     wipPath: join(dir, ".identity-wip.json"),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
   };
 }
 
@@ -52,7 +64,7 @@ function captureStdout(fn: () => Promise<void>): Promise<string> {
 // ─── T-Identity1 — show pretty-prints identity.json ──────────────────────────
 
 test("T-Identity1: runIdentitySubcommand show reads identity.json and pretty-prints to stdout", async () => {
-  const { dir, idPath } = tmpDir();
+  const { dir, idPath, restoreHome } = tmpDir();
   try {
     writeIdentity(
       {
@@ -76,6 +88,7 @@ test("T-Identity1: runIdentitySubcommand show reads identity.json and pretty-pri
     assert.ok(output.includes("\n"), "T-Identity1: output must be multi-line (pretty-printed)");
     console.log("T-Identity1: show pretty-prints identity.json ✓");
   } finally {
+    restoreHome();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -83,7 +96,7 @@ test("T-Identity1: runIdentitySubcommand show reads identity.json and pretty-pri
 // ─── T-Identity2 — show when file absent ─────────────────────────────────────
 
 test("T-Identity2: runIdentitySubcommand show with missing identity.json prints helpful message", async () => {
-  const { dir, idPath } = tmpDir();
+  const { dir, idPath, restoreHome } = tmpDir();
   try {
     // Do NOT write identity.json
     const output = await captureStdout(() => runIdentitySubcommand("show", { identityPath: idPath }));
@@ -94,6 +107,7 @@ test("T-Identity2: runIdentitySubcommand show with missing identity.json prints 
     );
     console.log("T-Identity2: missing identity.json → helpful message ✓");
   } finally {
+    restoreHome();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -110,7 +124,7 @@ test("T-Identity.1 (D-10): runIdentitySubcommand('init', {reset:true, modelFacto
   // When: runIdentitySubcommand("init", {identityPath, reset:true, modelFactory: () => mockModel}) + "y" stdin
   // Then: completes within 2000ms; identity.json + WIP unlinked; NO real LLM network call
   // NOTE: Must use doStream (not doGenerate) because bootstrap-agent uses streamText, not generateText.
-  const { dir, idPath, wipPath } = tmpDir();
+  const { dir, idPath, wipPath, restoreHome } = tmpDir();
   try {
     writeIdentity({ fullName: "Old Name", company: "Old Corp", updatedAt: new Date().toISOString() }, idPath);
     writeFileSync(wipPath, JSON.stringify({ fullName: "Partial" }), "utf-8");
@@ -177,6 +191,7 @@ test("T-Identity.1 (D-10): runIdentitySubcommand('init', {reset:true, modelFacto
       (process as any).exit = origExit;
     }
   } finally {
+    restoreHome();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -208,7 +223,7 @@ test("T-Identity.2 (D-10): production no-modelFactory path calls detectAnyModelK
 // ─── T-Identity5 — reset with "N" → Cancelled ────────────────────────────────
 
 test("T-Identity5: runIdentitySubcommand init --reset with N stdin prints [mai] Cancelled. and keeps files", async () => {
-  const { dir, idPath, wipPath } = tmpDir();
+  const { dir, idPath, wipPath, restoreHome } = tmpDir();
   try {
     writeIdentity({ fullName: "Keep Name", company: "Keep Corp", updatedAt: new Date().toISOString() }, idPath);
     writeFileSync(wipPath, JSON.stringify({ company: "partial" }), "utf-8");
@@ -243,6 +258,7 @@ test("T-Identity5: runIdentitySubcommand init --reset with N stdin prints [mai] 
     assert.ok(existsSync(wipPath), "T-Identity5: WIP must NOT be deleted after N");
     console.log("T-Identity5: --reset with N → [mai] Cancelled. + files preserved ✓");
   } finally {
+    restoreHome();
     rmSync(dir, { recursive: true, force: true });
   }
 });

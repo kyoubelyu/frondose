@@ -8,18 +8,36 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runTelegramSubcommand } from "../../src/cli/subcommands/telegram.js";
-import { DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
+import {
+  DEFAULT_TELEGRAM_CONFIG,
+  readTelegramConfig,
+  writeTelegramConfigFields,
+} from "../../src/persistence/telegramConfig.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function makeTmpCfgDir(): { cfgPath: string; cleanup: () => void } {
+// P-Z3 / P-24: `enabled`/`boundUserId` live in config.json.telegram (DEFAULT_CONFIG_PATH =
+// getHomeBase()/.mai/agent/config.json), NOT in telegram.json (now runtime-only).
+// runTelegramSubcommand has no configPath param, so isolate each test by pointing HOME at its own
+// tmp dir → config.json is per-test (no cross-test enabled/boundUserId bleed). Seed preconditions
+// via writeTelegramConfigFields and read back via readTelegramConfig. Caller invokes restoreHome().
+function makeTmpCfgDir(): { cfgPath: string; cleanup: () => void; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p11-tgsub-"));
-  return { cfgPath: join(dir, "telegram.json"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
+  return {
+    cfgPath: join(dir, "telegram.json"),
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
+  };
 }
 
 function writeCfg(path: string, cfg: Record<string, unknown>): void {
@@ -68,7 +86,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     //       on darwin → plist write attempted; launchctl may fail in CI (launchctl failure is expected);
     //                   cfg.enabled=true written only after successful launchctl (not testable in CI without real launchctl)
     //                   guard assertion: no uncaught exception; stderr or stdout contains 'telegram'
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     const origToken = process.env.TELEGRAM_TOKEN;
     // Mock process.exit to prevent test runner termination
     const exitCalls: number[] = [];
@@ -103,6 +121,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
       (process as any).exit = origExit;
       if (origToken !== undefined) process.env.TELEGRAM_TOKEN = origToken;
       else delete process.env.TELEGRAM_TOKEN;
+      restoreHome();
       cleanup();
     }
   });
@@ -111,19 +130,25 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // Given: telegram.json with enabled:true
     // When: runTelegramSubcommand("off", {tcPath}) called
     // Then: telegram.json.enabled===false; stdout contains 'disabled' or 'telegram'
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
-      writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG, enabled: true });
+      writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
+      // P-24: enabled lives in config.json.telegram — seed the precondition there.
+      writeTelegramConfigFields({ enabled: true });
       const stdout = await captureStdout(async () => {
         await runTelegramSubcommand("off", { tcPath: cfgPath });
       });
-      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { enabled: boolean };
-      assert.equal(onDisk.enabled, false, "telegram.json.enabled must be false after 'mai telegram off'");
+      assert.equal(
+        readTelegramConfig(cfgPath).enabled,
+        false,
+        "config.json.telegram.enabled must be false after 'mai telegram off'",
+      );
       assert.ok(
         stdout.includes("disabled") || stdout.includes("telegram"),
         `stdout must contain 'disabled' or 'telegram'; got: "${stdout}"`,
       );
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -132,19 +157,24 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // Given: telegram.json with boundUserId:null
     // When: runTelegramSubcommand("bind", {tcPath, userId:12345}) called
     // Then: telegram.json.boundUserId===12345; stdout confirms the binding
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
       const stdout = await captureStdout(async () => {
         await runTelegramSubcommand("bind", { tcPath: cfgPath, userId: 12345 });
       });
-      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { boundUserId: number | null };
-      assert.equal(onDisk.boundUserId, 12345, "telegram.json.boundUserId must be 12345 after bind");
+      // P-24: boundUserId lives in config.json.telegram — read back via the shim.
+      assert.equal(
+        readTelegramConfig(cfgPath).boundUserId,
+        12345,
+        "config.json.telegram.boundUserId must be 12345 after bind",
+      );
       assert.ok(
         stdout.includes("12345") || stdout.includes("boundUserId"),
         `stdout must confirm binding of chat_id 12345; got: "${stdout}"`,
       );
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -153,7 +183,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // Given: known telegram.json values INCLUDING lastReceivedAt timestamp; TELEGRAM_TOKEN env set
     // When: runTelegramSubcommand("status", {tcPath}) called; stdout captured
     // Then: output includes 'enabled:', 'boundUserId:', 'lastUpdateOffset:', 'TOKEN', and '[telegram] lastReceivedAt: 2026-05-11T10:00:00Z'
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
         enabled: true,
@@ -186,6 +216,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -194,16 +225,17 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // Given: TELEGRAM_TOKEN set; telegram.json has boundUserId:999; fetch mock returns 200
     // When: runTelegramSubcommand("test", {tcPath}) called (injectable transport for unit test)
     // Then: POST to /sendMessage attempted; stdout contains HTTP 200 (or test OK message)
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, {
-        enabled: true,
-        boundUserId: 999,
         lastUpdateOffset: 0,
         stickyFallbackIp: null,
         pollTimeoutSec: 30,
         pollBackoffSec: 5,
       });
+      // P-24: enabled/boundUserId live in config.json.telegram — seed there so the
+      // 'test' action passes the `boundUserId === null` guard and reaches the sendMessage fetch.
+      writeTelegramConfigFields({ enabled: true, boundUserId: 999 });
       process.env.TELEGRAM_TOKEN = "test-tok";
       const origFetch = globalThis.fetch;
       // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -229,6 +261,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -237,7 +270,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // Given: TELEGRAM_TOKEN not set; telegram.json exists
     // When: runTelegramSubcommand("test", {tcPath}) called; capture process.exit code
     // Then: stderr/stdout contains missing-token hint; process.exit(1) called (or error envelope returned)
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     let exitCode: number | undefined;
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -259,6 +292,7 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
+      restoreHome();
       cleanup();
     }
   });
@@ -268,14 +302,19 @@ describe("runTelegramSubcommand (G-P11.16)", () => {
     // When:  re-run against P-13 production (which adds optional prompter 3rd param with default=realPrompter)
     // Then:  telegram.json.boundUserId written correctly; realPrompter (default) never invoked (args-present branch)
 
-    const { cfgPath, cleanup } = makeTmpCfgDir();
+    const { cfgPath, cleanup, restoreHome } = makeTmpCfgDir();
     try {
       writeCfg(cfgPath, { ...DEFAULT_TELEGRAM_CONFIG });
 
       await captureStdout(() => runTelegramSubcommand("bind", { tcPath: cfgPath, userId: 77777 }));
-      const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { boundUserId: number | null };
-      assert.equal(onDisk.boundUserId, 77777, "T-Nonint.3: boundUserId must be 77777 with 2-arg call pattern");
+      // P-24: boundUserId lives in config.json.telegram — read back via the shim.
+      assert.equal(
+        readTelegramConfig(cfgPath).boundUserId,
+        77777,
+        "T-Nonint.3: boundUserId must be 77777 with 2-arg call pattern",
+      );
     } finally {
+      restoreHome();
       cleanup();
     }
   });

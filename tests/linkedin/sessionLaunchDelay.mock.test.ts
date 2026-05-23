@@ -36,12 +36,26 @@ const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
 
 // ─── Fake CDP handle ─────────────────────────────────────────────────────────
 
-/** Minimal fake handle satisfying injectStealth: Page.enable + addScriptToEvaluateOnNewDocument. */
+/**
+ * Fake handle satisfying injectStealth + installOverlay + attachEventBus.
+ * P-Z3: getOrInitClient now installOverlay()s + attachEventBus() after injectStealth
+ * (session.ts:67-70) — those need the Runtime domain + Page.getFrameTree. The P-37-era
+ * Page-only fake predates the overlay-install step; mirror session.mock.test.ts.
+ */
 function makeFakeCdpHandle() {
   return {
+    Runtime: {
+      enable: async () => {},
+      addBinding: async () => {},
+      executionContextCreated: () => () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: handler-capture stub
+      bindingCalled: (_h: any) => () => {},
+      callFunctionOn: async () => ({ result: { value: null } }),
+    },
     Page: {
       enable: async () => {},
       addScriptToEvaluateOnNewDocument: async (_args: unknown) => ({ identifier: "mock-id" }),
+      getFrameTree: async () => ({ frameTree: { frame: { id: "main-1" } } }),
     },
   };
 }
