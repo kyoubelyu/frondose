@@ -25,9 +25,10 @@ export const todoWriteSchema = z.object({
 
 export const todoWriteTool = tool({
   description:
-    "Declare or update your workflow plan for a multi-step task. Call this first for non-trivial requests. " +
+    "Declare or update your workflow plan for a multi-step task. Call this first for any non-trivial request -- anything beyond a step or two. " +
+    "Calling it renders your plan as the operator's live workflow card and is your primary way to show your work; in Manual mode, marking a step in_progress arms the approval gate that pauses before outbound steps. " +
     "Replace-whole-list: pass the full step list every time. Set requiresApproval:true on outbound communication steps. " +
-    "Set a step state to in_progress when starting it. Call this AGAIN before starting each step -- especially before any requiresApproval/outbound step -- marking that step in_progress; in Manual mode that is what pauses for operator approval. Pure control tool with zero side effects.",
+    "Set a step state to in_progress when starting it. Call this AGAIN before starting each step -- especially before any requiresApproval/outbound step -- marking that step in_progress; in Manual mode that is what pauses for operator approval.",
   parameters: todoWriteSchema,
   execute: async (input) => {
     const steps = input.steps.map((step) => ({

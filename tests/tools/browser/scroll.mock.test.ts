@@ -2,7 +2,9 @@
  * P-3 mock tests — T-M76..T-M77: scroll tool.
  *
  * Tests makeScrollTool() schema and execute dispatch to client.scroll().
- * NOTE: execute() calls applyPacing() (400-800ms real wait per test).
+ * NOTE: execute() calls applyPacing(). P-Y5 D-RUN-2 raises the default band to
+ * 800-2500ms, so this suite disables pacing via MAI_PACE_MIN_MS=0 (resolvePaceBand
+ * → disabled → no sleep; data.pacing is still {waitedMs:0,...} so presence checks hold).
  * No Chrome or LLM required.
  */
 
@@ -11,6 +13,9 @@ import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeScrollTool } from "../../../src/tools/browser/scroll.js";
+
+// P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
+process.env.MAI_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 

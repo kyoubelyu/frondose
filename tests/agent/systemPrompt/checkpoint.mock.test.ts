@@ -101,15 +101,18 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
 
 // ─── T-Checkpoint.7 — character count budget (P-39 update) ──────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 4200 characters (P-49 raised the budget: 'Task-start context lookup' subsection added; regression guard updated)", () => {
+test("T-Checkpoint.7: CHECKPOINT.length is <= 4400 characters (P-Y5 D-RUN-4 R2b raised the budget: task-start-ritual cross-link sentence added; regression guard updated)", () => {
   // Given: CHECKPOINT constant (P-39 added 'Session-end persistence' + 'Daily memory organization'
   //        subsections → grew from ~1786 chars to ~2620; P-49 added 'Task-start context lookup'
-  //        subsection → grew from ~2620 chars to ~3626)
+  //        subsection → grew from ~2620 chars to ~3626; P-Y5 D-RUN-4 R2b added the task-start-ritual
+  //        cross-link sentence ("This search_memory is step one… you declare your todo_write plan
+  //        (Boundary → Plan-first discipline)") → grew ~50 chars to ~4250)
   // When: CHECKPOINT.length measured
-  // Then: <= 4200 — generous ceiling preserving meaningful regression guard while allowing P-49 growth
+  // Then: <= 4400 — generous ceiling preserving meaningful regression guard while allowing the
+  //        intentional P-Y5 R2b growth (planned band-content tuning per docs/phase-Y5-drun24-plan.md §6.4-R2b)
   assert.ok(
-    CHECKPOINT.length <= 4200,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 4200-char budget (P-49 regression guard)`,
+    CHECKPOINT.length <= 4400,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 4400-char budget (P-Y5 regression guard)`,
   );
 });
 
