@@ -124,6 +124,16 @@ function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promi
   return windowRef.__TAURI__.core.invoke<T>(cmd, args);
 }
 
+// Surface a swallowed invoke failure to the operator (error banner) + the devtools
+// console, instead of failing silently. Silent catch{} on a user-clicked button is a
+// defect: a button that errors is diagnosable; a button that does nothing looks dead.
+function surfaceError(label: string, e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error(`[mai] ${label} failed:`, e);
+  errorBannerEl.textContent = `${label} failed: ${msg}`;
+  errorBannerEl.classList.remove("hidden");
+}
+
 function refreshOutputVisibility(): void {
   const hasText = (outputEl.textContent ?? "").trim().length > 0;
   outputMsgEl.classList.toggle("hidden", !hasText);
@@ -184,16 +194,18 @@ async function applyMode(mode: AppMode): Promise<void> {
       enabled: toggles.cronEnabled,
     });
     cronEnabled = cronResp.ok ? (cronResp.cronEnabled ?? toggles.cronEnabled) : toggles.cronEnabled;
-  } catch {
+  } catch (e) {
     cronEnabled = toggles.cronEnabled;
+    surfaceError("Set mode (cron)", e);
   }
   try {
     const passiveResp = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", {
       enabled: toggles.passiveEnabled,
     });
     passiveEnabled = passiveResp.ok ? (passiveResp.passiveEnabled ?? toggles.passiveEnabled) : toggles.passiveEnabled;
-  } catch {
+  } catch (e) {
     passiveEnabled = toggles.passiveEnabled;
+    surfaceError("Set mode (passive)", e);
   }
   syncModeUi(modeFromToggles(cronEnabled));
 }
@@ -243,8 +255,9 @@ async function abortTurn(): Promise<void> {
   if (appState !== "running" || currentTurnId === null) return;
   try {
     await invoke("mai_agent_abort");
-  } catch {
-    // Best-effort; the SSE error/done event owns UI recovery.
+  } catch (e) {
+    // SSE error/done event owns UI recovery, but surface the failure too.
+    surfaceError("Pause/abort", e);
   }
 }
 
@@ -390,21 +403,33 @@ function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepSt
 
 async function approveWorkflowStep(): Promise<void> {
   if (workflowView?.pendingStepId === null || workflowView === null) return;
-  await invoke("mai_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
+  try {
+    await invoke("mai_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
+  } catch (e) {
+    surfaceError("Approve", e);
+  }
 }
 
 async function declineWorkflowStep(): Promise<void> {
   if (workflowView?.pendingStepId === null || workflowView === null) return;
-  await invoke("mai_workflow_decline", {
-    workflowId: workflowView.workflowId,
-    stepId: workflowView.pendingStepId,
-    reason: "operator_declined",
-  });
+  try {
+    await invoke("mai_workflow_decline", {
+      workflowId: workflowView.workflowId,
+      stepId: workflowView.pendingStepId,
+      reason: "operator_declined",
+    });
+  } catch (e) {
+    surfaceError("Decline", e);
+  }
 }
 
 async function handoffWorkflow(): Promise<void> {
   if (workflowView === null) return;
-  await invoke("mai_workflow_handoff", { workflowId: workflowView.workflowId });
+  try {
+    await invoke("mai_workflow_handoff", { workflowId: workflowView.workflowId });
+  } catch (e) {
+    surfaceError("Hand off to Auto", e);
+  }
 }
 
 function syncExternalMode(): void {
