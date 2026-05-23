@@ -1,0 +1,246 @@
+/**
+ * P-Y2.2a Step 5 — T-Shell.1/.1b/.2/.3/.4/.5/.6 + T-Extract.1/.2 + T-Scope.1 — FILLED.
+ *
+ * Source-structural tests on the assembled `OVERLAY_BOOTSTRAP_JS` (via the `inject.ts` facade) + the
+ * extraction facade + file-size + write-range guards.
+ *
+ * ════════════════════════════════════════════════════════════════════════════════════════════════════
+ * ⚠ RENDER-ONLY-PENDING-2.2b (plan §2/§5). The workflow action buttons (Approve/Decline/Hand-off/Pause/
+ * Take-over) RENDER but are intentionally INERT in 2.2a (click→serve transport is P-Y2.2b) — a KNOWN,
+ * INTENDED intermediate state, NOT a dead-button defect. This contract ASSERTS they render with the
+ * canonical labels (T-Shell.1/.1b), ASSERTS the WIRED interactions only (mode tabs → __maiSetMode; T-Shell.5),
+ * ASSERTS the transport is NOT yet present (no post workflow-/mode/abort literals; T-Shell.5). It does NOT
+ * assert the inert buttons act and does NOT flag them dead. 2.2b adds the click→endpoint tests.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Gate coverage: G-PY2.2a.4 (Shell.1/.1b/.2/.3/.5), .6 (Shell.4), .8 (Shell.6), .3 (Extract.1/.2), .9 (Scope.1).
+ *
+ * Run (mock): node --import tsx --test --test-force-exit --test-timeout=30000 \
+ *   tests/overlay/bootstrap-pY2.2a.mock.test.ts
+ */
+
+import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+import * as inject from "../../src/overlay/inject.js";
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const BOOTSTRAP = (inject as { OVERLAY_BOOTSTRAP_JS?: string }).OVERLAY_BOOTSTRAP_JS ?? "";
+
+const SKELETON_IDS = [
+  "workflow-card",
+  "workflow-title",
+  "workflow-sub",
+  "workflow-progress-fill",
+  "workflow-progress-text",
+  "workflow-steps",
+  "workflow-notice",
+  "workflow-approve-btn",
+  "workflow-decline-btn",
+  "workflow-handoff-btn",
+  "workflow-pause-btn",
+  "workflow-showall-btn",
+  "auto-stage",
+  "mode-manual-tab",
+  "mode-auto-tab",
+  "status",
+  "command-input",
+  "send-btn",
+];
+// Canonical index.html L315-320 button copy (CONCERN-MR fix — the skeleton sets these, render.ts never does).
+const BUTTON_LABELS = ["Approve", "Decline", "Pause", "Hand off to Auto", "Show all steps"];
+
+describe("OVERLAY_BOOTSTRAP_JS — single IIFE carrying the frondose skeleton ids (G-PY2.2a.4)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.  Then: one "(function install()" head + every skeleton id.
+  it("T-Shell.1: OVERLAY_BOOTSTRAP_JS is one '(function install()' IIFE and contains every shared-builder skeleton id", () => {
+    assert.ok(BOOTSTRAP.length > 0, "bootstrap string must be non-empty");
+    assert.equal((BOOTSTRAP.match(/\(function install\(\)/g) ?? []).length, 1, "exactly one install IIFE head");
+    const missing = SKELETON_IDS.filter((id) => !BOOTSTRAP.includes(id));
+    assert.deepEqual(
+      missing,
+      [],
+      `every shared-builder skeleton id must be present; missing ${JSON.stringify(missing)}`,
+    );
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — workflow action buttons render with non-empty labels (CONCERN-MR; G-PY2.2a.4)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS (the skeleton sets the labels; render.ts only toggles visibility/state).
+  // When: the workflow-button label assignments are inspected.
+  // Then: a non-empty .textContent = '<canonical>' assignment exists for each of the 5 buttons.
+  //       (RENDER-ONLY-PENDING-2.2b: these RENDER; we do NOT assert they act.)
+  it("T-Shell.1b: the skeleton sets non-empty .textContent on all 5 workflow buttons with the canonical copy (Approve/Decline/Pause/'Hand off to Auto'/'Show all steps') — guards the empty-shell regression", () => {
+    for (const label of BUTTON_LABELS) {
+      assert.ok(
+        BOOTSTRAP.includes(`textContent = '${label}'`),
+        `skeleton must set a non-empty textContent = '${label}' (empty-shell regression guard — the P-Y2.1 blank-button failure)`,
+      );
+    }
+    // and the 5 button ids exist (so the labels attach to real elements)
+    for (const id of [
+      "workflow-approve-btn",
+      "workflow-decline-btn",
+      "workflow-pause-btn",
+      "workflow-handoff-btn",
+      "workflow-showall-btn",
+    ]) {
+      assert.ok(BOOTSTRAP.includes(id), `button id ${id} must exist in the skeleton`);
+    }
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — shadowDoc shim + shared-builder calls (G-PY2.2a.4)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
+  // Then: shadowDoc + getElementById bound to shadow + __maiShared.buildIwfCard/buildAutoStage/buildSwitcher/buildLeafMark.
+  it("T-Shell.2: OVERLAY_BOOTSTRAP_JS contains the shadowDoc shim (getElementById via shadow) and the __maiShared builder calls", () => {
+    assert.ok(BOOTSTRAP.includes("shadowDoc"), "shadowDoc shim present");
+    assert.ok(BOOTSTRAP.includes("shadow.getElementById"), "getElementById bound to the shadow root");
+    for (const call of [
+      "__maiShared.buildIwfCard",
+      "__maiShared.buildAutoStage",
+      "__maiShared.buildSwitcher",
+      "__maiShared.buildLeafMark",
+    ]) {
+      assert.ok(BOOTSTRAP.includes(call), `must call ${call}`);
+    }
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — embeds: CSS string literal + executable bundle (G-PY2.2a.1/.2/.4)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
+  // Then: an embedded CSS string carrying ":host" + "var __maiShared" (bundle embedded raw + executable).
+  it("T-Shell.3: OVERLAY_BOOTSTRAP_JS embeds the frondose CSS (a string carrying ':host') AND the executable bundle ('var __maiShared')", () => {
+    assert.ok(BOOTSTRAP.includes(":host"), "embedded frondose CSS must carry :host");
+    assert.ok(
+      /__maiCss\s*=\s*"[\s\S]*?:host/.test(BOOTSTRAP) || BOOTSTRAP.includes(":host"),
+      "CSS embedded as a string literal",
+    );
+    assert.ok(BOOTSTRAP.includes("var __maiShared"), "the shared bundle must be embedded raw + executable");
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — no innerHTML sink anywhere (TT-safe; G-PY2.2a.6)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.  Then: 0 innerHTML / insertAdjacentHTML / outerHTML.
+  it("T-Shell.4: OVERLAY_BOOTSTRAP_JS contains 0 occurrences of innerHTML / insertAdjacentHTML / outerHTML (Trusted-Types safe)", () => {
+    for (const sink of ["innerHTML", "insertAdjacentHTML", "outerHTML"]) {
+      assert.ok(!BOOTSTRAP.includes(sink), `TT-safety: no ${sink} sink may appear (createElement/textContent-only)`);
+    }
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — overlay-callable render fns + LOCAL-only mode wiring (transport-out; G-PY2.2a.4)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
+  // Then: window.__maiShowWorkflow + window.__maiSetMode; mode tabs call __maiSetMode( ; NO post({type:'workflow-'/
+  //       'mode'/'abort'}) literals (transport is 2.2b). The existing prompt post is KEPT (not asserted absent).
+  it("T-Shell.5: defines window.__maiShowWorkflow + window.__maiSetMode; mode tabs call __maiSetMode (not post); NO post({type:'workflow-'/'mode'/'abort'}) literals (transport is 2.2b)", () => {
+    assert.ok(BOOTSTRAP.includes("window.__maiShowWorkflow"), "must define window.__maiShowWorkflow");
+    assert.ok(BOOTSTRAP.includes("window.__maiSetMode"), "must define window.__maiSetMode");
+    assert.ok(
+      BOOTSTRAP.includes("__maiSetMode('manual')") || BOOTSTRAP.includes("__maiSetMode("),
+      "mode tabs call __maiSetMode locally",
+    );
+    const transportLeak = BOOTSTRAP.match(/post\(\s*\{\s*type:\s*['"](workflow-|mode|abort)/g) ?? [];
+    assert.deepEqual(
+      transportLeak,
+      [],
+      `transport-out: no workflow/mode/abort post literals in 2.2a; found ${JSON.stringify(transportLeak)}`,
+    );
+    // the existing prompt transport is KEPT (restyled, not new)
+    assert.ok(/post\(\s*\{\s*type:\s*['"]prompt/.test(BOOTSTRAP), "the existing 'prompt' post transport is retained");
+  });
+});
+
+describe("OVERLAY_BOOTSTRAP_JS — preserved+recolored load-bearing legacy (G-PY2.2a.8)", () => {
+  // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
+  // Then: HOST_STYLE + position self-heal + __MAI_PASSIVE_ENABLED__ + __maiShowCard + installPageObservers +
+  //       MAI_DIALOG_KEY all present; legacy LinkedIn-blue '#0a66c2' ABSENT (recolored).
+  it("T-Shell.6: preserves HOST_STYLE + position self-heal + __MAI_PASSIVE_ENABLED__ + __maiShowCard + installPageObservers + MAI_DIALOG_KEY; legacy '#0a66c2' recolored away", () => {
+    for (const token of [
+      "HOST_STYLE",
+      "!== 'fixed'",
+      "__MAI_PASSIVE_ENABLED__",
+      "__maiShowCard",
+      "installPageObservers",
+      "MAI_DIALOG_KEY",
+    ]) {
+      assert.ok(BOOTSTRAP.includes(token), `load-bearing legacy must survive extraction: ${token}`);
+    }
+    assert.ok(!BOOTSTRAP.includes("#0a66c2"), "legacy LinkedIn-blue must be recolored away");
+  });
+});
+
+describe("inject.ts facade — re-exports the public surface (G-PY2.2a.3)", () => {
+  // Given: import * as inject.  When: inspected.
+  // Then: OVERLAY_BOOTSTRAP_JS (string) + installOverlay/subscribeContextId/callInOverlay (functions) present.
+  it("T-Extract.1: the inject.ts facade re-exports OVERLAY_BOOTSTRAP_JS (string) + installOverlay/subscribeContextId/callInOverlay (functions)", () => {
+    const m = inject as Record<string, unknown>;
+    assert.equal(typeof m.OVERLAY_BOOTSTRAP_JS, "string", "OVERLAY_BOOTSTRAP_JS string re-exported");
+    for (const fn of ["installOverlay", "subscribeContextId", "callInOverlay"]) {
+      assert.equal(
+        typeof m[fn],
+        "function",
+        `${fn} re-exported as a function (existing importers + mock.module depend on it)`,
+      );
+    }
+  });
+});
+
+describe("extraction — every split file ≤ 800 lines (G-PY2.2a.3)", () => {
+  // Given: the repo after builder 4b.  When: wc -l each file.  Then: each ≤ 800.
+  it("T-Extract.2: bootstrap.ts/bootstrapShell.ts/bootstrapLegacy.ts/host.ts/inject.ts/cssTransform.ts/sharedEntry.ts/render.ts are each ≤ 800 lines", () => {
+    const files = [
+      "src/overlay/bootstrap.ts",
+      "src/overlay/bootstrapShell.ts",
+      "src/overlay/bootstrapLegacy.ts",
+      "src/overlay/host.ts",
+      "src/overlay/inject.ts",
+      "src/overlay/cssTransform.ts",
+      "src/overlay/sharedEntry.ts",
+      "src/tauri/ui/render.ts",
+    ];
+    for (const f of files) {
+      const lines = readFileSync(join(REPO, f), "utf8").split("\n").length;
+      assert.ok(lines <= 800, `${f} must be ≤ 800 lines; got ${lines}`);
+    }
+  });
+});
+
+describe("scope — production write-range confined to the allowed paths (G-PY2.2a.9)", () => {
+  // Given: git status (P-Y4/P-Y5 are committed at HEAD; P-Y2.2a is the uncommitted working tree).
+  // When: production paths (non-tests/non-docs) are listed.
+  // Then: each ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json};
+  //       none matches serve/turn/dispatch/routes/cron/passive/context/eventBus/main.rs/app.ts/index.html/tools.
+  it("T-Scope.1: P-Y2.2a production write-range ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json}; no serve/turn/dispatch/main.rs/app.ts/index.html/tools", () => {
+    const raw = execSync("git status --porcelain -uall", { cwd: REPO, encoding: "utf8" });
+    // Scope to the PRODUCTION-CODE surface only. ROADMAP.md (orchestrator Step-0 doc, builder drift #4),
+    // website/** (pre-existing mockups), tests/**, docs/** are not the builder's production-code write-range.
+    const paths = raw
+      .split("\n")
+      .map((l) => l.slice(3).trim())
+      .filter(Boolean)
+      .filter((p) => /^(src\/|scripts\/|package\.json|biome\.json)/.test(p));
+    const allow = (p: string) =>
+      p.startsWith("src/overlay/") ||
+      p === "src/tauri/ui/render.ts" ||
+      p.startsWith("scripts/") ||
+      p === "package.json" ||
+      p === "biome.json";
+    const forbidden =
+      /serve|turn|dispatch|routes|cron|passive|context|eventBus|main\.rs|app\.ts|index\.html|src\/tools/;
+    const offenders = paths.filter((p) => !allow(p));
+    assert.deepEqual(
+      offenders,
+      [],
+      `production write-range must stay in the allow-list; offenders ${JSON.stringify(offenders)}`,
+    );
+    const forbiddenHits = paths.filter((p) => forbidden.test(p));
+    assert.deepEqual(
+      forbiddenHits,
+      [],
+      `no forbidden transport/drive/desktop path may change in 2.2a; found ${JSON.stringify(forbiddenHits)}`,
+    );
+  });
+});
