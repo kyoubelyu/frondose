@@ -198,6 +198,15 @@ async function spinHarness(
     headers: { Authorization: `Bearer ${bearer}` },
   });
 
+  // P-Z2: P-57g made passive default-OFF; enable it via the real runtime toggle.
+  await udsReq({
+    socketPath: sockPath,
+    method: "POST",
+    path: "/agent/passive-mode",
+    headers: { Authorization: `Bearer ${bearer}` },
+    body: { enabled: true },
+  });
+
   return {
     sockPath,
     bearer,

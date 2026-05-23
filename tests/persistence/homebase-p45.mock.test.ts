@@ -222,7 +222,9 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       // Peek at the private hooksJson field via type-cast — verifies HookRunner
       // loaded the sandbox hooks.json (not real ~/.mai/agent/hooks.json which
       // either doesn't exist for this operator or has different content).
-      const hooksJson = (runner as unknown as { hooksJson: { hooks?: { PreToolUse?: Array<{ matcher: string }> } } | null }).hooksJson;
+      const hooksJson = (
+        runner as unknown as { hooksJson: { hooks?: { PreToolUse?: Array<{ matcher: string }> } } | null }
+      ).hooksJson;
       assert.ok(hooksJson, "T-HB.5: HookRunner must have loaded a hooks.json (non-null)");
       const matchers = hooksJson?.hooks?.PreToolUse?.map((e) => e.matcher) ?? [];
       assert.ok(
@@ -235,4 +237,3 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
     }
   });
 });
-

@@ -195,49 +195,52 @@ const PROFILE_JSON_JANE_DOE = JSON.stringify({
 // ─── T-Profile.1 (G-P47.4): profileCard entries prepended ────────────────────
 
 describe("T-Profile.1 (G-P47.4): synthesizeProfileEntries prepends @pp1/@pp2 profileCard entries at index 0", () => {
-  it(
-    "entries[0]=@pp1 with 'Jane Doe' and 'VP Sales'; entries[1]=@pp2 with Acme/London/500+; nav entries follow at ≥2",
-    async () => {
-      // Given: captureCurrentSurfaceContext with profile URL → inferSurface = "profile";
-      //        stub client.evaluate(PROFILE_SYNTH_JS) returns PROFILE_JSON_JANE_DOE;
-      //        5 nav AX nodes in refMap (entries that existed before prepend)
-      // When:  captureCurrentSurfaceContext(client) runs
-      //        (Step 4b adds the profile branch: entries.unshift(...synthesizeProfileEntries))
-      // Then:  (a) ctx.entries[0].role === "profileCard" AND ref === "@pp1"
-      //             AND name includes "Jane Doe" and "VP Sales at Acme"
-      //         (b) ctx.entries[1].role === "profileCard" AND ref === "@pp2"
-      //             AND name includes "Acme" and "London, UK" and "500+ connections"
-      //         (c) Original nav entries follow at indices ≥ 2 (were prepended, not appended)
-      //         (d) ctx.surface === "profile"
-      const handle = makeFakeProfileHandle({
-        axNodes: PROFILE_NAV_AX_NODES,
-        pageUrl: "https://www.linkedin.com/in/jane-doe/",
-        profileJson: PROFILE_JSON_JANE_DOE,
-      });
-      const client = CdpClient.fromHandle(handle);
-      const ctx = await captureCurrentSurfaceContext(client);
+  it("entries[0]=@pp1 with 'Jane Doe' and 'VP Sales'; entries[1]=@pp2 with Acme/London/500+; nav entries follow at ≥2", async () => {
+    // Given: captureCurrentSurfaceContext with profile URL → inferSurface = "profile";
+    //        stub client.evaluate(PROFILE_SYNTH_JS) returns PROFILE_JSON_JANE_DOE;
+    //        5 nav AX nodes in refMap (entries that existed before prepend)
+    // When:  captureCurrentSurfaceContext(client) runs
+    //        (Step 4b adds the profile branch: entries.unshift(...synthesizeProfileEntries))
+    // Then:  (a) ctx.entries[0].role === "profileCard" AND ref === "@pp1"
+    //             AND name includes "Jane Doe" and "VP Sales at Acme"
+    //         (b) ctx.entries[1].role === "profileCard" AND ref === "@pp2"
+    //             AND name includes "Acme" and "London, UK" and "500+ connections"
+    //         (c) Original nav entries follow at indices ≥ 2 (were prepended, not appended)
+    //         (d) ctx.surface === "profile"
+    const handle = makeFakeProfileHandle({
+      axNodes: PROFILE_NAV_AX_NODES,
+      pageUrl: "https://www.linkedin.com/in/jane-doe/",
+      profileJson: PROFILE_JSON_JANE_DOE,
+    });
+    const client = CdpClient.fromHandle(handle);
+    const ctx = await captureCurrentSurfaceContext(client);
 
-      // (d) ctx.surface === "profile"
-      assert.equal(ctx.surface, "profile", "T-Profile.1: ctx.surface must be 'profile'");
+    // (d) ctx.surface === "profile"
+    assert.equal(ctx.surface, "profile", "T-Profile.1: ctx.surface must be 'profile'");
 
-      // (a) entries[0]: @pp1 profileCard identity line (prepended via unshift)
-      assert.equal(ctx.entries[0]?.role, "profileCard", "T-Profile.1: entries[0].role must be 'profileCard'");
-      assert.equal(ctx.entries[0]?.ref, "@pp1", "T-Profile.1: entries[0].ref must be '@pp1'");
-      assert.ok(ctx.entries[0]?.name.includes("Jane Doe"), "T-Profile.1: @pp1 name must include 'Jane Doe'");
-      assert.ok(ctx.entries[0]?.name.includes("VP Sales at Acme"), "T-Profile.1: @pp1 name must include 'VP Sales at Acme'");
+    // (a) entries[0]: @pp1 profileCard identity line (prepended via unshift)
+    assert.equal(ctx.entries[0]?.role, "profileCard", "T-Profile.1: entries[0].role must be 'profileCard'");
+    assert.equal(ctx.entries[0]?.ref, "@pp1", "T-Profile.1: entries[0].ref must be '@pp1'");
+    assert.ok(ctx.entries[0]?.name.includes("Jane Doe"), "T-Profile.1: @pp1 name must include 'Jane Doe'");
+    assert.ok(
+      ctx.entries[0]?.name.includes("VP Sales at Acme"),
+      "T-Profile.1: @pp1 name must include 'VP Sales at Acme'",
+    );
 
-      // (b) entries[1]: @pp2 profileCard details line
-      assert.equal(ctx.entries[1]?.role, "profileCard", "T-Profile.1: entries[1].role must be 'profileCard'");
-      assert.equal(ctx.entries[1]?.ref, "@pp2", "T-Profile.1: entries[1].ref must be '@pp2'");
-      assert.ok(ctx.entries[1]?.name.includes("Acme"), "T-Profile.1: @pp2 name must include 'Acme'");
-      assert.ok(ctx.entries[1]?.name.includes("London, UK"), "T-Profile.1: @pp2 name must include 'London, UK'");
-      assert.ok(ctx.entries[1]?.name.includes("500+"), "T-Profile.1: @pp2 name must include '500+'");
+    // (b) entries[1]: @pp2 profileCard details line
+    assert.equal(ctx.entries[1]?.role, "profileCard", "T-Profile.1: entries[1].role must be 'profileCard'");
+    assert.equal(ctx.entries[1]?.ref, "@pp2", "T-Profile.1: entries[1].ref must be '@pp2'");
+    assert.ok(ctx.entries[1]?.name.includes("Acme"), "T-Profile.1: @pp2 name must include 'Acme'");
+    assert.ok(ctx.entries[1]?.name.includes("London, UK"), "T-Profile.1: @pp2 name must include 'London, UK'");
+    assert.ok(ctx.entries[1]?.name.includes("500+"), "T-Profile.1: @pp2 name must include '500+'");
 
-      // (c) nav entries follow at indices ≥ 2 (prepend: not appended)
-      assert.ok(ctx.entries.length >= 7, "T-Profile.1: total entries = 2 profileCard + 5 nav AX nodes");
-      assert.ok(ctx.entries[2]?.role !== "profileCard", "T-Profile.1: entry at index 2 must be a nav entry (not profileCard)");
-    },
-  );
+    // (c) nav entries follow at indices ≥ 2 (prepend: not appended)
+    assert.ok(ctx.entries.length >= 7, "T-Profile.1: total entries = 2 profileCard + 5 nav AX nodes");
+    assert.ok(
+      ctx.entries[2]?.role !== "profileCard",
+      "T-Profile.1: entry at index 2 must be a nav entry (not profileCard)",
+    );
+  });
 });
 
 // ─── T-Profile.3 (G-P47.4): extraction failure is silent best-effort ─────────
@@ -283,7 +286,7 @@ describe("T-Profile.3 (G-P47.4): extraction failure yields no profileCard entrie
       assert.equal(profileCards.length, 0, `T-Profile.3 [${tc.desc}]: no profileCard entries when extraction fails`);
 
       // Only the 5 nav AX entries remain (no synthesis added)
-      assert.equal(ctx.entries.length, 5, `T-Profile.3 [${tc.desc}]: exactly 5 nav entries (AX only)`)
+      assert.equal(ctx.entries.length, 5, `T-Profile.3 [${tc.desc}]: exactly 5 nav entries (AX only)`);
     }
   });
 });

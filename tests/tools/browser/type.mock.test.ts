@@ -323,7 +323,10 @@ describe("T-Type.1 (G-P47.2): per-char dispatch — 'hello' → 5 single-char in
       assert.deepEqual(actualChars, ["h", "e", "l", "l", "o"], "T-Type.1: chars must be h/e/l/l/o in order");
 
       // (b) insertText NEVER called with the full string
-      assert.ok(!log.some((e) => e === "insertText:hello"), "T-Type.1: atomic insertText('hello') must never be called");
+      assert.ok(
+        !log.some((e) => e === "insertText:hello"),
+        "T-Type.1: atomic insertText('hello') must never be called",
+      );
 
       // (c) dispatchKeyEvent only for Ctrl+A — no Enter events (no \\n in "hello")
       const enterEvents = log.filter((e) => e.includes(":Enter:"));
@@ -390,42 +393,43 @@ describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent betwee
 // ─── T-Type.3 (G-P47.3): computeCharDelay cap / floor / jitter ───────────────
 
 describe("T-Type.3 (G-P47.3): computeCharDelay — ~8s cap holds; 30ms floor for short/medium; jitter collapses for long text", () => {
-  it(
-    "cap ≤8000ms; floor ≥30ms (short/medium); jitter varies for len≤200; jitter collapses for len≥500",
-    async () => {
-      // Given: exported pure function computeCharDelay(textLength, rand): number
-      //        rand ∈ [0,1] maps to a 0.3..1.0 multiplier; floor=min(30,budget); budget=min(8000/len,150)
-      // When:  called with textLength ∈ {1,54,100,266,300,500,1000,5000} and rand=0/rand=1
-      // Then:  (a) CAP: for all lengths, textLength × computeCharDelay(textLength, 1) ≤ 8001 (fp tolerance)
-      //         (b) FLOOR: computeCharDelay(3, 0) ≥ 30 AND computeCharDelay(54, 0) ≥ 30
-      //             (30ms floor binds when budget ≥ 30, i.e. textLength ≲ 266)
-      //         (c) JITTER VARIES (short/medium): computeCharDelay(200, 0) < computeCharDelay(200, 1)
-      //         (d) JITTER COLLAPSES (long): computeCharDelay(500, 0) === computeCharDelay(500, 1)
-      //             AND that value < 30 (budget-aware floor: floor=budget<30 for len≥500)
+  it("cap ≤8000ms; floor ≥30ms (short/medium); jitter varies for len≤200; jitter collapses for len≥500", async () => {
+    // Given: exported pure function computeCharDelay(textLength, rand): number
+    //        rand ∈ [0,1] maps to a 0.3..1.0 multiplier; floor=min(30,budget); budget=min(8000/len,150)
+    // When:  called with textLength ∈ {1,54,100,266,300,500,1000,5000} and rand=0/rand=1
+    // Then:  (a) CAP: for all lengths, textLength × computeCharDelay(textLength, 1) ≤ 8001 (fp tolerance)
+    //         (b) FLOOR: computeCharDelay(3, 0) ≥ 30 AND computeCharDelay(54, 0) ≥ 30
+    //             (30ms floor binds when budget ≥ 30, i.e. textLength ≲ 266)
+    //         (c) JITTER VARIES (short/medium): computeCharDelay(200, 0) < computeCharDelay(200, 1)
+    //         (d) JITTER COLLAPSES (long): computeCharDelay(500, 0) === computeCharDelay(500, 1)
+    //             AND that value < 30 (budget-aware floor: floor=budget<30 for len≥500)
 
-      // (a) CAP: len × computeCharDelay(len, 1) ≤ 8001 (8000ms + 1ms fp tolerance)
-      for (const len of [1, 54, 100, 266, 300, 500, 1000, 5000]) {
-        const delay = computeCharDelay(len, 1);
-        const total = len * delay;
-        assert.ok(total <= 8001, `T-Type.3 CAP: len=${len}, delay=${delay}, total=${total} must be ≤8001`);
-      }
+    // (a) CAP: len × computeCharDelay(len, 1) ≤ 8001 (8000ms + 1ms fp tolerance)
+    for (const len of [1, 54, 100, 266, 300, 500, 1000, 5000]) {
+      const delay = computeCharDelay(len, 1);
+      const total = len * delay;
+      assert.ok(total <= 8001, `T-Type.3 CAP: len=${len}, delay=${delay}, total=${total} must be ≤8001`);
+    }
 
-      // (b) FLOOR: 30ms minimum for short/medium text (budget ≥ 30 when len ≤ ~266)
-      assert.ok(computeCharDelay(3, 0) >= 30, `T-Type.3 FLOOR: len=3,rand=0 → ${computeCharDelay(3, 0)} must be ≥30`);
-      assert.ok(computeCharDelay(54, 0) >= 30, `T-Type.3 FLOOR: len=54,rand=0 → ${computeCharDelay(54, 0)} must be ≥30`);
+    // (b) FLOOR: 30ms minimum for short/medium text (budget ≥ 30 when len ≤ ~266)
+    assert.ok(computeCharDelay(3, 0) >= 30, `T-Type.3 FLOOR: len=3,rand=0 → ${computeCharDelay(3, 0)} must be ≥30`);
+    assert.ok(computeCharDelay(54, 0) >= 30, `T-Type.3 FLOOR: len=54,rand=0 → ${computeCharDelay(54, 0)} must be ≥30`);
 
-      // (c) JITTER VARIES for short/medium text (len=200: budget=40,floor=30 → rand=0→30, rand=1→40)
-      const d200r0 = computeCharDelay(200, 0);
-      const d200r1 = computeCharDelay(200, 1);
-      assert.ok(d200r0 < d200r1, `T-Type.3 JITTER VARIES: len=200, rand=0 (${d200r0}) must be < rand=1 (${d200r1})`);
+    // (c) JITTER VARIES for short/medium text (len=200: budget=40,floor=30 → rand=0→30, rand=1→40)
+    const d200r0 = computeCharDelay(200, 0);
+    const d200r1 = computeCharDelay(200, 1);
+    assert.ok(d200r0 < d200r1, `T-Type.3 JITTER VARIES: len=200, rand=0 (${d200r0}) must be < rand=1 (${d200r1})`);
 
-      // (d) JITTER COLLAPSES for long text (len=500: budget=16,floor=16 → same for any rand)
-      const d500r0 = computeCharDelay(500, 0);
-      const d500r1 = computeCharDelay(500, 1);
-      assert.equal(d500r0, d500r1, `T-Type.3 COLLAPSES: len=500 delay must be same for rand=0 (${d500r0}) and rand=1 (${d500r1})`);
-      assert.ok(d500r0 < 30, `T-Type.3 COLLAPSES: collapsed delay (${d500r0}) must be < 30ms (budget-aware floor ≈ 16)`);
-    },
-  );
+    // (d) JITTER COLLAPSES for long text (len=500: budget=16,floor=16 → same for any rand)
+    const d500r0 = computeCharDelay(500, 0);
+    const d500r1 = computeCharDelay(500, 1);
+    assert.equal(
+      d500r0,
+      d500r1,
+      `T-Type.3 COLLAPSES: len=500 delay must be same for rand=0 (${d500r0}) and rand=1 (${d500r1})`,
+    );
+    assert.ok(d500r0 < 30, `T-Type.3 COLLAPSES: collapsed delay (${d500r0}) must be < 30ms (budget-aware floor ≈ 16)`);
+  });
 });
 
 // ─── T-Type.4 (G-P47.2): hardware arm unchanged ──────────────────────────────
@@ -467,7 +471,11 @@ describe("T-Type.4 (G-P47.2): hardware arm — hardwareTypeAt invoked; CDP inser
       assert.equal(ctrlAEvents.length, 0, "T-Type.4 hardware: CDP Ctrl+A must NOT be dispatched");
 
       // (c) result.ok===false confirms hardware branch ran (hardwareTypeAt throws in test env)
-      assert.equal(result.ok, false, "T-Type.4 hardware: ok===false (hardwareTypeAt throws: no CGEvent native addon in test)");
+      assert.equal(
+        result.ok,
+        false,
+        "T-Type.4 hardware: ok===false (hardwareTypeAt throws: no CGEvent native addon in test)",
+      );
     },
   );
 });

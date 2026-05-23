@@ -242,9 +242,10 @@ async function runEscalate(
   tool: ReturnType<typeof makeEscalateTool>,
   params: typeof P54_PARAMS = P54_PARAMS,
 ): Promise<unknown> {
-  return await (
-    tool as unknown as { execute: (args: typeof P54_PARAMS, ctx?: unknown) => Promise<unknown> }
-  ).execute(params, { toolCallId: "t-p54", messages: [] });
+  return await (tool as unknown as { execute: (args: typeof P54_PARAMS, ctx?: unknown) => Promise<unknown> }).execute(
+    params,
+    { toolCallId: "t-p54", messages: [] },
+  );
 }
 
 // ─── T-Escalate.1 ────────────────────────────────────────────────────────────
@@ -475,8 +476,7 @@ describe("escalate_for_capability tool description (G-P54.5)", () => {
     // (a) Composite-tool single-call clarification — accept either exact "do NOT
     // call `telegram_notify` or `gh_issue`" or the equivalent "double-notify" phrasing.
     const hasCompositeClarification =
-      description.includes("do NOT call `telegram_notify` or `gh_issue`") ||
-      description.includes("double-notify");
+      description.includes("do NOT call `telegram_notify` or `gh_issue`") || description.includes("double-notify");
     assert.ok(
       hasCompositeClarification,
       `description must contain composite-tool single-call clarification ("do NOT call \`telegram_notify\` or \`gh_issue\`" or "double-notify"); got: ${JSON.stringify(description.slice(0, 200))}`,

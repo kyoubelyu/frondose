@@ -145,7 +145,11 @@ describe("subscribeContextId — invokes onContext only for context.name === 'ma
       1,
       `onContext should be called exactly once (top-frame mai-overlay); got ${onContextCalls.length} call(s)`,
     );
-    assert.equal(onContextCalls[0], 7, `onContext should receive id=7 (top-frame mai-overlay); got ${onContextCalls[0]}`);
+    assert.equal(
+      onContextCalls[0],
+      7,
+      `onContext should receive id=7 (top-frame mai-overlay); got ${onContextCalls[0]}`,
+    );
     // Return value should be a function (unsubscribe handle)
     assert.strictEqual(typeof unsub, "function", "subscribeContextId must return a function (unsubscribe handle)");
   });

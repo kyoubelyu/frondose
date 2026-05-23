@@ -17,7 +17,6 @@
  */
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -85,8 +84,16 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// Post-P-31 worker tool snapshot (32 keys = pre-P-31 31 + schedule_task)
-const POST_P31_WORKER_KEYS = [...PRE_P31_WORKER_KEYS, "schedule_task"].sort();
+// P-Z2 rebaseline: current worker tool snapshot (35 keys = pre-P-31 31 + schedule_task [P-31]
+// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]). Tool inventory IS contract
+// (CLAUDE.md:70 worker=35); regenerated empirically from makeAllTools.
+const POST_P31_WORKER_KEYS = [
+  ...PRE_P31_WORKER_KEYS,
+  "schedule_task",
+  "suggest_card",
+  "suggest_next_actions",
+  "todo_write",
+].sort();
 
 // Pre-P-31 server tool snapshot (22 keys).
 // P-44: updated from 19 to 22 to include P-39's search_memory/set_memory_note/get_memory_note.
@@ -115,20 +122,20 @@ const PRE_P31_SERVER_KEYS = [
   "web_search",
 ].sort();
 
-// Post-P-31 server tool snapshot (23 keys = pre-P-31 22 + schedule_task)
-const POST_P31_SERVER_KEYS = [...PRE_P31_SERVER_KEYS, "schedule_task"].sort();
-
-// Pre-P-31 SHA-256 hashes of D-6 files (byte-identical constraint).
-// Computed at Step 4a from the live pre-P-31 codebase.
-const PRE_P31_HASHES: Record<string, string> = {
-  "src/persistence/schedule.ts": "1e04312ac53a1553a11d19c14730d726bd9662857b0b8d595b1ab893cd4b67d2",
-  "src/cli/replCron.ts": "2d6443d34594c1735d3ea378e8c54bcf3260609b89358765d3e53078f75afa8a",
-};
+// P-Z2 rebaseline: current server tool snapshot (26 keys = pre-P-31 22 + schedule_task [P-31]
+// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]). CLAUDE.md:70 server=26.
+const POST_P31_SERVER_KEYS = [
+  ...PRE_P31_SERVER_KEYS,
+  "schedule_task",
+  "suggest_card",
+  "suggest_next_actions",
+  "todo_write",
+].sort();
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 32 tool keys (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 32 keys; set = pre-P-31 31 + schedule_task", () => {
+describe("makeAllTools worker mode → 35 tool keys (rebaselined to current post-P-Y1; was P-31-era 32) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 35 keys; set = pre-P-31 31 + schedule_task + suggest_card/suggest_next_actions + todo_write", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
     // Then:   29 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is exactly {schedule_task}
@@ -152,13 +159,13 @@ describe("makeAllTools worker mode → 32 tool keys (G-P31.12)", () => {
 
       assert.equal(
         keys.length,
-        32,
-        `worker mode must return exactly 32 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
+        35,
+        `worker mode must return exactly 35 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_WORKER_KEYS,
-        "worker tool names must match POST_P31_WORKER_KEYS (pre-P-31 31 + schedule_task)",
+        "worker tool names must match POST_P31_WORKER_KEYS (current post-P-Y1 inventory)",
       );
     } finally {
       cleanup();
@@ -168,8 +175,8 @@ describe("makeAllTools worker mode → 32 tool keys (G-P31.12)", () => {
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
-describe("makeAllTools server mode → 23 tool keys (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 23 keys; set = pre-P-31 22 + schedule_task", () => {
+describe("makeAllTools server mode → 26 tool keys (rebaselined to current post-P-Y1; was P-31-era 23) (G-P31.12)", () => {
+  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 26 keys; set = pre-P-31 22 + schedule_task + suggest_card/suggest_next_actions + todo_write", () => {
     // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
     // When:   server mode tool set is built post-P-31
     // Then:   20 keys; deepEqual to POST_P31_SERVER_KEYS; diff from PRE is exactly {schedule_task}
@@ -192,13 +199,13 @@ describe("makeAllTools server mode → 23 tool keys (G-P31.12)", () => {
 
       assert.equal(
         keys.length,
-        23,
-        `server mode must return exactly 23 tools post-P-31 (got ${keys.length}): ${JSON.stringify(keys)}`,
+        26,
+        `server mode must return exactly 26 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_SERVER_KEYS,
-        "server tool names must match POST_P31_SERVER_KEYS (pre-P-31 22 + schedule_task)",
+        "server tool names must match POST_P31_SERVER_KEYS (current post-P-Y1 inventory)",
       );
     } finally {
       cleanup();
@@ -233,23 +240,7 @@ describe("No child_process or node-cron in P-31 new files (G-P31.11)", () => {
   });
 });
 
-// ─── T-CONTRACT.HELPERS ──────────────────────────────────────────────────────
-
-describe("schedule.ts + replCron.ts byte-identical to pre-P-31 (G-P31.11 D-6)", () => {
-  it("T-CONTRACT.HELPERS: src/persistence/schedule.ts and src/cli/replCron.ts have the same SHA-256 as at P-31 Step 4a (D-6: zero changes to these files)", () => {
-    // Given:  pre-P-31 SHA-256 hashes embedded in this test at Step 4a
-    // When:   recomputing SHA-256 of the current files
-    // Then:   hashes match — files are byte-identical to pre-P-31 (D-6 compliant)
-
-    for (const [relPath, expectedHash] of Object.entries(PRE_P31_HASHES)) {
-      const absPath = join(SRC_ROOT, "..", relPath);
-      const content = readFileSync(absPath);
-      const actualHash = createHash("sha256").update(content).digest("hex");
-      assert.equal(
-        actualHash,
-        expectedHash,
-        `${relPath} must be byte-identical to pre-P-31 (D-6); hash changed → builder accidentally modified it`,
-      );
-    }
-  });
-});
+// P-Z2 (bucket 5b): T-CONTRACT.HELPERS (SHA-256 byte-freeze of schedule.ts + replCron.ts)
+// DELETED. A "stays byte-identical to phase-N" SHA-pin is the wrong guard for evolving
+// helper files — it false-alarms on every legitimate edit. The behavioral tests for those
+// modules are the correct guard. (OQ-Z2.3.)

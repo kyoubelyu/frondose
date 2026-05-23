@@ -28,8 +28,8 @@ import type { CoreMessage } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { runRepl } from "../../src/cli/repl.js";
-import type { TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import type { RunCronTurnDeps } from "../../src/cli/replCron.js";
+import type { TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -427,7 +427,11 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
           stream: simulateReadableStream({
             chunks: [
               { type: "text-delta" as const, textDelta: "ok" },
-              { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 5, completionTokens: 2 } },
+              {
+                type: "finish" as const,
+                finishReason: "stop" as const,
+                usage: { promptTokens: 5, completionTokens: 2 },
+              },
             ],
           }),
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -498,7 +502,11 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
           stream: simulateReadableStream({
             chunks: [
               { type: "text-delta" as const, textDelta: "ok" },
-              { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 5, completionTokens: 2 } },
+              {
+                type: "finish" as const,
+                finishReason: "stop" as const,
+                usage: { promptTokens: 5, completionTokens: 2 },
+              },
             ],
           }),
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -567,7 +575,11 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
           stream: simulateReadableStream({
             chunks: [
               { type: "text-delta" as const, textDelta: "ok" },
-              { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 5, completionTokens: 2 } },
+              {
+                type: "finish" as const,
+                finishReason: "stop" as const,
+                usage: { promptTokens: 5, completionTokens: 2 },
+              },
             ],
           }),
           rawCall: { rawPrompt: null, rawSettings: {} },

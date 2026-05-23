@@ -10,12 +10,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type {
-  TodoStep,
-  Workflow,
-  WorkflowAuditEntry,
-  WorkflowState,
-} from "../../../src/agent/workflow/types.js";
+import type { TodoStep, Workflow, WorkflowAuditEntry, WorkflowState } from "../../../src/agent/workflow/types.js";
 
 // ─── T-Types.1 — Workflow data model shapes ─────────────────────────────────
 
@@ -56,7 +51,15 @@ describe("workflow/types.ts — TodoStep / Workflow / WorkflowState / WorkflowAu
     ];
     const kinds = new Set(events.map((e) => e.kind));
     assert.equal(kinds.size, 7, "event union must have exactly the 7 kinds");
-    for (const k of ["proposed", "step_advance", "approval_pending", "approval_resolved", "always_ask", "commit_warning", "completed"]) {
+    for (const k of [
+      "proposed",
+      "step_advance",
+      "approval_pending",
+      "approval_resolved",
+      "always_ask",
+      "commit_warning",
+      "completed",
+    ]) {
       assert.ok(kinds.has(k as WorkflowAuditEntry["event"]["kind"]), `event kind '${k}' must exist`);
     }
 

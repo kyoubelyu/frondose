@@ -295,6 +295,15 @@ async function spinHarness(
   });
   assert.ok(mockBindingCalledHandler !== null, `${testName}: bindingCalled handler must be captured`);
 
+  // P-Z2: P-57g made passive default-OFF; enable it via the real runtime toggle.
+  await udsReq({
+    socketPath: sockPath,
+    method: "POST",
+    path: "/agent/passive-mode",
+    headers: { Authorization: `Bearer ${bearer}` },
+    body: { enabled: true },
+  });
+
   return {
     sockPath,
     bearer,
@@ -420,8 +429,11 @@ describe("triggerPassiveAnalysis — isolated passiveMessages[]; operator messag
       );
       const passiveContent = passiveMsgs[0]?.content;
       assert.ok(
-        typeof passiveContent === "string" && passiveContent.includes("Silently analyse"),
-        `passive messages[0] must contain 'Silently analyse' (buildPassivePrompt profile-nav signature); got: ${String(passiveContent).slice(0, 200)}`,
+        // P-Z2 (bucket 1c): P-57e rev-2 changed the profile-nav prompt signature; it no longer
+        // says "Silently analyse". Current buildPassivePrompt profile-nav line (passive.ts:105)
+        // starts "Operator viewed LinkedIn profile: <handle> (<url>).".
+        typeof passiveContent === "string" && passiveContent.includes("Operator viewed LinkedIn profile:"),
+        `passive messages[0] must contain 'Operator viewed LinkedIn profile:' (buildPassivePrompt profile-nav signature); got: ${String(passiveContent).slice(0, 200)}`,
       );
 
       // (4) Operator messages[] length UNCHANGED after passive fire
@@ -500,15 +512,15 @@ describe("handlePassiveProfileNav — passiveProfileCache 10-min dedup + lazy TT
 
 // ─── T-Passive.5 — Click 2-tier ICP pre-filter ──────────────────────────────
 
-describe("handlePassiveObservation — click 2-tier ICP pre-filter (URL /in/* OR matchIcp role token) (G-P57b.6)", () => {
-  it("T-Passive.5: given serve.ts harness + identity.icp.targetRole=['VP Sales']; clean rate-limiter, WHEN dispatch four click events (V1:/feed/+'Like this post'→skip; V2:/in/jane-doe/+'Connect'→tier-1 fire; V3:/feed/+'VP of Sales role'→tier-2 fire on matchIcp; V4:/messaging/+'chat history'→skip), THEN runAgentLoop fired exactly 2 times (V2+V3); SSE has 2 passive-skipped + 2 passive-fired frames", async () => {
+describe("handlePassiveObservation — click → fire (no ICP pre-filter; rate-limit only) (G-P57b.6)", () => {
+  it("T-Passive.5: given serve.ts harness + clean rate-limiter, WHEN dispatch four interactive click events (P-57e rev-2 item d DROPPED the tier-2 ICP pre-filter — every refable click is intent-bearing and fires subject ONLY to the rate-limiter), THEN runAgentLoop fires for ALL 4 clicks; SSE has 4 passive-fired + 0 icp_mismatch frames", async () => {
     const h = await spinHarness("t5", { icpRoles: ["VP Sales"] });
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2000 });
       await new Promise((r) => setTimeout(r, 100));
 
-      // V1: /feed/ + "Like this post" — both tier-1 (no /in/) AND tier-2 (no role-token) miss → skip
+      // V1: /feed/ + "Like this post" — interactive click → fires (no ICP pre-filter; rate-limit only)
       dispatchOverlayBindingEvent({
         type: "observe",
         event_type: "click",
@@ -517,7 +529,7 @@ describe("handlePassiveObservation — click 2-tier ICP pre-filter (URL /in/* OR
       });
       await new Promise((r) => setTimeout(r, 60));
 
-      // V2: /in/jane-doe/ + "Connect" — tier-1 URL match → fire
+      // V2: /in/jane-doe/ + "Connect" — interactive click → fires
       dispatchOverlayBindingEvent({
         type: "observe",
         event_type: "click",
@@ -526,7 +538,7 @@ describe("handlePassiveObservation — click 2-tier ICP pre-filter (URL /in/* OR
       });
       await new Promise((r) => setTimeout(r, 60));
 
-      // V3: /feed/ + "VP of Sales role" — tier-2 matchIcp("VP of Sales role", {targetRole:["VP Sales"]}) → match → fire
+      // V3: /feed/ + "VP of Sales role" — interactive click → fires
       dispatchOverlayBindingEvent({
         type: "observe",
         event_type: "click",
@@ -535,7 +547,7 @@ describe("handlePassiveObservation — click 2-tier ICP pre-filter (URL /in/* OR
       });
       await new Promise((r) => setTimeout(r, 60));
 
-      // V4: /messaging/ + "chat history" — both tiers miss → skip
+      // V4: /messaging/ + "chat history" — interactive click → fires
       dispatchOverlayBindingEvent({
         type: "observe",
         event_type: "click",
@@ -546,16 +558,16 @@ describe("handlePassiveObservation — click 2-tier ICP pre-filter (URL /in/* OR
 
       assert.equal(
         mockRunAgentLoopCallCount,
-        2,
-        `runAgentLoop should fire exactly 2 times (V2 + V3); got ${mockRunAgentLoopCallCount}`,
+        4,
+        `runAgentLoop should fire for ALL 4 clicks (P-57e rev-2 removed the tier-2 ICP filter; rate-limit only); got ${mockRunAgentLoopCallCount}`,
       );
 
       const sse = await ssePromise;
-      // 2 passive-skipped + 2 passive-fired
+      // P-Z2 (bucket 1c): tier-2 ICP filter removed → 0 icp_mismatch skips; all 4 clicks fire.
       const skipCount = (sse.text.match(/"type":"passive-skipped".*?"reason":"icp_mismatch"/g) ?? []).length;
       const fireCount = (sse.text.match(/"type":"passive-fired"/g) ?? []).length;
-      assert.equal(skipCount, 2, `SSE must contain 2 passive-skipped icp_mismatch frames (V1+V4); got ${skipCount}`);
-      assert.equal(fireCount, 2, `SSE must contain 2 passive-fired frames (V2+V3); got ${fireCount}`);
+      assert.equal(skipCount, 0, `SSE must contain 0 icp_mismatch frames (tier-2 filter removed); got ${skipCount}`);
+      assert.equal(fireCount, 4, `SSE must contain 4 passive-fired frames (V1-V4 all fire); got ${fireCount}`);
     } finally {
       h.restoreEnv();
     }

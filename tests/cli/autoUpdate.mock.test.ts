@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, wr
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type AutoUpdateDI,
   type AutoUpdateResult,
@@ -40,19 +40,49 @@ import {
   runStartupAutoUpdate,
 } from "../../src/cli/autoUpdate.js";
 
+// P-Z2 (bucket 2): production autoUpdate.ts resolves lock/releases via getHomeBase()
+// (= MAI_HOME_BASE ?? homedir()). Isolate each test under its OWN fresh MAI_HOME_BASE so
+// (a) the clean-room shell-level MAI_HOME_BASE export does not share one home across all
+// tests (cross-test update.lock contamination) and (b) the test helpers below resolve to
+// the same dir production uses. The real ~/.mai is never touched.
+let pZ2PrevHome: string | undefined;
+let pZ2TmpHome: string;
+beforeEach(() => {
+  pZ2PrevHome = process.env.MAI_HOME_BASE;
+  pZ2TmpHome = mkdtempSync(join(tmpdir(), "pZ2-autoupd-"));
+  process.env.MAI_HOME_BASE = pZ2TmpHome;
+});
+afterEach(() => {
+  if (pZ2PrevHome === undefined) delete process.env.MAI_HOME_BASE;
+  else process.env.MAI_HOME_BASE = pZ2PrevHome;
+  rmSync(pZ2TmpHome, { recursive: true, force: true });
+});
+
 // ─── version helpers ──────────────────────────────────────────────────────────
 
 const _req = createRequire(import.meta.url);
 const LOCAL_VER: string = (_req("../../package.json") as { version: string }).version;
 const LOCAL_TAG = `v${LOCAL_VER}`;
 
+// P-Z2: a release tag reliably NEWER than LOCAL but with the SAME major (so it triggers
+// the normal update flow, not the major_bump short-circuit). Derived from LOCAL_VER so it
+// never goes stale as the package version advances (the old hardcoded NEWER_TAG fell BELOW
+// the bumped local 0.5.0-alpha.x → tests short-circuited as up_to_date).
+const _localParts = LOCAL_VER.split(".");
+const NEWER_TAG = `v${_localParts[0]}.${Number(_localParts[1]) + 1}.0`;
+
 // ─── path helpers ─────────────────────────────────────────────────────────────
 
+// P-Z2: mirror production getHomeBase() (MAI_HOME_BASE ?? homedir()) so the test's
+// fixture paths match where autoUpdate.ts actually reads/writes.
+function pZ2HomeBase(): string {
+  return process.env.MAI_HOME_BASE ?? homedir();
+}
 function updateLockPath(): string {
-  return join(homedir(), ".mai", "agent", "update.lock");
+  return join(pZ2HomeBase(), ".mai", "agent", "update.lock");
 }
 function releasesDirPath(): string {
-  return join(homedir(), ".mai", "agent", "releases");
+  return join(pZ2HomeBase(), ".mai", "agent", "releases");
 }
 
 // ─── mock helpers ──────────────────────────────────────────────────────────────
@@ -350,7 +380,7 @@ describe("autoUpdate — skip conditions", () => {
       const { argv1 } = makeSymlinkSetup(dir, true /* devLink */);
       stderr = await captureStderr(async () => {
         result = await runStartupAutoUpdate({
-          fetchImpl: makeMockReleaseFetch("v0.4.99"), // newer than local
+          fetchImpl: makeMockReleaseFetch(NEWER_TAG), // newer than local
           argv1Override: argv1,
           force: false,
         });
@@ -383,7 +413,7 @@ describe("autoUpdate — skip conditions", () => {
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
     try {
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         argv1Override: realFilePath,
         spawnSyncImpl: spawnFn,
       });
@@ -431,12 +461,12 @@ describe("autoUpdate — full update flow", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, false /* non-dev-link */);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
       });
       assert.equal(result.action, "updated", "action must be updated");
-      assert.equal(result.latestTag, "v0.4.99", "latestTag must match fetched tag");
+      assert.equal(result.latestTag, NEWER_TAG, "latestTag must match fetched tag");
       assert.equal(exitCode, 0, "process.exit(0) must have been called for re-exec");
       // Verify all build steps were invoked
       assert.ok(
@@ -465,10 +495,10 @@ describe("autoUpdate — full update flow", () => {
       else delete process.env.MAI_AUTOUPDATE;
       // Clean up release dir created in real homedir
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -488,7 +518,7 @@ describe("autoUpdate — full update flow", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, false);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
       });
@@ -498,7 +528,7 @@ describe("autoUpdate — full update flow", () => {
       assert.ok(!spawnCalls.some((c) => c.cmd === "npm"), "npm must not be called after extract failure");
       assert.ok(!spawnCalls.some((c) => c.cmd === process.execPath), "re-exec must not happen after extract failure");
       // Release dir must be cleaned up by cleanupPartial
-      const releaseDir = join(releasesDirPath(), "v0.4.99");
+      const releaseDir = join(releasesDirPath(), NEWER_TAG);
       assert.ok(!existsSync(releaseDir), "release dir must be removed after extract failure");
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
@@ -506,10 +536,10 @@ describe("autoUpdate — full update flow", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -529,7 +559,7 @@ describe("autoUpdate — full update flow", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, false);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
       });
@@ -546,7 +576,7 @@ describe("autoUpdate — full update flow", () => {
         "npm run build must not be called after install failure",
       );
       // Release dir must be cleaned up
-      const releaseDir = join(releasesDirPath(), "v0.4.99");
+      const releaseDir = join(releasesDirPath(), NEWER_TAG);
       assert.ok(!existsSync(releaseDir), "release dir must be removed after install failure");
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
@@ -554,10 +584,10 @@ describe("autoUpdate — full update flow", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -577,7 +607,7 @@ describe("autoUpdate — full update flow", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, false);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
       });
@@ -595,7 +625,7 @@ describe("autoUpdate — full update flow", () => {
       // Re-exec must NOT be called after build failure
       assert.ok(!spawnCalls.some((c) => c.cmd === process.execPath), "re-exec must not happen after build failure");
       // Release dir must be cleaned up
-      const releaseDir = join(releasesDirPath(), "v0.4.99");
+      const releaseDir = join(releasesDirPath(), NEWER_TAG);
       assert.ok(!existsSync(releaseDir), "release dir must be removed after build failure");
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
@@ -603,10 +633,10 @@ describe("autoUpdate — full update flow", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -771,7 +801,7 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, true /* devLink */);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
         force: true,
@@ -780,7 +810,7 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       // Must NOT return dev_link (force bypasses that check)
       assert.notEqual(result.reason, "dev_link", "dev_link guard must be bypassed when force=true");
       assert.equal(result.action, "updated", "action must be updated (dev_link bypass ran full flow)");
-      assert.equal(result.latestTag, "v0.4.99", "latestTag must match fetched tag");
+      assert.equal(result.latestTag, NEWER_TAG, "latestTag must match fetched tag");
       assert.equal(exitCode, 0, "process.exit(0) must have been called for re-exec");
       // All build steps must be called
       assert.ok(
@@ -807,10 +837,10 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -836,14 +866,14 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     try {
       const { argv1 } = makeSymlinkSetup(dir, false /* non-dev-link */);
       const result = await runStartupAutoUpdate({
-        fetchImpl: makeMockReleaseFetch("v0.4.99"),
+        fetchImpl: makeMockReleaseFetch(NEWER_TAG),
         spawnSyncImpl: spawnFn,
         argv1Override: argv1,
         force: true,
         source: "bootstrap",
       });
       assert.equal(result.action, "updated", "action must be updated (bootstrap + non-dev-link = regular update)");
-      assert.equal(result.latestTag, "v0.4.99", "latestTag must match fetched tag");
+      assert.equal(result.latestTag, NEWER_TAG, "latestTag must match fetched tag");
       assert.equal(exitCode, 0, "process.exit(0) must have been called for re-exec (idempotent)");
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
@@ -853,10 +883,10 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
       else delete process.env.MAI_AUTOUPDATE;
       try {
-        rmSync(join(releasesDirPath(), "v0.4.99"), { recursive: true, force: true });
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
       try {
-        unlinkSync(join(releasesDirPath(), "v0.4.99.tar.gz"));
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
       } catch {}
       cleanup();
     }
@@ -886,17 +916,13 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool count is 38 after P-39 (autoUpdate is NOT a Vercel tool; P-39 adds 3 memory tools)", async () => {
+  it("T-CONTRACT: tool() count in src/tools/ (P-Z2 rebaseline → 41; autoUpdate is NOT a Vercel tool)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  grep tool() in src/tools/**
-    // Then:  38 tool() calls — was 28 at P-26; +3 P-27; +3 P-28.5; +1 P-31 (schedule_task); +3 P-39 (search_memory/set_memory_note/get_memory_note).
-    //        mai auto-update is a startup hook, not a Vercel tool.
+    // Then:  41 tool() calls — P-Z2 rebaseline from P-39-era 38; +suggest_card/suggest_next_actions
+    //        [P-57a] + todo_write [P-Y1]. mai auto-update is a startup hook, not a Vercel tool.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(
-      count,
-      38,
-      `Expected exactly 38 tool() calls in src/tools/, got ${count}. P-39 added 3 new memory tools.`,
-    );
+    assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
   });
 });
