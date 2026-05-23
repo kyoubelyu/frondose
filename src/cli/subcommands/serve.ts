@@ -37,7 +37,7 @@ import { createCronDriver } from "./serve/cron.js";
 import { createOverlayDispatcher } from "./serve/dispatch.js";
 import { removeSocket } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
-import { createRequestHandler } from "./serve/routes.js";
+import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
 import { createTurnRunner } from "./serve/turn.js";
 
 export interface ServeOpts {
@@ -72,7 +72,12 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const schedulePath = join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
   const auditPath = AUDIT_PATH();
   const auditWriter = makeAuditWriter(auditPath);
-  const session = createLinkedinSession({ port: 9222, profileDir, inputMode: cfg.worker.input_mode });
+  const session = createLinkedinSession({
+    port: 9222,
+    profileDir,
+    inputMode: cfg.worker.input_mode,
+    onClientBooted: (client) => ensureOverlaySubscription(state, deps, dispatch.dispatchOverlayEvent, client),
+  });
   const state: ServeState = {
     currentTurn: null,
     overlayContextId: undefined,

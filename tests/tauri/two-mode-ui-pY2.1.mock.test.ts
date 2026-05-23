@@ -163,7 +163,15 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
     // a later phase's work). Acknowledged so this point-in-time P-Y2.1 gate stays green while still catching
     // a genuinely-unexpected escape (e.g. src/agent/**, src/tools/**). Grows as sibling phases interleave:
     //  - P-Y5 D-RUN-1 (app-close-must-stop-the-agent): serve UDS-disconnect-abort + Rust CloseRequested.
-    const SIBLING_PHASE = ["src/cli/subcommands/serve/routes.ts", "src/tauri/src-tauri/src/main.rs"];
+    //  - P-Y4 entry-flow redesign + agent-driven Chrome launch (overlay re-home): session.ts onClientBooted
+    //    seam, serve.ts onClientBooted wiring, routes.ts ensureOverlaySubscription extraction. (app.ts/
+    //    index.html/app.js are already covered by the src/tauri/ui/ prefix check above.)
+    const SIBLING_PHASE = [
+      "src/cli/subcommands/serve/routes.ts",
+      "src/tauri/src-tauri/src/main.rs",
+      "src/linkedin/session.ts",
+      "src/cli/subcommands/serve.ts",
+    ];
     const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
     const srcPaths = status

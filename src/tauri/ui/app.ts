@@ -30,9 +30,6 @@ declare global {
 type IdentityOk = { ok: true; fullName?: string; role?: string; company?: string; headline?: string };
 type IdentityErr = { ok: false; reason: string };
 type IdentityResp = IdentityOk | IdentityErr;
-type ChromeOk = { ok: true; chromePort: number; overlayInstalled: boolean };
-type ChromeErr = { ok: false; error: string; message?: string };
-type ChromeResp = ChromeOk | ChromeErr;
 type TurnOk = { ok: true; turnId: string };
 type TurnErr = { ok: false; reason: string; turnId?: string; attempts?: number };
 type TurnResp = TurnOk | TurnErr;
@@ -85,8 +82,8 @@ function mustGet<T extends TextElementLike>(id: string): T {
   return el as unknown as T;
 }
 
-type AppState = "identity-missing" | "chrome-needed" | "idle" | "running" | "error";
-let appState: AppState = "chrome-needed";
+type AppState = "identity-missing" | "idle" | "running" | "error";
+let appState: AppState = "identity-missing";
 let currentTurnId: string | null = null;
 let steerInFlight = false;
 let lastTurnPrompt: string | null = null;
@@ -96,8 +93,7 @@ let appMode: AppMode = "manual";
 let workflowView: WorkflowView | null = null;
 
 const nameEl = mustGet<TextElementLike>("name");
-const startEl = mustGet<ButtonElementLike>("start");
-const startCardEl = mustGet<ElementLike>("start-card");
+const identityGateEl = mustGet<ElementLike>("identity-gate");
 const statusEl = mustGet<TextElementLike>("status");
 const composerEl = mustGet<ElementLike>("composer");
 const commandEl = mustGet<InputElementLike>("command-input");
@@ -141,8 +137,7 @@ function refreshOutputVisibility(): void {
 
 function transition(next: AppState): void {
   appState = next;
-  startEl.classList.toggle("hidden", next !== "chrome-needed");
-  startCardEl.classList.toggle("hidden", next === "idle" || next === "running");
+  identityGateEl.classList.toggle("hidden", next !== "identity-missing");
   composerEl.classList.toggle("hidden", next !== "idle" && next !== "running");
   commandEl.classList.toggle("hidden", next !== "idle" && next !== "running");
   sendEl.classList.toggle("hidden", next !== "idle" && next !== "running");
@@ -221,33 +216,12 @@ async function loadIdentity(): Promise<void> {
     }
     nameEl.classList.remove("error");
     nameEl.textContent = r.fullName ?? "(no fullName in identity)";
-    transition("chrome-needed");
+    transition("idle");
   } catch (e) {
     nameEl.classList.add("error");
     nameEl.textContent = String(e);
     errorBannerEl.textContent = `boot error: ${String(e)}`;
     transition("error");
-  }
-}
-
-async function startLinkedIn(): Promise<void> {
-  startEl.disabled = true;
-  startEl.textContent = "Starting...";
-  statusEl.textContent = "";
-  try {
-    const r = await invoke<ChromeResp>("mai_chrome_ensure");
-    if (r.ok === false) {
-      statusEl.textContent = `error: ${r.message ?? r.error}`;
-      startEl.disabled = false;
-      startEl.textContent = "Start LinkedIn";
-      return;
-    }
-    statusEl.textContent = `Chrome on port ${r.chromePort}`;
-    transition("idle");
-  } catch (e) {
-    statusEl.textContent = String(e);
-    startEl.disabled = false;
-    startEl.textContent = "Start LinkedIn";
   }
 }
 
@@ -568,9 +542,6 @@ function handleEvent(payload: SseFrame): void {
   }
 }
 
-startEl.addEventListener("click", () => {
-  void startLinkedIn();
-});
 sendEl.addEventListener("click", () => {
   void sendCommand();
 });

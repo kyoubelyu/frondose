@@ -1,12 +1,51 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { attachEventBus } from "../../../overlay/eventBus.js";
+import type { CdpClient } from "../../../cdp/client.js";
+import { attachEventBus, type OverlayEvent } from "../../../overlay/eventBus.js";
 import { subscribeContextId } from "../../../overlay/inject.js";
 import { readIdentity } from "../../../persistence/identity.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
 import type { createOverlayDispatcher } from "./dispatch.js";
 import { checkBearer, readAuditTail, readJsonBody, sendJson } from "./http.js";
 import type { createTurnRunner } from "./turn.js";
+
+/**
+ * P-Y4 (ask d): wire the in-page overlay to a booted CDP client — capture the overlay
+ * execution-context id (for callInOverlay) + route in-page overlay events (pill activate,
+ * passive observe) into serve. Extracted verbatim from the old POST /chrome/ensure body so
+ * BOTH that route AND the lazy onClientBooted boot path share one idempotent implementation.
+ * Idempotent via the state guards: a second call (e.g. ensure after onClientBooted already
+ * ran) no-ops.
+ */
+export async function ensureOverlaySubscription(
+  state: ServeState,
+  deps: ServeDeps,
+  onOverlayEvent: (event: OverlayEvent) => void,
+  client: CdpClient,
+): Promise<void> {
+  if (!state.unsubscribeContextId) {
+    state.unsubscribeContextId = await subscribeContextId(client.handle, (id) => {
+      const wasReconnect = state.overlayContextId !== undefined && state.overlayContextId !== id;
+      state.overlayContextId = id;
+      if (wasReconnect) {
+        deps.emitFrame({ type: "overlay-reconnected" });
+        const ts = Date.now();
+        deps.emitOverlayEvent({
+          kind: "overlay-event",
+          ts,
+          event_type: "overlay-reconnected",
+          t0: ts,
+          latency_ms: 0,
+        });
+      }
+    });
+  }
+  if (!state.unsubscribeOverlayEvents) {
+    state.unsubscribeOverlayEvents = attachEventBus(client.handle, (event) => {
+      onOverlayEvent(event);
+    });
+  }
+}
 
 export function createRequestHandler(
   state: ServeState,
@@ -54,28 +93,7 @@ export function createRequestHandler(
           sendJson(res, 503, { ok: false, error: result.error, message: result.message });
           return;
         }
-        if (!state.unsubscribeContextId) {
-          state.unsubscribeContextId = await subscribeContextId(result.client.handle, (id) => {
-            const wasReconnect = state.overlayContextId !== undefined && state.overlayContextId !== id;
-            state.overlayContextId = id;
-            if (wasReconnect) {
-              deps.emitFrame({ type: "overlay-reconnected" });
-              const ts = Date.now();
-              deps.emitOverlayEvent({
-                kind: "overlay-event",
-                ts,
-                event_type: "overlay-reconnected",
-                t0: ts,
-                latency_ms: 0,
-              });
-            }
-          });
-        }
-        if (!state.unsubscribeOverlayEvents) {
-          state.unsubscribeOverlayEvents = attachEventBus(result.client.handle, (event) => {
-            void dispatch.dispatchOverlayEvent(event);
-          });
-        }
+        await ensureOverlaySubscription(state, deps, dispatch.dispatchOverlayEvent, result.client);
         sendJson(res, 200, { ok: true, chromePort: 9222, overlayInstalled: true });
         return;
       }

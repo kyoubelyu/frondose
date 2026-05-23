@@ -283,19 +283,11 @@
       <section id="manual-surface" class="conv">
         <div class="status-line"><span class="status-dot"></span><span id="status">Listening</span></div>
 
-        <div class="msg-agent">
-          <div class="avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
-          <div class="msg-agent-body">
-            <div class="msg-agent-text">Hi — I'm Frondose. Tell me a LinkedIn goal and I'll plan it as steps, run it in your browser, and pause for your approval before anything goes out.</div>
-          </div>
-        </div>
-
-        <div id="start-card" class="start-card">
+        <div id="identity-gate" class="start-card hidden">
           <div>
             <div id="name" class="start-name">loading identity...</div>
-            <div class="start-hint">Connect your browser to begin.</div>
+            <div class="start-hint">Run <code>mai setup</code> to set your identity.</div>
           </div>
-          <button id="start" class="btn-primary" type="button">Start LinkedIn</button>
         </div>
 
         <div id="output-msg" class="msg-agent hidden">
