@@ -32,6 +32,11 @@ export const SHELL_JS = `
   // ---- id-bearing skeleton (ports index.html body; ids match render.ts getElementById targets) ----
   function el(tag, cls, id){ var e = document.createElement(tag); if (cls) e.className = cls; if (id) e.id = id; return e; }
 
+  function wfRef() {
+    try { var w = JSON.parse(lastWorkflowJson); return { workflowId: w && w.workflowId, stepId: w && w.pendingStepId }; }
+    catch (e) { return {}; }
+  }
+
   function buildPanelSkeleton() {
     if (panelRoot) return;
     panelRoot = el('div', 'app');
@@ -96,9 +101,8 @@ export const SHELL_JS = `
     dialogElements = { ticker: ticker, output: output, input: input, cardSlot: cardSlot,
       nextActionsSlot: nextActionsSlot, retrySlot: retrySlot, cronSlot: cronSlot };
 
-    // local-only wiring (NO serve transport in 2.2a)
-    manualTab.addEventListener('click', function(){ window.__maiSetMode('manual'); });
-    autoTab.addEventListener('click', function(){ window.__maiSetMode('auto'); });
+    manualTab.addEventListener('click', function(){ window.__maiSetMode('manual'); post({ type:'mode', mode:'manual', t0:Date.now() }); });
+    autoTab.addEventListener('click', function(){ window.__maiSetMode('auto'); post({ type:'mode', mode:'auto', t0:Date.now() }); });
     var showAll = shadow.getElementById('workflow-showall-btn');
     if (showAll) showAll.addEventListener('click', function(){ workflowExpanded = !workflowExpanded; rerenderWorkflow(); });
   }
@@ -137,17 +141,34 @@ export const SHELL_JS = `
     right.appendChild(approveBtn); right.appendChild(declineBtn);
     right.appendChild(pauseBtn); right.appendChild(handoffBtn);
     actions.appendChild(right); card.appendChild(actions);
+    approveBtn.addEventListener('click', function(){ var w = wfRef(); post({ type:'workflow-approve', workflowId:w.workflowId, stepId:w.stepId, t0:Date.now() }); });
+    declineBtn.addEventListener('click', function(){ var w = wfRef(); post({ type:'workflow-decline', workflowId:w.workflowId, stepId:w.stepId, reason:'operator_declined', t0:Date.now() }); });
+    handoffBtn.addEventListener('click', function(){ var w = wfRef(); post({ type:'workflow-handoff', workflowId:w.workflowId, t0:Date.now() }); });
+    pauseBtn.addEventListener('click', function(){ post({ type:'abort', t0:Date.now() }); });
     return card;
   }
 
   // ---- render dispatch on STATIC/mock data (serve auto-drive is 2.2b) ----
+  function bindAutoStageButtons() {
+    var p = shadow.getElementById('auto-pause-btn');
+    if (p) p.addEventListener('click', function(){ post({ type:'abort', t0:Date.now() }); });
+    var t = shadow.getElementById('auto-takeover-btn');
+    if (t) t.addEventListener('click', function(){ post({ type:'abort', t0:Date.now() }); });
+  }
+
   function rerenderWorkflow() {
     if (!lastWorkflowJson) return;
     var wf = JSON.parse(lastWorkflowJson);
+    if (!wf) {
+      var c0 = shadow.getElementById('workflow-card'); if (c0) c0.classList.add('hidden');
+      var a0 = shadow.getElementById('auto-stage'); if (a0) a0.classList.add('hidden');
+      return;
+    }
     if (appMode === 'auto') {
       var wfCard = shadow.getElementById('workflow-card');
       if (wfCard) wfCard.classList.add('hidden');
       __maiShared.buildAutoStage(shadowDoc, wf, { compact: true });
+      bindAutoStageButtons();
     } else {
       var stage = shadow.getElementById('auto-stage');
       if (stage) stage.classList.add('hidden');
@@ -156,9 +177,10 @@ export const SHELL_JS = `
   }
 
   window.__maiShowWorkflow = function(payloadJson) {
-    try { JSON.parse(payloadJson); } catch (e) { return; }
+    var parsed;
+    try { parsed = JSON.parse(payloadJson); } catch (e) { return; }
     lastWorkflowJson = payloadJson;
-    if (!dialogExpanded) window.__maiExpandDialog();
+    if (parsed && !dialogExpanded) window.__maiExpandDialog();
     rerenderWorkflow();
   };
 

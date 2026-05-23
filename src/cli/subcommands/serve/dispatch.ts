@@ -89,6 +89,28 @@ export function createOverlayDispatcher(
       }
       return;
     }
+    if (
+      event.event_type === "workflow-approve" ||
+      event.event_type === "workflow-decline" ||
+      event.event_type === "workflow-handoff"
+    ) {
+      const verb = event.event_type.slice("workflow-".length);
+      const stepId = overlayStringField(event, "stepId");
+      const reason = overlayStringField(event, "reason");
+      const r = deps.workflow.handleEndpoint(`/workflow/${verb}`, { stepId, reason });
+      if (r.resumePrompt) void turn.resumeWorkflowTurn(r.resumePrompt);
+      return;
+    }
+    if (event.event_type === "mode") {
+      const mode = overlayStringField(event, "mode");
+      state.cronEnabled = mode === "auto";
+      deps.emitFrame({ type: "cron-mode", cronEnabled: state.cronEnabled });
+      return;
+    }
+    if (event.event_type === "abort") {
+      if (state.currentTurn !== null) state.currentTurn.abortController.abort();
+      return;
+    }
     deps.emitOverlayEvent(event);
   }
 
