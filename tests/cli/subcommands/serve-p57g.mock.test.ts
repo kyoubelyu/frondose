@@ -245,7 +245,10 @@ describe("serve.ts passiveEnabled — defaults OFF; only MAI_PASSIVE_SUGGEST='on
   it('T-PassiveDefault.1: given serve.ts L51 post-P-57g, WHEN the default expression is inspected, THEN it reads `?? "off"` + `=== "on"` and the OLD `?? "on"` + `!== "off"` default-ON form is GONE', () => {
     const src = readFileSync(SERVE_TS_PATH, "utf-8");
     assert.ok(
-      /let passiveEnabled\s*=\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"off"\)/.test(src),
+      // P-Z1 OQ-Z1.4: passiveEnabled moved from a module `let` to a ServeState object
+      // literal in the serve.ts shell (serve.ts:84). The env-read line stays in serve.ts
+      // (SERVE_TS_PATH unchanged); only the `let X =` prefix becomes the `X:` property form.
+      /passiveEnabled:\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"off"\)/.test(src),
       "serve.ts must default MAI_PASSIVE_SUGGEST to 'off' (default-off)",
     );
     assert.ok(
