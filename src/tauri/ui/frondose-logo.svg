@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 350" fill="none" role="img" aria-label="Frondose logo">
+  <!--
+    Frondose brand mark — hand-vectored interpretation of the reference logo.
+    Concept: chat bubble (conversation / agent) + leaf (frondōsus, organic growth)
+             + circuit node (web automation / tech), in navy + two-tone green.
+    Palette: navy #15487B · leaf bright #46B54A · leaf deep #3A9C43.
+  -->
+
+  <!-- Speech bubble: navy outline, open on the right where the leaf sits, tail bottom-left -->
+  <path d="M154 60 A64 64 0 1 0 96 156 L72 188 L120 150"
+        stroke="#15487B" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Leaf, tip up-right, two-tone split along the midrib -->
+  <!-- deeper-green left half (the side overlapping the bubble) -->
+  <path d="M118 170 C120 108 148 66 192 52 C176 88 148 126 118 170 Z" fill="#3A9C43"/>
+  <!-- bright-green right half -->
+  <path d="M118 170 C148 126 176 88 192 52 C184 104 168 152 118 170 Z" fill="#46B54A"/>
+  <!-- midrib + side veins -->
+  <path d="M118 170 C148 126 176 88 192 52" stroke="#2C7C36" stroke-width="3.5" stroke-linecap="round" opacity="0.55"/>
+  <path d="M150 138 C160 130 168 120 173 108" stroke="#2C7C36" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+  <path d="M138 116 C150 106 160 96 165 84" stroke="#2C7C36" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+
+  <!-- Circuit trace + node, off the leaf's lower-right -->
+  <path d="M150 156 L196 156" stroke="#46B54A" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="210" cy="156" r="11" stroke="#46B54A" stroke-width="7"/>
+
+  <!-- Wordmark: split-colour "frondose" (font-stack stand-in; swap for the real brand face) -->
+  <text x="140" y="300" text-anchor="middle"
+        font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-weight="700" font-size="60" letter-spacing="-1.5">
+    <tspan fill="#15487B">fron</tspan><tspan fill="#46B54A">dose</tspan>
+  </text>
+</svg>

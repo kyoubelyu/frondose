@@ -1,7 +1,20 @@
-// P-56a M-1 scaffold + P-56b M-1 overlay wiring.
+// P-56a M-1 scaffold + P-Y2.1 Frondose two-mode shell.
 // Plain HTML + tsc-compiled TS, no React/Vite. Invokes Rust through window.__TAURI__.
 
-export {};
+import { LOGO_MARK } from "./frondoseTokens.js";
+import type { AppMode } from "./mode.js";
+import { modeFromToggles, statusForMode, togglesForMode } from "./mode.js";
+import {
+  buildAutoStage,
+  buildBrandBar,
+  buildIwfCard,
+  buildSwitcher,
+  type ButtonElementLike,
+  type DocumentLike,
+  type ElementLike,
+  type InputElementLike,
+  type TextElementLike,
+} from "./render.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -30,7 +43,7 @@ type WorkflowStepView = { id: string; title: string; requiresApproval: boolean; 
 type WorkflowView = {
   workflowId: string;
   title: string;
-  approvalMode: "manual" | "auto";
+  approvalMode: AppMode;
   steps: WorkflowStepView[];
   pendingStepId: string | null;
   notice: string;
@@ -56,47 +69,15 @@ type SseFrame =
       type: "workflow-proposed";
       workflowId: string;
       title: string;
-      approvalMode: "manual" | "auto";
+      approvalMode: AppMode;
       steps: WorkflowStepView[];
     }
   | { type: "workflow-step-advanced"; workflowId: string; stepId: string; nextState: WorkflowStepState }
   | { type: "workflow-approval-pending"; workflowId: string; stepId: string; stepTitle: string }
   | { type: "workflow-approval-resolved"; workflowId: string; stepId: string; decision: "approved" | "declined" }
-  | { type: "workflow-mode-changed"; workflowId: string; approvalMode: "manual" | "auto" }
+  | { type: "workflow-mode-changed"; workflowId: string; approvalMode: AppMode }
   | { type: "workflow-completed"; workflowId: string; finalState: string }
   | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" };
-
-interface ClassListLike {
-  add(token: string): void;
-  remove(token: string): void;
-  toggle(token: string, force?: boolean): void;
-}
-
-interface TextElementLike {
-  classList: ClassListLike;
-  textContent: string | null;
-}
-
-interface ElementLike extends TextElementLike {
-  appendChild(child: ElementLike): void;
-}
-
-interface ButtonElementLike extends TextElementLike {
-  disabled: boolean;
-  addEventListener(type: "click", listener: () => void): void;
-}
-
-interface InputElementLike extends TextElementLike {
-  value: string;
-  disabled: boolean;
-  addEventListener(type: "keydown", listener: (e: { key?: string; preventDefault: () => void }) => void): void;
-  addEventListener(type: "input", listener: () => void): void;
-}
-
-interface DocumentLike {
-  getElementById(id: string): TextElementLike | null;
-  createElement(tagName: string): ElementLike;
-}
 
 const windowRef = globalThis as unknown as Window & { document: DocumentLike };
 
@@ -111,20 +92,25 @@ let appState: AppState = "chrome-needed";
 let currentTurnId: string | null = null;
 let steerInFlight = false;
 let lastTurnPrompt: string | null = null;
+let cronEnabled = false;
+let passiveEnabled = false;
+let appMode: AppMode = "manual";
+let workflowView: WorkflowView | null = null;
 
+const brandBarEl = mustGet<ElementLike>("brand-bar");
 const nameEl = mustGet<TextElementLike>("name");
 const startEl = mustGet<ButtonElementLike>("start");
 const statusEl = mustGet<TextElementLike>("status");
 const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
-const autoModeBtnEl = mustGet<ButtonElementLike>("auto-mode-toggle");
-const passiveModeBtnEl = mustGet<ButtonElementLike>("passive-mode-toggle");
+const modeManualTabEl = mustGet<ButtonElementLike>("mode-manual-tab");
+const modeAutoTabEl = mustGet<ButtonElementLike>("mode-auto-tab");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
-const workflowCardEl = mustGet<TextElementLike>("workflow-card");
+const workflowCardEl = mustGet<ElementLike>("workflow-card");
 const workflowTitleEl = mustGet<TextElementLike>("workflow-title");
 const workflowModeEl = mustGet<TextElementLike>("workflow-mode");
 const workflowStepsEl = mustGet<ElementLike>("workflow-steps");
@@ -132,9 +118,7 @@ const workflowNoticeEl = mustGet<TextElementLike>("workflow-notice");
 const workflowApproveBtnEl = mustGet<ButtonElementLike>("workflow-approve-btn");
 const workflowDeclineBtnEl = mustGet<ButtonElementLike>("workflow-decline-btn");
 const workflowHandoffBtnEl = mustGet<ButtonElementLike>("workflow-handoff-btn");
-let cronEnabled = true;
-let passiveEnabled = false; // P-57g — passive auto-react default OFF
-let workflowView: WorkflowView | null = null;
+const autoStageEl = mustGet<ElementLike>("auto-stage");
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
@@ -163,6 +147,42 @@ function transition(next: AppState): void {
 function updateSendButtonLabel(): void {
   if (appState !== "running") return;
   sendEl.textContent = commandEl.value.trim().length > 0 ? "Steer" : "Cancel";
+}
+
+function syncModeUi(mode: AppMode): void {
+  appMode = mode;
+  buildSwitcher(modeManualTabEl, modeAutoTabEl, mode);
+  windowRef.document.documentElement.classList.toggle("mode-auto", mode === "auto");
+  windowRef.document.body?.classList.toggle("mode-auto", mode === "auto");
+  const status = statusForMode(mode);
+  statusEl.textContent = status.label;
+  statusEl.classList.toggle("working", mode === "auto");
+  renderWorkflowCard();
+}
+
+async function applyMode(mode: AppMode): Promise<void> {
+  syncModeUi(mode);
+  const toggles = {
+    cronEnabled: togglesForMode(mode).cronEnabled,
+    passiveEnabled: togglesForMode(mode).passiveEnabled,
+  };
+  try {
+    const cronResp = await invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode", {
+      enabled: toggles.cronEnabled,
+    });
+    cronEnabled = cronResp.ok ? (cronResp.cronEnabled ?? toggles.cronEnabled) : toggles.cronEnabled;
+  } catch {
+    cronEnabled = toggles.cronEnabled;
+  }
+  try {
+    const passiveResp = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", {
+      enabled: toggles.passiveEnabled,
+    });
+    passiveEnabled = passiveResp.ok ? (passiveResp.passiveEnabled ?? toggles.passiveEnabled) : toggles.passiveEnabled;
+  } catch {
+    passiveEnabled = toggles.passiveEnabled;
+  }
+  syncModeUi(modeFromToggles(cronEnabled));
 }
 
 async function loadIdentity(): Promise<void> {
@@ -203,32 +223,6 @@ async function startLinkedIn(): Promise<void> {
     statusEl.textContent = String(e);
     startEl.disabled = false;
     startEl.textContent = "Start LinkedIn";
-  }
-}
-
-async function toggleAutoMode(): Promise<void> {
-  const next = !cronEnabled;
-  try {
-    const r = await invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode", { enabled: next });
-    if (r.ok) {
-      cronEnabled = r.cronEnabled ?? next;
-      autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
-    }
-  } catch {
-    // The next SSE cron-mode event owns eventual resync.
-  }
-}
-
-async function togglePassiveMode(): Promise<void> {
-  const next = !passiveEnabled;
-  try {
-    const r = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", { enabled: next });
-    if (r.ok) {
-      passiveEnabled = r.passiveEnabled ?? next;
-      passiveModeBtnEl.textContent = `Magical click: ${passiveEnabled ? "ON" : "OFF"}`;
-    }
-  } catch {
-    // The next SSE passive-mode event owns eventual resync.
   }
 }
 
@@ -338,27 +332,28 @@ async function performRetry(): Promise<void> {
 }
 
 function renderWorkflowCard(): void {
+  if (appMode === "auto") {
+    workflowCardEl.classList.add("hidden");
+    buildAutoStage({ doc: windowRef.document, workflow: workflowView, stage: autoStageEl });
+    return;
+  }
+  autoStageEl.classList.add("hidden");
   if (workflowView === null) {
     workflowCardEl.classList.add("hidden");
     return;
   }
-  workflowCardEl.classList.remove("hidden");
-  workflowTitleEl.textContent = `mai · ${workflowView.title}`;
-  workflowModeEl.textContent = workflowView.approvalMode === "auto" ? "Auto" : "Manual";
-  workflowStepsEl.textContent = "";
-  for (const step of workflowView.steps) {
-    const item = windowRef.document.createElement("li") as unknown as ElementLike;
-    item.classList.toggle("pending-approval", step.id === workflowView.pendingStepId);
-    const marker = step.requiresApproval ? " approval" : "";
-    item.textContent = `${step.state.replace("_", " ")} · ${step.title}${marker}`;
-    workflowStepsEl.appendChild(item);
-  }
-  workflowNoticeEl.textContent = workflowView.notice;
-  workflowNoticeEl.classList.toggle("hidden", workflowView.notice.length === 0);
-  const waiting = workflowView.pendingStepId !== null;
-  workflowApproveBtnEl.classList.toggle("hidden", !waiting);
-  workflowDeclineBtnEl.classList.toggle("hidden", !waiting);
-  workflowHandoffBtnEl.classList.toggle("hidden", workflowView.approvalMode === "auto");
+  buildIwfCard({
+    doc: windowRef.document,
+    workflow: workflowView,
+    card: workflowCardEl,
+    title: workflowTitleEl,
+    mode: workflowModeEl,
+    steps: workflowStepsEl,
+    notice: workflowNoticeEl,
+    approveButton: workflowApproveBtnEl,
+    declineButton: workflowDeclineBtnEl,
+    handoffButton: workflowHandoffBtnEl,
+  });
 }
 
 function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepState, requiresApproval: boolean): void {
@@ -392,18 +387,17 @@ async function handoffWorkflow(): Promise<void> {
   await invoke("mai_workflow_handoff", { workflowId: workflowView.workflowId });
 }
 
+function syncExternalMode(): void {
+  syncModeUi(modeFromToggles(cronEnabled));
+}
+
 function handleEvent(payload: SseFrame): void {
   switch (payload.type) {
     case "tool-call":
-      if (payload.turnId === currentTurnId) {
-        tickerEl.textContent = `${payload.toolName}...`;
-      }
+      if (payload.turnId === currentTurnId) tickerEl.textContent = `${payload.toolName}...`;
       break;
     case "text":
-      if (payload.turnId === currentTurnId) {
-        const prev = outputEl.textContent ?? "";
-        outputEl.textContent = prev + payload.chunk;
-      }
+      if (payload.turnId === currentTurnId) outputEl.textContent = `${outputEl.textContent ?? ""}${payload.chunk}`;
       break;
     case "step-done":
       break;
@@ -423,16 +417,12 @@ function handleEvent(payload: SseFrame): void {
       errorBannerEl.textContent = `agent error: ${payload.message}`;
       currentTurnId = null;
       transition("error");
-      if (payload.retryable === true) {
-        retryBtnEl.classList.remove("hidden");
-      } else {
-        retryBtnEl.classList.add("hidden");
-      }
+      retryBtnEl.classList.toggle("hidden", payload.retryable !== true);
       break;
     case "overlay-reconnected":
       statusEl.textContent = "overlay reconnected";
       setTimeout(() => {
-        statusEl.textContent = "Chrome on port 9222";
+        statusEl.textContent = statusForMode(appMode).label;
       }, 2000);
       break;
     case "overlay-event":
@@ -450,14 +440,14 @@ function handleEvent(payload: SseFrame): void {
       break;
     case "cron-mode":
       cronEnabled = payload.cronEnabled ?? cronEnabled;
-      autoModeBtnEl.textContent = `Auto-mode: ${cronEnabled ? "ON" : "OFF"}`;
+      syncExternalMode();
       break;
     case "passive-mode":
       passiveEnabled = payload.passiveEnabled ?? passiveEnabled;
-      passiveModeBtnEl.textContent = `Magical click: ${passiveEnabled ? "ON" : "OFF"}`;
+      syncExternalMode();
       break;
     case "cron-tick":
-      cronTickBannerEl.textContent = `\u23f0 cron active${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
+      cronTickBannerEl.textContent = `cron active${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
       cronTickBannerEl.classList.remove("hidden");
       break;
     case "cron-done":
@@ -530,6 +520,9 @@ function handleEvent(payload: SseFrame): void {
   }
 }
 
+buildBrandBar(windowRef.document, brandBarEl);
+brandBarEl.setAttribute?.("data-logo", LOGO_MARK);
+
 startEl.addEventListener("click", () => {
   void startLinkedIn();
 });
@@ -548,14 +541,12 @@ workflowDeclineBtnEl.addEventListener("click", () => {
 workflowHandoffBtnEl.addEventListener("click", () => {
   void handoffWorkflow();
 });
-autoModeBtnEl.addEventListener("click", () => {
-  void toggleAutoMode();
+modeManualTabEl.addEventListener("click", () => {
+  void applyMode("manual");
 });
-passiveModeBtnEl.addEventListener("click", () => {
-  void togglePassiveMode();
+modeAutoTabEl.addEventListener("click", () => {
+  void applyMode("auto");
 });
-autoModeBtnEl.textContent = "Auto-mode: ON";
-passiveModeBtnEl.textContent = "Magical click: OFF";
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();
 });
@@ -574,6 +565,7 @@ async function boot(): Promise<void> {
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
   await loadIdentity();
+  await applyMode("manual");
 }
 
 void boot();
