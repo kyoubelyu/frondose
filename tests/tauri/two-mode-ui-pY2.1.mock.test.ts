@@ -154,9 +154,11 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       const lines = readFileSync(join(UI_DIR, f), "utf-8").split("\n").length;
       assert.ok(lines <= 800, `${f} must be ≤800 lines; got ${lines}`);
     }
-    // Operator-approved scope expansion (P-Y2.1 visual rework, 2026-05-23): the Tauri window/product
-    // brand rename ("mai" → "Frondose") lives in tauri.conf.json — whitelisted alongside src/tauri/ui/.
-    const SCOPE_WHITELIST = new Set(["src/tauri/src-tauri/tauri.conf.json"]);
+    // Operator-approved scope expansions (P-Y2.1, 2026-05-23), whitelisted alongside src/tauri/ui/:
+    //  - tauri.conf.json: the Tauri window/product brand rename ("mai" → "Frondose") (visual rework).
+    //  - src/overlay/inject.ts: the functional-hardening fix (callInOverlay try/catch so a missing
+    //    overlay context no longer spams unhandled "Cannot find context" rejections during cron turns).
+    const SCOPE_WHITELIST = new Set(["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inject.ts"]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
     const srcPaths = status
       .split("\n")

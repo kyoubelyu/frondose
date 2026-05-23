@@ -697,11 +697,29 @@ export async function subscribeContextId(
   });
 }
 
-/** P-56b: call a function inside the captured isolated overlay execution context. */
+/**
+ * P-56b: call a function inside the captured isolated overlay execution context.
+ *
+ * Best-effort + non-throwing BY DESIGN. The captured executionContextId goes stale
+ * whenever the page navigates: Chrome destroys the old context before
+ * executionContextCreated fires for the new document, so a call landing in that
+ * window rejects with "Cannot find context with specified id". Because the agent
+ * navigates LinkedIn constantly and every call site is fire-and-forget
+ * (`void callInOverlay(...)`), an un-caught reject became an unhandled rejection that
+ * flooded ~/.mai/agent/logs/crash.log (and is a silent-failure defect per CLAUDE.md).
+ * This is a COSMETIC in-page overlay update (the Tauri shell renders from SSE, not
+ * this), so swallowing is correct: the overlay re-evaluates on the new document and
+ * subsequent calls use the refreshed contextId (state.overlayContextId is updated by
+ * subscribeContextId's executionContextCreated listener).
+ */
 export async function callInOverlay(client: CdpHandle, contextId: number, functionDeclaration: string): Promise<void> {
-  await client.Runtime.callFunctionOn({
-    executionContextId: contextId,
-    functionDeclaration,
-    silent: true,
-  });
+  try {
+    await client.Runtime.callFunctionOn({
+      executionContextId: contextId,
+      functionDeclaration,
+      silent: true,
+    });
+  } catch {
+    // Stale/destroyed overlay context during navigation — expected, benign, swallowed.
+  }
 }
