@@ -14,6 +14,15 @@ export function createRequestHandler(
   turn: ReturnType<typeof createTurnRunner>,
   dispatch: ReturnType<typeof createOverlayDispatcher>,
 ): { handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> } {
+  // D-RUN-1 (safety, belt-and-suspenders): if the controlling UDS client (the Tauri
+  // shell's SSE subscriber) disconnects and does NOT reconnect within a short grace
+  // window, STOP THE AGENT so an orphaned sidecar can't keep acting on the page even if
+  // the parent's kill failed — halt the cron loop (cronEnabled=false; cron.tick() early-
+  // returns) AND abort any in-flight turn. The grace window tolerates the subscriber's
+  // ~1s reconnect (main.rs run_sse_subscriber) so a transient blip never stops a live
+  // session. Headless `mai serve` (cron, no SSE client) never connects → never triggers.
+  const CLIENT_DISCONNECT_GRACE_MS = 3000;
+  let clientGoneTimer: ReturnType<typeof setTimeout> | null = null;
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const authError = checkBearer(req, deps.expectedToken);
@@ -219,6 +228,11 @@ export function createRequestHandler(
         });
         res.write(":\n\n");
         state.sseClients.add(res);
+        // A (re)connected client cancels any pending orphan-abort.
+        if (clientGoneTimer) {
+          clearTimeout(clientGoneTimer);
+          clientGoneTimer = null;
+        }
         const ping = setInterval(() => {
           try {
             res.write(":\n\n");
@@ -230,6 +244,18 @@ export function createRequestHandler(
         res.on("close", () => {
           clearInterval(ping);
           state.sseClients.delete(res);
+          if (state.sseClients.size === 0) {
+            if (clientGoneTimer) clearTimeout(clientGoneTimer);
+            clientGoneTimer = setTimeout(() => {
+              clientGoneTimer = null;
+              if (state.sseClients.size === 0) {
+                // Controlling client gone + no reconnect → stop the agent loop entirely.
+                state.cronEnabled = false;
+                if (state.currentTurn !== null) state.currentTurn.abortController.abort();
+              }
+            }, CLIENT_DISCONNECT_GRACE_MS);
+            clientGoneTimer.unref?.();
+          }
         });
         return;
       }
