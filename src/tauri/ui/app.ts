@@ -1,12 +1,10 @@
 // P-56a M-1 scaffold + P-Y2.1 Frondose two-mode shell.
 // Plain HTML + tsc-compiled TS, no React/Vite. Invokes Rust through window.__TAURI__.
 
-import { LOGO_MARK } from "./frondoseTokens.js";
 import type { AppMode } from "./mode.js";
 import { modeFromToggles, statusForMode, togglesForMode } from "./mode.js";
 import {
   buildAutoStage,
-  buildBrandBar,
   buildIwfCard,
   buildSwitcher,
   type ButtonElementLike,
@@ -97,46 +95,55 @@ let passiveEnabled = false;
 let appMode: AppMode = "manual";
 let workflowView: WorkflowView | null = null;
 
-const brandBarEl = mustGet<ElementLike>("brand-bar");
 const nameEl = mustGet<TextElementLike>("name");
 const startEl = mustGet<ButtonElementLike>("start");
+const startCardEl = mustGet<ElementLike>("start-card");
 const statusEl = mustGet<TextElementLike>("status");
+const composerEl = mustGet<ElementLike>("composer");
 const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
 const modeManualTabEl = mustGet<ButtonElementLike>("mode-manual-tab");
 const modeAutoTabEl = mustGet<ButtonElementLike>("mode-auto-tab");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
+const outputMsgEl = mustGet<ElementLike>("output-msg");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
 const workflowCardEl = mustGet<ElementLike>("workflow-card");
-const workflowTitleEl = mustGet<TextElementLike>("workflow-title");
-const workflowModeEl = mustGet<TextElementLike>("workflow-mode");
-const workflowStepsEl = mustGet<ElementLike>("workflow-steps");
-const workflowNoticeEl = mustGet<TextElementLike>("workflow-notice");
 const workflowApproveBtnEl = mustGet<ButtonElementLike>("workflow-approve-btn");
 const workflowDeclineBtnEl = mustGet<ButtonElementLike>("workflow-decline-btn");
 const workflowHandoffBtnEl = mustGet<ButtonElementLike>("workflow-handoff-btn");
+const workflowPauseBtnEl = mustGet<ButtonElementLike>("workflow-pause-btn");
+const workflowShowAllBtnEl = mustGet<ButtonElementLike>("workflow-showall-btn");
 const autoStageEl = mustGet<ElementLike>("auto-stage");
+let workflowExpanded = false;
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
   return windowRef.__TAURI__.core.invoke<T>(cmd, args);
 }
 
+function refreshOutputVisibility(): void {
+  const hasText = (outputEl.textContent ?? "").trim().length > 0;
+  outputMsgEl.classList.toggle("hidden", !hasText);
+}
+
 function transition(next: AppState): void {
   appState = next;
   startEl.classList.toggle("hidden", next !== "chrome-needed");
+  startCardEl.classList.toggle("hidden", next === "idle" || next === "running");
+  composerEl.classList.toggle("hidden", next !== "idle" && next !== "running");
   commandEl.classList.toggle("hidden", next !== "idle" && next !== "running");
   sendEl.classList.toggle("hidden", next !== "idle" && next !== "running");
   tickerEl.classList.toggle("hidden", next !== "running");
-  outputEl.classList.toggle("hidden", next === "identity-missing" || next === "chrome-needed");
   errorBannerEl.classList.toggle("hidden", next !== "error");
   commandEl.disabled = next !== "idle" && next !== "running";
   sendEl.disabled = next !== "idle" && next !== "running";
+  refreshOutputVisibility();
   if (next === "idle") {
-    sendEl.textContent = "Send";
+    sendEl.setAttribute?.("title", "Send");
+    sendEl.classList.remove("is-cancel");
     commandEl.value = "";
     retryBtnEl.classList.add("hidden");
   } else if (next === "running") {
@@ -146,7 +153,9 @@ function transition(next: AppState): void {
 
 function updateSendButtonLabel(): void {
   if (appState !== "running") return;
-  sendEl.textContent = commandEl.value.trim().length > 0 ? "Steer" : "Cancel";
+  const steer = commandEl.value.trim().length > 0;
+  sendEl.setAttribute?.("title", steer ? "Steer" : "Cancel");
+  sendEl.classList.toggle("is-cancel", !steer);
 }
 
 function syncModeUi(mode: AppMode): void {
@@ -157,6 +166,10 @@ function syncModeUi(mode: AppMode): void {
   const status = statusForMode(mode);
   statusEl.textContent = status.label;
   statusEl.classList.toggle("working", mode === "auto");
+  commandEl.setAttribute?.(
+    "placeholder",
+    mode === "auto" ? "Inject a rule, ask a question, or interrupt…" : "Reply, or press / for actions",
+  );
   renderWorkflowCard();
 }
 
@@ -226,6 +239,15 @@ async function startLinkedIn(): Promise<void> {
   }
 }
 
+async function abortTurn(): Promise<void> {
+  if (appState !== "running" || currentTurnId === null) return;
+  try {
+    await invoke("mai_agent_abort");
+  } catch {
+    // Best-effort; the SSE error/done event owns UI recovery.
+  }
+}
+
 async function sendCommand(): Promise<void> {
   if (appState === "running" && currentTurnId !== null) {
     const text = commandEl.value.trim();
@@ -233,11 +255,7 @@ async function sendCommand(): Promise<void> {
       void performSteer(text);
       return;
     }
-    try {
-      await invoke("mai_agent_abort");
-    } catch {
-      // Best-effort; the SSE error/done event owns UI recovery.
-    }
+    await abortTurn();
     return;
   }
 
@@ -256,6 +274,7 @@ async function sendCommand(): Promise<void> {
     currentTurnId = r.turnId;
     lastTurnPrompt = prompt;
     outputEl.textContent = "";
+    refreshOutputVisibility();
     tickerEl.textContent = "starting...";
     transition("running");
   } catch (e) {
@@ -331,10 +350,22 @@ async function performRetry(): Promise<void> {
   }
 }
 
+function bindAutoStageButtons(): void {
+  const pause = windowRef.document.getElementById("auto-pause-btn") as ButtonElementLike | null;
+  pause?.addEventListener("click", () => {
+    void abortTurn();
+  });
+  const takeover = windowRef.document.getElementById("auto-takeover-btn") as ButtonElementLike | null;
+  takeover?.addEventListener("click", () => {
+    void abortTurn();
+  });
+}
+
 function renderWorkflowCard(): void {
   if (appMode === "auto") {
     workflowCardEl.classList.add("hidden");
-    buildAutoStage({ doc: windowRef.document, workflow: workflowView, stage: autoStageEl });
+    buildAutoStage(windowRef.document, workflowView);
+    bindAutoStageButtons();
     return;
   }
   autoStageEl.classList.add("hidden");
@@ -342,18 +373,7 @@ function renderWorkflowCard(): void {
     workflowCardEl.classList.add("hidden");
     return;
   }
-  buildIwfCard({
-    doc: windowRef.document,
-    workflow: workflowView,
-    card: workflowCardEl,
-    title: workflowTitleEl,
-    mode: workflowModeEl,
-    steps: workflowStepsEl,
-    notice: workflowNoticeEl,
-    approveButton: workflowApproveBtnEl,
-    declineButton: workflowDeclineBtnEl,
-    handoffButton: workflowHandoffBtnEl,
-  });
+  buildIwfCard(windowRef.document, workflowView, workflowExpanded);
 }
 
 function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepState, requiresApproval: boolean): void {
@@ -397,7 +417,10 @@ function handleEvent(payload: SseFrame): void {
       if (payload.turnId === currentTurnId) tickerEl.textContent = `${payload.toolName}...`;
       break;
     case "text":
-      if (payload.turnId === currentTurnId) outputEl.textContent = `${outputEl.textContent ?? ""}${payload.chunk}`;
+      if (payload.turnId === currentTurnId) {
+        outputEl.textContent = `${outputEl.textContent ?? ""}${payload.chunk}`;
+        refreshOutputVisibility();
+      }
       break;
     case "step-done":
       break;
@@ -520,9 +543,6 @@ function handleEvent(payload: SseFrame): void {
   }
 }
 
-buildBrandBar(windowRef.document, brandBarEl);
-brandBarEl.setAttribute?.("data-logo", LOGO_MARK);
-
 startEl.addEventListener("click", () => {
   void startLinkedIn();
 });
@@ -540,6 +560,13 @@ workflowDeclineBtnEl.addEventListener("click", () => {
 });
 workflowHandoffBtnEl.addEventListener("click", () => {
   void handoffWorkflow();
+});
+workflowPauseBtnEl.addEventListener("click", () => {
+  void abortTurn();
+});
+workflowShowAllBtnEl.addEventListener("click", () => {
+  workflowExpanded = !workflowExpanded;
+  renderWorkflowCard();
 });
 modeManualTabEl.addEventListener("click", () => {
   void applyMode("manual");
