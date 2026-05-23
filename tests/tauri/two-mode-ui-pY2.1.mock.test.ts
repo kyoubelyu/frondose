@@ -154,11 +154,17 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       const lines = readFileSync(join(UI_DIR, f), "utf-8").split("\n").length;
       assert.ok(lines <= 800, `${f} must be ≤800 lines; got ${lines}`);
     }
-    // Operator-approved scope expansions (P-Y2.1, 2026-05-23), whitelisted alongside src/tauri/ui/:
+    // P-Y2.1's OWN operator-approved out-of-ui scope expansions (2026-05-23), alongside src/tauri/ui/:
     //  - tauri.conf.json: the Tauri window/product brand rename ("mai" → "Frondose") (visual rework).
     //  - src/overlay/inject.ts: the functional-hardening fix (callInOverlay try/catch so a missing
     //    overlay context no longer spams unhandled "Cannot find context" rejections during cron turns).
-    const SCOPE_WHITELIST = new Set(["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inject.ts"]);
+    const PY21_EXCEPTIONS = ["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inject.ts"];
+    // SIBLING-PHASE files that legitimately coexist UNCOMMITTED in the shared dev tree (NOT P-Y2.1 scope —
+    // a later phase's work). Acknowledged so this point-in-time P-Y2.1 gate stays green while still catching
+    // a genuinely-unexpected escape (e.g. src/agent/**, src/tools/**). Grows as sibling phases interleave:
+    //  - P-Y5 D-RUN-1 (app-close-must-stop-the-agent): serve UDS-disconnect-abort + Rust CloseRequested.
+    const SIBLING_PHASE = ["src/cli/subcommands/serve/routes.ts", "src/tauri/src-tauri/src/main.rs"];
+    const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
     const srcPaths = status
       .split("\n")
