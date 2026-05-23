@@ -3,6 +3,7 @@ import type { StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../../../agent/loop.js";
 import { callInOverlay } from "../../../overlay/inject.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
+import { hideEdgeRing, showEdgeRing } from "./takeover.js";
 
 export interface TurnArgs {
   turnId: string;
@@ -30,6 +31,7 @@ export function createTurnRunner(
     if (ctxId0 !== undefined && client0) {
       void callInOverlay(client0.handle, ctxId0, "function() { window.__maiClearOutput(); }");
     }
+    showEdgeRing(state, deps.session); // P-Y2.3: Auto-mode page-edge ring for the turn (no-op in Manual)
     try {
       await runAgentLoop({
         model: deps.model,
@@ -141,6 +143,8 @@ export function createTurnRunner(
           : "function() { if (window.__maiHideRetry) window.__maiHideRetry(); }";
         void callInOverlay(client.handle, ctxId, fn);
       }
+    } finally {
+      hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     }
   }
 

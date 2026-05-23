@@ -105,13 +105,18 @@ describe("OVERLAY_BOOTSTRAP_JS — cron-banner + retry-button TT-safe + state-aw
     // !@keyframes ban is therefore over-broad. The cron-pulse intent is preserved: the cron banner uses
     // setInterval (asserted (g)) and adds NO cron-specific @keyframes — so the only @keyframes present
     // must be the known shared-design ones.
+    // P-Y2.3 RECONCILED: the magical Auto-mode takeover layer adds three takeover-DESIGN @keyframes to the
+    // shared stylesheet (borderFlow = the page-edge ring flow; targetPulse = the element-highlight pulse;
+    // pulseDot = the agent-cursor dot). These are design keyframes for OTHER components, NOT the cron banner —
+    // the cron-pulse intent of (o) is unchanged (the cron banner still adds NO cron-specific @keyframes and
+    // pulses via setInterval, asserted (g)). So they join the allow-set exactly like the P-Y2.2a additions.
     const keyframeNames = [...OVERLAY_BOOTSTRAP_JS.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
-    const allowedDesignKeyframes = new Set(["pulseSubtle", "ringPulse"]);
+    const allowedDesignKeyframes = new Set(["pulseSubtle", "ringPulse", "borderFlow", "targetPulse", "pulseDot"]);
     const unexpected = keyframeNames.filter((n) => !allowedDesignKeyframes.has(n ?? ""));
     assert.deepEqual(
       unexpected,
       [],
-      `(o) the only @keyframes may be the shared-design ones (pulseSubtle/ringPulse); the cron pulse is JS-driven (setInterval). Unexpected: ${JSON.stringify(unexpected)}`,
+      `(o) the only @keyframes may be the shared-design ones (pulseSubtle/ringPulse + the P-Y2.3 takeover borderFlow/targetPulse/pulseDot); the cron pulse is JS-driven (setInterval). Unexpected: ${JSON.stringify(unexpected)}`,
     );
   });
 });

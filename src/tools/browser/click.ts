@@ -37,6 +37,16 @@ export function makeClickTool(session: LinkedinSession) {
           const entry = resolveByLabel(ctx.entries, label!, { kind: "click", scope });
           target = entry.ref;
         }
+        // P-Y2.3: paint the agent cursor + highlight on the resolved target before acting. Best-effort,
+        // visual-only (a getBox/overlay failure must NEVER block the click); the injected driver Auto-gates
+        // (no paint + no dwell in Manual/headless/REPL). Same getBox the click resolves → highlight box ==
+        // clickAt landing (live cross-check). The click dispatch is OUTSIDE this try (unaffected on failure).
+        try {
+          const box = await client.getBox(target);
+          await session.showAgentTarget?.(box, label ?? target);
+        } catch {
+          // visual-only; ignore
+        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
         else await client.clickAt(target);

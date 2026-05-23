@@ -5,6 +5,7 @@
 // FRONDOSE_CSS is embedded as a JSON.stringify'd string literal (backtick/${ proof — R-2).
 import { LEGACY_JS } from "./bootstrapLegacy.js";
 import { SHELL_JS } from "./bootstrapShell.js";
+import { TAKEOVER_JS } from "./bootstrapTakeover.js";
 import { FRONDOSE_CSS } from "./frondoseCss.generated.js";
 import { SHARED_RENDER_JS } from "./sharedRenderBundle.generated.js";
 
@@ -78,6 +79,9 @@ export const OVERLAY_BOOTSTRAP_JS = `
 
   // --- PRESERVED + recolored existing features (suggest_card / ticker / retry / cron / observers) ---
   ${LEGACY_JS}
+
+  // --- P-Y2.3 magical takeover layer (Auto mode): ring + label + agent cursor + highlight ---
+  ${TAKEOVER_JS}
 
   // --- boot tail: build the panel skeleton, replay saved dialog state, wire pill + passive ---
   buildPanelSkeleton();

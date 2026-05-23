@@ -78,6 +78,15 @@ export function makeTypeTool(session: LinkedinSession) {
             }
           }
         }
+        // P-Y2.3: paint the agent cursor + highlight on the resolved target before the focus click. Best-effort,
+        // visual-only (a getBox/overlay failure must NEVER block typing); the injected driver Auto-gates (no paint
+        // + no dwell in Manual/headless/REPL). The type dispatch is OUTSIDE this try (unaffected on failure).
+        try {
+          const box = await client.getBox(target);
+          await session.showAgentTarget?.(box, label ?? target);
+        } catch {
+          // visual-only; ignore
+        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") {
           await hardwareTypeAt(client, target, text);

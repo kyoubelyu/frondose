@@ -171,6 +171,21 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       "src/tauri/src-tauri/src/main.rs",
       "src/linkedin/session.ts",
       "src/cli/subcommands/serve.ts",
+      //  - P-Y2.3 (magical Auto-mode takeover layer): the additive takeover surface — coords helper +
+      //    getBox (cdp/client.ts), session visual hooks (session.ts already above; linkedin/types.ts driver
+      //    type), serve-side Auto-gated driver/ring (serve/takeover.ts + serve/turn.ts wiring), the overlay
+      //    takeover bootstrap fragment + CSS (overlay/bootstrap.ts, bootstrapTakeover.ts, cssTransform.ts,
+      //    frondoseCss.generated.ts regen), and the best-effort tool drive (tools/browser/click.ts + type.ts).
+      "src/cdp/client.ts",
+      "src/linkedin/types.ts",
+      "src/cli/subcommands/serve/takeover.ts",
+      "src/cli/subcommands/serve/turn.ts",
+      "src/overlay/bootstrap.ts",
+      "src/overlay/bootstrapTakeover.ts",
+      "src/overlay/cssTransform.ts",
+      "src/overlay/frondoseCss.generated.ts",
+      "src/tools/browser/click.ts",
+      "src/tools/browser/type.ts",
     ];
     const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
