@@ -162,8 +162,13 @@ describe("OVERLAY_BOOTSTRAP_JS click observer — registered with capture+passiv
     // (d) Observe payload shape — type, event_type, ctx fields
     assert.ok(OVERLAY_BOOTSTRAP_JS.includes("type: 'observe'"), "(g) payload must have type: 'observe'");
     assert.ok(OVERLAY_BOOTSTRAP_JS.includes("event_type: 'click'"), "(h) payload must have event_type: 'click'");
-    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("targetTag:"), "(i) ctx must carry targetTag");
-    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("targetText:"), "(j) ctx must carry targetText");
+    // P-Z3 rebaseline: P-57e rev-2 replaced the flat targetTag/targetText ctx fields with a single
+    // `ref` object built by getElementRef (nearest interactive ancestor → { tag, text, ... }).
+    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("ref: ref"), "(i) click ctx must carry the interactive-element ref");
+    assert.ok(
+      OVERLAY_BOOTSTRAP_JS.includes("tag: node.tagName"),
+      "(j) the click ref (getElementRef) must carry the element tag",
+    );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("x: event.clientX") || OVERLAY_BOOTSTRAP_JS.includes("x: event.clientX"),
       "(k) ctx must carry x (client coords)",
@@ -242,9 +247,11 @@ describe("OVERLAY_BOOTSTRAP_JS — TT-safe + collapsed-card fns + click present 
       OVERLAY_BOOTSTRAP_JS.includes("installPageObservers"),
       "(c) must contain 'installPageObservers' (declared + called inside IIFE)",
     );
+    // P-Z3 rebaseline: P-57e rev-2 dropped the detectComposerKind helper; the input observer is now a
+    // debounced 'input' listener emitting event_type:'input'. Assert that surviving input observer.
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("detectComposerKind"),
-      "(d) must contain 'detectComposerKind' (input observer helper)",
+      OVERLAY_BOOTSTRAP_JS.includes("event_type: 'input'"),
+      "(d) must contain the input observer (event_type: 'input')",
     );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("addEventListener('click'"),

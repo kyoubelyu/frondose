@@ -15,29 +15,38 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runTelegramSubcommand } from "../../../src/cli/subcommands/telegram.js";
+import { readTelegramConfig } from "../../../src/persistence/telegramConfig.js";
 import { captureStdout, makeMockPrompter, stubInteractive } from "./_mockPrompter.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function makeTmpTgDir(): { tcPath: string; cleanup: () => void } {
+// P-Z3 / P-24: `bind` writes boundUserId to config.json.telegram (DEFAULT_CONFIG_PATH =
+// getHomeBase()/.mai/agent/config.json), NOT to tcPath (now runtime-only). TelegramSubcommandOpts
+// has no configPath, so isolate each test by pointing HOME at its own tmp dir → config.json is
+// per-test. Caller MUST invoke restoreHome() in finally.
+function makeTmpTgDir(): { tcPath: string; cleanup: () => void; restoreHome: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p13-tg-"));
+  const savedHome = process.env.HOME;
+  process.env.HOME = dir;
   return {
     tcPath: join(dir, "telegram.json"),
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    restoreHome: () => {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+    },
   };
 }
 
-function readTcJson(tcPath: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(tcPath, "utf-8"));
-  } catch {
-    return {};
-  }
+// P-Z3: read boundUserId via the readTelegramConfig shim (merges config.json.telegram +
+// telegram.json runtime) instead of a raw JSON.parse of tcPath.
+function readBoundUserId(tcPath: string): number | null {
+  return readTelegramConfig(tcPath).boundUserId;
 }
 
 // ─── T-TgI.1 ─────────────────────────────────────────────────────────────────
@@ -48,15 +57,15 @@ describe("runTelegramSubcommand('bind') — userId arg present (non-interactive 
     // When:  runTelegramSubcommand("bind", { tcPath, userId: 12345 }, mockPrompter)
     // Then:  telegram.json.boundUserId === 12345; no prompter method called
 
-    const { tcPath, cleanup } = makeTmpTgDir();
+    const { tcPath, cleanup, restoreHome } = makeTmpTgDir();
     const mp = makeMockPrompter();
     try {
       await captureStdout(() => runTelegramSubcommand("bind", { tcPath, userId: 12345 }, mp));
-      const cfg = readTcJson(tcPath);
-      assert.equal(cfg.boundUserId, 12345, "T-TgI.1: boundUserId must be 12345");
+      assert.equal(readBoundUserId(tcPath), 12345, "T-TgI.1: boundUserId must be 12345");
       assert.equal(mp.calls.telegramUserSelect.length, 0, "T-TgI.1: telegramUserSelect MUST NOT be called");
       assert.equal(mp.calls.input.length, 0, "T-TgI.1: input MUST NOT be called");
     } finally {
+      restoreHome();
       cleanup();
     }
   });
@@ -73,7 +82,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates succeed
     // NOTE: telegramFetch mock strategy TBD at Step 5. Scaffold marks fetch-dependent steps TODO.
     // Approach options: (a) node:test mock.module() to override transport; (b) env-based fetch intercept.
 
-    const { tcPath, cleanup } = makeTmpTgDir();
+    const { tcPath, cleanup, restoreHome } = makeTmpTgDir();
     const restore = stubInteractive(true);
     const savedToken = process.env.TELEGRAM_TOKEN;
     process.env.TELEGRAM_TOKEN = "test-token-mock";
@@ -94,8 +103,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates succeed
       });
     try {
       await captureStdout(() => runTelegramSubcommand("bind", { tcPath }, mp));
-      const cfg = readTcJson(tcPath);
-      assert.equal(cfg.boundUserId, 999, "T-TgI.2: boundUserId must be 999");
+      assert.equal(readBoundUserId(tcPath), 999, "T-TgI.2: boundUserId must be 999");
       assert.equal(mp.calls.telegramUserSelect.length, 1, "T-TgI.2: telegramUserSelect must be called once");
       const senderMap = mp.calls.telegramUserSelect[0][0] as Map<number, string>;
       assert.ok(senderMap instanceof Map && senderMap.has(999), "T-TgI.2: senderMap must have entry for 999");
@@ -104,6 +112,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates succeed
       restore();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
+      restoreHome();
       cleanup();
     }
   });
@@ -117,7 +126,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates fails �
     // When:  runTelegramSubcommand("bind", { tcPath }, mockPrompter) with input→"42424242"
     // Then:  telegram.json.boundUserId===42424242; telegramUserSelect MUST NOT be called; input called once
 
-    const { tcPath, cleanup } = makeTmpTgDir();
+    const { tcPath, cleanup, restoreHome } = makeTmpTgDir();
     const restore = stubInteractive(true);
     const savedToken = process.env.TELEGRAM_TOKEN;
     process.env.TELEGRAM_TOKEN = "test-token-mock";
@@ -134,8 +143,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates fails �
       });
     try {
       await captureStdout(() => runTelegramSubcommand("bind", { tcPath }, mp));
-      const cfg = readTcJson(tcPath);
-      assert.equal(cfg.boundUserId, 42424242, "T-TgI.3: boundUserId must be parsed from input");
+      assert.equal(readBoundUserId(tcPath), 42424242, "T-TgI.3: boundUserId must be parsed from input");
       assert.equal(
         mp.calls.telegramUserSelect.length,
         0,
@@ -147,6 +155,7 @@ describe("runTelegramSubcommand('bind') — interactive path (getUpdates fails �
       restore();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
+      restoreHome();
       cleanup();
     }
   });
@@ -160,7 +169,7 @@ describe("runTelegramSubcommand('bind') — interactive path (empty senders)", (
     // When:  runTelegramSubcommand("bind", { tcPath }, mockPrompter)
     // Then:  stdout contains "No recent senders found"; neither telegramUserSelect NOR input is called
 
-    const { tcPath, cleanup } = makeTmpTgDir();
+    const { tcPath, cleanup, restoreHome } = makeTmpTgDir();
     const restore = stubInteractive(true);
     const savedToken = process.env.TELEGRAM_TOKEN;
     process.env.TELEGRAM_TOKEN = "test-token-mock";
@@ -183,6 +192,7 @@ describe("runTelegramSubcommand('bind') — interactive path (empty senders)", (
       restore();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
+      restoreHome();
       cleanup();
     }
   });

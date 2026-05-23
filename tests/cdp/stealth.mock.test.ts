@@ -23,12 +23,14 @@ test("T-M4: STEALTH_INIT_SCRIPT parses as valid JS", () => {
 // ─── T-M5 ─────────────────────────────────────────────────────────────────────
 
 test("T-M5: STEALTH_INIT_SCRIPT patches navigator.webdriver / cdc_* / chrome.runtime", () => {
-  // Build a minimal fake global context matching what STEALTH_INIT_SCRIPT expects.
-  const nav = {
-    permissions: {
-      query: async (_p: unknown) => ({ state: "default" }),
-    },
-  };
+  // P-Z3 (cat-2): the current mechanism (stealth.ts:20) DELETES `webdriver` from
+  // Navigator.prototype (not a getter on the instance), and step 4 captures
+  // Object.getPrototypeOf(navigator.plugins) — so the sandbox must give navigator a
+  // prototype carrying `webdriver` + a `plugins` object. Assert EFFECTS, not the script text.
+  const navProto: Record<string, unknown> = { webdriver: false };
+  const nav: Record<string, unknown> = Object.create(navProto);
+  nav.permissions = { query: async (_p: unknown) => ({ state: "default" }) };
+  nav.plugins = []; // has Array.prototype → step-4 getPrototypeOf works
 
   const win: Record<string, unknown> = {
     cdc_adoQpoasnfa76pfcZLmcfl_Array: 1,
@@ -40,20 +42,16 @@ test("T-M5: STEALTH_INIT_SCRIPT patches navigator.webdriver / cdc_* / chrome.run
     navigator: nav,
     window: win,
     Notification: { permission: "default" },
-    // Provide Object so Object.defineProperty resolves from sandbox globals
     Object: Object,
     Symbol: Symbol,
+    Promise: Promise,
   };
 
   vm.runInNewContext(STEALTH_INIT_SCRIPT, sandbox);
 
-  // 1. navigator.webdriver must return undefined via the installed getter
-  assert.equal(
-    // Object.getOwnPropertyDescriptor works on the nav object from outer context
-    Object.getOwnPropertyDescriptor(nav, "webdriver")?.get?.(),
-    undefined,
-    "navigator.webdriver getter must return undefined",
-  );
+  // 1. `webdriver` deleted from the prototype → `"webdriver" in navigator` is false
+  //    (Intoli "WebDriver New" checks property PRESENCE, which the prototype-delete defeats).
+  assert.ok(!("webdriver" in nav), "navigator.webdriver must be absent after prototype-delete");
 
   // 2. cdc_* globals must be deleted from window
   assert.ok(!("cdc_adoQpoasnfa76pfcZLmcfl_Array" in win), "cdc_Array must be deleted");
@@ -69,11 +67,11 @@ test("T-M5: STEALTH_INIT_SCRIPT patches navigator.webdriver / cdc_* / chrome.run
 // ─── T-M6 ─────────────────────────────────────────────────────────────────────
 
 test("T-M6: navigator.plugins stub returns 5 entries each with name/filename/description", () => {
-  const nav: Record<string, unknown> = {
-    permissions: {
-      query: async (_p: unknown) => ({ state: "default" }),
-    },
-  };
+  // P-Z3 (cat-2): give navigator a prototype + a starting `plugins` (step-4 captures its proto).
+  const navProto: Record<string, unknown> = { webdriver: false };
+  const nav: Record<string, unknown> = Object.create(navProto);
+  nav.permissions = { query: async (_p: unknown) => ({ state: "default" }) };
+  nav.plugins = [];
 
   const win: Record<string, unknown> = {};
 
@@ -83,6 +81,7 @@ test("T-M6: navigator.plugins stub returns 5 entries each with name/filename/des
     Notification: { permission: "default" },
     Object: Object,
     Symbol: Symbol,
+    Promise: Promise,
   };
 
   vm.runInNewContext(STEALTH_INIT_SCRIPT, sandbox);

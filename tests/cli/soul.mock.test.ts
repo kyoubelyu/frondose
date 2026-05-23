@@ -14,7 +14,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { test } from "node:test";
@@ -68,6 +68,14 @@ function makeIdentityFixture(identityPath: string): void {
 
 test("T-M_p5.19: runSoulSubcommand('show', ...) writes composed Soul to process.stdout", async () => {
   const identityPath = makeTempPath("show");
+  // P-Z3: readIdentity (P-28 shim) reads config.json.identity at DEFAULT_CONFIG_PATH (getHomeBase)
+  // FIRST, only falling back to identityPath. Under the shared clean-room HOME another test file's
+  // writeIdentity can pre-populate config.json → 'show' would read THAT instead of this fixture
+  // (passes in isolation, fails in the full suite). Point HOME at a fresh dir so config.json is empty
+  // → readIdentity falls back to the test's identityPath. Restored in finally.
+  const savedHome = process.env.HOME;
+  const homeDir = mkdtempSync(join(tmpdir(), "mai-p5-soul-home-"));
+  process.env.HOME = homeDir;
   try {
     makeIdentityFixture(identityPath);
 
@@ -121,6 +129,9 @@ test("T-M_p5.19: runSoulSubcommand('show', ...) writes composed Soul to process.
 
     console.log("T-M_p5.19: soul show prints composed Soul including identity + methodology + axes ✓");
   } finally {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    rmSync(homeDir, { recursive: true, force: true });
     cleanup(identityPath);
   }
 });

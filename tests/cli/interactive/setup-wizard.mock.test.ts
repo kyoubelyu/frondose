@@ -20,11 +20,30 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 import { ExitPromptError } from "@inquirer/core";
 import { runSetupSubcommand, type SetupSubcommandOpts } from "../../../src/cli/subcommands/setup.js";
-import { DEFAULT_TELEGRAM_CONFIG } from "../../../src/persistence/telegramConfig.js";
-import { captureStderr, captureStdout, makeMockPrompter, stubInteractive } from "./_mockPrompter.js";
+import { readAuth } from "../../../src/persistence/auth.js";
+import { writeTelegramConfigFields } from "../../../src/persistence/telegramConfig.js";
+import { captureStderr, captureStdout, makeMockPrompter, stubInteractive, stubProcessExit } from "./_mockPrompter.js";
+
+// P-Z3 (plan §6.2 / OQ-Z3.2): defensive process.exit stub for the whole file.
+// The setup wizard's auth section drives runAuthSubcommand's P-21 URL flow, which
+// process.exit(1)s on an invalid/missing URL (auth.ts:139-140). Without this, a stale
+// prompt collapses the entire file at :1:1 instead of failing one isolated test.
+let exitStub: ReturnType<typeof stubProcessExit>;
+before(() => {
+  exitStub = stubProcessExit();
+});
+after(() => {
+  exitStub.restore();
+});
+
+// P-Z3: an empty-model-list fetch so the auth section's fetchModelListSafe (which uses
+// globalThis.fetch — not injectable from the wizard) returns [] → the flow falls to
+// prompter.input("Model ID …") instead of prompter.modelSelect (the mock has no modelSelect).
+const emptyModelsFetch: typeof globalThis.fetch = async () =>
+  ({ ok: true, status: 200, json: async () => ({ data: [] }) }) as Response;
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -199,10 +218,17 @@ describe("runSetupSubcommand — section subset selection", () => {
 
     const { opts, cleanup } = makeTmpSetupEnv();
     const restore = stubInteractive(true);
+    // P-Z3: auth section drives the P-21 URL flow → mock fetch empty so no modelSelect.
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = emptyModelsFetch;
     const mp = makeMockPrompter({
       checkboxSections: async () => ["auth", "soul"],
-      // Auth section: provide required prompts
-      providerSelect: async () => "anthropic:claude-sonnet-4-5",
+      // Auth section (P-21 URL flow): URL → key → model → name
+      input: async (msg) => {
+        if (msg.includes("URL")) return "https://api.deepseek.com/v1";
+        if (msg.includes("Model")) return "deepseek-chat";
+        return ""; // name prompt → derived default
+      },
       apiKeyInput: async () => "sk-mock-test",
       // Soul section: return valid choices[0].key (freeAxesSchema validated)
       axisSelect: async (_axisKey: string, choices: { key: string; meaning: string }[]) =>
@@ -215,10 +241,10 @@ describe("runSetupSubcommand — section subset selection", () => {
       writeMinimalIdentity(opts.identityPath);
 
       await captureStdout(() => runSetupSubcommand(opts, mp));
-      // Auth ran: providerSelect called (auth not pre-configured)
+      // Auth ran: apiKeyInput called + provider written (P-24: writeAuth → secrets.json, not authPath).
       assert.ok(
-        mp.calls.providerSelect.length > 0 || existsSync(opts.authPath),
-        "T-Setup.3: auth section must have run (providerSelect called or authPath written)",
+        mp.calls.apiKeyInput.length > 0 || readAuth(opts.authPath)?.providers !== undefined,
+        "T-Setup.3: auth section must have run (apiKeyInput called or provider written)",
       );
       // Soul ran: axisSelect called for each of the 4 axes
       assert.ok(mp.calls.axisSelect.length > 0, "T-Setup.3: soul section must have run (axisSelect called)");
@@ -231,6 +257,7 @@ describe("runSetupSubcommand — section subset selection", () => {
         "T-Setup.3: identity section must not have run",
       );
     } finally {
+      globalThis.fetch = savedFetch;
       restore();
       cleanup();
     }
@@ -265,9 +292,10 @@ describe("runSetupSubcommand — canonical section ordering enforced", () => {
       writeFileSync(opts.authPath, JSON.stringify({ providers: { anthropic: { key: "sk-existing" } } }), "utf-8");
       // identity.json WITH freeAxes → isIdentityConfigured() = true AND isSoulConfigured() = true
       writeIdentityWithAxes(opts.identityPath);
-      // telegram.json with boundUserId → isTelegramConfigured() = true
-      // Must include ALL required fields (pollTimeoutSec + pollBackoffSec) or schema parse fails
-      writeFileSync(opts.tcPath, JSON.stringify({ ...DEFAULT_TELEGRAM_CONFIG, boundUserId: 12345 }), "utf-8");
+      // P-Z3 / P-24: enabled+boundUserId moved to config.json.telegram (telegram.json is now
+      // runtime-only). isTelegramConfigured()→readTelegramConfig(tcPath)→readConfig(DEFAULT_CONFIG_PATH).
+      // Seed the isolated HOME's config.json so isTelegramConfigured()=true → "Reconfigure?"→false→skip.
+      writeTelegramConfigFields({ enabled: true, boundUserId: 12345 });
 
       await captureStdout(() => runSetupSubcommand(opts, mp));
 
@@ -298,6 +326,9 @@ describe("runSetupSubcommand — canonical section ordering enforced", () => {
       assert.ok(identityIdx < telegramIdx, "T-Setup.4: identity section must run before telegram section");
       assert.ok(telegramIdx < soulIdx, "T-Setup.4: telegram section must run before soul section");
     } finally {
+      // Reset the shared isolated-HOME config.json so later tests (T-Setup.5 needs telegram
+      // UN-configured to exercise its section) are not polluted by this test's seed.
+      writeTelegramConfigFields({ enabled: false, boundUserId: null });
       restore();
       cleanup();
     }
@@ -322,7 +353,13 @@ describe("runSetupSubcommand — partial-save on ExitPromptError (Ctrl-C mid-wiz
     // ExitPromptError is now imported at the top of this file.
     const mp = makeMockPrompter({
       checkboxSections: async () => ["auth", "identity", "telegram", "soul"],
-      providerSelect: async () => "anthropic:claude-sonnet-4-5",
+      // Auth section (P-21 URL flow): the mocked globalThis.fetch below returns a
+      // telegram-getUpdates shape with no `data` field → model list empty → input fallback.
+      input: async (msg) => {
+        if (msg.includes("URL")) return "https://api.deepseek.com/v1";
+        if (msg.includes("Model")) return "deepseek-chat";
+        return ""; // name prompt → derived default
+      },
       apiKeyInput: async () => "sk-mock-partial",
       confirm: async () => false, // skip reconfiguration for already-configured sections (C-2)
       // telegram section: telegramFetch needs fetch mock so telegramUserSelect is reached
@@ -353,8 +390,12 @@ describe("runSetupSubcommand — partial-save on ExitPromptError (Ctrl-C mid-wiz
         }
       });
       assert.ok(caughtErr instanceof ExitPromptError, "T-Setup.5: ExitPromptError must propagate out of wizard");
-      // auth.json must be on disk (auth section completed before telegram threw)
-      assert.ok(existsSync(opts.authPath), "T-Setup.5: auth.json must be on disk (partial-save)");
+      // auth provider must be persisted (auth section completed before telegram threw).
+      // P-24: writeAuth routes to secrets.json — verify via the readAuth shim, not raw authPath.
+      assert.ok(
+        readAuth(opts.authPath)?.providers?.deepseek?.key === "sk-mock-partial",
+        "T-Setup.5: auth provider must be persisted (partial-save)",
+      );
       // identity.json still on disk (pre-written; identity section was skipped by confirm=false)
       assert.ok(existsSync(opts.identityPath), "T-Setup.5: identity.json must still be on disk");
     } finally {

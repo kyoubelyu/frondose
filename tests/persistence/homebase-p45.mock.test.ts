@@ -127,25 +127,25 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       mkdirSync(agentUploadsDir, { recursive: true });
       const sandboxFile = join(agentUploadsDir, "test-screenshot.png");
       writeFileSync(sandboxFile, "fake-png", "utf-8");
-      const realHomeFile = join(homedir(), ".mai", "agent", "screenshot.png");
+      // P-Z3: under the clean-room HOME=$(mktemp -d) gate, homedir() falls INSIDE os.tmpdir(), so a
+      // join(homedir(), …) path is allowed via the tmpdir rule — masking this test's intent. Use a
+      // synthetic path OUTSIDE the sandbox AND outside os.tmpdir() to represent "a path the redirected
+      // allowlist excludes" (assertFileReadable is prefix-only — the dir need not exist).
+      const outsideFile = join("/mai-z3-real-home", ".mai", "agent", "screenshot.png");
       const { assertFileReadable } = await import("../../src/linkedin/uploadAllowlist.js");
       // (a) Sandbox file must pass (it's under the allowlist root).
       assertFileReadable(sandboxFile);
-      // (b) Real-home file must throw because the allowlist resolved to sandbox only.
+      // (b) A path outside the redirected allowlist (and outside tmpdir/fixtures) must throw.
       let realThrew = false;
       try {
-        assertFileReadable(realHomeFile);
+        assertFileReadable(outsideFile);
       } catch {
         realThrew = true;
       }
-      // Only assert if the real-home path is OUTSIDE the sandbox (it should be, since
-      // mkdtemp gave us a fresh path under /tmp).
-      if (dir !== homedir()) {
-        assert.ok(
-          realThrew,
-          `T-HB.3: assertFileReadable(${realHomeFile}) MUST throw when MAI_HOME_BASE redirects elsewhere (allowlist excludes real home)`,
-        );
-      }
+      assert.ok(
+        realThrew,
+        `T-HB.3: assertFileReadable(${outsideFile}) MUST throw when MAI_HOME_BASE redirects elsewhere (allowlist excludes it)`,
+      );
     } finally {
       restoreHomeBase(prior);
       if (savedAllowlist !== undefined) process.env.MAI_UPLOAD_ALLOWLIST = savedAllowlist;

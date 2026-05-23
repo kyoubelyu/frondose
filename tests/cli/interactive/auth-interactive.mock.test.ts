@@ -10,12 +10,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 import { runAuthSubcommand } from "../../../src/cli/subcommands/auth.js";
-import { captureStdout, makeMockPrompter, stubInteractive } from "./_mockPrompter.js";
+import { readAuth } from "../../../src/persistence/auth.js";
+import { captureStdout, makeMockPrompter, stubInteractive, stubProcessExit } from "./_mockPrompter.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,32 +33,56 @@ interface AuthJson {
   default?: string;
 }
 
+// P-Z3: P-24 path-shift — writeAuth routes to secrets.json (co-located with authPath).
+// Read back via the readAuth persistence shim (NOT a raw JSON.parse of authPath, which
+// would only see a stale pre-write). The shim reads secrets.json, falling back to the
+// legacy authPath on first read.
 function readAuthJson(authPath: string): AuthJson {
-  try {
-    return JSON.parse(readFileSync(authPath, "utf-8")) as AuthJson;
-  } catch {
-    return {};
-  }
+  return (readAuth(authPath) ?? {}) as AuthJson;
 }
+
+// P-Z3 (plan §6.2 / OQ-Z3.2): defensive process.exit stub for the whole file.
+// runAuthSubcommand calls process.exit(1) on missing-arg branches (auth.ts:140,168,191,…);
+// without this, a single stale call collapses the entire file at :1:1 instead of failing
+// one isolated test. The stub makes process.exit throw; tests that exercise the happy
+// (interactive, all-prompts-answered) path never trip it.
+let exitStub: ReturnType<typeof stubProcessExit>;
+before(() => {
+  exitStub = stubProcessExit();
+});
+after(() => {
+  exitStub.restore();
+});
 
 // ─── T-AuthI.1 ───────────────────────────────────────────────────────────────
 
 describe("runAuthSubcommand — args-present (non-interactive path)", () => {
-  it("T-AuthI.1: when full positional args present, writes auth.json AND prompter is NOT called", async () => {
-    // Given: spec="anthropic:claude-sonnet-4-5" and key="sk-test" both present in opts
-    // When:  runAuthSubcommand("set", { spec, key }, mockPrompter) is called
-    // Then:  auth.json is written with the new key; no prompter method is invoked
+  it("T-AuthI.1: when full positional args present (P-21 URL API), writes auth.json AND prompter is NOT called", async () => {
+    // Given: url+key+model+name all present in opts (P-21 URL-based API, replacing the old spec:)
+    // When:  runAuthSubcommand("set", { url, key, model, name, authPath }, mockPrompter) is called non-interactively
+    // Then:  auth.json (secrets.json) written with the anthropic key; no prompter method invoked
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const mp = makeMockPrompter();
     try {
       await captureStdout(() =>
-        runAuthSubcommand("set", { spec: "anthropic:claude-sonnet-4-5", key: "sk-test", authPath }, mp),
+        runAuthSubcommand(
+          "set",
+          {
+            url: "https://api.anthropic.com/v1",
+            key: "sk-test",
+            model: "claude-sonnet-4-5",
+            name: "anthropic",
+            authPath,
+          },
+          mp,
+        ),
       );
       const written = readAuthJson(authPath);
-      assert.ok(written.providers?.anthropic?.key, "T-AuthI.1: key must be written");
+      assert.equal(written.providers?.anthropic?.key, "sk-test", "T-AuthI.1: key must be written");
       assert.equal(mp.calls.providerSelect.length, 0, "T-AuthI.1: providerSelect MUST NOT be called");
       assert.equal(mp.calls.apiKeyInput.length, 0, "T-AuthI.1: apiKeyInput MUST NOT be called");
+      assert.equal(mp.calls.input.length, 0, "T-AuthI.1: input MUST NOT be called when all args present");
     } finally {
       cleanup();
     }
@@ -67,23 +92,37 @@ describe("runAuthSubcommand — args-present (non-interactive path)", () => {
 // ─── T-AuthI.2 ───────────────────────────────────────────────────────────────
 
 describe("runAuthSubcommand('set') — interactive path (no args)", () => {
-  it("T-AuthI.2: when no args AND isInteractive() returns true, calls providerSelect+apiKeyInput and writes auth.json", async () => {
-    // Given: no spec/key in opts; stdin.isTTY=true; MAI_NO_INTERACTIVE unset
-    // When:  runAuthSubcommand("set", {}, mockPrompter) with providerSelect→"anthropic:claude-sonnet-4-5" apiKeyInput→"sk-mock-123"
-    // Then:  auth.json written with anthropic provider key; both prompter methods called once
+  it("T-AuthI.2: when no args AND isInteractive() returns true, prompts URL→Key→Model→Name and writes auth.json", async () => {
+    // Given: no url/key/model in opts; stdin.isTTY=true; MAI_NO_INTERACTIVE unset
+    // When:  runAuthSubcommand("set", { authPath, fetchImpl }, mockPrompter) — P-21 URL flow;
+    //        fetchImpl returns an empty model list so the flow falls to input("Model ID…") (no modelSelect)
+    // Then:  auth.json (secrets.json) written with the deepseek provider key from apiKeyInput;
+    //        input() prompts URL+Model+Name; apiKeyInput called once; providerSelect NOT used in set
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const restore = stubInteractive(true);
+    const emptyModelsFetch: typeof globalThis.fetch = async () =>
+      ({ ok: true, status: 200, json: async () => ({ data: [] }) }) as Response;
     const mp = makeMockPrompter({
-      providerSelect: async () => "anthropic:claude-sonnet-4-5",
+      input: async (msg) => {
+        if (msg.includes("URL")) return "https://api.deepseek.com/v1";
+        if (msg.includes("Model")) return "deepseek-chat";
+        return ""; // provider-name prompt → empty accepts the derived default "deepseek"
+      },
       apiKeyInput: async () => "sk-mock-123",
     });
     try {
-      await captureStdout(() => runAuthSubcommand("set", { authPath }, mp));
+      await captureStdout(() => runAuthSubcommand("set", { authPath, fetchImpl: emptyModelsFetch }, mp));
       const written = readAuthJson(authPath);
-      assert.equal(written.providers?.anthropic?.key, "sk-mock-123", "T-AuthI.2: key must be stored");
-      assert.equal(mp.calls.providerSelect.length, 1, "T-AuthI.2: providerSelect called once");
+      assert.equal(written.providers?.deepseek?.key, "sk-mock-123", "T-AuthI.2: key must be stored");
+      assert.equal(
+        (written.providers as Record<string, { baseUrl?: string }>)?.deepseek?.baseUrl,
+        "https://api.deepseek.com/v1",
+        "T-AuthI.2: baseUrl from URL prompt must be stored",
+      );
       assert.equal(mp.calls.apiKeyInput.length, 1, "T-AuthI.2: apiKeyInput called once");
+      assert.equal(mp.calls.providerSelect.length, 0, "T-AuthI.2: providerSelect is NOT used in the URL set flow");
+      assert.equal(mp.calls.input.length, 3, "T-AuthI.2: input prompts URL + Model ID + provider-name");
     } finally {
       restore();
       cleanup();
@@ -219,24 +258,30 @@ describe("runAuthSubcommand('default') — interactive path", () => {
 
 // ─── T-AuthI.6 ───────────────────────────────────────────────────────────────
 
-describe("runAuthSubcommand('set') — __NEW__ sentinel path (C-1 Option A)", () => {
-  it("T-AuthI.6: when providerSelect returns '__NEW__', calls prompter.input for spec, writes new provider while preserving existing", async () => {
-    // Given: stdin.isTTY=true; auth.json has anthropic; providerSelect→"__NEW__"; input→"openai:gpt-4o"; apiKeyInput→"sk-new-test"
-    // When:  runAuthSubcommand("set", {}, mockPrompter)
-    // Then:  auth.json has BOTH anthropic AND openai entries; stdout mentions new provider
+describe("runAuthSubcommand('set') — interactive add preserves existing providers", () => {
+  it("T-AuthI.6: when interactive set adds a new provider, it preserves existing entries", async () => {
+    // Given: stdin.isTTY=true; auth.json already has anthropic; interactive URL flow for a new openai provider
+    //        (P-21 removed the __NEW__ providerSelect sentinel from set — it now prompts URL/key/model/name directly)
+    // When:  runAuthSubcommand("set", { authPath, fetchImpl }, mockPrompter) with url=openai, key=sk-new-test
+    // Then:  auth.json has BOTH anthropic AND openai; new openai key stored; stdout mentions the new provider
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const restore = stubInteractive(true);
+    const emptyModelsFetch: typeof globalThis.fetch = async () =>
+      ({ ok: true, status: 200, json: async () => ({ data: [] }) }) as Response;
     const mp = makeMockPrompter({
-      providerSelect: async () => "__NEW__",
-      input: async () => "openai:gpt-4o",
+      input: async (msg) => {
+        if (msg.includes("URL")) return "https://api.openai.com/v1";
+        if (msg.includes("Model")) return "gpt-4o";
+        return ""; // name prompt → derived default "openai"
+      },
       apiKeyInput: async () => "sk-new-test",
     });
     try {
       writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-existing" } } }), "utf-8");
 
       const stdout = await captureStdout(async () => {
-        await runAuthSubcommand("set", { authPath }, mp);
+        await runAuthSubcommand("set", { authPath, fetchImpl: emptyModelsFetch }, mp);
       });
 
       const written = readAuthJson(authPath);
@@ -251,7 +296,6 @@ describe("runAuthSubcommand('set') — __NEW__ sentinel path (C-1 Option A)", ()
         stdout.includes("openai") || stdout.includes("provider"),
         `T-AuthI.6: stdout mentions provider; got: "${stdout}"`,
       );
-      assert.equal(mp.calls.input.length, 1, "T-AuthI.6: input() called once for spec collection");
     } finally {
       restore();
       cleanup();

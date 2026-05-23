@@ -23,11 +23,47 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
+import { writeAuth } from "../../../src/persistence/auth.js";
 import { makeAnalyzeScreenshotTool } from "../../../src/tools/webTools/analyzeScreenshot.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const FIXTURE_PNG = join(process.cwd(), "tests", "fixtures", "test-screenshot.png");
+
+// P-Z3: the happy-path tests need a CONFIGURED vision provider. buildModel
+// (modelResolver.ts:162) throws "not configured" when no auth.json/secrets provider ENTRY
+// exists — env API keys are consulted only AFTER the entry is found (resolveModelKey:145-156),
+// so the original env-key-only setup stopped resolving at P-21. Seed a CUSTOM-URL OpenAI-compatible
+// provider (the only provider type allowed post-P-57d) under an isolated HOME so the mocked OpenAI
+// response exercises the happy path. Restores HOME + removes the tmp dir afterwards.
+const SEEDED_VISION_SPEC = "mockvision:vision-1";
+function withSeededVisionProvider(fn: () => Promise<void>): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), "mai-p9-as-home-"));
+  const savedHome = process.env.HOME;
+  process.env.HOME = home;
+  writeAuth({
+    providers: { mockvision: { key: "test-key", baseUrl: "https://vision.test/v1", type: "openai" } },
+  });
+  return withEnv("MAI_VISION_MODEL", SEEDED_VISION_SPEC, fn).finally(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    rmSync(home, { recursive: true, force: true });
+  });
+}
+
+/** Fake a minimal OpenAI-compatible chat.completion response (P-57d custom-URL provider shape). */
+function makeOpenAIResponse(text: string): Response {
+  return new Response(
+    JSON.stringify({
+      id: "chatcmpl-test",
+      object: "chat.completion",
+      model: "vision-1",
+      choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
 
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "as-1", messages: [] as CoreMessage[] };
 
@@ -52,23 +88,6 @@ async function withMockFetch(
   } finally {
     globalThis.fetch = orig;
   }
-}
-
-/** Fake a minimal Anthropic non-streaming response matching SDK shape. */
-function makeAnthropicResponse(text: string): Response {
-  return new Response(
-    JSON.stringify({
-      id: "msg_test123",
-      type: "message",
-      role: "assistant",
-      content: [{ type: "text", text }],
-      model: "claude-sonnet-4-5-20250710",
-      stop_reason: "end_turn",
-      stop_sequence: null,
-      usage: { input_tokens: 50, output_tokens: 20 },
-    }),
-    { status: 200, headers: { "content-type": "application/json" } },
-  );
 }
 
 // ─── T-AnalyzeScreenshot.1: path outside sandbox → fail envelope ──────────────
@@ -161,21 +180,19 @@ test(
 test("T-AnalyzeScreenshot.4: .png extension → mimeType: image/png in ok envelope", async () => {
   const tool = makeAnalyzeScreenshotTool();
 
-  await withEnv("ANTHROPIC_API_KEY", "test-key", async () =>
-    withEnv("MAI_VISION_MODEL", "anthropic:claude-sonnet-4-5", async () =>
-      withMockFetch(
-        async () => makeAnthropicResponse("This is a screenshot with UI elements."),
-        async () => {
-          const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { mimeType: string; description: string };
-          };
+  await withSeededVisionProvider(async () =>
+    withMockFetch(
+      async () => makeOpenAIResponse("This is a screenshot with UI elements."),
+      async () => {
+        const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
+          ok: boolean;
+          data: { mimeType: string; description: string };
+        };
 
-          assert.equal(result.ok, true, `must succeed; got: ${JSON.stringify(result)}`);
-          assert.equal(result.data.mimeType, "image/png", ".png must use image/png mimeType");
-          assert.ok(result.data.description.length > 0, "description must be non-empty");
-        },
-      ),
+        assert.equal(result.ok, true, `must succeed; got: ${JSON.stringify(result)}`);
+        assert.equal(result.data.mimeType, "image/png", ".png must use image/png mimeType");
+        assert.ok(result.data.description.length > 0, "description must be non-empty");
+      },
     ),
   );
 });
@@ -194,33 +211,31 @@ test("T-AnalyzeScreenshot.5: .jpg and .jpeg extensions → mimeType: image/jpeg"
 
     const tool = makeAnalyzeScreenshotTool();
 
-    await withEnv("ANTHROPIC_API_KEY", "test-key", async () =>
-      withEnv("MAI_VISION_MODEL", "anthropic:claude-sonnet-4-5", async () =>
-        withMockFetch(
-          async () => makeAnthropicResponse("JPEG image description."),
-          async () => {
-            // .jpg
-            const r1 = (await tool.execute?.({ path: jpgPath, prompt: "d" }, FAKE_OPTS)) as {
-              ok: boolean;
-              data?: { mimeType: string };
-            };
-            if (r1.ok) {
-              assert.equal(r1.data?.mimeType, "image/jpeg", ".jpg must use image/jpeg");
-            }
+    await withSeededVisionProvider(async () =>
+      withMockFetch(
+        async () => makeOpenAIResponse("JPEG image description."),
+        async () => {
+          // .jpg
+          const r1 = (await tool.execute?.({ path: jpgPath, prompt: "d" }, FAKE_OPTS)) as {
+            ok: boolean;
+            data?: { mimeType: string };
+          };
+          if (r1.ok) {
+            assert.equal(r1.data?.mimeType, "image/jpeg", ".jpg must use image/jpeg");
+          }
 
-            // .jpeg
-            const r2 = (await tool.execute?.({ path: jpegPath, prompt: "d" }, FAKE_OPTS)) as {
-              ok: boolean;
-              data?: { mimeType: string };
-            };
-            if (r2.ok) {
-              assert.equal(r2.data?.mimeType, "image/jpeg", ".jpeg must use image/jpeg");
-            }
+          // .jpeg
+          const r2 = (await tool.execute?.({ path: jpegPath, prompt: "d" }, FAKE_OPTS)) as {
+            ok: boolean;
+            data?: { mimeType: string };
+          };
+          if (r2.ok) {
+            assert.equal(r2.data?.mimeType, "image/jpeg", ".jpeg must use image/jpeg");
+          }
 
-            // At least one must succeed (both should since tmpdir is allowed)
-            assert.ok(r1.ok || r2.ok, "at least one JPEG path must succeed");
-          },
-        ),
+          // At least one must succeed (both should since tmpdir is allowed)
+          assert.ok(r1.ok || r2.ok, "at least one JPEG path must succeed");
+        },
       ),
     );
   } finally {
@@ -233,23 +248,21 @@ test("T-AnalyzeScreenshot.5: .jpg and .jpeg extensions → mimeType: image/jpeg"
 test("T-AnalyzeScreenshot.6: happy path via mock fetch → ok envelope with description, visionModel, bytes", async () => {
   const tool = makeAnalyzeScreenshotTool();
 
-  await withEnv("ANTHROPIC_API_KEY", "test-key", async () =>
-    withEnv("MAI_VISION_MODEL", "anthropic:claude-sonnet-4-5", async () =>
-      withMockFetch(
-        async () => makeAnthropicResponse("A white background with minimal content."),
-        async () => {
-          const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
-            ok: boolean;
-            data: { description: string; visionModel: string; mimeType: string; bytes: number };
-          };
+  await withSeededVisionProvider(async () =>
+    withMockFetch(
+      async () => makeOpenAIResponse("A white background with minimal content."),
+      async () => {
+        const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
+          ok: boolean;
+          data: { description: string; visionModel: string; mimeType: string; bytes: number };
+        };
 
-          assert.equal(result.ok, true, `must return ok:true; got: ${JSON.stringify(result)}`);
-          assert.equal(result.data.description, "A white background with minimal content.");
-          assert.equal(result.data.visionModel, "anthropic:claude-sonnet-4-5");
-          assert.equal(result.data.mimeType, "image/png");
-          assert.ok(result.data.bytes > 0, "bytes must be the file size (> 0)");
-        },
-      ),
+        assert.equal(result.ok, true, `must return ok:true; got: ${JSON.stringify(result)}`);
+        assert.equal(result.data.description, "A white background with minimal content.");
+        assert.equal(result.data.visionModel, SEEDED_VISION_SPEC);
+        assert.equal(result.data.mimeType, "image/png");
+        assert.ok(result.data.bytes > 0, "bytes must be the file size (> 0)");
+      },
     ),
   );
 });
