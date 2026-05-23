@@ -40,7 +40,7 @@ const { OVERLAY_BOOTSTRAP_JS, subscribeContextId, callInOverlay } = mod;
 // ─── T-Overlay.4 — OVERLAY_BOOTSTRAP_JS ticker + Trusted Types safety ────────
 
 describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + textContent safety (G-P56b.2)", () => {
-  it("T-Overlay.4a: given OVERLAY_BOOTSTRAP_JS imported from src/overlay/inject.ts, WHEN substring searches applied, THEN string contains 'window.__maiUpdateTicker = function' AND 'setTimeout' AND '5000' AND 'pill.textContent =' AND does NOT contain '.innerHTML'", () => {
+  it("T-Overlay.4a: given OVERLAY_BOOTSTRAP_JS imported from src/overlay/inject.ts, WHEN substring searches applied, THEN string contains 'window.__maiUpdateTicker = function' AND 'setTimeout' AND '5000' AND 'pillLabel.textContent' (P-Y2.2a) AND does NOT contain '.innerHTML'", () => {
     // Given: OVERLAY_BOOTSTRAP_JS is an exported string constant from inject.ts
     // When:  substring checks run against the constant
     // Then:  ticker function declaration present; setTimeout with 5000ms present;
@@ -59,8 +59,8 @@ describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + t
     );
     assert.ok(OVERLAY_BOOTSTRAP_JS.includes("5000"), "OVERLAY_BOOTSTRAP_JS must contain '5000' (5s reset delay in ms)");
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("pill.textContent ="),
-      "OVERLAY_BOOTSTRAP_JS must use pill.textContent= (Trusted Types safe)",
+      OVERLAY_BOOTSTRAP_JS.includes("pillLabel.textContent"),
+      "P-Y2.2a reconciled: the ticker resets the pill via pillLabel.textContent (the frondose pill is now a 2-child leaf+label element; was pill.textContent) — still TT-safe",
     );
     assert.ok(
       !OVERLAY_BOOTSTRAP_JS.includes(".innerHTML"),
@@ -68,14 +68,19 @@ describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + t
     );
   });
 
-  it("T-Overlay.4b: given OVERLAY_BOOTSTRAP_JS imported, WHEN checking for middle-dot escape, THEN string contains 'mai \\xb7 idle' (U+00B7 escaped as \\xb7, not a raw middle-dot literal)", () => {
-    // Given: OVERLAY_BOOTSTRAP_JS is the exported constant
-    // When:  check for the hex-escaped middle-dot sentinel (template literal \\xb7 → \xb7 in value)
-    // Then:  string contains the literal character sequence: m-a-i-space-backslash-x-b-7-space-i-d-l-e
-    //        (inject.ts template literal uses \\xb7, so OVERLAY_BOOTSTRAP_JS value has \xb7 as 4 chars)
+  it("T-Overlay.4b: given OVERLAY_BOOTSTRAP_JS imported, WHEN checking the in-page pill label, THEN it is 'Frondose' (P-Y2.2a reskin retired the old 'mai \\xb7 idle' middle-dot string — U+00B7 escape concern moot)", () => {
+    // Given: OVERLAY_BOOTSTRAP_JS is the exported constant.
+    // When:  check the pill label string.
+    // Then:  P-Y2.2a RECONCILED — the frondose reskin set the collapsed pill label to 'Frondose' (was the
+    //        'mai \xb7 idle' middle-dot ticker reset). The old U+00B7-escape-safety test is therefore obsolete;
+    //        the new label has no middle-dot. We pin the rebranded label + confirm the retired string is gone.
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("mai \\xb7 idle"),
-      "OVERLAY_BOOTSTRAP_JS must contain 'mai \\xb7 idle' (backslash-xb7 hex escape for browser JS context)",
+      OVERLAY_BOOTSTRAP_JS.includes("'Frondose'"),
+      "P-Y2.2a: the in-page collapsed pill label must be 'Frondose'",
+    );
+    assert.ok(
+      !OVERLAY_BOOTSTRAP_JS.includes("mai \\xb7 idle"),
+      "the old 'mai \\xb7 idle' pill string is retired by the frondose reskin",
     );
   });
 
