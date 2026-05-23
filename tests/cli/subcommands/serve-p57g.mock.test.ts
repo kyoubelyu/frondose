@@ -3,7 +3,7 @@
  * (G-P57g.1, G-P57g.2, G-P57g.3)
  *
  * Per source grep at Step 5 baseline (post-Step 4b):
- *   - serve.ts L51: `let passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on";`
+ *   - serve.ts L84 (P-Z1: now a ServeState property in the shell): `passiveEnabled: (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on",`
  *   - L484 POST /agent/passive-mode: enabled null → 400 {ok:false, reason:"missing_enabled"};
  *     else passiveEnabled=enabled + SSE {type:"passive-mode", passiveEnabled} + 200 {ok:true, passiveEnabled}.
  *   - L611/L634 `if (!passiveEnabled) { ...passive-skipped disabled... return; }` gates.
@@ -242,7 +242,7 @@ function dispatchClick(rawCtx: any): void {
 // ─── T-PassiveDefault.1 — passiveEnabled defaults OFF (source-level) ─────────
 
 describe("serve.ts passiveEnabled — defaults OFF; only MAI_PASSIVE_SUGGEST='on' enables (G-P57g.1)", () => {
-  it('T-PassiveDefault.1: given serve.ts L51 post-P-57g, WHEN the default expression is inspected, THEN it reads `?? "off"` + `=== "on"` and the OLD `?? "on"` + `!== "off"` default-ON form is GONE', () => {
+  it('T-PassiveDefault.1: given serve.ts L84 post-P-Z1 (ServeState literal), WHEN the default expression is inspected, THEN it reads `?? "off"` + `=== "on"` and the OLD `?? "on"` + `!== "off"` default-ON form is GONE', () => {
     const src = readFileSync(SERVE_TS_PATH, "utf-8");
     assert.ok(
       // P-Z1 OQ-Z1.4: passiveEnabled moved from a module `let` to a ServeState object

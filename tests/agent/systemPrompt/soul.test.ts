@@ -69,8 +69,7 @@ describe("composeSoulBand triggerHabits rewrite (G-P54.3)", () => {
     );
 
     // (b) Task-execution anchoring: one of mid-task / executing / mid-action.
-    const hasTaskExecAnchor =
-      soul.includes("mid-task") || soul.includes("executing") || soul.includes("mid-action");
+    const hasTaskExecAnchor = soul.includes("mid-task") || soul.includes("executing") || soul.includes("mid-action");
     assert.ok(
       hasTaskExecAnchor,
       "Soul band must contain a task-execution anchor (one of: 'mid-task', 'executing', 'mid-action')",

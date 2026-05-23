@@ -50,17 +50,72 @@ async function loadExportedFactories(): Promise<
   const serverPaths = (await import("../../src/persistence/serverPaths.js")) as AnyMod;
   const sharedSession = (await import("../../src/persistence/sharedSession.js")) as AnyMod;
   return [
-    { name: "DEFAULT_AUTH_PATH", modulePath: "src/persistence/auth.ts", getter: auth.DEFAULT_AUTH_PATH, expectedRelative: ".mai/auth.json" },
-    { name: "DEFAULT_SECRETS_PATH", modulePath: "src/persistence/secrets.ts", getter: secrets.DEFAULT_SECRETS_PATH, expectedRelative: ".mai/agent/secrets.json" },
-    { name: "DEFAULT_CONFIG_PATH", modulePath: "src/persistence/config.ts", getter: config.DEFAULT_CONFIG_PATH, expectedRelative: ".mai/agent/config.json" },
-    { name: "DEFAULT_IDENTITY_PATH", modulePath: "src/persistence/identity.ts", getter: identity.DEFAULT_IDENTITY_PATH, expectedRelative: ".mai/agent/identity.json" },
-    { name: "DEFAULT_MEMORY_DB_PATH", modulePath: "src/persistence/memory.ts", getter: memory.DEFAULT_MEMORY_DB_PATH, expectedRelative: ".mai/agent/memory.sqlite" },
-    { name: "SESSIONS_ROOT", modulePath: "src/persistence/session.ts", getter: session.SESSIONS_ROOT, expectedRelative: ".mai/agent/sessions" },
-    { name: "WORKER_INBOX_DB_PATH", modulePath: "src/persistence/workerInbox.ts", getter: workerInbox.WORKER_INBOX_DB_PATH, expectedRelative: ".mai/agent/inbox.sqlite" },
-    { name: "DEFAULT_SEARCH_CONFIG_PATH", modulePath: "src/persistence/search.ts", getter: search.DEFAULT_SEARCH_CONFIG_PATH, expectedRelative: ".mai/agent/search.json" },
-    { name: "DEFAULT_GITHUB_CONFIG_PATH", modulePath: "src/persistence/github.ts", getter: github.DEFAULT_GITHUB_CONFIG_PATH, expectedRelative: ".mai/agent/github.json" },
-    { name: "SERVER_ROOT", modulePath: "src/persistence/serverPaths.ts", getter: serverPaths.SERVER_ROOT, expectedRelative: ".mai/server" },
-    { name: "sharedSessionPath", modulePath: "src/persistence/sharedSession.ts", getter: sharedSession.sharedSessionPath, expectedRelative: ".mai/agent/sessions/shared/active.jsonl" },
+    {
+      name: "DEFAULT_AUTH_PATH",
+      modulePath: "src/persistence/auth.ts",
+      getter: auth.DEFAULT_AUTH_PATH,
+      expectedRelative: ".mai/auth.json",
+    },
+    {
+      name: "DEFAULT_SECRETS_PATH",
+      modulePath: "src/persistence/secrets.ts",
+      getter: secrets.DEFAULT_SECRETS_PATH,
+      expectedRelative: ".mai/agent/secrets.json",
+    },
+    {
+      name: "DEFAULT_CONFIG_PATH",
+      modulePath: "src/persistence/config.ts",
+      getter: config.DEFAULT_CONFIG_PATH,
+      expectedRelative: ".mai/agent/config.json",
+    },
+    {
+      name: "DEFAULT_IDENTITY_PATH",
+      modulePath: "src/persistence/identity.ts",
+      getter: identity.DEFAULT_IDENTITY_PATH,
+      expectedRelative: ".mai/agent/identity.json",
+    },
+    {
+      name: "DEFAULT_MEMORY_DB_PATH",
+      modulePath: "src/persistence/memory.ts",
+      getter: memory.DEFAULT_MEMORY_DB_PATH,
+      expectedRelative: ".mai/agent/memory.sqlite",
+    },
+    {
+      name: "SESSIONS_ROOT",
+      modulePath: "src/persistence/session.ts",
+      getter: session.SESSIONS_ROOT,
+      expectedRelative: ".mai/agent/sessions",
+    },
+    {
+      name: "WORKER_INBOX_DB_PATH",
+      modulePath: "src/persistence/workerInbox.ts",
+      getter: workerInbox.WORKER_INBOX_DB_PATH,
+      expectedRelative: ".mai/agent/inbox.sqlite",
+    },
+    {
+      name: "DEFAULT_SEARCH_CONFIG_PATH",
+      modulePath: "src/persistence/search.ts",
+      getter: search.DEFAULT_SEARCH_CONFIG_PATH,
+      expectedRelative: ".mai/agent/search.json",
+    },
+    {
+      name: "DEFAULT_GITHUB_CONFIG_PATH",
+      modulePath: "src/persistence/github.ts",
+      getter: github.DEFAULT_GITHUB_CONFIG_PATH,
+      expectedRelative: ".mai/agent/github.json",
+    },
+    {
+      name: "SERVER_ROOT",
+      modulePath: "src/persistence/serverPaths.ts",
+      getter: serverPaths.SERVER_ROOT,
+      expectedRelative: ".mai/server",
+    },
+    {
+      name: "sharedSessionPath",
+      modulePath: "src/persistence/sharedSession.ts",
+      getter: sharedSession.sharedSessionPath,
+      expectedRelative: ".mai/agent/sessions/shared/active.jsonl",
+    },
   ];
 }
 
@@ -72,10 +127,30 @@ async function loadExportedFactories(): Promise<
  * in a `.mai/...` join (the launchd-plist sites are out of scope per plan §6.10).
  */
 const T_PATHS_2_PRIVATE_MATRIX = [
-  { name: "DEFAULT_LOG_PATH (crashLogger)", file: "src/cli/crashLogger.ts", getter: "DEFAULT_LOG_PATH", relPathFragment: '.mai", "agent", "logs", "crash.log"' },
-  { name: "RELEASES_DIR (autoUpdate)", file: "src/cli/autoUpdate.ts", getter: "RELEASES_DIR", relPathFragment: '.mai", "agent", "releases"' },
-  { name: "UPDATE_LOCK (autoUpdate)", file: "src/cli/autoUpdate.ts", getter: "UPDATE_LOCK", relPathFragment: '.mai", "agent", "update.lock"' },
-  { name: "UPDATE_LOG (autoUpdate)", file: "src/cli/autoUpdate.ts", getter: "UPDATE_LOG", relPathFragment: '.mai", "agent", "logs", "update.log"' },
+  {
+    name: "DEFAULT_LOG_PATH (crashLogger)",
+    file: "src/cli/crashLogger.ts",
+    getter: "DEFAULT_LOG_PATH",
+    relPathFragment: '.mai", "agent", "logs", "crash.log"',
+  },
+  {
+    name: "RELEASES_DIR (autoUpdate)",
+    file: "src/cli/autoUpdate.ts",
+    getter: "RELEASES_DIR",
+    relPathFragment: '.mai", "agent", "releases"',
+  },
+  {
+    name: "UPDATE_LOCK (autoUpdate)",
+    file: "src/cli/autoUpdate.ts",
+    getter: "UPDATE_LOCK",
+    relPathFragment: '.mai", "agent", "update.lock"',
+  },
+  {
+    name: "UPDATE_LOG (autoUpdate)",
+    file: "src/cli/autoUpdate.ts",
+    getter: "UPDATE_LOG",
+    relPathFragment: '.mai", "agent", "logs", "update.log"',
+  },
 ] as const;
 
 describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-P52.1, CONCERN-2)", () => {
@@ -137,7 +212,7 @@ describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-
         const text = readFileSync(abs, "utf8");
         assert.ok(
           text.includes('import { getHomeBase } from "../persistence/paths.js"') ||
-            text.includes("import { getHomeBase }") && text.includes("paths.js"),
+            (text.includes("import { getHomeBase }") && text.includes("paths.js")),
           `${row.file} must import getHomeBase from ../persistence/paths.js`,
         );
         // The getter's declaration line should contain BOTH the getter name
@@ -150,7 +225,9 @@ describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-
         );
         // Pre-P-52 shape: a bare `homedir()` in a `.mai/...` join → absent.
         // Allow `homedir()` in launchd / non-`.mai` contexts only.
-        const homedirJoinPattern = new RegExp(`const\\s+${row.getter}\\b[\\s\\S]{0,200}homedir\\(\\)[\\s\\S]{0,100}["']\\.mai["']`);
+        const homedirJoinPattern = new RegExp(
+          `const\\s+${row.getter}\\b[\\s\\S]{0,200}homedir\\(\\)[\\s\\S]{0,100}["']\\.mai["']`,
+        );
         assert.ok(
           !homedirJoinPattern.test(text),
           `${row.file} ${row.getter} must NOT contain a residual homedir() → .mai join (pre-P-52 shape)`,

@@ -31,7 +31,19 @@ describe("controller.onToolResults — reconcile preserves step ids by title acr
   it("T-Reconcile.1: given a controller seeded from todo_write [A,B], WHEN a second todo_write [A:completed, B:in_progress, C] arrives, THEN A keeps its id (completed), B keeps its id (in_progress), C gets a fresh id (pending), AND a workflow-step-advanced SSE is emitted for B", () => {
     const { c, frames } = makeController();
     c.onToolResults(
-      [{ toolName: "todo_write", result: { ok: true, workflowTitle: "W", steps: [{ id: "p_a", title: "A", requiresApproval: false }, { id: "p_b", title: "B", requiresApproval: false }] } }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "W",
+            steps: [
+              { id: "p_a", title: "A", requiresApproval: false },
+              { id: "p_b", title: "B", requiresApproval: false },
+            ],
+          },
+        },
+      ],
       { turnId: "t1", isCronTurn: false },
     );
     const after1 = c.getState().current;
@@ -41,7 +53,20 @@ describe("controller.onToolResults — reconcile preserves step ids by title acr
     assert.ok(idA && idB, "A and B have ids");
 
     c.onToolResults(
-      [{ toolName: "todo_write", result: { ok: true, workflowTitle: "W", steps: [{ id: "x", title: "A", requiresApproval: false, state: "completed" }, { id: "y", title: "B", requiresApproval: false, state: "in_progress" }, { id: "step_c_provisional", title: "C", requiresApproval: false }] } }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "W",
+            steps: [
+              { id: "x", title: "A", requiresApproval: false, state: "completed" },
+              { id: "y", title: "B", requiresApproval: false, state: "in_progress" },
+              { id: "step_c_provisional", title: "C", requiresApproval: false },
+            ],
+          },
+        },
+      ],
       { turnId: "t2", isCronTurn: false },
     );
     const after2 = c.getState().current;
@@ -72,7 +97,16 @@ describe("controller.onToolResults — Manual gate fires on requiresApproval in_
   it("T-Gate.1: given Manual mode + todo_write with a {requiresApproval:true, state:'in_progress'} 'Send DM' step, WHEN onToolResults runs, THEN it returns {abort:true} + getState().awaitingApprovalStepId === that step id + wf.state==='awaiting_approval' + a workflow-approval-pending SSE (stepTitle 'Send DM') + an approval_pending audit row", () => {
     const { c, frames, audits } = makeController();
     const res = c.onToolResults(
-      [{ toolName: "todo_write", result: { ok: true, workflowTitle: "Outreach", steps: [{ id: "p1", title: "Send DM", requiresApproval: true, state: "in_progress" }] } }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "Outreach",
+            steps: [{ id: "p1", title: "Send DM", requiresApproval: true, state: "in_progress" }],
+          },
+        },
+      ],
       { turnId: "t1", isCronTurn: false },
     );
     assert.equal(res.abort, true, "Manual gate aborts");
@@ -87,7 +121,10 @@ describe("controller.onToolResults — Manual gate fires on requiresApproval in_
       assert.equal(pending.stepTitle, "Send DM", "stepTitle 'Send DM'");
       assert.equal(pending.stepId, stepId);
     }
-    assert.ok(audits.some((e) => e.kind === "approval_pending"), "approval_pending audit row written");
+    assert.ok(
+      audits.some((e) => e.kind === "approval_pending"),
+      "approval_pending audit row written",
+    );
   });
 });
 
@@ -97,7 +134,16 @@ describe("controller.onToolResults — Auto/cron mode does NOT gate requiresAppr
   it("T-Gate.2: given Auto mode (isCronTurn:true) + the same {requiresApproval:true, state:'in_progress'} step, WHEN onToolResults runs, THEN it returns {abort:false} + getState().awaitingApprovalStepId === null + NO workflow-approval-pending SSE", () => {
     const { c, frames } = makeController();
     const res = c.onToolResults(
-      [{ toolName: "todo_write", result: { ok: true, workflowTitle: "Outreach", steps: [{ id: "p1", title: "Send DM", requiresApproval: true, state: "in_progress" }] } }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "Outreach",
+            steps: [{ id: "p1", title: "Send DM", requiresApproval: true, state: "in_progress" }],
+          },
+        },
+      ],
       { turnId: "t1", isCronTurn: true },
     );
     assert.equal(res.abort, false, "Auto mode does not abort");
@@ -117,7 +163,10 @@ describe("controller.onToolResults — coexists with suggest_card in the same st
       c.onToolResults(
         [
           { toolName: "suggest_card", result: { ok: true, title: "X" } },
-          { toolName: "todo_write", result: { ok: true, workflowTitle: "W", steps: [{ id: "p1", title: "A", requiresApproval: false }] } },
+          {
+            toolName: "todo_write",
+            result: { ok: true, workflowTitle: "W", steps: [{ id: "p1", title: "A", requiresApproval: false }] },
+          },
         ],
         { turnId: "t1", isCronTurn: false },
       );
@@ -125,7 +174,10 @@ describe("controller.onToolResults — coexists with suggest_card in the same st
       threw = true;
     }
     assert.ok(!threw, "controller must not throw on the non-workflow suggest_card entry");
-    assert.ok(frames.some((f) => f.type === "workflow-proposed"), "todo_write still processed → workflow-proposed emitted");
+    assert.ok(
+      frames.some((f) => f.type === "workflow-proposed"),
+      "todo_write still processed → workflow-proposed emitted",
+    );
     assert.ok(c.getState().current, "workflow created despite the coexisting suggest_card result");
   });
 });
@@ -135,7 +187,10 @@ describe("controller.onToolResults — coexists with suggest_card in the same st
 describe("controller.onToolResults — click commit-warning advisory: SSE + audit row (non-blocking) (G-PY1.8)", () => {
   it("T-Advisory.1: given onToolResults([{toolName:'click', result:{targetLabel:'Send'}}], ctx), WHEN the advisory branch runs, THEN BOTH a commit-warning SSE {label:'Send', severity:'low'} AND a commit_warning audit row {detectedLabel:'Send'} are emitted, AND the turn is NOT aborted; a non-committal label emits NEITHER", () => {
     const { c, frames, audits } = makeController();
-    const res = c.onToolResults([{ toolName: "click", result: { targetLabel: "Send" } }], { turnId: "t1", isCronTurn: false });
+    const res = c.onToolResults([{ toolName: "click", result: { targetLabel: "Send" } }], {
+      turnId: "t1",
+      isCronTurn: false,
+    });
     assert.equal(res.abort, false, "advisory does not abort");
 
     const warn = frames.find((f) => f.type === "commit-warning");
@@ -144,11 +199,17 @@ describe("controller.onToolResults — click commit-warning advisory: SSE + audi
       assert.equal(warn.label, "Send");
       assert.equal(warn.severity, "low");
     }
-    assert.ok(audits.some((e) => e.kind === "commit_warning" && e.detectedLabel === "Send"), "commit_warning audit row written");
+    assert.ok(
+      audits.some((e) => e.kind === "commit_warning" && e.detectedLabel === "Send"),
+      "commit_warning audit row written",
+    );
 
     // A non-committal label → neither.
     const { c: c2, frames: f2, audits: a2 } = makeController();
-    c2.onToolResults([{ toolName: "click", result: { targetLabel: "Profile photo" } }], { turnId: "t2", isCronTurn: false });
+    c2.onToolResults([{ toolName: "click", result: { targetLabel: "Profile photo" } }], {
+      turnId: "t2",
+      isCronTurn: false,
+    });
     assert.ok(!f2.some((f) => f.type === "commit-warning"), "non-committal label → no commit-warning SSE");
     assert.ok(!a2.some((e) => e.kind === "commit_warning"), "non-committal label → no commit_warning audit");
   });
@@ -178,7 +239,10 @@ describe("controller.onToolResults — D-3 always-ask whitelist (telegram_notify
       // Auto mode (isCronTurn:true) → NO always-ask.
       const { c: cAuto, frames: fAuto, audits: aAuto } = makeController();
       cAuto.onToolResults([{ toolName, result: { ok: true } }], { turnId: "t2", isCronTurn: true });
-      assert.ok(!fAuto.some((f) => f.type === "workflow-approval-pending"), `${toolName}: Auto mode → NO always-ask SSE`);
+      assert.ok(
+        !fAuto.some((f) => f.type === "workflow-approval-pending"),
+        `${toolName}: Auto mode → NO always-ask SSE`,
+      );
       assert.ok(!aAuto.some((e) => e.kind === "always_ask"), `${toolName}: Auto mode → NO always_ask audit`);
     }
   });
