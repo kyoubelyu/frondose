@@ -23,6 +23,15 @@ function center(border: number[]): { x: number; y: number } {
   return { x: (x0 + x2) / 2, y: (y0 + y2) / 2 };
 }
 
+/** P-Y2.3: border quad [x0,y0,x1,y1,x2,y2,x3,y3] → viewport box {x,y,w,h}. Pure (unit-tested T-Box.1). */
+export function borderQuadToBox(border: number[]): { x: number; y: number; w: number; h: number } {
+  const x0 = border[0] ?? 0;
+  const y0 = border[1] ?? 0;
+  const x1 = border[2] ?? 0;
+  const y2 = border[5] ?? 0;
+  return { x: x0, y: y0, w: x1 - x0, h: y2 - y0 };
+}
+
 /** Typed wrapper around chrome-remote-interface's dynamic CDP client. */
 export class CdpClient {
   private readonly client: CdpHandle;
@@ -98,6 +107,28 @@ export class CdpClient {
       button: "left",
       clickCount: 1,
     });
+  }
+
+  /** P-Y2.3: resolve an element's viewport box for the takeover highlight. Same resolution as clickAt
+   *  (@ref → refMap backendNodeId, else selector → first nodeId) → DOM.getBoxModel border quad. */
+  async getBox(selectorOrRef: string): Promise<{ x: number; y: number; w: number; h: number }> {
+    let backendNodeId: number | undefined;
+    let nodeId: number | undefined;
+    if (selectorOrRef.startsWith("@")) {
+      const refKey = selectorOrRef.slice(1);
+      const entry = this.refMap[refKey];
+      if (!entry) throw new Error(`getBox: ref @${refKey} not found in current snapshot`);
+      backendNodeId = entry.backendNodeId;
+    } else {
+      const doc = await this.client.DOM.getDocument({ depth: 0 });
+      const r = await this.client.DOM.querySelectorAll({ nodeId: doc.root.nodeId, selector: selectorOrRef });
+      const first = r.nodeIds?.[0];
+      if (typeof first !== "number") throw new Error(`getBox: selector ${selectorOrRef} matched no element`);
+      nodeId = first;
+    }
+    const arg = backendNodeId !== undefined ? { backendNodeId } : { nodeId };
+    const box = await this.client.DOM.getBoxModel(arg);
+    return borderQuadToBox(box.model.border as number[]);
   }
 
   async typeAt(selectorOrRef: string, text: string): Promise<void> {

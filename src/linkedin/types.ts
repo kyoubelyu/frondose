@@ -93,6 +93,16 @@ export interface LinkedinSession {
   heartbeat(): Promise<boolean>;
   setLastContext(ctx: CurrentSurfaceContext): void;
   getLastContext(): CurrentSurfaceContext | undefined;
+  /**
+   * P-Y2.3 (optional): magical Auto-mode takeover visual hooks. serve injects the driver via
+   * setVisualDriver after capturing overlayContextId; the driver is Auto-gated (cronEnabled) and
+   * returns true ONLY when it actually painted. Browser tools call showAgentTarget?.(box,label)
+   * before a click so the overlay paints the agent cursor + element highlight. Optional → REPL /
+   * tests / server-mode callers that never setVisualDriver no-op (showAgentTarget?.(…) chains away).
+   */
+  setVisualDriver?(driver: (fnDeclaration: string) => boolean): void;
+  showAgentTarget?(box: { x: number; y: number; w: number; h: number }, label: string): Promise<void>;
+  clearAgentTarget?(): void;
 }
 
 /** RefMap re-export for downstream consumers within `src/linkedin/`. */
