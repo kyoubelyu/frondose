@@ -11,9 +11,10 @@
  *
  * Gate: G-PY2.1.9 (button behavior — every wired button fires its mapped invoke).
  *
- * Start LinkedIn (mai_chrome_ensure — Chrome-profile collision hazard) and the real turn execution of
- * Send (needs LLM + live LinkedIn) are OPERATOR-LIVE: Send's *listener wiring* is asserted here against
- * the mock spy (harmless), but the real turn is never run. Start is not auto-clicked.
+ * P-Y4 removed the "Start LinkedIn" gate (no #start button, no mai_chrome_ensure boot path) — identity-OK
+ * boot now lands directly in 'idle'. gotoIdle() reaches 'idle' via boot, NOT a Start click. The real turn
+ * execution of Send (needs LLM + live LinkedIn) stays OPERATOR-LIVE: Send's *listener wiring* is asserted
+ * here against the mock spy (harmless), but the real turn is never run.
  *
  * Run: node --import tsx --test --test-force-exit --test-timeout=120000 tests/tauri/button-click-pY2.1.test.ts
  */
@@ -78,11 +79,16 @@ async function clickAndRecord(id: string, setupExpr = ""): Promise<Array<{ cmd: 
   await sleep(180);
   return evalIn("window.__mai_invokes");
 }
-// Precondition helper: reach appState='idle' via a MOCKED Start click (fires mai_chrome_ensure against the
-// spy → transition('idle'); NO real Chrome launched). The real Start/Chrome path stays operator-live.
+// Precondition helper: reach appState='idle'. P-Y4 removed the "Start LinkedIn" gate — identity-OK boot now
+// lands directly in 'idle' (composer live, no Chrome dependency, no mai_chrome_ensure). So gotoIdle no longer
+// clicks #start (it no longer exists); it just waits until the composer input is interactive (idle reached
+// via boot → loadIdentity → transition('idle')), so the next Send opens a fresh turn.
 async function gotoIdle(): Promise<void> {
-  await evalIn("document.getElementById('start').click(); 'ok'");
-  await sleep(180);
+  for (let i = 0; i < 40; i++) {
+    const ready = await evalIn("!document.getElementById('command-input').disabled");
+    if (ready) return;
+    await sleep(50);
+  }
 }
 
 before(async () => {
