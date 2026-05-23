@@ -5,6 +5,10 @@ import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
 import { installOverlay } from "../overlay/inject.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
 
+const VISUAL_DWELL_MS = 500; // P-Y2.3 (OQ-Y2.3.6): pre-click cursor-travel dwell so the operator sees the
+// cursor land + highlight before the click. 400–600ms range; builder may tune
+// at the live gate. Applied ONLY when the driver actually painted (Auto mode).
+
 export interface CreateLinkedinSessionOpts {
   port: number;
   profileDir: string;
@@ -42,6 +46,7 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
   let cached: CdpClient | undefined;
   let initPromise: Promise<CdpClient> | undefined;
   let lastContext: CurrentSurfaceContext | undefined;
+  let visualDriver: ((fnDeclaration: string) => boolean) | undefined;
 
   // P-32: resolve the effective input mode ONCE at session creation
   // (graceful downgrade to "cdp" — D-4).
@@ -116,6 +121,22 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
 
     getLastContext(): CurrentSurfaceContext | undefined {
       return lastContext;
+    },
+
+    setVisualDriver(driver: (fnDeclaration: string) => boolean): void {
+      visualDriver = driver;
+    },
+
+    async showAgentTarget(box: { x: number; y: number; w: number; h: number }, label: string): Promise<void> {
+      if (!visualDriver) return;
+      const payload = JSON.stringify({ box, label });
+      const painted = visualDriver(`function() { window.__maiShowAgentTarget(${JSON.stringify(payload)}); }`);
+      if (painted) await new Promise((r) => setTimeout(r, VISUAL_DWELL_MS));
+    },
+
+    clearAgentTarget(): void {
+      if (!visualDriver) return;
+      visualDriver("function() { window.__maiClearAgentTarget(); }");
     },
 
     /** P-18 D-2: Probe cached CDP connection health via Runtime.evaluate("1").

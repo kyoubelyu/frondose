@@ -38,6 +38,7 @@ import { createOverlayDispatcher } from "./serve/dispatch.js";
 import { removeSocket } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
+import { makeTakeoverVisualDriver } from "./serve/takeover.js";
 import { createTurnRunner } from "./serve/turn.js";
 import { pushWorkflowToOverlay } from "./serve/workflowOverlay.js";
 
@@ -96,6 +97,9 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     passiveLimiter: new PassiveRateLimiter(passiveRateLimiterOptsFromEnv()),
     sseClients: new Set<ServerResponse>(),
   };
+  // P-Y2.3: wire the Auto-mode takeover visual driver into the session so browser tools can paint the
+  // agent cursor + element highlight before a click (Auto-gated inside the driver; no-op in Manual/headless).
+  session.setVisualDriver?.(makeTakeoverVisualDriver(state, session));
   const control: ControlSignals = {
     requestStop: () => state.currentTurn?.abortController.abort(),
     auditPath,

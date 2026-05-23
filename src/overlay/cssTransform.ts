@@ -34,3 +34,33 @@ export const OVERLAY_LAYOUT_OVERRIDES = `
 .brand-logo { color: var(--brand-600); display: block; }
 :host(.mode-auto) .brand-logo { color: var(--accent-500); }
 `.trim();
+
+// P-Y2.3 — overlay-EXCLUSIVE takeover visuals (the desktop shell has no live page → NOT in the shared
+// index.html source). Appended to the shadow stylesheet by gen-overlay-assets.ts after OVERLAY_LAYOUT_OVERRIDES.
+// @keyframes proven to apply under LinkedIn TT/CSP via the shadow <style> (P-Y2.2a). Tuned vs the mockup at B7;
+// STRUCTURE (3 keyframes by name, the 4-element classes, z-index/pointer-events) locked.
+export const OVERLAY_TAKEOVER_CSS = `
+.takeover-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483646; }
+.takeover-layer.hidden { display: none; }
+.takeover-ring { position: fixed; inset: 0; pointer-events: none; box-sizing: border-box;
+  border: 3px solid var(--accent-500, #D9A75F); box-shadow: inset 0 0 22px rgba(217,167,95,0.55);
+  animation: borderFlow 6s ease-in-out infinite; }
+.takeover-label { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: inline-flex;
+  align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; background: rgba(22,26,20,0.92);
+  color: #F4F2EB; font: 700 11px/1.2 "Inter", system-ui; letter-spacing: 0.08em; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.takeover-label-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-500, #D9A75F);
+  animation: pulseDot 1.2s ease-in-out infinite; }
+.agent-cursor { position: fixed; pointer-events: none; z-index: 2147483647; transform: translate(-2px, -2px); }
+.agent-cursor.hidden, .agent-highlight.hidden { display: none; }
+.cursor-arrow { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-top: 12px solid var(--accent-500, #D9A75F); transform: rotate(-28deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+.cursor-tag { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(22,26,20,0.92); color: #F4F2EB; font: 600 10px/1.2 "Inter", system-ui; white-space: nowrap; }
+.cursor-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-500, #D9A75F);
+  animation: pulseDot 1.2s ease-in-out infinite; }
+.agent-highlight { position: fixed; pointer-events: none; z-index: 2147483646; border-radius: 6px;
+  outline: 2px dashed var(--accent-500, #D9A75F); outline-offset: 2px; animation: targetPulse 1.6s ease-in-out infinite; }
+@keyframes borderFlow { 0%,100% { opacity: 0.8; } 50% { opacity: 1; } }
+@keyframes targetPulse { 0%,100% { box-shadow: 0 0 12px rgba(217,167,95,0.4); } 50% { box-shadow: 0 0 22px rgba(217,167,95,0.78); } }
+@keyframes pulseDot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.6; } }
+`.trim();
