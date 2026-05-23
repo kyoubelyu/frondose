@@ -24,6 +24,11 @@ import { describe, it } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
 import { makeNavigateToUrlTool } from "../../src/tools/browser/navigateToUrl.js";
 
+// P-Y5 D-RUN-2: navigate_to_url execute() calls applyPacing() (inter-tool dwell). The new default
+// band is 800-2500ms; disable it here so the suite stays fast. resolvePaceBand → disabled returns
+// {waitedMs:0,...}, so data.pacing is STILL present — the T-Nav.1 "pacing present" check still holds.
+process.env.MAI_PACE_MIN_MS = "0";
+
 // ─── Fake session helpers ──────────────────────────────────────────────────────
 
 /** Minimal fake CdpHandle that records navigate() calls. */

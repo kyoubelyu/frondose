@@ -4,8 +4,9 @@
  * Tests makeLaunchTool() schema, description, and execute dispatch.
  * Uses CdpClient.fromHandle() with a minimal fake handle.
  *
- * NOTE: T-M57 and T-M58 call execute() which triggers applyPacing() (400-800ms real wait).
- * This is intentional — test plans document tool-execute tests as having pacing overhead.
+ * NOTE: T-M57 and T-M58 call execute() which triggers applyPacing(). P-Y5 D-RUN-2 raises the
+ * default band to 800-2500ms, so this suite disables pacing via MAI_PACE_MIN_MS=0 (resolvePaceBand
+ * → disabled → no sleep; data.pacing is still {waitedMs:0,...} so presence checks hold).
  * No Chrome or LLM required.
  */
 
@@ -14,6 +15,9 @@ import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeLaunchTool } from "../../../src/tools/linkedin/launch.js";
+
+// P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
+process.env.MAI_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 

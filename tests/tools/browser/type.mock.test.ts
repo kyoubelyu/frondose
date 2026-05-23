@@ -2,7 +2,10 @@
  * P-3 mock tests — T-M65..T-M67: type tool.
  *
  * Tests makeTypeTool() schema, execute dispatch (ref + label paths), and no-ref-no-label error.
- * NOTE: execute() calls applyPacing() (400-800ms real wait per test).
+ * NOTE: execute() calls applyPacing() (inter-tool dwell) in addition to the within-`type`
+ * char-by-char pacing. P-Y5 D-RUN-2 raises the inter-tool default band to 800-2500ms, so this
+ * suite disables inter-tool pacing via MAI_PACE_MIN_MS=0 (resolvePaceBand → disabled → no sleep).
+ * The within-`type` char delay (computeCharDelay) is unaffected and still under test.
  * No Chrome or LLM required.
  */
 
@@ -11,6 +14,9 @@ import { describe, it, test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { computeCharDelay, makeTypeTool } from "../../../src/tools/browser/type.js";
+
+// P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
+process.env.MAI_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 const FAKE_BORDER = [0, 0, 10, 0, 10, 10, 0, 10]; // center: x=5, y=5
