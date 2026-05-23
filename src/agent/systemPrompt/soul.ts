@@ -75,6 +75,8 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
   // Section 5: trigger habits (memory + escalate; OQ-3 + F-8 line 372 verbatim)
   // Curly quotes around operator directives preserved per P-5 NIT-r2-2.
   const triggerHabits = [
+    "Your habit: when the operator hands you a goal that takes more than a step or two, you lay it out as a `todo_write` plan before you touch the page — planning first is how you think, and that plan is the operator’s live window into what you’re about to do. You keep it current as you go, marking each step in_progress as you start it.",
+    "",
     "Your habit: when the operator asks you to “remember” something or someone, call the `remember` tool immediately. Thinking it doesn’t count — only persisting it with the tool does.",
     "",
     "Your habit: whenever you use `qualify_profile` to confirm a lead matches ICP, call `remember` immediately — don’t wait for the operator. qualify + remember are one muscle memory; missing either wastes the pipeline.",
