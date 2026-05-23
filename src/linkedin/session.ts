@@ -18,6 +18,15 @@ export interface CreateLinkedinSessionOpts {
    * Chrome. Default (undefined) preserves existing REPL behavior.
    */
   chromeAcquireGuard?: () => boolean;
+  /**
+   * P-Y4 (ask d): post-boot hook invoked ONCE inside getOrInitClient — after Chrome
+   * boots + stealth + overlay install, before the client is returned. serve wires this
+   * to ensureOverlaySubscription so an AGENT-DRIVEN lazy boot (no operator "Start" click)
+   * still captures overlayContextId + attaches the overlay-event dispatcher — wiring that
+   * used to live ONLY in POST /chrome/ensure. Best-effort: a failure here is logged and
+   * swallowed so it never breaks the browser tool that triggered the boot.
+   */
+  onClientBooted?: (client: CdpClient) => void | Promise<void>;
 }
 
 /**
@@ -68,6 +77,15 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
         // P-55 M-0 overlay spike — throwaway
         await installOverlay(client.handle);
         attachEventBus(client.handle, appendOverlayEventRow);
+        if (opts.onClientBooted) {
+          try {
+            await opts.onClientBooted(client);
+          } catch (err) {
+            // Best-effort overlay wiring: a subscribe failure must NOT break the browser
+            // tool that triggered this boot. POST /chrome/ensure remains a manual re-trigger.
+            console.error("[mai] onClientBooted hook failed:", err);
+          }
+        }
         return client;
       })();
       // Cache-on-success + clear-pending-on-either, via the two-arm then() pattern.
