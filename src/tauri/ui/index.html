@@ -268,6 +268,7 @@
     .settings-group input::placeholder, .settings-group textarea::placeholder { color: var(--ink-muted); }
     .settings-group textarea { resize: vertical; }
     .settings-foot { display: flex; justify-content: flex-end; }
+    .settings-update-status { font-size: 12px; color: var(--ink-muted); min-height: 14px; }
 
     @keyframes pulseSubtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .pulse { animation: pulseSubtle 1.6s infinite; }
@@ -392,6 +393,12 @@
       <div class="settings-group">
         <h4>Soul override (advanced)</h4>
         <textarea id="settings-soul" maxlength="3000" rows="5" placeholder="Leave blank to use the default soul band."></textarea>
+      </div>
+      <div class="settings-group">
+        <h4>Updates</h4>
+        <label>Update server URL <input id="settings-update-url" type="text" placeholder="http://192.168.x.x:8765 or http://host.local:8765" /></label>
+        <button id="settings-check-update" class="btn-primary" type="button">Check for updates</button>
+        <span id="settings-update-status" class="settings-update-status"></span>
       </div>
       <footer class="settings-foot"><button id="settings-save" class="btn-primary" type="button">Save</button></footer>
     </section>
