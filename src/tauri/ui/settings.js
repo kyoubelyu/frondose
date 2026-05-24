@@ -35,6 +35,9 @@ export function createSettingsPanel(deps) {
         const soulEl = $("settings-soul");
         if (soulEl)
             soulEl.value = r.soul.override ?? "";
+        const updateUrlEl = $("settings-update-url");
+        if (updateUrlEl)
+            updateUrlEl.value = r.updateServerUrl ?? ""; // P-58d.1-UI
     }
     function collectPatch() {
         const v = (id) => ($(id)?.value ?? "").trim();
@@ -53,6 +56,7 @@ export function createSettingsPanel(deps) {
                 ...(roles.length ? { icp: { targetRole: roles } } : {}),
             },
             soul: { override: v("settings-soul") || null },
+            updateServerUrl: v("settings-update-url") || null, // P-58d.1-UI: empty=clear; serve .url()-validates
         };
     }
     async function save() {
@@ -64,6 +68,24 @@ export function createSettingsPanel(deps) {
             deps.surfaceError("Save settings", e);
         }
     }
+    // P-58d.1-UI: manual updater trigger (OQ-58d.6). Invokes the shipped mai_check_update.
+    // On a found update the Rust side downloads + restarts (this await may not resolve);
+    // otherwise report "Up to date". A reject (no URL / server down) → surfaceError.
+    async function checkUpdate() {
+        const statusEl = $("settings-update-status");
+        if (statusEl)
+            statusEl.textContent = "Checking…";
+        try {
+            const r = await deps.invoke("mai_check_update");
+            if (statusEl)
+                statusEl.textContent = r?.updateAvailable ? "Updating…" : "Up to date";
+        }
+        catch (e) {
+            if (statusEl)
+                statusEl.textContent = "";
+            deps.surfaceError("Check for updates", e);
+        }
+    }
     function close() {
         panel?.classList.add("hidden");
     }
@@ -73,6 +95,7 @@ export function createSettingsPanel(deps) {
     }
     $("settings-save")?.addEventListener("click", () => void save());
     $("settings-close")?.addEventListener("click", () => close());
+    $("settings-check-update")?.addEventListener("click", () => void checkUpdate());
     return { open, close };
 }
 //# sourceMappingURL=settings.js.map

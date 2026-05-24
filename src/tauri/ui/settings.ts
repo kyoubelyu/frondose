@@ -16,11 +16,13 @@ interface SettingsResp {
   llm: { baseUrl: string | null; model: string | null; hasKey: boolean; maskedKey: string | null; provider: string | null };
   identity: Record<string, unknown>;
   soul: { override: string | null };
+  updateServerUrl: string | null; // P-58d.1-UI: plaintext, not masked
 }
 
 interface FieldLike {
   value: string;
   placeholder: string;
+  textContent: string | null; // P-58d.1-UI: status span uses this (inputs ignore it)
   classList: { add(token: string): void; remove(token: string): void };
   addEventListener(type: string, listener: () => void): void;
 }
@@ -54,6 +56,8 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
     if (icpEl) icpEl.value = (icp?.targetRole ?? []).join(", ");
     const soulEl = $("settings-soul");
     if (soulEl) soulEl.value = r.soul.override ?? "";
+    const updateUrlEl = $("settings-update-url");
+    if (updateUrlEl) updateUrlEl.value = r.updateServerUrl ?? ""; // P-58d.1-UI
   }
 
   function collectPatch(): Record<string, unknown> {
@@ -73,6 +77,7 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
         ...(roles.length ? { icp: { targetRole: roles } } : {}),
       },
       soul: { override: v("settings-soul") || null },
+      updateServerUrl: v("settings-update-url") || null, // P-58d.1-UI: empty=clear; serve .url()-validates
     };
   }
 
@@ -82,6 +87,21 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
       await load(); // re-GET → key re-masked, fields reflect saved state
     } catch (e) {
       deps.surfaceError("Save settings", e);
+    }
+  }
+
+  // P-58d.1-UI: manual updater trigger (OQ-58d.6). Invokes the shipped mai_check_update.
+  // On a found update the Rust side downloads + restarts (this await may not resolve);
+  // otherwise report "Up to date". A reject (no URL / server down) → surfaceError.
+  async function checkUpdate(): Promise<void> {
+    const statusEl = $("settings-update-status");
+    if (statusEl) statusEl.textContent = "Checking…";
+    try {
+      const r = await deps.invoke<{ updateAvailable?: boolean }>("mai_check_update");
+      if (statusEl) statusEl.textContent = r?.updateAvailable ? "Updating…" : "Up to date";
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "";
+      deps.surfaceError("Check for updates", e);
     }
   }
 
@@ -95,5 +115,6 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
 
   $("settings-save")?.addEventListener("click", () => void save());
   $("settings-close")?.addEventListener("click", () => close());
+  $("settings-check-update")?.addEventListener("click", () => void checkUpdate());
   return { open, close };
 }
