@@ -32,6 +32,8 @@ import {
   makeDispatchGoogleLoginTool,
 } from "../../src/tools/server/dispatchGoogleLogin.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p28.5-contract-"));
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };

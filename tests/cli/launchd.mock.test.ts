@@ -28,6 +28,8 @@ import {
 import { createLinkedinSession } from "../../src/linkedin/index.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpHome(): { home: string; cleanup: () => void } {

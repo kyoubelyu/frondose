@@ -17,6 +17,8 @@ import type { LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-contract-"));
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };

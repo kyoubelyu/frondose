@@ -269,6 +269,11 @@ async function spinHarness(
     JSON.stringify({ icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() }, null, 2),
     "utf-8",
   );
+  // P-58a RECONCILE: serve now boots cronEnabled from readMode() (default "manual" → cron driver no-ops).
+  // The cron tests exercise the Auto path, so persist mode.json=auto (the realistic "operator enabled Auto")
+  // BEFORE runServeSubcommand boots → cronEnabled=true → the cron driver ticks. (Production: Manual default
+  // means cron is OFF — the supervised default; this harness opts into Auto.)
+  writeFileSync(join(tmpDir, ".mai", "agent", "mode.json"), JSON.stringify({ mode: "auto" }), "utf-8");
   if (opts.writeScheduleJsonl !== undefined) {
     writeFileSync(join(tmpDir, ".mai", "agent", "schedule.jsonl"), opts.writeScheduleJsonl, "utf-8");
   }

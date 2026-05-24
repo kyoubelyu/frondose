@@ -27,6 +27,8 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
 test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_event+query_lead_globally+schedule_task); with session returns 19 keys [P-44 updated]", () => {

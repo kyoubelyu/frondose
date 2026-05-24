@@ -28,6 +28,8 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeFakeSession() {

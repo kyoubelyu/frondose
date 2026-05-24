@@ -39,6 +39,8 @@ import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { makeLinkedinTools } from "../../src/tools/linkedin/index.js";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SRC_ROOT = resolve(new URL(".", import.meta.url).pathname, "../../src");
