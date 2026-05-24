@@ -5,6 +5,7 @@ import { ExitPromptError } from "@inquirer/core";
 import { Command } from "commander";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
 import { getHomeBase } from "../persistence/paths.js";
+import { resolveTier } from "../tier.js";
 import { registerCrashHandlers } from "./crashLogger.js";
 import { loadDotenv } from "./env.js";
 import { handleCronSlash } from "./replCron.js";
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
   const pkg = requireFromHere("../../package.json") as { version: string };
 
   const program = new Command();
+  const powerTier = resolveTier() === "power";
   program
     .name("mai")
     .description("LinkedIn autonomous agent")
@@ -222,322 +224,328 @@ async function main(): Promise<void> {
     process.exit(0);
   });
 
-  // P-11 D-9: `mai telegram` — bidirectional Telegram channel management.
-  const tg = program.command("telegram").description("Bidirectional Telegram channel management");
-  tg.command("on").action(async () => {
-    await runTelegramSubcommand("on", { tcPath: telegramConfigPath });
-    process.exit(0);
-  });
-  tg.command("off").action(async () => {
-    await runTelegramSubcommand("off", { tcPath: telegramConfigPath });
-    process.exit(0);
-  });
-  tg.command("status").action(async () => {
-    await runTelegramSubcommand("status", { tcPath: telegramConfigPath });
-    process.exit(0);
-  });
-  tg.command("test").action(async () => {
-    await runTelegramSubcommand("test", { tcPath: telegramConfigPath });
-    process.exit(0);
-  });
-  tg.command("bind [user_id]").action(async (id: string | undefined) => {
-    await runWithExitGuard(async () => {
-      // P-13 D-7: when id absent, runTelegramSubcommand's interactive bind flow handles it.
-      const userId = id === undefined ? undefined : Number(id);
-      await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId });
-    });
-    process.exit(0);
-  });
-  tg.command("proxy [url]")
-    .option("--unset", "Clear proxy URL")
-    .action(async (url: string | undefined, cliOpts: { unset?: boolean }) => {
-      await runTelegramSubcommand("proxy", {
-        tcPath: telegramConfigPath,
-        proxyUrl: url,
-        unsetProxy: cliOpts.unset ?? false,
-      });
+  if (powerTier) {
+    // P-11 D-9: `mai telegram` — bidirectional Telegram channel management.
+    const tg = program.command("telegram").description("Bidirectional Telegram channel management");
+    tg.command("on").action(async () => {
+      await runTelegramSubcommand("on", { tcPath: telegramConfigPath });
       process.exit(0);
     });
-  // P-23 §6.9: daemon entry — invoked by launchd, not for direct operator use.
-  tg.command("poll")
-    .description("(daemon) long-running Telegram poll loop — invoked by launchd; not for direct operator use")
-    .action(async () => {
-      await runTelegramDaemon();
+    tg.command("off").action(async () => {
+      await runTelegramSubcommand("off", { tcPath: telegramConfigPath });
       process.exit(0);
     });
-
-  // P-25: `mai server` — orchestrator agent (chief-of-staff). Independent
-  // directory tree at ~/.mai/server/, distinct Telegram bot via
-  // MAI_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
-  const server = program.command("server").description("Operator's orchestrator agent");
-  server.action(async () => {
-    // P-25 §6.11: propagate MAI_SERVER_TELEGRAM_TOKEN → TELEGRAM_TOKEN in-process
-    // so replTelegram.ts (which reads process.env.TELEGRAM_TOKEN) sees the
-    // operator's server-bot token. Guard prevents clobbering an explicitly-set
-    // TELEGRAM_TOKEN (per GQ-3 + plan §6.11).
-    if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
-      process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
-    }
-    await runServerSubcommand("repl", {});
-    process.exit(0);
-  });
-  server
-    .command("install")
-    .option("--yes", "Bypass consent prompt", false)
-    .action(async (cliOpts: { yes?: boolean }) => {
+    tg.command("status").action(async () => {
+      await runTelegramSubcommand("status", { tcPath: telegramConfigPath });
+      process.exit(0);
+    });
+    tg.command("test").action(async () => {
+      await runTelegramSubcommand("test", { tcPath: telegramConfigPath });
+      process.exit(0);
+    });
+    tg.command("bind [user_id]").action(async (id: string | undefined) => {
       await runWithExitGuard(async () => {
-        await runServerSubcommand("install", { yes: cliOpts.yes ?? false });
+        // P-13 D-7: when id absent, runTelegramSubcommand's interactive bind flow handles it.
+        const userId = id === undefined ? undefined : Number(id);
+        await runTelegramSubcommand("bind", { tcPath: telegramConfigPath, userId });
       });
       process.exit(0);
     });
-  server.command("uninstall").action(async () => {
-    await runServerSubcommand("uninstall", {});
-    process.exit(0);
-  });
-  server.command("status").action(async () => {
-    await runServerSubcommand("status", {});
-    process.exit(0);
-  });
-  server.command("bind [user_id]").action(async (id: string | undefined) => {
-    await runWithExitGuard(async () => {
-      const userId = id === undefined ? undefined : Number(id);
-      await runServerSubcommand("bind", { userId });
+    tg.command("proxy [url]")
+      .option("--unset", "Clear proxy URL")
+      .action(async (url: string | undefined, cliOpts: { unset?: boolean }) => {
+        await runTelegramSubcommand("proxy", {
+          tcPath: telegramConfigPath,
+          proxyUrl: url,
+          unsetProxy: cliOpts.unset ?? false,
+        });
+        process.exit(0);
+      });
+    // P-23 §6.9: daemon entry — invoked by launchd, not for direct operator use.
+    tg.command("poll")
+      .description("(daemon) long-running Telegram poll loop — invoked by launchd; not for direct operator use")
+      .action(async () => {
+        await runTelegramDaemon();
+        process.exit(0);
+      });
+  }
+
+  if (powerTier) {
+    // P-25: `mai server` — orchestrator agent (chief-of-staff). Independent
+    // directory tree at ~/.mai/server/, distinct Telegram bot via
+    // MAI_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
+    const server = program.command("server").description("Operator's orchestrator agent");
+    server.action(async () => {
+      // P-25 §6.11: propagate MAI_SERVER_TELEGRAM_TOKEN → TELEGRAM_TOKEN in-process
+      // so replTelegram.ts (which reads process.env.TELEGRAM_TOKEN) sees the
+      // operator's server-bot token. Guard prevents clobbering an explicitly-set
+      // TELEGRAM_TOKEN (per GQ-3 + plan §6.11).
+      if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
+        process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      }
+      await runServerSubcommand("repl", {});
+      process.exit(0);
     });
-    process.exit(0);
-  });
-  const serverIdent = server.command("identity");
-  serverIdent
-    .command("init")
-    .option("--reset", "Re-run from scratch", false)
-    .action(async (cliOpts: { reset?: boolean }) => {
+    server
+      .command("install")
+      .option("--yes", "Bypass consent prompt", false)
+      .action(async (cliOpts: { yes?: boolean }) => {
+        await runWithExitGuard(async () => {
+          await runServerSubcommand("install", { yes: cliOpts.yes ?? false });
+        });
+        process.exit(0);
+      });
+    server.command("uninstall").action(async () => {
+      await runServerSubcommand("uninstall", {});
+      process.exit(0);
+    });
+    server.command("status").action(async () => {
+      await runServerSubcommand("status", {});
+      process.exit(0);
+    });
+    server.command("bind [user_id]").action(async (id: string | undefined) => {
       await runWithExitGuard(async () => {
-        await runServerSubcommand("identity-init", { reset: cliOpts.reset ?? false });
+        const userId = id === undefined ? undefined : Number(id);
+        await runServerSubcommand("bind", { userId });
       });
       process.exit(0);
     });
-  const serverSoul = server.command("soul");
-  serverSoul.command("show").action(async () => {
-    await runServerSubcommand("soul-show", {});
-    process.exit(0);
-  });
-  serverSoul.command("edit").action(async () => {
-    await runServerSubcommand("soul-edit", {});
-    process.exit(0);
-  });
-  serverSoul.command("reset").action(async () => {
-    await runWithExitGuard(async () => {
-      await runServerSubcommand("soul-reset", {});
-    });
-    process.exit(0);
-  });
-  // P-26: `mai server worker add/rotate/remove/list` — worker-registry subgroup.
-  const serverWorker = server.command("worker").description("Worker registry");
-  serverWorker
-    .command("add <worker_id>")
-    .option("--hostname <h>", "worker hostname")
-    .option("--persona <p>", "worker persona label")
-    .action(async (workerId: string, cliOpts: { hostname?: string; persona?: string }) => {
-      await runServerWorkerSubcommand("add", {
-        workerId,
-        hostname: cliOpts.hostname,
-        persona: cliOpts.persona,
+    const serverIdent = server.command("identity");
+    serverIdent
+      .command("init")
+      .option("--reset", "Re-run from scratch", false)
+      .action(async (cliOpts: { reset?: boolean }) => {
+        await runWithExitGuard(async () => {
+          await runServerSubcommand("identity-init", { reset: cliOpts.reset ?? false });
+        });
+        process.exit(0);
       });
+    const serverSoul = server.command("soul");
+    serverSoul.command("show").action(async () => {
+      await runServerSubcommand("soul-show", {});
       process.exit(0);
     });
-  serverWorker.command("rotate <worker_id>").action(async (workerId: string) => {
-    await runServerWorkerSubcommand("rotate", { workerId });
-    process.exit(0);
-  });
-  serverWorker.command("remove <worker_id>").action(async (workerId: string) => {
-    await runServerWorkerSubcommand("remove", { workerId });
-    process.exit(0);
-  });
-  serverWorker
-    .command("list")
-    .option("--json", "JSON output", false)
-    .action(async (cliOpts: { json?: boolean }) => {
-      await runServerWorkerSubcommand("list", { json: cliOpts.json ?? false });
+    serverSoul.command("edit").action(async () => {
+      await runServerSubcommand("soul-edit", {});
       process.exit(0);
     });
-  // P-41: provision a worker over SSH + revoke CLI shortcuts.
-  serverWorker
-    .command("provision <persona_id>")
-    .description("Provision a new worker over SSH (installs + configures mai on the host)")
-    .option("--hostname <h>", "worker SSH-reachable hostname (required for SSH provisioning)")
-    .option("--worker-id <id>", "explicit worker id (default: random 8-hex)")
-    .action(async (personaId: string, cliOpts: { hostname?: string; workerId?: string }) => {
-      await runServerWorkerSubcommand("provision", {
-        personaId,
-        hostname: cliOpts.hostname,
-        workerId: cliOpts.workerId,
-      });
-      process.exit(0);
-    });
-  serverWorker.command("revoke <worker_id>").action(async (workerId: string) => {
-    await runServerWorkerSubcommand("revoke", { workerId });
-    process.exit(0);
-  });
-  // P-28.5: dispatch a server-guided Google login task to a worker.
-  serverWorker.command("login <worker_id>").action(async (workerId: string) => {
-    await runServerWorkerSubcommand("login", { workerId });
-    process.exit(0);
-  });
-
-  // P-29: `mai server web-token set/show/remove` — web dashboard Basic-Auth secret.
-  const serverWebToken = server.command("web-token").description("Web dashboard Basic-Auth token");
-  serverWebToken.command("set [token]").action((token?: string) => {
-    runServerWebTokenSubcommand("set", { token });
-    process.exit(0);
-  });
-  serverWebToken.command("show").action(() => {
-    runServerWebTokenSubcommand("show");
-    process.exit(0);
-  });
-  serverWebToken.command("remove").action(() => {
-    runServerWebTokenSubcommand("remove");
-    process.exit(0);
-  });
-
-  // P-27: `mai server persona add/list/show/remove` — persona library subgroup.
-  const serverPersona = server.command("persona").description("Persona template library");
-  const runPersona = async (
-    action: "add" | "list" | "show" | "remove",
-    opts: { personaId?: string; json?: boolean; fromTemplate?: string },
-  ): Promise<void> => {
-    try {
-      await runServerPersonaSubcommand(action, opts);
-    } catch (e) {
-      process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
-      process.exit(1);
-    }
-    process.exit(0);
-  };
-  serverPersona
-    .command("add <persona_id>")
-    .option("--from-template <id_or_json>", "copy from an existing persona ID or inline JSON")
-    .action(async (personaId: string, cliOpts: { fromTemplate?: string }) => {
+    serverSoul.command("reset").action(async () => {
       await runWithExitGuard(async () => {
-        await runPersona("add", { personaId, fromTemplate: cliOpts.fromTemplate });
+        await runServerSubcommand("soul-reset", {});
       });
+      process.exit(0);
     });
-  serverPersona
-    .command("list")
-    .option("--json", "JSON output", false)
-    .action(async (cliOpts: { json?: boolean }) => {
-      await runPersona("list", { json: cliOpts.json ?? false });
+    // P-26: `mai server worker add/rotate/remove/list` — worker-registry subgroup.
+    const serverWorker = server.command("worker").description("Worker registry");
+    serverWorker
+      .command("add <worker_id>")
+      .option("--hostname <h>", "worker hostname")
+      .option("--persona <p>", "worker persona label")
+      .action(async (workerId: string, cliOpts: { hostname?: string; persona?: string }) => {
+        await runServerWorkerSubcommand("add", {
+          workerId,
+          hostname: cliOpts.hostname,
+          persona: cliOpts.persona,
+        });
+        process.exit(0);
+      });
+    serverWorker.command("rotate <worker_id>").action(async (workerId: string) => {
+      await runServerWorkerSubcommand("rotate", { workerId });
+      process.exit(0);
     });
-  serverPersona.command("show <persona_id>").action(async (personaId: string) => {
-    await runPersona("show", { personaId });
-  });
-  serverPersona.command("remove <persona_id>").action(async (personaId: string) => {
-    await runPersona("remove", { personaId });
-  });
-
-  // P-28: `mai server llm-key` + `mai server google-account` — credential library.
-  const runCred = async (
-    kind: "llm-key" | "google-account",
-    action: "add" | "list" | "remove",
-    credOpts: ServerCredentialOpts,
-  ): Promise<void> => {
-    try {
-      await runServerCredentialSubcommand(kind, action, credOpts);
-    } catch (e) {
-      process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
-      process.exit(1);
-    }
-    process.exit(0);
-  };
-
-  const serverLlmKey = server.command("llm-key").description("LLM API key pool");
-  serverLlmKey
-    .command("add <id>")
-    .option("--type <type>", "anthropic | openai")
-    .option("--base-url <url>", "OpenAI-compatible base URL")
-    .option("--key <key>", "API key (prompted if omitted)")
-    .option("--label <label>", "display label")
-    .action(
-      async (id: string, o: { type?: "anthropic" | "openai"; baseUrl?: string; key?: string; label?: string }) => {
-        await runWithExitGuard(() => runCred("llm-key", "add", { id, ...o }));
-      },
-    );
-  serverLlmKey
-    .command("list")
-    .option("--json", "JSON output", false)
-    .action(async (o: { json?: boolean }) => {
-      await runCred("llm-key", "list", { json: o.json ?? false });
+    serverWorker.command("remove <worker_id>").action(async (workerId: string) => {
+      await runServerWorkerSubcommand("remove", { workerId });
+      process.exit(0);
     });
-  serverLlmKey.command("remove <id>").action(async (id: string) => {
-    await runCred("llm-key", "remove", { id });
-  });
+    serverWorker
+      .command("list")
+      .option("--json", "JSON output", false)
+      .action(async (cliOpts: { json?: boolean }) => {
+        await runServerWorkerSubcommand("list", { json: cliOpts.json ?? false });
+        process.exit(0);
+      });
+    // P-41: provision a worker over SSH + revoke CLI shortcuts.
+    serverWorker
+      .command("provision <persona_id>")
+      .description("Provision a new worker over SSH (installs + configures mai on the host)")
+      .option("--hostname <h>", "worker SSH-reachable hostname (required for SSH provisioning)")
+      .option("--worker-id <id>", "explicit worker id (default: random 8-hex)")
+      .action(async (personaId: string, cliOpts: { hostname?: string; workerId?: string }) => {
+        await runServerWorkerSubcommand("provision", {
+          personaId,
+          hostname: cliOpts.hostname,
+          workerId: cliOpts.workerId,
+        });
+        process.exit(0);
+      });
+    serverWorker.command("revoke <worker_id>").action(async (workerId: string) => {
+      await runServerWorkerSubcommand("revoke", { workerId });
+      process.exit(0);
+    });
+    // P-28.5: dispatch a server-guided Google login task to a worker.
+    serverWorker.command("login <worker_id>").action(async (workerId: string) => {
+      await runServerWorkerSubcommand("login", { workerId });
+      process.exit(0);
+    });
 
-  const serverGoogle = server.command("google-account").description("Google account library (LinkedIn SSO)");
-  serverGoogle
-    .command("add <id>")
-    .option("--email <email>", "Google account email")
-    .option("--password <pw>", "password (prompted if omitted)")
-    .option("--recovery-email <email>", "recovery email (P-28.5)")
-    .option("--phone <phone>", "phone number (P-28.5)")
-    .option("--sms-link <url>", "hosted SMS-receive URL (P-28.5)")
-    .option("--twofa-link <url>", "hosted TOTP URL (P-28.5)")
-    .option("--label <label>", "display label")
-    .action(
-      async (
-        id: string,
-        o: {
-          email?: string;
-          password?: string;
-          recoveryEmail?: string;
-          phone?: string;
-          smsLink?: string;
-          twofaLink?: string;
-          label?: string;
+    // P-29: `mai server web-token set/show/remove` — web dashboard Basic-Auth secret.
+    const serverWebToken = server.command("web-token").description("Web dashboard Basic-Auth token");
+    serverWebToken.command("set [token]").action((token?: string) => {
+      runServerWebTokenSubcommand("set", { token });
+      process.exit(0);
+    });
+    serverWebToken.command("show").action(() => {
+      runServerWebTokenSubcommand("show");
+      process.exit(0);
+    });
+    serverWebToken.command("remove").action(() => {
+      runServerWebTokenSubcommand("remove");
+      process.exit(0);
+    });
+
+    // P-27: `mai server persona add/list/show/remove` — persona library subgroup.
+    const serverPersona = server.command("persona").description("Persona template library");
+    const runPersona = async (
+      action: "add" | "list" | "show" | "remove",
+      opts: { personaId?: string; json?: boolean; fromTemplate?: string },
+    ): Promise<void> => {
+      try {
+        await runServerPersonaSubcommand(action, opts);
+      } catch (e) {
+        process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+        process.exit(1);
+      }
+      process.exit(0);
+    };
+    serverPersona
+      .command("add <persona_id>")
+      .option("--from-template <id_or_json>", "copy from an existing persona ID or inline JSON")
+      .action(async (personaId: string, cliOpts: { fromTemplate?: string }) => {
+        await runWithExitGuard(async () => {
+          await runPersona("add", { personaId, fromTemplate: cliOpts.fromTemplate });
+        });
+      });
+    serverPersona
+      .command("list")
+      .option("--json", "JSON output", false)
+      .action(async (cliOpts: { json?: boolean }) => {
+        await runPersona("list", { json: cliOpts.json ?? false });
+      });
+    serverPersona.command("show <persona_id>").action(async (personaId: string) => {
+      await runPersona("show", { personaId });
+    });
+    serverPersona.command("remove <persona_id>").action(async (personaId: string) => {
+      await runPersona("remove", { personaId });
+    });
+
+    // P-28: `mai server llm-key` + `mai server google-account` — credential library.
+    const runCred = async (
+      kind: "llm-key" | "google-account",
+      action: "add" | "list" | "remove",
+      credOpts: ServerCredentialOpts,
+    ): Promise<void> => {
+      try {
+        await runServerCredentialSubcommand(kind, action, credOpts);
+      } catch (e) {
+        process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+        process.exit(1);
+      }
+      process.exit(0);
+    };
+
+    const serverLlmKey = server.command("llm-key").description("LLM API key pool");
+    serverLlmKey
+      .command("add <id>")
+      .option("--type <type>", "anthropic | openai")
+      .option("--base-url <url>", "OpenAI-compatible base URL")
+      .option("--key <key>", "API key (prompted if omitted)")
+      .option("--label <label>", "display label")
+      .action(
+        async (id: string, o: { type?: "anthropic" | "openai"; baseUrl?: string; key?: string; label?: string }) => {
+          await runWithExitGuard(() => runCred("llm-key", "add", { id, ...o }));
         },
-      ) => {
-        await runWithExitGuard(() => runCred("google-account", "add", { id, ...o }));
-      },
-    );
-  serverGoogle
-    .command("list")
-    .option("--json", "JSON output", false)
-    .action(async (o: { json?: boolean }) => {
-      await runCred("google-account", "list", { json: o.json ?? false });
-    });
-  serverGoogle.command("remove <id>").action(async (id: string) => {
-    await runCred("google-account", "remove", { id });
-  });
-
-  // Hidden launchd entry — invoked by ProgramArguments only.
-  server.command("daemon", { hidden: true }).action(async () => {
-    // Same env propagation as the foreground `server` action so the daemon
-    // (which is launchd-spawned) sees the server-bot token under
-    // process.env.TELEGRAM_TOKEN (the plist's EnvironmentVariables already
-    // sets TELEGRAM_TOKEN to the snapshot of MAI_SERVER_TELEGRAM_TOKEN, but
-    // this guard keeps the dev-mode `mai server daemon` invocation correct).
-    if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
-      process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
-    }
-    await runServerSubcommand("daemon", {});
-    process.exit(0);
-  });
-
-  // P-15: `mai gh` — GitHub issue tool configuration
-  const gh = program.command("gh").description("GitHub issue tool configuration");
-  gh.command("set [token]")
-    .option("--repo <owner/repo>", "GitHub repo (format owner/repo)")
-    .action(async (token: string | undefined, cliOpts: { repo?: string }) => {
-      await runWithExitGuard(async () => {
-        await runGhSubcommand("set", { token, repo: cliOpts.repo });
+      );
+    serverLlmKey
+      .command("list")
+      .option("--json", "JSON output", false)
+      .action(async (o: { json?: boolean }) => {
+        await runCred("llm-key", "list", { json: o.json ?? false });
       });
+    serverLlmKey.command("remove <id>").action(async (id: string) => {
+      await runCred("llm-key", "remove", { id });
+    });
+
+    const serverGoogle = server.command("google-account").description("Google account library (LinkedIn SSO)");
+    serverGoogle
+      .command("add <id>")
+      .option("--email <email>", "Google account email")
+      .option("--password <pw>", "password (prompted if omitted)")
+      .option("--recovery-email <email>", "recovery email (P-28.5)")
+      .option("--phone <phone>", "phone number (P-28.5)")
+      .option("--sms-link <url>", "hosted SMS-receive URL (P-28.5)")
+      .option("--twofa-link <url>", "hosted TOTP URL (P-28.5)")
+      .option("--label <label>", "display label")
+      .action(
+        async (
+          id: string,
+          o: {
+            email?: string;
+            password?: string;
+            recoveryEmail?: string;
+            phone?: string;
+            smsLink?: string;
+            twofaLink?: string;
+            label?: string;
+          },
+        ) => {
+          await runWithExitGuard(() => runCred("google-account", "add", { id, ...o }));
+        },
+      );
+    serverGoogle
+      .command("list")
+      .option("--json", "JSON output", false)
+      .action(async (o: { json?: boolean }) => {
+        await runCred("google-account", "list", { json: o.json ?? false });
+      });
+    serverGoogle.command("remove <id>").action(async (id: string) => {
+      await runCred("google-account", "remove", { id });
+    });
+
+    // Hidden launchd entry — invoked by ProgramArguments only.
+    server.command("daemon", { hidden: true }).action(async () => {
+      // Same env propagation as the foreground `server` action so the daemon
+      // (which is launchd-spawned) sees the server-bot token under
+      // process.env.TELEGRAM_TOKEN (the plist's EnvironmentVariables already
+      // sets TELEGRAM_TOKEN to the snapshot of MAI_SERVER_TELEGRAM_TOKEN, but
+      // this guard keeps the dev-mode `mai server daemon` invocation correct).
+      if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
+        process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      }
+      await runServerSubcommand("daemon", {});
       process.exit(0);
     });
-  gh.command("status").action(async () => {
-    await runGhSubcommand("status", {});
-    process.exit(0);
-  });
-  gh.command("remove").action(async () => {
-    await runGhSubcommand("remove", {});
-    process.exit(0);
-  });
+  }
+
+  if (powerTier) {
+    // P-15: `mai gh` — GitHub issue tool configuration
+    const gh = program.command("gh").description("GitHub issue tool configuration");
+    gh.command("set [token]")
+      .option("--repo <owner/repo>", "GitHub repo (format owner/repo)")
+      .action(async (token: string | undefined, cliOpts: { repo?: string }) => {
+        await runWithExitGuard(async () => {
+          await runGhSubcommand("set", { token, repo: cliOpts.repo });
+        });
+        process.exit(0);
+      });
+    gh.command("status").action(async () => {
+      await runGhSubcommand("status", {});
+      process.exit(0);
+    });
+    gh.command("remove").action(async () => {
+      await runGhSubcommand("remove", {});
+      process.exit(0);
+    });
+  }
 
   // P-15: `mai search` — web search API key management
   const search = program.command("search").description("Web search API key management");

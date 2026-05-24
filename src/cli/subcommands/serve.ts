@@ -28,6 +28,7 @@ import { createLinkedinSession } from "../../linkedin/session.js";
 import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
+import { readMode } from "../../persistence/mode.js";
 import { getHomeBase } from "../../persistence/paths.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
@@ -85,7 +86,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     overlayContextId: undefined,
     unsubscribeContextId: undefined,
     unsubscribeOverlayEvents: undefined,
-    cronEnabled: true,
+    cronEnabled: readMode() === "auto",
     // P-57g (D-DOGFOOD-07): passive auto-react HIDDEN by default — opt in via MAI.app toggle
     // (mai_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
     passiveEnabled: (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on",

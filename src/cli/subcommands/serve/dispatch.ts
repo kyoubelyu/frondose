@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { OverlayEvent } from "../../../overlay/eventBus.js";
+import { setCronMode } from "../../../persistence/mode.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
 import type { createPassiveHandlers } from "./passive.js";
 import type { createTurnRunner } from "./turn.js";
@@ -103,7 +104,7 @@ export function createOverlayDispatcher(
     }
     if (event.event_type === "mode") {
       const mode = overlayStringField(event, "mode");
-      state.cronEnabled = mode === "auto";
+      setCronMode(state, mode === "auto");
       deps.emitFrame({ type: "cron-mode", cronEnabled: state.cronEnabled });
       return;
     }

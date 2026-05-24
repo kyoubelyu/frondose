@@ -588,7 +588,7 @@ async function boot(): Promise<void> {
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
   await loadIdentity();
-  await applyMode("manual");
+  syncModeUi("manual");
 }
 
 void boot();

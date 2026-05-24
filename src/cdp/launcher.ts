@@ -4,6 +4,7 @@ import { DEFAULT_FLAGS } from "chrome-launcher/dist/flags.js";
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
 import { getHomeBase } from "../persistence/paths.js";
+import { clearStaleSingletonLocks } from "./profileLock.js";
 import type { ChromeHandle, ChromeLaunchOptions } from "./types.js";
 
 const DEFAULT_PORT = 9222;
@@ -97,6 +98,8 @@ export async function ensureChrome(opts: ChromeLaunchOptions = {}): Promise<Chro
   } catch {
     // Not reachable; launch.
   }
+
+  await clearStaleSingletonLocks(profileDir);
 
   // P-15 fix: chrome-launcher's DEFAULT_FLAGS include --password-store=basic and
   // --use-mock-keychain. When the profile is shared with mai-browser (which does

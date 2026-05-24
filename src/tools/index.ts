@@ -11,6 +11,7 @@ import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
 import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH, SERVER_WORKERS_CONFIG_DIR } from "../persistence/serverPaths.js";
 import { openWorkersDb } from "../persistence/workersRegistry.js";
+import { type MaiTier, resolveTier } from "../tier.js";
 import { makeBrowserTools } from "./browser/index.js";
 import { echoTool } from "./control/echo.js";
 import { makeControlTools } from "./control/index.js";
@@ -87,9 +88,10 @@ export function makeAllTools(
   persistence?: PersistencePaths,
   control?: ControlSignals,
   hookRunner?: HookRunner,
-  opts?: { mode?: ToolMode; workerId?: string },
+  opts?: { mode?: ToolMode; workerId?: string; tier?: MaiTier },
 ): ToolSet {
   const mode: ToolMode = opts?.mode ?? "worker";
+  const tier: MaiTier = opts?.tier ?? resolveTier();
   const out: ToolSet = { echo: echoTool };
 
   // P-26: lazy serverCoords resolution from config + secrets. Resolved ONLY
@@ -136,7 +138,7 @@ export function makeAllTools(
   // P-6: operator-output + control tools. Registered when `control` is given.
   if (control) {
     const operatorOutputTools = makeOperatorOutputTools();
-    Object.assign(out, operatorOutputTools);
+    if (tier === "power") Object.assign(out, operatorOutputTools);
     Object.assign(
       out,
       makeControlTools(

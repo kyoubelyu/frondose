@@ -4,9 +4,11 @@ import type { CdpClient } from "../../../cdp/client.js";
 import { attachEventBus, type OverlayEvent } from "../../../overlay/eventBus.js";
 import { subscribeContextId } from "../../../overlay/inject.js";
 import { readIdentity } from "../../../persistence/identity.js";
+import { setCronMode } from "../../../persistence/mode.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
 import type { createOverlayDispatcher } from "./dispatch.js";
 import { checkBearer, readAuditTail, readJsonBody, sendJson } from "./http.js";
+import { showEdgeRing } from "./takeover.js";
 import type { createTurnRunner } from "./turn.js";
 
 /**
@@ -27,6 +29,7 @@ export async function ensureOverlaySubscription(
     state.unsubscribeContextId = await subscribeContextId(client.handle, (id) => {
       const wasReconnect = state.overlayContextId !== undefined && state.overlayContextId !== id;
       state.overlayContextId = id;
+      if (state.currentTurn !== null && state.cronEnabled) showEdgeRing(state, deps.session);
       if (wasReconnect) {
         deps.emitFrame({ type: "overlay-reconnected" });
         const ts = Date.now();
@@ -219,7 +222,7 @@ export function createRequestHandler(
           sendJson(res, 400, { ok: false, reason: "missing_enabled" });
           return;
         }
-        state.cronEnabled = enabled;
+        setCronMode(state, enabled);
         deps.emitFrame({ type: "cron-mode", cronEnabled: enabled });
         sendJson(res, 200, { ok: true, cronEnabled: state.cronEnabled });
         return;
@@ -246,6 +249,7 @@ export function createRequestHandler(
         });
         res.write(":\n\n");
         state.sseClients.add(res);
+        res.write(`data: ${JSON.stringify({ type: "cron-mode", cronEnabled: state.cronEnabled })}\n\n`);
         // A (re)connected client cancels any pending orphan-abort.
         if (clientGoneTimer) {
           clearTimeout(clientGoneTimer);
