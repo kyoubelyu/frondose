@@ -2,6 +2,7 @@
 // DOM-lib-free: compiled by BOTH the Tauri-UI build (lib DOM) and the main build (no DOM lib),
 // so this module references ONLY the `*Like` structural interfaces below — never HTMLElement/Document.
 // Builders use the DOM API (createElement/textContent/appendChild/classList/setAttribute) — never innerHTML.
+import { LEAF_SVG } from "./frondoseTokens.js";
 // Inline glyph path-data (24x24, stroke=currentColor). Kept local so frondoseTokens.ts stays the
 // pinned single-source-of-truth for the palette/leaf-mark; these are UI-builder glyphs only.
 const GLYPH = {
@@ -86,6 +87,24 @@ function glyph(doc, paths, className, strokeWidth = 2) {
         p.setAttribute?.("fill", "none");
         p.setAttribute?.("stroke", "currentColor");
         p.setAttribute?.("stroke-width", String(strokeWidth));
+        p.setAttribute?.("stroke-linecap", "round");
+        p.setAttribute?.("stroke-linejoin", "round");
+        svg.appendChild(p);
+    }
+    return svg;
+}
+// --- brand mark (inline SVG from LEAF_SVG — the overlay needs inline SVG; an <img src> 404s in-page, F6) ---
+export function buildLeafMark(doc) {
+    const svg = doc.createElementNS?.(SVG_NS, "svg") ?? doc.createElement("svg");
+    svg.setAttribute?.("viewBox", LEAF_SVG.viewBox);
+    svg.setAttribute?.("aria-hidden", "true");
+    svg.classList.add("brand-logo");
+    for (const d of LEAF_SVG.paths) {
+        const p = doc.createElementNS?.(SVG_NS, "path") ?? doc.createElement("path");
+        p.setAttribute?.("d", d);
+        p.setAttribute?.("fill", "none");
+        p.setAttribute?.("stroke", "currentColor");
+        p.setAttribute?.("stroke-width", "2");
         p.setAttribute?.("stroke-linecap", "round");
         p.setAttribute?.("stroke-linejoin", "round");
         svg.appendChild(p);
@@ -299,7 +318,7 @@ function buildTimeline(doc, workflow) {
     });
     return timeline;
 }
-export function buildAutoStage(doc, workflow) {
+export function buildAutoStage(doc, workflow, opts) {
     const stage = asEl(doc.getElementById("auto-stage"));
     if (!stage)
         return;
@@ -307,6 +326,7 @@ export function buildAutoStage(doc, workflow) {
     stage.classList.remove("hidden");
     stage.appendChild(buildHero(doc, workflow));
     stage.appendChild(buildProgressStrip(doc, workflow));
-    stage.appendChild(buildTimeline(doc, workflow));
+    if (opts?.compact !== true)
+        stage.appendChild(buildTimeline(doc, workflow)); // desktop default unchanged
 }
 //# sourceMappingURL=render.js.map

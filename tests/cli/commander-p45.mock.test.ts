@@ -21,6 +21,8 @@ import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
 
+process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
 

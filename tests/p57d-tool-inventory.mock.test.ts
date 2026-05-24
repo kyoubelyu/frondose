@@ -57,8 +57,11 @@ function makeMockSession() {
 
 // ─── T-Inv.1 — 34 worker tools; key scope-relevant tools present ────────────
 
-describe("makeAllTools() worker mode — 35-tool inventory snapshot (G-P57d.9, updated P-Y1 +todo_write)", () => {
-  it("T-Inv.1: given makeAllTools(session, persistence, control, hookRunner, {mode:'worker'}) called with mock session + tmp persistence, WHEN enumerating Object.keys(tools), THEN length === 35 (P-Y1 +todo_write); tools.web_search exists + tools.analyze_screenshot exists (still REGISTERED, not removed — just behaviorally scope-graceful); tools.telegram_notify exists + tools.gh_issue exists (approved-external per A-1); tools.todo_write exists (P-Y1 workflow tool)", () => {
+describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 + P-58a MAI_TIER tiering)", () => {
+  // P-58a RECONCILED: the worker tool count is now TIER-DEPENDENT. The canonical inventory test asserts BOTH
+  // the power count (full = 35, incl. telegram_notify + gh_issue) AND the consumer count (= power − 2 = 33,
+  // the 2 operator-output tools gated out). The scope-graceful + todo_write tools are present in BOTH tiers.
+  it("T-Inv.1: worker tier:'power' → 35 tools (incl. telegram_notify + gh_issue); tier:'consumer' → 33 (those 2 gated out); web_search/analyze_screenshot/todo_write present in BOTH", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -71,23 +74,38 @@ describe("makeAllTools() worker mode — 35-tool inventory snapshot (G-P57d.9, u
       // biome-ignore lint/suspicious/noExplicitAny: minimal ControlSignals subset
     } as any;
 
-    const tools = makeAllTools(makeMockSession(), persistence, control, undefined, { mode: "worker" });
-    const names = Object.keys(tools);
+    // builder 4b adds `tier` to makeAllTools' opts; typed cast (no `any`) until the contract test catches up.
+    type ToolsOpts = NonNullable<Parameters<typeof makeAllTools>[4]> & { tier?: "consumer" | "power" };
+    const power = makeAllTools(makeMockSession(), persistence, control, undefined, {
+      mode: "worker",
+      tier: "power",
+    } as ToolsOpts);
+    const consumer = makeAllTools(makeMockSession(), persistence, control, undefined, {
+      mode: "worker",
+      tier: "consumer",
+    } as ToolsOpts);
+    const powerNames = Object.keys(power);
+    const consumerNames = Object.keys(consumer);
 
-    // Plan §1 A-1: 35 worker tools per CLAUDE.md L70 (updated P-Y1 +todo_write).
-    assert.equal(names.length, 35, `Expected 35 worker tools; got ${names.length}. Names: ${names.sort().join(", ")}`);
+    // POWER = the full inventory (today's count) per CLAUDE.md L70 (P-Y1 +todo_write).
+    assert.equal(
+      powerNames.length,
+      35,
+      `power worker tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`,
+    );
+    // CONSUMER = power − 2 (telegram_notify + gh_issue gated out — the one P-58a contract-adjacent change).
+    assert.equal(consumerNames.length, 33, `consumer = power−2; got ${consumerNames.length}`);
 
-    // 2 scope-graceful tools (P-57d items b + c)
-    assert.ok("web_search" in tools, "tools.web_search must exist (P-57d cleanup keeps tool registered)");
+    // the 2 operator-output tools: power-only
+    assert.ok("telegram_notify" in power && "gh_issue" in power, "power includes the operator-output tools");
     assert.ok(
-      "analyze_screenshot" in tools,
-      "tools.analyze_screenshot must exist (P-57d cleanup keeps tool registered)",
+      !("telegram_notify" in consumer) && !("gh_issue" in consumer),
+      "consumer gates out the operator-output tools",
     );
 
-    // 2 approved-external tools (per plan §1 A-1)
-    assert.ok("telegram_notify" in tools, "tools.telegram_notify must exist (approved-external)");
-    assert.ok("gh_issue" in tools, "tools.gh_issue must exist (approved-external)");
-    // P-Y1 workflow tool
-    assert.ok("todo_write" in tools, "tools.todo_write must exist (P-Y1 workflow)");
+    // scope-graceful + workflow tools present in BOTH tiers (registered, not removed)
+    for (const t of ["web_search", "analyze_screenshot", "todo_write"] as const) {
+      assert.ok(t in power && t in consumer, `${t} present in both tiers`);
+    }
   });
 });

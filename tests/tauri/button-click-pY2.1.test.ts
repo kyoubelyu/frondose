@@ -119,17 +119,20 @@ after(async () => {
 });
 
 describe("button click-through — boot wiring (G-PY2.1.9)", () => {
-  it("T-Click.0: boot() ran without throwing — it fired mai_identity + the Manual applyMode invokes (listeners attached)", async () => {
+  it("T-Click.0: boot() ran without throwing — fired mai_identity + UI-only syncModeUi (NO force-POST cron-mode, P-58a)", async () => {
     // Given: the app booted in headless Chrome with the spy stub
     // When:  reading the invokes recorded during boot()
-    // Then:  mai_identity + mai_set_cron_mode{enabled:false} + mai_set_passive_mode{enabled:false} were called
-    //        (a boot-throw would attach no listeners AND skip applyMode → this fails, catching that bug class)
+    // Then:  mai_identity was called (a boot-throw would attach no listeners AND skip it → catches that bug class).
+    //        P-58a RECONCILE: boot() now does syncModeUi("manual") (UI-only) instead of applyMode("manual") — it
+    //        must NOT force-POST mai_set_cron_mode (that would overwrite serve's PERSISTED mode; the persisted mode
+    //        now arrives via the initial cron-mode SSE frame). So boot fires mai_identity but NO mai_set_cron_mode.
     const boot = await evalIn("window.__mai_invokes");
     const cmds = boot.map((i: { cmd: string }) => i.cmd);
     assert.ok(cmds.includes("mai_identity"), "boot must call mai_identity");
-    assert.ok(cmds.includes("mai_set_cron_mode"), "boot must call mai_set_cron_mode (applyMode manual)");
-    const cron = boot.find((i: { cmd: string }) => i.cmd === "mai_set_cron_mode");
-    assert.deepEqual(cron.args, { enabled: false }, "boot Manual ⇒ cron disabled");
+    assert.ok(
+      !cmds.includes("mai_set_cron_mode"),
+      "boot must NOT force-POST mai_set_cron_mode (P-58a: UI-only syncModeUi; persisted mode arrives via SSE)",
+    );
   });
 });
 

@@ -54,8 +54,13 @@ jobs:
           TAG: ${{ steps.notes.outputs.tag }}
           NOTES: ${{ steps.notes.outputs.body }}
         run: |
+          PRERELEASE=""
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*) PRERELEASE="--prerelease" ;;
+          esac
           printf '%s' "$NOTES" | gh release create "$TAG" \
             --title "$TAG" \
+            $PRERELEASE \
             --notes-file - \
             --verify-tag \
             install.sh

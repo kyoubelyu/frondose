@@ -186,6 +186,17 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       "src/overlay/frondoseCss.generated.ts",
       "src/tools/browser/click.ts",
       "src/tools/browser/type.ts",
+      //  - P-58a (autonomous robustness/hygiene): profile-lock self-heal (cdp/profileLock.ts + cdp/launcher.ts
+      //    call site), MAI_TIER gate (tier.ts + tools/index.ts gate + main.ts if(powerTier) CLI gating),
+      //    mode-persist sidecar (persistence/mode.ts + serve.ts boot + routes.ts persist/frame/re-push +
+      //    dispatch.ts overlay-mode persist). (tauri.conf.json is in PY21_EXCEPTIONS; app.ts is under src/tauri/ui/.)
+      "src/cdp/profileLock.ts",
+      "src/cdp/launcher.ts",
+      "src/tier.ts",
+      "src/tools/index.ts",
+      "src/persistence/mode.ts",
+      "src/cli/main.ts",
+      "src/cli/subcommands/serve/dispatch.ts",
     ];
     const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
