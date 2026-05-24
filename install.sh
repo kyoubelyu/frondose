@@ -9,6 +9,26 @@ set -euo pipefail
 
 REPO="kyoubelyu/mai-agent"
 
+# P-58b: optional release-channel flags. No-arg => stable "Latest" (backward compatible).
+CHANNEL="stable"
+REQ_VERSION=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prerelease) CHANNEL="prerelease"; shift ;;
+    --version)
+      # MR1 fix: validate the operand BEFORE `shift 2` — a bare `--version`
+      # (no tag) leaves only 1 positional, so `shift 2` errors under `set -u`.
+      REQ_VERSION="${2:-}"
+      if [[ -z "$REQ_VERSION" ]]; then
+        echo "ERROR: --version requires a tag (e.g. --version v0.5.0-alpha.26)" >&2
+        exit 1
+      fi
+      shift 2 ;;
+    --version=*) REQ_VERSION="${1#*=}"; shift ;;
+    *) echo "ERROR: unknown argument '$1'. Usage: bash install.sh [--prerelease] [--version <tag>]" >&2; exit 1 ;;
+  esac
+done
+
 echo "=== mai-agent install ==="
 
 # 1. Platform
@@ -56,14 +76,28 @@ HOME_BASE="${MAI_PREFIX:-$HOME}"
 BREW_BASE="${MAI_PREFIX:-$(brew --prefix)}"
 
 # --- install-core: latest GitHub Release → tarball → build → npm-global symlink ---
-TAG=$(gh release view --repo "$REPO" --json tagName --jq '.tagName')
-if [[ -z "$TAG" ]]; then
-  echo "ERROR: could not read the latest GitHub Release for $REPO." >&2
+if [[ -n "$REQ_VERSION" ]]; then
+  # Explicit pin: validate the tag exists (gh release view errors if absent).
+  if ! gh release view "$REQ_VERSION" --repo "$REPO" --json tagName &>/dev/null; then
+    echo "ERROR: release '$REQ_VERSION' not found in $REPO." >&2
+    exit 1
+  fi
+  TAG="$REQ_VERSION"
+elif [[ "$CHANNEL" == "prerelease" ]]; then
+  # Latest prerelease by publish date (scout §3 jq — VERIFIED against the repo).
+  TAG=$(gh release list --repo "$REPO" --exclude-drafts --limit 30 \
+    --json tagName,isPrerelease,publishedAt \
+    --jq 'map(select(.isPrerelease==true)) | sort_by(.publishedAt) | reverse | .[0].tagName')
+else
+  TAG=$(gh release view --repo "$REPO" --json tagName --jq '.tagName')  # stable "Latest"
+fi
+if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+  echo "ERROR: could not resolve a release tag for $REPO (channel=$CHANNEL)." >&2
   exit 1
 fi
 INSTALL_DIR="$HOME_BASE/.mai/agent/releases/$TAG"
 mkdir -p "$INSTALL_DIR"
-gh release download --repo "$REPO" --archive=tar.gz --output /tmp/mai-agent.tar.gz --clobber
+gh release download "$TAG" --repo "$REPO" --archive=tar.gz --output /tmp/mai-agent.tar.gz --clobber
 tar -xzf /tmp/mai-agent.tar.gz -C "$INSTALL_DIR" --strip-components=1
 rm -f /tmp/mai-agent.tar.gz
 
@@ -84,6 +118,13 @@ ln -sfn "$INSTALL_DIR" "$PKG_LINK"
 ln -sfn "../lib/node_modules/@kyoube/mai-agent/dist/cli/main.js" "$BIN_LINK"
 chmod +x "$INSTALL_DIR/dist/cli/main.js"
 # --- end install-core ---
+
+# P-58b: persist the update channel so `mai` startup auto-update stays on it.
+# --prerelease => "prerelease" (ride alphas); otherwise "stable". --version pins
+# explicitly => stable (no auto-ride). Plain text; read by src/persistence/channel.ts.
+CHANNEL_FILE="$HOME_BASE/.mai/agent/channel"
+mkdir -p "$(dirname "$CHANNEL_FILE")"
+printf '%s\n' "$CHANNEL" > "$CHANNEL_FILE"
 
 echo ""
 echo "=== Install complete ==="

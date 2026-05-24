@@ -926,3 +926,215 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
   });
 });
+
+// ─── P-58b T-AutoChannel.1..4: channel-aware release resolution ───────────────
+//
+// Step 4a scaffold (validator). Assertion bodies are `assert.fail("TODO Step 5")`
+// — they intentionally FAIL until Step 5 fill. These exercise the NEW `channel?`
+// DI field on AutoUpdateDI (added by builder at 4b). At 4a the unmodified
+// runStartupAutoUpdate ignores `di.channel`; under tsx (no type-check) passing an
+// extra property is harmless at runtime, so these load + run + hit assert.fail.
+//
+// Plan §5 coverage (Deliverable 4 — interim opt-in prerelease channel):
+//   T-AutoChannel.1 — default/stable channel hits /releases/latest (LOAD-BEARING, R1)
+//   T-AutoChannel.2 — prerelease channel hits the list endpoint
+//   T-AutoChannel.3 — prerelease loop-guard: local === newest-prerelease → up_to_date (LOAD-BEARING, R1)
+//   T-AutoChannel.4 — prerelease channel proceeds past the version guard when newer
+
+type PrereleaseListItem = {
+  tag_name: string;
+  tarball_url: string;
+  prerelease: boolean;
+  draft: boolean;
+  published_at: string;
+};
+
+/**
+ * URL-aware tracking fetch. Records every requested URL in order and answers:
+ *   - `/releases/latest`  → a single release object { tag_name: stableTag }
+ *   - `/releases?...`     → the supplied prerelease list array
+ *   - anything else (tarball) → an empty arrayBuffer (download path)
+ * The recorded `urls` lets a test assert WHICH endpoint the channel selected.
+ */
+function makeTrackingFetch(opts: { stableTag?: string; prereleaseList?: PrereleaseListItem[] }): {
+  impl: AutoUpdateDI["fetchImpl"];
+  urls: string[];
+} {
+  const urls: string[] = [];
+  const impl: AutoUpdateDI["fetchImpl"] = async (url, _opts) => {
+    const u = String(url);
+    urls.push(u);
+    if (u.includes("/releases/latest")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          tag_name: opts.stableTag ?? "v0.4.49",
+          tarball_url: "https://codeload.github.com/kyoubelyu/mai-agent/legacy.tar.gz/refs/tags/stable",
+        }),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      } as unknown as Response;
+    }
+    if (u.includes("/releases?")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => opts.prereleaseList ?? [],
+        arrayBuffer: async () => new ArrayBuffer(0),
+      } as unknown as Response;
+    }
+    // tarball download
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    } as unknown as Response;
+  };
+  return { impl, urls };
+}
+
+/** Build a one-entry prerelease list whose newest item carries `tag`. */
+function prereleaseListWith(tag: string): PrereleaseListItem[] {
+  return [
+    {
+      tag_name: tag,
+      tarball_url: `https://codeload.github.com/kyoubelyu/mai-agent/legacy.tar.gz/refs/tags/${tag}`,
+      prerelease: true,
+      draft: false,
+      published_at: "2026-05-24T00:00:00Z",
+    },
+  ];
+}
+
+describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
+  it("T-AutoChannel.1: default/stable channel hits /releases/latest (preserves today — LOAD-BEARING R1)", async () => {
+    // Given: di.channel:"stable" (or unset), GH_TOKEN set, a URL-tracking fetch
+    //        whose /releases/latest returns LOCAL_TAG (→ up_to_date, no download)
+    // When:  runStartupAutoUpdate({ channel:"stable", fetchImpl }) is called
+    // Then:  the FIRST fetched URL is …/releases/latest (NOT …/releases?…)
+    const origToken = process.env.GH_TOKEN;
+    const origMai = process.env.MAI_AUTOUPDATE;
+    delete process.env.MAI_AUTOUPDATE;
+    process.env.GH_TOKEN = "test-gh-token-p58b-1";
+    const { impl: fetchImpl, urls } = makeTrackingFetch({ stableTag: LOCAL_TAG });
+    try {
+      const result = await runStartupAutoUpdate({ channel: "stable", fetchImpl } as AutoUpdateDI);
+      assert.ok(urls.length >= 1, `expected at least one fetch (got ${JSON.stringify(urls)})`);
+      assert.match(urls[0] ?? "", /\/releases\/latest/, "stable channel must hit /releases/latest");
+      assert.doesNotMatch(urls[0] ?? "", /\/releases\?/, "stable channel must NOT hit the list endpoint");
+      assert.equal(result.reason, "up_to_date", "latest === LOCAL_TAG → up_to_date (no download)");
+    } finally {
+      if (origToken !== undefined) process.env.GH_TOKEN = origToken;
+      else delete process.env.GH_TOKEN;
+      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
+      else delete process.env.MAI_AUTOUPDATE;
+    }
+  });
+
+  it("T-AutoChannel.2: prerelease channel hits the list endpoint (/releases?per_page=)", async () => {
+    // Given: di.channel:"prerelease", GH_TOKEN set, tracking fetch whose list's
+    //        newest prerelease is LOCAL_TAG (→ up_to_date, no download)
+    // When:  runStartupAutoUpdate({ channel:"prerelease", fetchImpl }) is called
+    // Then:  the FIRST fetched URL contains "/releases?per_page=" (NOT /releases/latest)
+    const origToken = process.env.GH_TOKEN;
+    const origMai = process.env.MAI_AUTOUPDATE;
+    delete process.env.MAI_AUTOUPDATE;
+    process.env.GH_TOKEN = "test-gh-token-p58b-2";
+    const { impl: fetchImpl, urls } = makeTrackingFetch({ prereleaseList: prereleaseListWith(LOCAL_TAG) });
+    try {
+      const result = await runStartupAutoUpdate({ channel: "prerelease", fetchImpl } as AutoUpdateDI);
+      assert.ok(urls.length >= 1, `expected at least one fetch (got ${JSON.stringify(urls)})`);
+      assert.match(urls[0] ?? "", /\/releases\?per_page=/, "prerelease channel must hit the list endpoint");
+      assert.doesNotMatch(urls[0] ?? "", /\/releases\/latest/, "prerelease channel must NOT hit /releases/latest");
+      assert.equal(result.reason, "up_to_date", "newest prerelease === LOCAL_TAG → up_to_date (no download)");
+    } finally {
+      if (origToken !== undefined) process.env.GH_TOKEN = origToken;
+      else delete process.env.GH_TOKEN;
+      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
+      else delete process.env.MAI_AUTOUPDATE;
+    }
+  });
+
+  it("T-AutoChannel.3: prerelease loop-guard — local === newest-prerelease → {skipped,up_to_date}, no spawn (LOAD-BEARING R1)", async () => {
+    // Given: di.channel:"prerelease", local pkg.version == LOCAL_VER, the list's
+    //        newest prerelease tag === LOCAL_TAG, a tracked spawnSyncImpl
+    // When:  runStartupAutoUpdate({ channel:"prerelease", fetchImpl, spawnSyncImpl })
+    // Then:  result == {action:"skipped",reason:"up_to_date"} AND spawn NEVER called
+    const origToken = process.env.GH_TOKEN;
+    const origMai = process.env.MAI_AUTOUPDATE;
+    delete process.env.MAI_AUTOUPDATE;
+    process.env.GH_TOKEN = "test-gh-token-p58b-3";
+    const { impl: fetchImpl } = makeTrackingFetch({ prereleaseList: prereleaseListWith(LOCAL_TAG) });
+    const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
+    try {
+      const result = await runStartupAutoUpdate({
+        channel: "prerelease",
+        fetchImpl,
+        spawnSyncImpl: spawnFn,
+      } as AutoUpdateDI);
+      assert.equal(result.action, "skipped", "loop-guard: local === newest prerelease → skipped");
+      assert.equal(result.reason, "up_to_date", "loop-guard reason must be up_to_date");
+      assert.equal(spawnCalls.length, 0, "loop-guard: spawn must NEVER be called (no download, no re-exec)");
+    } finally {
+      if (origToken !== undefined) process.env.GH_TOKEN = origToken;
+      else delete process.env.GH_TOKEN;
+      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
+      else delete process.env.MAI_AUTOUPDATE;
+    }
+  });
+
+  it("T-AutoChannel.4: prerelease channel passes the version guard when a newer prerelease exists", async () => {
+    // Given: di.channel:"prerelease", local LOCAL_VER, the list's newest prerelease
+    //        is NEWER_TAG (newer, same major), a non-dev-link argv1 symlink, success
+    //        spawn + a mocked process.exit (download/re-exec path)
+    // When:  runStartupAutoUpdate({ channel:"prerelease", fetchImpl, spawnSyncImpl, argv1Override })
+    // Then:  it does NOT short-circuit — result.reason ∉ {"up_to_date","local_ahead"}
+    const { dir, cleanup } = makeTmpDir();
+    const origToken = process.env.GH_TOKEN;
+    const origMai = process.env.MAI_AUTOUPDATE;
+    const origExit = process.exit.bind(process);
+    delete process.env.MAI_AUTOUPDATE;
+    process.env.GH_TOKEN = "test-gh-token-p58b-4";
+    let exitCode: number | undefined;
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    (process as any).exit = (code?: number) => {
+      exitCode = code;
+    };
+    // stableTag below LOCAL keeps the 4a (channel-ignored) path safe (local_ahead,
+    // no download); at 4b the honoured prerelease channel uses NEWER_TAG and proceeds.
+    const { impl: fetchImpl } = makeTrackingFetch({
+      stableTag: "v0.4.0",
+      prereleaseList: prereleaseListWith(NEWER_TAG),
+    });
+    const { impl: spawnFn } = makeSuccessSpawn();
+    try {
+      const { argv1 } = makeSymlinkSetup(dir, false /* non-dev-link */);
+      const result = await runStartupAutoUpdate({
+        channel: "prerelease",
+        fetchImpl,
+        spawnSyncImpl: spawnFn,
+        argv1Override: argv1,
+      } as AutoUpdateDI);
+      assert.notEqual(result.reason, "up_to_date", "newer prerelease must NOT short-circuit to up_to_date");
+      assert.notEqual(result.reason, "local_ahead", "newer prerelease must NOT short-circuit to local_ahead");
+      assert.equal(result.action, "updated", "newer prerelease proceeds through download/build/re-exec");
+      assert.equal(result.latestTag, NEWER_TAG, "latestTag must be the newest prerelease from the list");
+      assert.equal(exitCode, 0, "re-exec process.exit(0) must have been called");
+    } finally {
+      // biome-ignore lint/suspicious/noExplicitAny: restore
+      (process as any).exit = origExit;
+      if (origToken !== undefined) process.env.GH_TOKEN = origToken;
+      else delete process.env.GH_TOKEN;
+      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
+      else delete process.env.MAI_AUTOUPDATE;
+      try {
+        rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
+      } catch {}
+      try {
+        unlinkSync(join(releasesDirPath(), `${NEWER_TAG}.tar.gz`));
+      } catch {}
+      cleanup();
+    }
+  });
+});
