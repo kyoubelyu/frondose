@@ -10,7 +10,9 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -60,6 +62,101 @@ describe("install.sh post-install message advises `mai setup` (G-P52.4)", () => 
     assert.ok(
       !postInstallRegion.includes("mai auth set"),
       "post-install hint region must NOT contain `mai auth set` (the pre-P-52 string was at install.sh:91)",
+    );
+  });
+});
+
+// ─── P-58b T-InstallFlag.1..4 — install.sh --prerelease/--version + channel ───
+//
+// Step 4a scaffold (validator). Assertion bodies are `assert.fail("TODO Step 5")`.
+// These assert the FIXED §6.2 behavior (B1 + MR1 folded into the locked sketch):
+//   - the new arg-parse + 3-branch TAG resolution + B1 `$TAG` download positional
+//     + the channel-write block are added by builder at 4b.
+// At 4a the current install.sh has NONE of these, so the Step-5 assertions will
+// be RED until 4b lands. The bodies stay TODO so Step 5 fills them.
+//
+// Plan §5 coverage (Deliverable 3 — install.sh flags + channel persist):
+//   T-InstallFlag.1 — `bash -n install.sh` passes (syntax valid after the new blocks)
+//   T-InstallFlag.2 — `--version` with no operand errors (MR1 fix)
+//   T-InstallFlag.3 — the resolved `$TAG` reaches the download command (B1 fix)
+//   T-InstallFlag.4 — the chosen channel is persisted to ~/.mai/agent/channel
+
+describe("install.sh — P-58b --prerelease/--version flags + channel persist (§6.2)", () => {
+  it("T-InstallFlag.1: `bash -n install.sh` exits 0 (the new arg-parse + 3-branch TAG block is syntactically valid)", () => {
+    // Given: install.sh on disk after the §6.2 edits
+    // When:  `bash -n` (no-exec syntax check) runs against it
+    // Then:  exits 0 (no syntax error) — guards the new while/case + 3-branch block
+    //
+    // `bash -n` is a no-exec syntax check — safe + deterministic (no brew/gh/network).
+    assert.doesNotThrow(
+      () => execSync(`bash -n "${INSTALL_SH_PATH}"`, { stdio: "pipe" }),
+      "install.sh must pass `bash -n` (no syntax error in the new arg-parse + 3-branch TAG block)",
+    );
+  });
+
+  it("T-InstallFlag.2: `bash install.sh --version` (no operand) exits non-zero with a 'requires a tag' error (MR1 fix)", () => {
+    // Given: install.sh with the §6.2 arg-parse block inserted right after REPO=
+    //        (before any platform/brew/gh work, so the usage error surfaces first)
+    // When:  install.sh is invoked with a bare `--version` (no tag operand)
+    // Then:  it exits non-zero and stderr contains "--version requires a tag"
+    //        — it must NOT loop forever under `set -euo pipefail` (the MR1 bug)
+    //
+    // The §6.2 arg-parse block runs FIRST (right after REPO=), before any
+    // platform/brew/gh work — so a bare `--version` errors immediately with no
+    // network/brew side effects. Run under a tmp MAI_PREFIX sandbox for safety.
+    const sandbox = mkdtempSync(path.join(tmpdir(), "mai-p58b-installsh-"));
+    let succeeded = false;
+    let status: number | null = null;
+    let stderr = "";
+    try {
+      execSync(`bash "${INSTALL_SH_PATH}" --version`, {
+        stdio: "pipe",
+        timeout: 15_000,
+        env: { ...process.env, MAI_PREFIX: sandbox },
+      });
+      succeeded = true;
+    } catch (err) {
+      const e = err as { status?: number | null; stderr?: Buffer | string };
+      status = e.status ?? null;
+      stderr = e.stderr ? e.stderr.toString() : "";
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+    assert.ok(!succeeded, "`bash install.sh --version` (no operand) must exit non-zero, not succeed");
+    assert.notStrictEqual(status, 0, `--version with no operand must exit non-zero (got status ${status})`);
+    assert.match(stderr, /requires a tag/, `stderr must explain the missing operand: ${JSON.stringify(stderr)}`);
+  });
+
+  it("T-InstallFlag.3: the resolved `$TAG` is passed to `gh release download` (B1 fix — selected release, not stable Latest)", () => {
+    // Given: install.sh content read from disk
+    // When:  the download command is inspected
+    // Then:  it reads `gh release download "$TAG" --repo "$REPO" --archive=tar.gz`
+    //        — WITHOUT the "$TAG" positional, --prerelease/--version resolve a tag
+    //        but still download stable Latest (the B1 silent-breakage)
+    //
+    const text = readFileSync(INSTALL_SH_PATH, "utf8");
+    assert.ok(
+      text.includes('gh release download "$TAG"'),
+      'install.sh must pass the resolved $TAG to the download command (B1 fix) — no `gh release download "$TAG"` found',
+    );
+    // The old tag-less form (which silently pulls stable Latest) must be gone.
+    assert.ok(
+      !text.includes("gh release download --repo"),
+      "the tag-less `gh release download --repo …` form must be removed (B1 silent-breakage)",
+    );
+  });
+
+  it("T-InstallFlag.4: the chosen channel is persisted to ~/.mai/agent/channel (plain text, install.sh ↔ channel.ts agree)", () => {
+    // Given: install.sh content read from disk
+    // When:  the channel-persist block is inspected
+    // Then:  it writes `$CHANNEL` (stable|prerelease) to "$HOME_BASE/.mai/agent/channel"
+    //        via `printf '%s\n'` (matches readUpdateChannel's trim-tolerant format)
+    //
+    const text = readFileSync(INSTALL_SH_PATH, "utf8");
+    assert.ok(text.includes(".mai/agent/channel"), "install.sh must write the channel to ~/.mai/agent/channel");
+    assert.ok(
+      text.includes(`printf '%s\\n' "$CHANNEL"`),
+      "install.sh must persist $CHANNEL via `printf '%s\\n'` (plain-text format readUpdateChannel reads)",
     );
   });
 });

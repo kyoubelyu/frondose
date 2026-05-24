@@ -281,12 +281,61 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
     Ok((token, sock_path, parent_dir))
 }
 
+/// Resolve an absolute `node` executable. A GUI-launched `.app` inherits launchd's
+/// minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) — Homebrew node at
+/// `/opt/homebrew/bin` is NOT on it — so a bare `Command::new("node")` fails from
+/// Finder (BLOCKER-RISK #1). Probe an ordered candidate list; fall back to bare
+/// "node" for the `cargo tauri dev` shell-PATH case.
+fn resolve_node() -> String {
+    if let Ok(p) = std::env::var("MAI_NODE_PATH") {
+        if !p.trim().is_empty() {
+            return p;
+        }
+    }
+    for candidate in [
+        "/opt/homebrew/bin/node", // Apple Silicon Homebrew
+        "/usr/local/bin/node",    // Intel Homebrew
+        "/usr/bin/node",          // system
+    ] {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "node".to_string() // dev fallback (shell PATH under `cargo tauri dev`)
+}
+
+/// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
+/// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/mai-agent` →
+/// `~/.mai/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
+/// `MAI_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
+/// relative path so `cargo tauri dev` (CWD = src-tauri) keeps working.
+/// NOTE: a fresh Mac with ONLY the `.app` (no prior install.sh) hits the dev
+/// fallback, fails to resolve, and exits via the existing `await_serve_ready`
+/// timeout — DEFERRED to P-58c (self-contained bundle).
+fn resolve_mai_bin() -> String {
+    if let Ok(p) = std::env::var("MAI_BIN_PATH") {
+        if !p.trim().is_empty() {
+            return p;
+        }
+    }
+    for candidate in [
+        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js", // Apple Silicon
+        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",    // Intel
+    ] {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "../../../dist/cli/main.js".to_string() // dev fallback (cargo tauri dev)
+}
+
 /// Spawn `node <mai_bin> serve --sock <path> --token <tok>` as a child process.
 async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
-    // Resolve the mai dist path. Dev override: MAI_BIN_PATH env var.
-    // Default for dev: `../../../dist/cli/main.js` relative to src-tauri/.
-    let mai_bin = std::env::var("MAI_BIN_PATH").unwrap_or_else(|_| "../../../dist/cli/main.js".to_string());
-    let child = Command::new("node")
+    // P-58b: resolve node + the install.sh-installed CLI by absolute path so a
+    // Finder-launched bundle (launchd minimal PATH) can spawn the sidecar.
+    let mai_bin = resolve_mai_bin();
+    let node_bin = resolve_node();
+    let child = Command::new(&node_bin)
         .arg(&mai_bin)
         .arg("serve")
         .arg("--sock")

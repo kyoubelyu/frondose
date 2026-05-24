@@ -4,11 +4,33 @@ Single-binary LinkedIn autonomous agent. Vercel AI SDK + embedded CDP + Chrome s
 
 ## Install
 
+Frondose installs from GitHub Releases via `install.sh` (the package is private —
+**not** on npm). Requirements: **macOS · Homebrew · the `gh` CLI (authenticated:
+`gh auth login`) · Google Chrome**. `install.sh` provisions Node 20 + Chrome via
+Homebrew, downloads the latest Release, builds it, and links `mai` onto your PATH.
+
 ```bash
-npm install -g @kyoube/mai-agent
+# Latest stable
+bash <(gh release download --repo kyoubelyu/mai-agent --pattern install.sh --output - )
+# ...or clone + run:
+gh repo clone kyoubelyu/mai-agent && bash mai-agent/install.sh
+
+# Latest Frondose alpha (v0.5 prerelease line):
+bash install.sh --prerelease
+
+# A specific release:
+bash install.sh --version v0.5.0-alpha.26
 ```
 
-Requirements: Node >= 20, macOS with Chrome installed.
+### Opening the unsigned Frondose app (Gatekeeper)
+
+The `.app`/`.dmg` is **unsigned** (signing/notarization arrive in a later release).
+Installs via `install.sh` / `gh` are **not quarantined** and launch normally. If you
+download the `.app` or `.dmg` with a **browser**, macOS quarantines it; on Sequoia
+(15.x) the old right-click -> Open is gone — instead:
+
+- **System Settings -> Privacy & Security ->** scroll to Security -> **"Open Anyway"** -> authenticate. One-time per app. **or**
+- Terminal: `xattr -cr /Applications/Frondose.app` (or `xattr -dr com.apple.quarantine /Applications/Frondose.app`), then open normally.
 
 ## Quick start
 
@@ -101,4 +123,4 @@ in access logs.
 
 ## License
 
-MIT
+UNLICENSED — proprietary. © Kyoube. Not for redistribution.
