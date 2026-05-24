@@ -1,6 +1,6 @@
 [package]
 name = "mai-tauri"
-version = "0.5.0-alpha.26"
+version = "0.5.0-alpha.27"
 description = "mai-agent v0.5 hover-pivot Tauri shell (M-1 demo skeleton)"
 edition = "2021"
 rust-version = "1.75"
@@ -22,3 +22,4 @@ serde_json = "1"
 rand = "0.8"
 bytes = "1"
 libc = "0.2"  # rev-1 Step 3b NIT-N1 / CONCERN-LR-2 fix: explicit direct dep for libc::kill + libc::SIGTERM in shutdown_sidecar.
+tauri-plugin-updater = { version = "2", features = [] }  # P-58d.1: app-native self-update (desktop-only build; no target qualifier needed — this app never targets mobile).

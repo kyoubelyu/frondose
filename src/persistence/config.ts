@@ -62,6 +62,14 @@ export const configJsonSchemaV2 = z.object({
   telegram: telegramSubSchema.default({ enabled: false, boundUserId: null, proxyUrl: null }),
   identity: identityRecordSchema.optional(), // P-28: folded from identity.json
   soul: soulSubSchema.default({ override: null }), // P-28: folded from soul_band_override.txt
+  // P-58d.1 [3b/CMR-1]: app-native update endpoint (Tailscale IP / .local mDNS host).
+  // Plaintext, NOT a secret. LENIENT here on purpose — NO .url(): operators hand-edit
+  // this field in .1 (pre-UI), and readConfig falls through to DEFAULT_CONFIG_V2 on ANY
+  // schema failure, so a single typo here must NOT reset all other config. URL shape is
+  // validated where it matters: serve/settings.ts settingsPatchSchema (.url(), write-time)
+  // + the Rust endpoint.parse() guard. .trim() drops stray whitespace. No schema_version
+  // bump (additive optional; old configs Zod-fill null).
+  updateServerUrl: z.string().trim().nullable().default(null),
 });
 export type ConfigJsonV2 = z.infer<typeof configJsonSchemaV2>;
 
@@ -92,6 +100,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   worker: { id: null, hostname: null, label: null, input_mode: "cdp" }, // P-32: input_mode added
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
+  updateServerUrl: null, // P-58d.1
   // identity intentionally omitted (optional).
 };
 
@@ -187,6 +196,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     telegram: base.telegram,
     identity,
     soul: { override: soulOverride },
+    updateServerUrl: null, // P-58d.1: v1 configs never carried it
   };
 }
 
