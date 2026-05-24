@@ -8,6 +8,7 @@ import { setCronMode } from "../../../persistence/mode.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
 import type { createOverlayDispatcher } from "./dispatch.js";
 import { checkBearer, readAuditTail, readJsonBody, sendJson } from "./http.js";
+import { applySettings, parseSettingsPatch, readSettings, reloadAgentDeps } from "./settings.js";
 import { showEdgeRing } from "./takeover.js";
 import type { createTurnRunner } from "./turn.js";
 
@@ -87,6 +88,27 @@ export function createRequestHandler(
           return;
         }
         sendJson(res, 200, { ok: true, ...id });
+        return;
+      }
+
+      // P-Y6 GET — mirror /identity, sendJson only (masked view; the raw key never leaves serve).
+      if (method === "GET" && url === "/settings") {
+        sendJson(res, 200, { ok: true, ...readSettings() });
+        return;
+      }
+
+      // P-Y6 POST — VALIDATE-before-write (Step-3b CONCERN-MR) → write-merge → hot-reload → masked echo.
+      // NO emitFrame/auditWriter (no key leak). A malformed body 400s and writes NOTHING.
+      if (method === "POST" && url === "/settings") {
+        const body = await readJsonBody(req);
+        const parsed = parseSettingsPatch(body);
+        if (!parsed.ok) {
+          sendJson(res, 400, { ok: false, error: parsed.error });
+          return; // config/secrets UNCHANGED — fail-fast at write, not corrupt-then-break-on-read
+        }
+        applySettings(parsed.patch);
+        const { restartRequired } = reloadAgentDeps(deps);
+        sendJson(res, 200, { ok: true, restartRequired, ...readSettings() });
         return;
       }
 

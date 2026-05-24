@@ -254,6 +254,21 @@
     .cron-banner { margin: 8px 18px 12px; padding: 8px 10px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--accent-900); font-size: 12px; }
     body.mode-auto .cron-banner { color: var(--accent-500); }
 
+    /* settings gear + panel (P-Y6) */
+    .icon-btn { flex-shrink: 0; width: 28px; height: 28px; border: 0.5px solid var(--line); border-radius: var(--r-btn); background: var(--card-bg); color: var(--ink-soft); font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .icon-btn:hover { color: var(--ink); }
+    .settings-panel { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 22px; overflow-y: auto; background: var(--page-bg); }
+    .settings-head { display: flex; align-items: center; justify-content: space-between; }
+    .settings-head span { font-size: 15px; font-weight: 600; color: var(--ink); }
+    .settings-group { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px; border: 0.5px solid var(--line); border-radius: var(--r-card); background: var(--card-bg); box-shadow: 0 1px 2px rgba(58, 90, 44, 0.05); }
+    .settings-group h4 { margin: 0 0 1px; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-muted); }
+    .settings-group label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-soft); }
+    .settings-group input, .settings-group textarea { border: 0.5px solid var(--line); border-radius: var(--r-btn); padding: 7px 10px; background: var(--glass-input); color: var(--ink); font: inherit; font-size: 13px; outline: none; }
+    .settings-group input:focus, .settings-group textarea:focus { border-color: var(--accent-500); }
+    .settings-group input::placeholder, .settings-group textarea::placeholder { color: var(--ink-muted); }
+    .settings-group textarea { resize: vertical; }
+    .settings-foot { display: flex; justify-content: flex-end; }
+
     @keyframes pulseSubtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .pulse { animation: pulseSubtle 1.6s infinite; }
     @keyframes ringPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.15; transform: scale(1.08); } }
@@ -277,6 +292,9 @@
           Auto
         </button>
       </div>
+      <button id="settings-gear" class="icon-btn" title="Settings" aria-label="Settings" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
     </header>
 
     <div class="scroll-area">
@@ -351,6 +369,32 @@
     <div id="error-banner" class="banner-error hidden">error</div>
     <button id="retry-btn" class="btn-retry hidden" type="button">Retry</button>
     <div id="cron-tick-banner" class="cron-banner hidden"></div>
+
+    <section id="settings-panel" class="settings-panel hidden">
+      <header class="settings-head">
+        <span>Settings</span>
+        <button id="settings-close" class="icon-btn" title="Close" aria-label="Close" type="button">✕</button>
+      </header>
+      <div class="settings-group">
+        <h4>Model (custom URL)</h4>
+        <label>Base URL <input id="settings-baseurl" type="text" placeholder="https://your-provider.example/v1" /></label>
+        <label>Model <input id="settings-model" type="text" placeholder="model-id" /></label>
+        <label>API key <input id="settings-key" type="password" placeholder="no key set" autocomplete="off" /></label>
+      </div>
+      <div class="settings-group">
+        <h4>Identity</h4>
+        <label>Name <input id="settings-fullname" type="text" /></label>
+        <label>Company <input id="settings-company" type="text" /></label>
+        <label>Role <input id="settings-role" type="text" /></label>
+        <label>Headline <input id="settings-headline" type="text" /></label>
+        <label>ICP target roles <input id="settings-icp-roles" type="text" placeholder="VP Sales, Head of Growth" /></label>
+      </div>
+      <div class="settings-group">
+        <h4>Soul override (advanced)</h4>
+        <textarea id="settings-soul" maxlength="3000" rows="5" placeholder="Leave blank to use the default soul band."></textarea>
+      </div>
+      <footer class="settings-foot"><button id="settings-save" class="btn-primary" type="button">Save</button></footer>
+    </section>
   </div>
   <script type="module" src="./app.js"></script>
 </body>
