@@ -3,10 +3,11 @@
        corner radius 185 (≈22.4% of the tile — close visual match to Apple's superellipse). -->
   <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="#F4F2EB"/>
   <!-- Frondose mark, copied verbatim from frondose-logo-mark.svg (viewBox 40 25 200 200),
-       scaled x2.6 (200→520, ≈63% of the tile) and translated to center at (512,512):
-       translate = (252 - 40*2.6, 252 - 25*2.6) = (148, 187). Builder visually re-centers
-       (the mark sits a touch up/left in its own viewBox — nudge translate if needed). -->
-  <g transform="translate(148,187) scale(2.6)">
+       scaled x2.6 (200→520, ≈63% of the tile) and translated to center the PAINTED
+       CONTENT at (512,512). The mark's painted bounding box in mark-coords is roughly
+       x=[27,224] y=[20,194], center ≈ (125,107) — not the viewBox center (140,125).
+       Correct translate: (512 - 125*2.6, 512 - 107*2.6) ≈ (186, 233). -->
+  <g transform="translate(186,233) scale(2.6)">
     <path d="M154 60 A64 64 0 1 0 96 156 L72 188 L120 150" stroke="#15487B" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
     <path d="M118 170 C120 108 148 66 192 52 C176 88 148 126 118 170 Z" fill="#3A9C43"/>
     <path d="M118 170 C148 126 176 88 192 52 C184 104 168 152 118 170 Z" fill="#46B54A"/>
