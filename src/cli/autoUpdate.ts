@@ -29,6 +29,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { readUpdateChannel, type UpdateChannel } from "../persistence/channel.js";
 import { readGithubConfig } from "../persistence/github.js";
 import { getHomeBase } from "../persistence/paths.js";
 import { compareVersions } from "./subcommands/update.js";
@@ -39,6 +40,7 @@ const pkg = require("../../package.json") as { version: string };
 const PKG_NAME = "@kyoube/mai-agent";
 const REPO_PATH = "kyoubelyu/mai-agent";
 const LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`;
+const RELEASES_LIST_URL = `https://api.github.com/repos/${REPO_PATH}/releases?per_page=30`;
 const RELEASES_DIR = (): string => join(getHomeBase(), ".mai", "agent", "releases");
 const UPDATE_LOCK = (): string => join(getHomeBase(), ".mai", "agent", "update.lock");
 const UPDATE_LOG = (): string => join(getHomeBase(), ".mai", "agent", "logs", "update.log");
@@ -77,6 +79,8 @@ export interface AutoUpdateDI {
   force?: boolean;
   /** Tag the log line; default "startup". */
   source?: "startup" | "bootstrap";
+  /** Override the update channel (tests). Default: readUpdateChannel(). */
+  channel?: UpdateChannel;
 }
 
 export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoUpdateResult> {
@@ -108,10 +112,14 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
   }
 
   try {
-    // (4) Latest tag
+    // (4) Latest release — channel-aware. Default "stable" = /releases/latest
+    //     (unchanged from P-22). "prerelease" = newest prerelease from the list
+    //     endpoint (opt-in via ~/.mai/agent/channel, written by install.sh).
+    const channel = di.channel ?? readUpdateChannel();
     let release: { tag_name: string; tarball_url: string };
     try {
-      release = await fetchLatestTag(fetchFn, token);
+      release =
+        channel === "prerelease" ? await fetchLatestPrerelease(fetchFn, token) : await fetchLatestTag(fetchFn, token);
     } catch (e) {
       logAttempt(source, `skip:network ${(e as Error).message}`);
       return { action: "skipped", reason: "network" };
@@ -241,6 +249,30 @@ export async function fetchLatestTag(
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json() as Promise<{ tag_name: string; tarball_url: string }>;
+}
+
+export async function fetchLatestPrerelease(
+  fetchFn: typeof globalThis.fetch,
+  token: string,
+): Promise<{ tag_name: string; tarball_url: string }> {
+  const resp = await fetchFn(RELEASES_LIST_URL, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const all = (await resp.json()) as Array<{
+    tag_name: string;
+    tarball_url: string;
+    prerelease: boolean;
+    draft: boolean;
+    published_at: string;
+  }>;
+  const pres = all
+    .filter((r) => r.prerelease && !r.draft)
+    .sort((x, y) => (x.published_at < y.published_at ? 1 : x.published_at > y.published_at ? -1 : 0));
+  const latest = pres[0];
+  if (latest === undefined) throw new Error("no prerelease found");
+  return { tag_name: latest.tag_name, tarball_url: latest.tarball_url };
 }
 
 export async function downloadTarball(

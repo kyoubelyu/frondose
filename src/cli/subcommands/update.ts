@@ -27,18 +27,66 @@ export interface UpdateResult {
 }
 
 /**
- * Compare two semver strings (with or without leading "v").
- * Assumes strict `{v}major.minor.patch` format.
+ * Compare two semver strings (with or without a leading "v"), INCLUDING
+ * prerelease suffixes (e.g. "0.5.0-alpha.25"). Implements the SemVer §11
+ * precedence rules this project's tags need:
+ *   1. Compare major.minor.patch numerically.
+ *   2. A version WITHOUT a prerelease outranks one WITH a prerelease at the same
+ *      core (1.0.0 > 1.0.0-alpha.1).
+ *   3. Two prereleases compare identifier-by-identifier: numeric identifiers
+ *      numerically, others lexically; numeric < non-numeric; fewer ids = lower.
  * @returns -1 if a < b, 0 if equal, 1 if a > b
  */
 export function compareVersions(a: string, b: string): -1 | 0 | 1 {
-  const pa = a.replace(/^v/, "").split(".").map(Number);
-  const pb = b.replace(/^v/, "").split(".").map(Number);
+  const [coreA, preA] = splitVersion(a);
+  const [coreB, preB] = splitVersion(b);
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1;
-    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1;
+    const x = coreA[i] ?? 0;
+    const y = coreB[i] ?? 0;
+    if (x > y) return 1;
+    if (x < y) return -1;
+  }
+  // Presence of a prerelease: a release outranks its prereleases.
+  if (preA.length === 0 && preB.length === 0) return 0;
+  if (preA.length === 0) return 1;
+  if (preB.length === 0) return -1;
+  const n = Math.max(preA.length, preB.length);
+  for (let i = 0; i < n; i++) {
+    const x = preA[i];
+    const y = preB[i];
+    if (x === undefined) return -1; // fewer identifiers = lower precedence
+    if (y === undefined) return 1;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) {
+      const dx = Number(x);
+      const dy = Number(y);
+      if (dx > dy) return 1;
+      if (dx < dy) return -1;
+    } else if (xn) {
+      return -1; // numeric identifiers rank below non-numeric
+    } else if (yn) {
+      return 1;
+    } else {
+      if (x > y) return 1;
+      if (x < y) return -1;
+    }
   }
   return 0;
+}
+
+/** Split "v1.2.3-alpha.4" -> [[1,2,3], ["alpha","4"]]. Non-numeric core parts -> 0. */
+function splitVersion(v: string): [number[], string[]] {
+  const clean = v.replace(/^v/, "").trim();
+  const dashIdx = clean.indexOf("-");
+  const core = dashIdx === -1 ? clean : clean.slice(0, dashIdx);
+  const pre = dashIdx === -1 ? "" : clean.slice(dashIdx + 1);
+  const coreNums = core.split(".").map((s) => {
+    const num = Number(s);
+    return Number.isFinite(num) ? num : 0;
+  });
+  const preIds = pre === "" ? [] : pre.split(".");
+  return [coreNums, preIds];
 }
 
 export async function runUpdateSubcommand(opts: UpdateSubcommandOpts = {}): Promise<void> {

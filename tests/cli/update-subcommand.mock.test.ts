@@ -462,13 +462,17 @@ describe("runUpdateSubcommand — error handling", () => {
 // ─── T-UPDATE.11: compareVersions unit tests ────────────────────────────────
 
 describe("compareVersions", () => {
-  it("T-UPDATE.11: returns correct -1/0/1 for 8 version pairs", async () => {
-    // Given: Various "v{major.minor.patch}" version string pairs
+  it("T-UPDATE.11: returns correct -1/0/1 for 8 release-core pairs + the P-58b prerelease pairs", async () => {
+    // Given: "v{major.minor.patch}" version string pairs PLUS P-58b prerelease pairs
     // When:  compareVersions(a, b) is called
-    // Then:  Returns correct -1/0/1 for all 8 test cases:
+    // Then:  Returns correct -1/0/1 for all cases:
+    //        Release-core (8, unchanged from P-20):
     //        0.4.14 vs 0.4.15 → -1 | 0.4.15 vs 0.4.14 → 1 | 0.4.14 vs 0.4.14 → 0
     //        0.3.0  vs 0.4.0  → -1 | 1.0.0  vs 0.9.9  → 1 | v0.4.14 vs 0.4.14 → 0
     //        v0.4.15 vs 0.4.14 → 1  | 0.10.0 vs 0.9.0  → 1
+    //        P-58b prerelease (7, NEW — RED at 4a with the old release-core-only
+    //        comparator; GREEN once builder rewrites compareVersions at 4b/Step 5):
+    //        these mirror T-Compare.1..11 in update-channel.mock.test.ts.
     const cases: [string, string, -1 | 0 | 1, string][] = [
       ["0.4.14", "0.4.15", -1, "basic less-than (patch)"],
       ["0.4.15", "0.4.14", 1, "basic greater-than (patch)"],
@@ -478,6 +482,14 @@ describe("compareVersions", () => {
       ["v0.4.14", "0.4.14", 0, "v prefix stripped correctly"],
       ["v0.4.15", "0.4.14", 1, "v prefix on newer"],
       ["0.10.0", "0.9.0", 1, "two-digit minor (numeric comparison, not lexicographic)"],
+      // ── P-58b prerelease pairs ──────────────────────────────────────────────
+      ["0.5.0-alpha.25", "0.5.0-alpha.26", -1, "P-58b: prerelease ascending (numeric id)"],
+      ["0.5.0-alpha.25", "0.5.0", -1, "P-58b: prerelease < its own release"],
+      ["0.5.0", "0.5.0-alpha.25", 1, "P-58b: release > prerelease (symmetry)"],
+      ["0.5.0-alpha.25", "0.4.49", 1, "P-58b: alpha local vs stable Latest — no-downgrade invariant (R1)"],
+      ["0.5.0-alpha.2", "0.5.0-alpha.25", -1, "P-58b: numeric prerelease ids compared numerically not lexically"],
+      ["0.5.0-alpha.25", "0.5.0-alpha.25", 0, "P-58b: equal prereleases"],
+      ["0.5.0-alpha", "0.5.0-alpha.1", -1, "P-58b: fewer prerelease identifiers = lower precedence"],
     ];
     for (const [a, b, expected, rationale] of cases) {
       const actual = compareVersions(a, b);
