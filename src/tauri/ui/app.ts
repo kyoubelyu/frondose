@@ -574,7 +574,7 @@ modeAutoTabEl.addEventListener("click", () => {
 });
 const settings = createSettingsPanel({ invoke, surfaceError });
 settingsGearEl.addEventListener("click", () => {
-  void settings.open();
+  settings.open().catch((e) => surfaceError("Open settings", e));
 });
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();
