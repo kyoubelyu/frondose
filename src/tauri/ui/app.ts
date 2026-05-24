@@ -13,6 +13,7 @@ import {
   type InputElementLike,
   type TextElementLike,
 } from "./render.js";
+import { createSettingsPanel } from "./settings.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -100,6 +101,7 @@ const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
 const modeManualTabEl = mustGet<ButtonElementLike>("mode-manual-tab");
 const modeAutoTabEl = mustGet<ButtonElementLike>("mode-auto-tab");
+const settingsGearEl = mustGet<ButtonElementLike>("settings-gear");
 const tickerEl = mustGet<TextElementLike>("ticker");
 const outputEl = mustGet<TextElementLike>("output");
 const outputMsgEl = mustGet<ElementLike>("output-msg");
@@ -569,6 +571,10 @@ modeManualTabEl.addEventListener("click", () => {
 });
 modeAutoTabEl.addEventListener("click", () => {
   void applyMode("auto");
+});
+const settings = createSettingsPanel({ invoke, surfaceError });
+settingsGearEl.addEventListener("click", () => {
+  void settings.open();
 });
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();

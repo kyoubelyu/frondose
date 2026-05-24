@@ -197,6 +197,9 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       "src/persistence/mode.ts",
       "src/cli/main.ts",
       "src/cli/subcommands/serve/dispatch.ts",
+      //  - P-Y6 (in-app settings panel): the serve settings module (the routes.ts GET/POST + tauri/ui/settings.*
+      //    + index.html + frondoseCss.generated.ts transitive are already covered above / under src/tauri/ui/).
+      "src/cli/subcommands/serve/settings.ts",
     ];
     const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
     const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
