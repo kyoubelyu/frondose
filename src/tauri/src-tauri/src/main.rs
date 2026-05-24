@@ -79,6 +79,21 @@ async fn mai_chrome_ensure(state: tauri::State<'_, MaiServeState>) -> Result<Val
     uds_request(state.inner(), Method::POST, "/chrome/ensure", Some(json!({}))).await
 }
 
+// P-Y6 — in-app settings (auth/identity/soul). Mirror mai_identity → GET /settings;
+// mai_set_settings POSTs the masked-safe patch. The serve handler returns a masked view.
+#[tauri::command]
+async fn mai_get_settings(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+    uds_request(state.inner(), Method::GET, "/settings", None).await
+}
+
+#[tauri::command]
+async fn mai_set_settings(
+    state: tauri::State<'_, MaiServeState>,
+    settings: Value,
+) -> Result<Value, String> {
+    uds_request(state.inner(), Method::POST, "/settings", Some(settings)).await
+}
+
 #[tauri::command]
 async fn mai_agent_turn(
     state: tauri::State<'_, MaiServeState>,
@@ -343,6 +358,8 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             mai_health,
             mai_identity,
+            mai_get_settings,
+            mai_set_settings,
             mai_chrome_ensure,
             mai_agent_turn,
             mai_agent_abort,
