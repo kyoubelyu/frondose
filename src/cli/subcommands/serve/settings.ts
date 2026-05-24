@@ -24,6 +24,7 @@ export interface SettingsView {
   };
   identity: IdentityPatch;
   soul: { override: string | null };
+  updateServerUrl: string | null; // P-58d.1: plaintext, NOT masked (contrast llm.maskedKey)
 }
 
 // Step-3b CONCERN-MR — validate-before-write. The write helpers are atomic but do NOT validate SHAPE;
@@ -43,6 +44,7 @@ const settingsPatchSchema = z.object({
     .optional(),
   identity: identityPatchSchema.optional(), // EXISTING schema (identitySchema.ts:44)
   soul: z.object({ override: z.string().max(3000).nullable() }).optional(), // EXISTING ≤3000 constraint
+  updateServerUrl: z.string().url().nullable().optional(), // P-58d.1: omit=unchanged, null=clear, url=set
 });
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
@@ -77,6 +79,7 @@ export function readSettings(): SettingsView {
     },
     identity: identity as IdentityPatch,
     soul: { override: cfg.soul.override },
+    updateServerUrl: cfg.updateServerUrl, // P-58d.1: plaintext
   };
 }
 
@@ -107,7 +110,7 @@ export function applySettings(patch: SettingsPatch): void {
       });
     }
   }
-  if (patch.identity || patch.soul) {
+  if (patch.identity || patch.soul || patch.updateServerUrl !== undefined) {
     const cfg = readConfig();
     const next = { ...cfg };
     if (patch.identity) {
@@ -115,6 +118,7 @@ export function applySettings(patch: SettingsPatch): void {
       next.identity = { ...merged, updatedAt: new Date().toISOString() } as typeof cfg.identity;
     }
     if (patch.soul) next.soul = { override: patch.soul.override ?? null };
+    if (patch.updateServerUrl !== undefined) next.updateServerUrl = patch.updateServerUrl; // P-58d.1
     writeConfig(next, DEFAULT_CONFIG_PATH());
   }
 }

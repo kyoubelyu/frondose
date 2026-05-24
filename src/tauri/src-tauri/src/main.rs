@@ -14,8 +14,9 @@ use hyperlocal::{UnixClientExt, Uri};
 use rand::RngCore;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, RunEvent, WindowEvent};
+use tauri_plugin_updater::UpdaterExt;
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// Per-app state: bearer token + UDS path + sidecar child handle.
 struct MaiServeState {
@@ -92,6 +93,34 @@ async fn mai_set_settings(
     settings: Value,
 ) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/settings", Some(settings)).await
+}
+
+// P-58d.1 — manual "Check for updates" trigger (OQ-58d.6). Custom command (no
+// plugin command exposed to JS → no capability change). The Settings-panel
+// button that calls this ships in P-58d.1-UI.
+#[tauri::command]
+async fn mai_check_update(app: tauri::AppHandle) -> Result<Value, String> {
+    let url = read_update_server_url().ok_or("no update server URL configured")?;
+    let endpoint = format!("{}/latest.json", url.trim_end_matches('/'));
+    let parsed = endpoint
+        .parse()
+        .map_err(|e| format!("invalid endpoint {}: {}", endpoint, e))?;
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![parsed])
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+    match updater.check().await.map_err(|e| e.to_string())? {
+        Some(update) => {
+            update
+                .download_and_install(|_chunk, _total| {}, || {})
+                .await
+                .map_err(|e| e.to_string())?;
+            app.restart() // -> ! ; coerces to Result, no code after
+        }
+        None => Ok(json!({ "ok": true, "updateAvailable": false })),
+    }
 }
 
 #[tauri::command]
@@ -329,6 +358,68 @@ fn resolve_mai_bin() -> String {
     "../../../dist/cli/main.js".to_string() // dev fallback (cargo tauri dev)
 }
 
+/// P-58d.1: read the operator-set `updateServerUrl` directly from
+/// ~/.mai/agent/config.json (independent of the sidecar; the updater runs
+/// around it). None when absent/null/empty → the updater is a clean no-op.
+/// Uses $HOME — no new crate dep (serde_json is already present).
+fn read_update_server_url() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::Path::new(&home).join(".mai/agent/config.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&raw).ok()?;
+    let url = v.get("updateServerUrl")?.as_str()?.trim().to_string();
+    if url.is_empty() {
+        None
+    } else {
+        Some(url)
+    }
+}
+
+/// P-58d.1: check the runtime-configured update endpoint once at launch
+/// (OQ-58d.6: check-on-launch). Runs in a spawned task so a down/slow server
+/// never blocks the UI. No URL → returns immediately. On a found update:
+/// download → install → restart. All failures are logged + swallowed (a broken
+/// updater must NOT crash the app).
+async fn run_update_check(app: AppHandle) {
+    let Some(url) = read_update_server_url() else {
+        return;
+    };
+    let endpoint = format!("{}/latest.json", url.trim_end_matches('/'));
+    let parsed = match endpoint.parse() {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("[mai-tauri] invalid update endpoint {}: {}", endpoint, e);
+            return;
+        }
+    };
+    let updater = match app
+        .updater_builder()
+        .endpoints(vec![parsed])
+        .and_then(|b| b.build())
+    {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("[mai-tauri] updater init failed: {}", e);
+            return;
+        }
+    };
+    match updater.check().await {
+        Ok(Some(update)) => {
+            eprintln!("[mai-tauri] update available: {}", update.version);
+            if let Err(e) = update
+                .download_and_install(|_chunk, _total| {}, || {})
+                .await
+            {
+                eprintln!("[mai-tauri] update install failed: {}", e);
+                return;
+            }
+            app.restart();
+        }
+        Ok(None) => eprintln!("[mai-tauri] no update available"),
+        Err(e) => eprintln!("[mai-tauri] update check failed: {}", e),
+    }
+}
+
 /// Spawn `node <mai_bin> serve --sock <path> --token <tok>` as a child process.
 async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
     // P-58b: resolve node + the install.sh-installed CLI by absolute path so a
@@ -381,20 +472,16 @@ async fn shutdown_sidecar(state: &MaiServeState) {
 #[tokio::main]
 async fn main() {
     let (token, sock_path, parent_dir) = provision_state().expect("provision UDS state");
-    let child = spawn_mai_serve(&sock_path, &token).await.expect("spawn mai serve");
+    // P-58d.1 [3b/CMR-2]: best-effort spawn — a missing/broken sidecar must NOT panic
+    // before the updater gets a turn (the updater is the recovery path).
+    let child = spawn_mai_serve(&sock_path, &token).await.ok();
 
-    let state = MaiServeState {
+    let state = Arc::new(MaiServeState {
         token,
         sock_path: sock_path.clone(),
         parent_dir: parent_dir.clone(),
-        child: Arc::new(Mutex::new(Some(child))),
-    };
-    if let Err(e) = await_serve_ready(&state, 10_000).await {
-        eprintln!("[mai-tauri] mai serve startup failed: {}", e);
-        shutdown_sidecar(&state).await;
-        std::process::exit(1);
-    }
-    let state = Arc::new(state);
+        child: Arc::new(Mutex::new(child)),
+    });
     let state_clone = state.clone();
 
     let app = tauri::Builder::default()
@@ -404,6 +491,7 @@ async fn main() {
             parent_dir: state.parent_dir.clone(),
             child: state.child.clone(),
         })
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             mai_health,
             mai_identity,
@@ -418,19 +506,38 @@ async fn main() {
             mai_workflow_approve,
             mai_workflow_decline,
             mai_workflow_handoff,
-            mai_workflow_cancel
+            mai_workflow_cancel,
+            mai_check_update
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");
 
-    // P-56b: spawn SSE subscriber + SIGTERM handler before the blocking app.run().
     let app_handle = app.handle().clone();
+
+    // P-58d.1 [3b/CMR-2 + 3b-r2/CONCERN-MR]: spawn the updater task BEFORE the
+    // sidecar-readiness gate so it runs INDEPENDENT of sidecar health — a sidecar-breaking
+    // SHELL release can self-recover. (Thin-launcher .1 swaps the shell only; full
+    // agent-sidecar recovery is .3. .1 guarantees the check always RUNS.) The task PARKS on
+    // `ready_notify.notified()` until the RunEvent::Ready arm of app.run() fires, so
+    // check()/download_and_install()/restart() can only execute once the event loop is live
+    // and the app.run shutdown handlers are registered — closing the pre-app.run() restart
+    // race (a pre-run restart would BYPASS those handlers).
+    let ready_notify = Arc::new(Notify::new());
+    let app_handle_updater = app_handle.clone();
+    let updater_ready = ready_notify.clone();
+    tokio::spawn(async move {
+        updater_ready.notified().await; // park until the run loop signals Ready
+        run_update_check(app_handle_updater).await;
+    });
+
+    // P-56b: SSE subscriber (reconnecting — tolerates a not-yet-ready sidecar).
     let app_handle_sse = app_handle.clone();
     let state_for_sse = state.clone();
     tokio::spawn(async move {
         run_sse_subscriber(app_handle_sse, state_for_sse).await;
     });
 
+    // SIGTERM handler.
     let app_handle_sigterm = app_handle.clone();
     tokio::spawn(async move {
         use tokio::signal::unix::{signal, SignalKind};
@@ -443,8 +550,25 @@ async fn main() {
         }
     });
 
+    // P-58d.1 [3b/CMR-2]: sidecar readiness is now NON-FATAL (was std::process::exit(1)).
+    // Same 10s budget → happy path unchanged (window appears once the sidecar is healthy);
+    // on failure we LOG + proceed to a degraded window so the updater (spawned above) can
+    // recover a bad release instead of the app silently exiting.
+    if let Err(e) = await_serve_ready(&state, 10_000).await {
+        eprintln!(
+            "[mai-tauri] mai serve not ready: {} — UI degraded; updater may recover a bad release",
+            e
+        );
+    }
+
     app.run(move |app_handle, event| {
         match event {
+            // P-58d.1 [3b-r2/CONCERN-MR]: the event loop is live — release the parked
+            // updater task. notify_one() stores a permit, so this is race-free even if the
+            // task has not yet reached notified().await when Ready fires.
+            RunEvent::Ready => {
+                ready_notify.notify_one();
+            }
             // D-RUN-1 (safety): macOS does NOT auto-exit when the last window closes
             // (NSApplication convention), so RunEvent::ExitRequested never fires on a
             // window-close — the spawned `mai serve` sidecar (+ agent loop + Chrome
