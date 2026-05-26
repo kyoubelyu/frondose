@@ -52,21 +52,40 @@ test("T-M82: MAI_CDP_PORT env var: default is 9222; custom value parses to integ
 
 // ─── T-M83 (D-12 refresh — P-11 Step 4a) ──────────────────────────────────────
 
-test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 7-tool no-session set (P-Z3 rebaseline from 4)", () => {
+test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 19-tool no-session set (P-SP-A rebaseline)", () => {
   // Given: no CDP session (no LinkedIn tools), no memory, no identity, no control tools
   // When: makeAllTools(undefined, undefined, undefined, undefined) called
-  // Then: sorted keys === the 7 session-independent tools (P-Z3 rebaseline: + publish_event,
-  //       query_lead_globally [P-26 coords] + schedule_task [P-31] register without a session)
+  // Then: sorted keys === the 19 session-independent tools (base + 12 worker-only sales kernel tools)
 
   const toolsNoSession = makeAllTools(undefined);
   const keys = Object.keys(toolsNoSession).sort();
 
   assert.deepEqual(
     keys,
-    ["analyze_screenshot", "echo", "publish_event", "query_lead_globally", "schedule_task", "web_fetch", "web_search"],
-    `T-M83: makeAllTools(undefined) must return the 7-tool no-session set; got: [${keys.join(", ")}]`,
+    [
+      "analyze_screenshot",
+      "echo",
+      "get_account_context",
+      "get_auto_run_state",
+      "get_lead_context",
+      "list_due_followups",
+      "mark_message_sent",
+      "promote_candidate_to_lead",
+      "publish_event",
+      "query_lead_globally",
+      "record_auto_action",
+      "record_lead_event",
+      "record_raw_candidate",
+      "save_message_draft",
+      "schedule_follow_up",
+      "schedule_task",
+      "update_lead_stage",
+      "web_fetch",
+      "web_search",
+    ],
+    `T-M83: makeAllTools(undefined) must return the 19-tool no-session set; got: [${keys.join(", ")}]`,
   );
-  assert.equal(keys.length, 7, "exactly 7 tools when no session (P-Z3 rebaseline)");
+  assert.equal(keys.length, 19, "exactly 19 tools when no session (P-SP-A rebaseline)");
 
   // Spot-check that echo tool is still functional
   assert.ok(typeof toolsNoSession.echo?.execute === "function", "echo tool execute must be a function");

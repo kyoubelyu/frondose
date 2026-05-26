@@ -36,6 +36,9 @@ export function borderQuadToBox(border: number[]): { x: number; y: number; w: nu
 export class CdpClient {
   private readonly client: CdpHandle;
   private refMap: RefMap = {};
+  /** [P-62 F-1] Set ONLY by injectStealth(client) after Page.addScriptToEvaluateOnNewDocument
+   *  registers STEALTH_INIT_SCRIPT on this target. navigate() asserts it before any nav. */
+  private stealthInjected = false;
 
   private constructor(client: CdpHandle) {
     this.client = client;
@@ -64,7 +67,22 @@ export class CdpClient {
     return this.client;
   }
 
+  /** @internal — called by injectStealth() in src/cdp/stealth.ts after registration. */
+  markStealthInjected(): void {
+    this.stealthInjected = true;
+  }
+
+  /** @internal — used by injectStealth() for idempotency early-return + by tests/lifecycle guards. */
+  isStealthInjected(): boolean {
+    return this.stealthInjected;
+  }
+
   async navigate(url: string, waitUntil?: WaitState): Promise<void> {
+    // [P-62 F-1] Structural invariant: stealth MUST be injected before any navigation on this
+    // target, or `"webdriver" in navigator === true` exposure recurs (92-reconnect regression).
+    if (!this.stealthInjected) {
+      throw new Error("navigate: stealth not injected — call injectStealth(client) first");
+    }
     await this.client.Page.enable();
     const r = await this.client.Page.navigate({ url });
     if (r.errorText) throw new Error(`navigate failed: ${r.errorText}`);
@@ -177,6 +195,13 @@ export class CdpClient {
     const result = await getSnapshot(this.client, opts);
     this.refMap = result.refs;
     return result;
+  }
+
+  /** [P-59 INSPECT-1] Merge synthesized overlay refs into the current snapshot's refMap so the agent
+   *  can click overlay items (menuitems/dialog) that are ABSENT from the AX tree. Additive: does NOT
+   *  clear the AX-derived refs (called right after snapshot() in captureCurrentSurfaceContext). */
+  mergeRefs(extra: RefMap): void {
+    Object.assign(this.refMap, extra);
   }
 
   async waitFor(opts: WaitForOpts): Promise<void> {

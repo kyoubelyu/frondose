@@ -55,13 +55,13 @@ function makeMockSession() {
   } as any;
 }
 
-// ─── T-Inv.1 — 34 worker tools; key scope-relevant tools present ────────────
+// ─── T-Inv.1 — 47 worker tools; key scope-relevant tools present ────────────
 
 describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 + P-58a MAI_TIER tiering)", () => {
   // P-58a RECONCILED: the worker tool count is now TIER-DEPENDENT. The canonical inventory test asserts BOTH
-  // the power count (full = 35, incl. telegram_notify + gh_issue) AND the consumer count (= power − 2 = 33,
+  // the power count (full = 47, incl. telegram_notify + gh_issue) AND the consumer count (= power − 2 = 45,
   // the 2 operator-output tools gated out). The scope-graceful + todo_write tools are present in BOTH tiers.
-  it("T-Inv.1: worker tier:'power' → 35 tools (incl. telegram_notify + gh_issue); tier:'consumer' → 33 (those 2 gated out); web_search/analyze_screenshot/todo_write present in BOTH", () => {
+  it("T-Inv.1: worker tier:'power' → 47 tools (incl. telegram_notify + gh_issue); tier:'consumer' → 45 (those 2 gated out); web_search/analyze_screenshot/todo_write present in BOTH", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -87,14 +87,14 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
     const powerNames = Object.keys(power);
     const consumerNames = Object.keys(consumer);
 
-    // POWER = the full inventory (today's count) per CLAUDE.md L70 (P-Y1 +todo_write).
+    // POWER = the full inventory (today's count) including P-SP-A sales kernel tools.
     assert.equal(
       powerNames.length,
-      35,
+      47,
       `power worker tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`,
     );
     // CONSUMER = power − 2 (telegram_notify + gh_issue gated out — the one P-58a contract-adjacent change).
-    assert.equal(consumerNames.length, 33, `consumer = power−2; got ${consumerNames.length}`);
+    assert.equal(consumerNames.length, 45, `consumer = power−2; got ${consumerNames.length}`);
 
     // the 2 operator-output tools: power-only
     assert.ok("telegram_notify" in power && "gh_issue" in power, "power includes the operator-output tools");

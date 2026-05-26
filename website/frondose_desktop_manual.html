@@ -1,0 +1,178 @@
+<h2 class="sr-only">Frondose desktop app in Manual mode with the new Living Moss and Warm Sand palette.</h2>
+
+<style>
+.appM { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #F4F2EB; border-radius: 14px; overflow: hidden; border: 0.5px solid #E0DDD2; }
+.tbM { display: flex; align-items: center; padding: 9px 14px; background: #EBE7DC; border-bottom: 0.5px solid #E0DDD2; gap: 12px; }
+.tbM-dots { display: flex; gap: 6px; }
+.tbM-dot { width: 11px; height: 11px; border-radius: 50%; }
+.tbM-brand { display: flex; align-items: center; gap: 6px; }
+.tbM-logo { width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, #5A8043, #3A5A2C); display: flex; align-items: center; justify-content: center; }
+.tbM-logo svg { display: block; }
+.tbM-name { font-size: 12px; color: #4A4A40; font-weight: 600; letter-spacing: 0.3px; }
+.tbM-switcher { margin-left: auto; display: flex; background: #DAD5C5; border-radius: 7px; padding: 2px; gap: 2px; }
+.tbM-tab { padding: 4px 12px; font-size: 11px; font-weight: 500; border-radius: 5px; color: #7A7468; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+.tbM-tab.active { background: white; color: #2A2A22; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+.conv { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; min-height: 440px; }
+
+.msg-user { align-self: flex-end; max-width: 75%; background: #2A2A22; color: white; padding: 9px 14px; border-radius: 14px 14px 4px 14px; font-size: 13.5px; line-height: 1.5; }
+
+.msg-agent { display: flex; gap: 11px; align-items: flex-start; }
+.avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 2px; box-shadow: 0 0 10px rgba(90, 128, 67, 0.25); }
+.msg-agent-body { max-width: 88%; }
+.msg-agent-text { font-size: 13.5px; color: #2A2A22; line-height: 1.6; }
+
+.inline-wf-card { margin-top: 10px; background: white; border: 0.5px solid #E0DDD2; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(58, 90, 44, 0.04); }
+.iwf-head { padding: 11px 14px; background: linear-gradient(180deg, #FAFAF5, white); border-bottom: 0.5px solid #EFEAE0; display: flex; align-items: center; gap: 10px; }
+.iwf-icon { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; }
+.iwf-title { font-size: 12.5px; font-weight: 600; color: #2A2A22; }
+.iwf-sub { font-size: 10.5px; color: #8B8475; margin-top: 1px; }
+.iwf-progress-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.iwf-progress-bar { width: 70px; height: 3px; background: #EFEAE0; border-radius: 2px; overflow: hidden; }
+.iwf-progress-fill { height: 100%; background: linear-gradient(90deg, #5A8043, #7AA060); }
+.iwf-progress-text { font-size: 10.5px; color: #7A7468; font-variant-numeric: tabular-nums; }
+
+.iwf-steps { padding: 8px 0; }
+.iwf-step { display: flex; align-items: center; gap: 10px; padding: 6px 14px; font-size: 12px; }
+.iwf-step-dot { width: 14px; height: 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.iwf-step-text { flex: 1; color: #2A2A22; }
+.iwf-step-text.muted { color: #8B8475; }
+.iwf-step-time { font-size: 10.5px; color: #8B8475; font-variant-numeric: tabular-nums; }
+.iwf-step.current .iwf-step-text { font-weight: 500; }
+
+.iwf-actions { padding: 8px 12px; border-top: 0.5px solid #EFEAE0; display: flex; align-items: center; gap: 8px; background: #FAFAF5; }
+.iwf-btn { font-size: 11px; padding: 5px 10px; border-radius: 6px; border: 0.5px solid #E0DDD2; background: white; color: #2A2A22; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.iwf-btn-primary { background: linear-gradient(180deg, #E0B070, #C8943A); color: #3A2A0A; border-color: transparent; box-shadow: 0 1px 2px rgba(200, 148, 58, 0.25); }
+.iwf-btn-ghost { background: transparent; border: none; color: #7A7468; }
+
+.follow-up { font-size: 13.5px; color: #2A2A22; line-height: 1.6; margin-top: 12px; }
+
+.composer { padding: 12px 18px 16px; }
+.composer-inner { background: white; border: 0.5px solid #E0DDD2; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.composer-inner input { flex: 1; border: none; background: transparent; font-size: 13px; outline: none; color: #2A2A22; font-family: inherit; }
+.composer-kbd { font-size: 10px; color: #8B8475; background: #EFEAE0; padding: 2px 5px; border-radius: 3px; }
+.composer-send { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; box-shadow: 0 1px 3px rgba(58, 90, 44, 0.25); }
+
+@keyframes pulseSubtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.pulse { animation: pulseSubtle 1.6s infinite; }
+</style>
+
+<div class="appM">
+
+  <div class="tbM">
+    <div class="tbM-dots">
+      <div class="tbM-dot" style="background: #E26B62;"></div>
+      <div class="tbM-dot" style="background: #E5B147;"></div>
+      <div class="tbM-dot" style="background: #6FA86F;"></div>
+    </div>
+    <div class="tbM-brand">
+      <div class="tbM-logo">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22V8"/>
+          <path d="M12 14C12 14 7 13 5 10C7 9 12 10 12 14Z"/>
+          <path d="M12 17C12 17 17 16 19 13C17 12 12 13 12 17Z"/>
+          <path d="M12 11C12 11 8 9 7 6C9 5 12 7 12 11Z"/>
+        </svg>
+      </div>
+      <div class="tbM-name">Frondose</div>
+    </div>
+    <div class="tbM-switcher">
+      <div class="tbM-tab active">
+        <i class="ti ti-message-circle" style="font-size:11px;" aria-hidden="true"></i>
+        Manual
+      </div>
+      <div class="tbM-tab">
+        <i class="ti ti-bolt" style="font-size:11px;" aria-hidden="true"></i>
+        Auto
+      </div>
+    </div>
+  </div>
+
+  <div class="conv">
+
+    <div class="msg-user">
+      I need to find around 50 UK plastics manufacturers for our Interplas outreach. Can you help?
+    </div>
+
+    <div class="msg-agent">
+      <div class="avatar"><i class="ti ti-sparkles" style="font-size:13px;" aria-hidden="true"></i></div>
+      <div class="msg-agent-body">
+        <div class="msg-agent-text">
+          Happy to help. I'll do this on LinkedIn Sales Navigator since that's where you've sourced suppliers before. Here's the plan — I'll pause for your approval before adding anyone to the outreach sheet.
+        </div>
+
+        <div class="inline-wf-card">
+          <div class="iwf-head">
+            <div class="iwf-icon"><i class="ti ti-route" style="font-size:14px;" aria-hidden="true"></i></div>
+            <div>
+              <div class="iwf-title">LinkedIn supplier discovery</div>
+              <div class="iwf-sub">7 steps · 1 confirmation required</div>
+            </div>
+            <div class="iwf-progress-wrap">
+              <div class="iwf-progress-bar"><div class="iwf-progress-fill" style="width: 30%;"></div></div>
+              <div class="iwf-progress-text">2 / 7</div>
+            </div>
+          </div>
+
+          <div class="iwf-steps">
+
+            <div class="iwf-step">
+              <div class="iwf-step-dot" style="background: #6FA86F;"><i class="ti ti-check" style="font-size: 8px; color:white;" aria-hidden="true"></i></div>
+              <div class="iwf-step-text">Parse search criteria</div>
+              <div class="iwf-step-time">0.4s</div>
+            </div>
+
+            <div class="iwf-step">
+              <div class="iwf-step-dot" style="background: #6FA86F;"><i class="ti ti-check" style="font-size: 8px; color:white;" aria-hidden="true"></i></div>
+              <div class="iwf-step-text">Open LinkedIn Sales Navigator</div>
+              <div class="iwf-step-time">1.8s</div>
+            </div>
+
+            <div class="iwf-step current">
+              <div class="iwf-step-dot pulse" style="background: #F2DCAE; border: 1.5px solid #D9A75F;"><div style="width:4px; height:4px; background:#9A6F1F; border-radius:50%;"></div></div>
+              <div class="iwf-step-text">Apply filters: industry, size, location</div>
+              <div class="iwf-step-time" style="color: #9A6F1F;">running</div>
+            </div>
+
+            <div class="iwf-step">
+              <div class="iwf-step-dot" style="background: #E3ECF6; border: 1.5px solid #B5C6DC;"></div>
+              <div class="iwf-step-text muted">Review filtered companies</div>
+              <div class="iwf-step-time" style="color: #4A6E9B;">needs you</div>
+            </div>
+
+            <div class="iwf-step">
+              <div class="iwf-step-dot" style="background: #EFEAE0;"></div>
+              <div class="iwf-step-text muted">Extract contact details · +2 more steps</div>
+            </div>
+
+          </div>
+
+          <div class="iwf-actions">
+            <button class="iwf-btn-ghost" style="font-size: 11px; padding: 5px 8px; cursor: pointer;">
+              <i class="ti ti-chevron-down" style="font-size:11px; vertical-align:-1px;" aria-hidden="true"></i>
+              Show all steps
+            </button>
+            <div style="margin-left: auto; display: flex; gap: 6px;">
+              <button class="iwf-btn"><i class="ti ti-player-pause" style="font-size:11px;" aria-hidden="true"></i>Pause</button>
+              <button class="iwf-btn iwf-btn-primary"><i class="ti ti-bolt" style="font-size:11px;" aria-hidden="true"></i>Hand off to Auto</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="follow-up">
+          Want me to widen the company size range? Right now I'm targeting 51–500 employees.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="composer">
+    <div class="composer-inner">
+      <i class="ti ti-paperclip" style="color:#8B8475; font-size:15px;" aria-hidden="true"></i>
+      <input type="text" placeholder="Reply, or press / for actions" />
+      <span class="composer-kbd">⌘↵</span>
+      <button class="composer-send"><i class="ti ti-arrow-up" style="font-size:13px;" aria-hidden="true"></i></button>
+    </div>
+  </div>
+</div>

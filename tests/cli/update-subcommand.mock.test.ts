@@ -601,13 +601,13 @@ describe("Commander registration", () => {
 // ─── T-UPDATE.13: Tool count contract ──────────────────────────────────────
 
 describe("contract checks", () => {
-  it("T-UPDATE.13: tool() count in src/tools/ (P-Z3 rebaseline → 41; mai update is a CLI subcommand, not a Vercel tool)", async () => {
+  it("T-UPDATE.13: tool() count in src/tools/ (P-SP-A rebaseline → 53; mai update is a CLI subcommand, not a Vercel tool)", async () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  41 (P-Z3 rebaseline from the P-20-era 24 — tools accreted across P-26..P-Y1)
+    // Then:  53 (P-SP-A rebaseline adds 12 sales kernel tool definitions)
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
   });
 
   // ─── T-UPDATE.14: lint check ──────────────────────────────────────────────

@@ -1,14 +1,28 @@
 /**
  * P-3 mock tests — T-M38..T-M40: LinkedIn snapshot capture.
+ * P-47 G-3 — T-Profile.1, T-Profile.3: profile-surface synthesis.
+ * P-59 D-G6 Layer-2 — T-G6.1..T-G6.5: retry-with-delay + [data-test-modal] selector.
+ *   Step 4a scaffolds — all assertion bodies are TODO; all 5 intentionally FAIL.
+ *   Assertions filled at Step 5 after builder 4b lands.
  *
  * Tests captureCurrentSurfaceContext() using a fake CdpClient built via
  * CdpClient.fromHandle(). No real Chrome required.
+ *
+ * Source-text assertions (T-G6.*) read snapshotCapture.ts directly — no CDP needed.
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import { captureCurrentSurfaceContext } from "../../src/linkedin/snapshotCapture.js";
+
+// ─── Source-text harness (D-G6 source-structural assertions) ─────────────────
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const SNAPSHOT_CAPTURE_SRC = readFileSync(join(REPO, "src/linkedin/snapshotCapture.ts"), "utf-8");
 
 /** Build a minimal fake CdpHandle for snapshot capture. */
 function makeFakeHandle(opts: {
@@ -309,4 +323,159 @@ test("T-M40: captureCurrentSurfaceContext on non-LinkedIn URL returns 'unknown' 
   // No @mr refs
   const mrRefs = ctx.entries.filter((e) => e.ref.startsWith("@mr"));
   assert.equal(mrRefs.length, 0, "must have no @mr refs for non-messaging surface");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-59 D-G6 — Layer-2 round 3 — T-G6.1..T-G6.6
+// Source-structural scaffolds. All assertion bodies are TODO (intentionally fail).
+// Step 4a — Filled at Step 5 after builder 4b (Sketches A+B from plan §6.4).
+//
+// Guardian Step-3 amendments applied (CONCERN-MR C1/C2/C3/D2/A3/NIT):
+//   Amendment 1 (C3): Added T-G6.6 — assert all 5 selector arms survive the edit
+//     (the original 4: menuitem/option/dialog/alertdialog + the new data-test-modal).
+//     T-G6.1 retains focus on the new arm; T-G6.6 provides regression defense.
+//   Amendment 2 (C1/C2): T-G6.3 scoped to synthesizeOverlayEntries function body,
+//     not the whole file — avoids brittleness if other callers use the same snippet.
+//   Amendment 3 (D2/A3 — Step 5 note): pre-click baseline MANDATORY; any non-zero
+//     overlay entries on bare profile BEFORE clicking @e33 = Step-5 FAILURE.
+//   Amendment 4 (NIT — Step 5 note): live G6 modal proof keys on label TEXT (e.g.
+//     "Add a note" / "Send without a note"), NOT role — [data-test-modal] matches
+//     get classified 'menuitem' by the role classifier (snapshotCapture.ts:125).
+//
+// Gate coverage:
+//   T-G6.1 → G-P59.1 (INSPECT-1 overlay capture) — new [data-test-modal] arm present
+//   T-G6.2 → G-P59.1 — retry-with-delay shape (two eval call sites + 350ms gating)
+//   T-G6.3 → G-P59.1 — bounded retry within fn body (exactly 2 evals — anti-while-loop)
+//   T-G6.4 → G-P59.1 — early-return preservation (captureCurrentSurfaceContext branch unchanged)
+//   T-G6.5 → G-P59.1 — Option β proof (no unconditional sleep before first eval)
+//   T-G6.6 → G-P59.1 — selector regression defense (all 4 original arms preserved)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("T-G6 — D-G6 fix: OVERLAY_SYNTH_JS + synthesizeOverlayEntries retry-with-delay (P-59 D-G6, source-structural)", () => {
+  it("T-G6.1: when snapshotCapture.ts OVERLAY_SYNTH_JS constant is read, querySelectorAll selector list includes '[data-test-modal]' (covers H3 — unroled artdeco modals such as the LinkedIn 'Invite to connect' dialog)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = src/linkedin/snapshotCapture.ts source text
+    // When:  OVERLAY_SYNTH_JS constant body is inspected for the querySelectorAll selector list
+    // Then:  selector string contains '[data-test-modal]' so artdeco-modals without an ARIA role attribute are captured
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("[data-test-modal]"),
+      "T-G6.1: OVERLAY_SYNTH_JS must include '[data-test-modal]' selector arm (Sketch A — covers H3 unroled artdeco modals)",
+    );
+  });
+
+  it("T-G6.2: when synthesizeOverlayEntries body is read, TWO client.evaluate<string>(OVERLAY_SYNTH_JS) call sites are present AND a setTimeout(…, 350) (or 350ms Promise sleep) is between them AND the retry is gated on items.length === 0 (retry-with-delay shape — Option β)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text
+    // When:  the synthesizeOverlayEntries function body is examined for evaluate call sites + retry shape
+    // Then:  either 2 evalOverlay() calls (closure pattern) OR 2 direct client.evaluate calls;
+    //        a 350ms settle is between them; the second fires ONLY when items.length === 0
+    //
+    // Note: Sketch B uses an evalOverlay closure (1 evaluate definition, called twice via evalOverlay()).
+    //       Both patterns satisfy the retry-with-delay behavioral contract.
+    const fnStart = SNAPSHOT_CAPTURE_SRC.indexOf("async function synthesizeOverlayEntries");
+    const fnEnd = SNAPSHOT_CAPTURE_SRC.indexOf("\nasync function ", fnStart + 1);
+    const fnBody = fnEnd > fnStart ? SNAPSHOT_CAPTURE_SRC.slice(fnStart, fnEnd) : SNAPSHOT_CAPTURE_SRC.slice(fnStart);
+
+    // 2a: two invocations of the evaluate path (either via closure or direct)
+    const closureCallCount = (fnBody.match(/await evalOverlay\(\)/g) ?? []).length;
+    const directEvalCount = (fnBody.match(/client\.evaluate<string>\(OVERLAY_SYNTH_JS\)/g) ?? []).length;
+    assert.ok(
+      closureCallCount >= 2 || directEvalCount >= 2,
+      `T-G6.2a: fn body must have ≥2 evalOverlay() calls (${closureCallCount}) OR ≥2 direct evaluate calls (${directEvalCount}) — retry-with-delay shape`,
+    );
+
+    // 2b: 350ms settle present
+    assert.ok(
+      fnBody.includes("setTimeout") && fnBody.includes("350"),
+      "T-G6.2b: fn body must contain 'setTimeout' + '350' — the 350ms settle between first and retry eval",
+    );
+
+    // 2c: retry gated on items.length === 0 (conditional, not unconditional)
+    assert.ok(
+      fnBody.includes("items.length === 0"),
+      "T-G6.2c: fn body must contain 'items.length === 0' — gates the retry, not unconditional",
+    );
+  });
+
+  it("T-G6.3: when synthesizeOverlayEntries FUNCTION BODY is sliced from SNAPSHOT_CAPTURE_SRC, the count of 'client.evaluate<string>(OVERLAY_SYNTH_JS)' occurrences in that slice is EXACTLY 2 (bounded retry, not a while-loop — Amendment 2: scoped to fn body, not whole file)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text
+    // When:  synthesizeOverlayEntries function body is sliced (from 'async function synthesizeOverlayEntries'
+    //        to the next top-level function boundary), then counted for bounded-retry evidence
+    // Then:  either: evalOverlay() invocation count === 2 in the fn slice (closure pattern)
+    //        OR:     client.evaluate<string>(OVERLAY_SYNTH_JS) occurrence count === 2 in the fn slice (direct pattern)
+    //        — proves a single bounded re-eval, not a polling while-loop.
+    //        Scoped to fn body avoids false positives from future callers elsewhere in the file (Amendment 2).
+    const fnStart = SNAPSHOT_CAPTURE_SRC.indexOf("async function synthesizeOverlayEntries");
+    const fnEnd = SNAPSHOT_CAPTURE_SRC.indexOf("\nasync function ", fnStart + 1);
+    const fnBody = fnEnd > fnStart ? SNAPSHOT_CAPTURE_SRC.slice(fnStart, fnEnd) : SNAPSHOT_CAPTURE_SRC.slice(fnStart);
+
+    const closureCallCount = (fnBody.match(/evalOverlay\(\)/g) ?? []).length;
+    const directEvalCount = (fnBody.match(/client\.evaluate<string>\(OVERLAY_SYNTH_JS\)/g) ?? []).length;
+
+    assert.ok(
+      closureCallCount === 2 || directEvalCount === 2,
+      `T-G6.3: synthesizeOverlayEntries fn body must have exactly 2 evalOverlay() calls (got ${closureCallCount}) ` +
+        `OR exactly 2 direct client.evaluate calls (got ${directEvalCount}) — bounded retry, not a while-loop`,
+    );
+  });
+
+  it("T-G6.4: when synthesizeOverlayEntries body is read, a 'return { entries: [], refs: {} }' early-return guarded on 'items.length === 0' is present AFTER the retry block (preserves the captureCurrentSurfaceContext activeLayer:page branch for legitimately-empty overlays)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text
+    // When:  synthesizeOverlayEntries body is examined for the post-retry early-return guard
+    // Then:  the LAST occurrence of 'items.length === 0' (after the retry block) is followed by
+    //        'return { entries: [], refs: {} }' — so legitimately-empty overlays short-circuit the for-loop
+    const lastLengthCheckIdx = SNAPSHOT_CAPTURE_SRC.lastIndexOf("items.length === 0");
+    assert.ok(
+      lastLengthCheckIdx !== -1,
+      "T-G6.4a: 'items.length === 0' must appear at least once (post-retry early-return guard)",
+    );
+    const afterLastCheck = SNAPSHOT_CAPTURE_SRC.slice(lastLengthCheckIdx, lastLengthCheckIdx + 120);
+    assert.ok(
+      afterLastCheck.includes("return { entries: [], refs: {} }"),
+      "T-G6.4b: the last 'items.length === 0' guard must be followed by 'return { entries: [], refs: {} }' within ~120 chars — early-return preserved",
+    );
+  });
+
+  it("T-G6.5: when synthesizeOverlayEntries body is read, NO setTimeout / Promise sleep appears BEFORE the first client.evaluate<string>(OVERLAY_SYNTH_JS) call (proves Option β — retry-only — NOT Option α — unconditional pre-eval settle)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text
+    // When:  the text between the start of synthesizeOverlayEntries and the first evaluate call is sliced
+    // Then:  'setTimeout' does NOT appear in that prefix span — zero latency on the common path confirmed
+    const fnStart = SNAPSHOT_CAPTURE_SRC.indexOf("async function synthesizeOverlayEntries");
+    const firstEvalIdx = SNAPSHOT_CAPTURE_SRC.indexOf("client.evaluate<string>(OVERLAY_SYNTH_JS)", fnStart);
+    assert.ok(
+      firstEvalIdx !== -1,
+      "T-G6.5 precondition: client.evaluate<string>(OVERLAY_SYNTH_JS) must exist after synthesizeOverlayEntries start",
+    );
+    const prefixBeforeFirstEval = SNAPSHOT_CAPTURE_SRC.slice(fnStart, firstEvalIdx);
+    assert.ok(
+      !prefixBeforeFirstEval.includes("setTimeout"),
+      "T-G6.5: no 'setTimeout' must appear before the first client.evaluate call in synthesizeOverlayEntries — confirms Option β (retry-only, not unconditional pre-eval settle)",
+    );
+  });
+
+  it("T-G6.6: OVERLAY_SYNTH_JS querySelectorAll selector still contains ALL 4 original arms after the [data-test-modal] addition — regression defense (Amendment 1 / CONCERN-MR C3)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text
+    // When:  OVERLAY_SYNTH_JS constant body is searched for the 4 pre-existing selector arms
+    // Then:  ALL of '[role="menuitem"]', '[role="option"]', '[role="dialog"]', '[role="alertdialog"]'
+    //        are present — Sketch A added [data-test-modal] without dropping any existing arm
+    for (const arm of ['[role="menuitem"]', '[role="option"]', '[role="dialog"]', '[role="alertdialog"]']) {
+      assert.ok(
+        SNAPSHOT_CAPTURE_SRC.includes(arm),
+        `T-G6.6: OVERLAY_SYNTH_JS must still contain selector arm '${arm}' — regression defense; no arm dropped by Sketch A`,
+      );
+    }
+  });
+
+  it("T-G6.7: OVERLAY_SYNTH_JS still contains '[data-test-modal]' — Issue B regression guard (scout-verified selector must not be dropped by future refactors)", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = snapshotCapture.ts source text (post round-3 builder Step 4b);
+    //        scout's live DOM investigation confirmed [data-test-modal] is the correct attribute
+    //        on the artdeco connect dialog (docs/phase-59-d-g6-selector-research.md §3-§4);
+    //        round-4 plan §R4-2 confirms NO source change to snapshotCapture.ts in round 4
+    // When:  SNAPSHOT_CAPTURE_SRC is inspected for '[data-test-modal]' (per §R4-4: "Issue B
+    //        'selector still contains [data-test-modal]' is a regression invariant of T-G6.1")
+    // Then:  '[data-test-modal]' is present — regression guard so future selector refactors
+    //        cannot silently drop the scout-verified attribute (ALREADY PASSES — intentional)
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("[data-test-modal]"),
+      "T-G6.7: OVERLAY_SYNTH_JS must contain '[data-test-modal]' — Issue B regression guard; scout-verified correct selector for the artdeco connect dialog (phase-59-d-g6-selector-research.md §3-§4)",
+    );
+  });
 });

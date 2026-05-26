@@ -4,16 +4,16 @@
  * Tests for the P-9 changes to makeAllTools() in src/tools/index.ts.
  *
  * T-MakeAllTools.1 — 3-arg call still compiles and works (backward compat; G-P9.12)
- * T-MakeAllTools.2 — no-args call returns 7 tools (echo + 3 web + publish_event + query_lead_globally + schedule_task)
- * T-MakeAllTools.3 — full 4-arg call → exactly 32 tools (P-44: updated from 24)
- * T-MakeAllTools.4 — all 32 expected tool names present (enumeration; P-44: updated from 24)
+ * T-MakeAllTools.2 — no-args call returns 19 tools (base + sales kernel)
+ * T-MakeAllTools.3 — full 4-arg call → exactly 47 tools
+ * T-MakeAllTools.4 — all 47 expected tool names present
  * T-MakeAllTools.5 — IDEMPOTENT tools get retry wrapper (execute replaced); analyze_screenshot does NOT
  * T-MakeAllTools.6 — hook wrapping: with hookRunner, all tools get hook wrapper (outermost)
  * T-MakeAllTools.7 — without hookRunner, tools are NOT hook-wrapped
- * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 32 tools (P-44: updated from 24)
+ * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 47 tools
  * T-MakeAllTools.9 — HookRunner with ENOENT hooks.json → makeAllTools still works (no-op hooks)
  *
- * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-44: updated from 24 to 32)
+ * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-SP-A rebaseline)
  *
  * No LLM, no Chrome (CdpClient.fromHandle with fake handle).
  */
@@ -52,9 +52,23 @@ const FAKE_PERSISTENCE = {
 
 const FAKE_CONTROL = { requestStop: () => {} };
 
-// Complete enumeration — 35 tools (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions;
-// P-44: updated from 24; adds P-28.5 browser, P-26 server-coords, P-31 scheduler, P-39 memory)
-const EXPECTED_35_TOOLS = [
+const SALES_TOOL_NAMES = [
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
+  "list_due_followups",
+  "mark_message_sent",
+  "promote_candidate_to_lead",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
+  "save_message_draft",
+  "schedule_follow_up",
+  "update_lead_stage",
+] as const;
+
+// Complete enumeration — 47 tools (P-SP-A: +12 sales kernel tools).
+const EXPECTED_47_TOOLS = [
   // P-1 (1)
   "echo",
   // P-4 memory (2)
@@ -69,6 +83,8 @@ const EXPECTED_35_TOOLS = [
   "getIdentity",
   // P-5 methodology (1)
   "qualify_profile",
+  // P-SP-A sales kernel (12)
+  ...SALES_TOOL_NAMES,
   // P-3 LinkedIn browser (10)
   "launch",
   "inspect",
@@ -116,9 +132,9 @@ test("T-MakeAllTools.1: 3-arg makeAllTools call (no hookRunner) still compiles a
   assert.ok("web_fetch" in t, "web_fetch must be present even without 4th arg (always registered)");
 });
 
-// ─── T-MakeAllTools.2: no-args → 7 tools (echo + 3 web + publish_event + query_lead_globally + schedule_task) ──
+// ─── T-MakeAllTools.2: no-args → 19 tools ───────────────────────────────────
 
-test("T-MakeAllTools.2: makeAllTools() with no args → 7 tools (echo + web + publish_event + query_lead_globally + schedule_task)", () => {
+test("T-MakeAllTools.2: makeAllTools() with no args → 19 tools (base + sales kernel)", () => {
   // P-9: web tools are ALWAYS registered (no deps required)
   // P-26 + P-31: publish_event, query_lead_globally, schedule_task are base tools (no session/persistence needed)
   const t = makeAllTools();
@@ -131,14 +147,15 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 7 tools (echo + web + pu
     "schedule_task",
     "web_fetch",
     "web_search",
-  ];
+    ...SALES_TOOL_NAMES,
+  ].sort();
 
-  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 7 tools with no args; got: ${keys.join(", ")}`);
+  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 19 tools with no args; got: ${keys.join(", ")}`);
 });
 
-// ─── T-MakeAllTools.3: full 4-arg → exactly 32 tools ─────────────────────────
+// ─── T-MakeAllTools.3: full 4-arg → exactly 47 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 35 tools (G-P9.14; P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: updated from 24)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 47 tools (G-P9.14; P-SP-A rebaseline)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -146,24 +163,24 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 35 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      35,
-      `must have exactly 35 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      47,
+      `must have exactly 47 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-// ─── T-MakeAllTools.4: all 32 expected tool names present ────────────────────
+// ─── T-MakeAllTools.4: all 47 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 35 expected tool names present (enumeration; P-Y1: updated from 32)", () => {
+test("T-MakeAllTools.4: all 47 expected tool names present (enumeration; P-SP-A rebaseline)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
     const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL, runner);
     const keys = Object.keys(t).sort();
 
-    assert.deepEqual(keys, EXPECTED_35_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
+    assert.deepEqual(keys, EXPECTED_47_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
 
     // Spot-check P-9 web tools
     assert.ok("web_fetch" in t, "web_fetch must be in tool set (P-9)");
@@ -280,15 +297,15 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
   assert.equal(result.echoed, "hello", "echo must return { echoed: message }");
 });
 
-// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 32 tools ─
+// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 47 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 35 tools (P-Y1: updated from 32; +todo_write/suggest_card/suggest_next_actions)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 47 tools (P-SP-A rebaseline)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
   assert.equal(
     count,
-    35,
-    `3-arg makeAllTools must return 35 tools (P-Y1: was 32 pre-P-57a; +suggest_card/suggest_next_actions/todo_write); got ${count}`,
+    47,
+    `3-arg makeAllTools must return 47 tools (P-SP-A rebaseline); got ${count}`,
   );
 });
 

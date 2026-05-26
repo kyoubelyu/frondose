@@ -59,6 +59,9 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
   "get_memory_note",
   "getIdentity",
   "getMemory",
@@ -66,14 +69,22 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "identity",
   "inspect",
   "launch",
+  "list_due_followups",
+  "mark_message_sent",
   "navigate_to_url",
   "press",
+  "promote_candidate_to_lead",
   "publish_event",
   "qualify_profile",
   "query_lead_globally",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
   "reload",
   "remember",
+  "save_message_draft",
   "schedule_task",
+  "schedule_follow_up",
   "screenshot",
   "scroll",
   "search_memory",
@@ -86,6 +97,7 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "telegram_notify",
   "todo_write",
   "type",
+  "update_lead_stage",
   "upload",
   "web_fetch",
   "web_search",
@@ -151,11 +163,11 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 35 / server 26 (rebaselined to current post-P-Y1; was P-44-era 32/23) (G-P37.12)", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 35 / server 26)", () => {
+describe("tool counts: worker 47 / server 26 (rebaselined to P-SP-A from post-P-Y1) (G-P37.12)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 47 / server 26)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 35; server count === 26 (P-Z2 rebaseline: +P-57a suggestion tools + P-Y1 todo_write)
+    // Then:  worker count === 47; server count === 26 (P-SP-A adds 12 worker-only sales kernel tools)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -170,8 +182,8 @@ describe("tool counts: worker 35 / server 26 (rebaselined to current post-P-Y1; 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        35,
-        `worker tool count must be 35; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
+        47,
+        `worker tool count must be 47; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
       );
       assert.deepEqual(
         workerKeys,

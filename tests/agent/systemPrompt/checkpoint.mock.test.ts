@@ -135,8 +135,8 @@ test("T-Checkpoint.8: CHECKPOINT contains all 5 bidirectional-Telegram anchor su
     `CHECKPOINT must contain "[TG_PHOTO=" (media tag format); len=${CHECKPOINT.length}`,
   );
   assert.ok(
-    CHECKPOINT.includes("auto-pushed"),
-    `CHECKPOINT must contain "auto-pushed" (auto-reply semantic); len=${CHECKPOINT.length}`,
+    CHECKPOINT.includes("auto-push"),
+    `CHECKPOINT must contain "auto-push" (auto-reply semantic; matches "auto-push" or "auto-pushed"); len=${CHECKPOINT.length}`,
   );
   assert.ok(
     CHECKPOINT.includes("Do NOT include"),

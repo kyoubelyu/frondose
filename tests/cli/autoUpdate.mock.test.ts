@@ -916,14 +916,14 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool() count in src/tools/ (P-Z2 rebaseline → 41; autoUpdate is NOT a Vercel tool)", async () => {
+  it("T-CONTRACT: tool() count in src/tools/ (P-SP-A rebaseline → 53; autoUpdate is NOT a Vercel tool)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  grep tool() in src/tools/**
-    // Then:  41 tool() calls — P-Z2 rebaseline from P-39-era 38; +suggest_card/suggest_next_actions
-    //        [P-57a] + todo_write [P-Y1]. mai auto-update is a startup hook, not a Vercel tool.
+    // Then:  53 tool() calls — P-SP-A rebaseline adds 12 sales kernel tool definitions.
+    //        mai auto-update is a startup hook, not a Vercel tool.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
   });
 });
 
