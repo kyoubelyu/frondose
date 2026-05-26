@@ -41,13 +41,15 @@ const SALES_TOOL_NAMES = [
   "record_raw_candidate",
   "save_message_draft",
   "schedule_follow_up",
+  "score_account",   // P-SP-B: +2 sales-value scoring tools
+  "score_lead",      // P-SP-B
   "update_lead_stage",
 ] as const;
 
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
-test("T-M81: makeAllTools with no session returns 19 keys; with session returns 31 keys [P-SP-A updated]", () => {
-  // No session → 19 base tools (P-SP-A adds 12 sales kernel tools)
+test("T-M81: makeAllTools with no session returns 21 keys; with session returns 33 keys [P-SP-A+B updated]", () => {
+  // No session → 21 base tools (P-SP-B adds score_lead + score_account to the 19 P-SP-A base)
   const echoOnly = makeAllTools();
   const echoKeys = Object.keys(echoOnly).sort();
   assert.deepEqual(
@@ -62,7 +64,7 @@ test("T-M81: makeAllTools with no session returns 19 keys; with session returns 
       "web_search",
       ...SALES_TOOL_NAMES,
     ].sort(),
-    "makeAllTools() (no session) must return 19 base tools in P-SP-A",
+    "makeAllTools() (no session) must return 21 base tools in P-SP-A+B",
   );
 
   // Static export `tools` must also be echo-only (P-1 backward compat)
@@ -109,8 +111,8 @@ test("T-M81: makeAllTools with no session returns 19 keys; with session returns 
     "upload",
   ].sort();
 
-  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 31 keys in P-SP-A");
-  assert.equal(allKeys.length, 31, "must have exactly 31 tools with session (P-SP-A)");
+  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 33 keys in P-SP-A+B");
+  assert.equal(allKeys.length, 33, "must have exactly 33 tools with session (P-SP-A+B: +2 score tools)");
 
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in minimal set");
@@ -136,8 +138,8 @@ test("T-M120: makeAllTools() with no args returns exactly 19 keys — P-SP-A upd
     "web_search",
     ...SALES_TOOL_NAMES,
   ];
-  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 19 base tools in P-SP-A; got: ${keys.join(", ")}`);
-  assert.equal(keys.length, 19, "makeAllTools() must have exactly 19 tools (P-SP-A: was 7 in P-44)");
+  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 21 base tools in P-SP-A+B; got: ${keys.join(", ")}`);
+  assert.equal(keys.length, 21, "makeAllTools() must have exactly 21 tools (P-SP-B: +2 score_lead/score_account; was 19 in P-SP-A)");
 });
 
 // ─── T-M121 ─────────────────────────────────────────────────────────────────
@@ -174,9 +176,9 @@ test("T-M121: makeAllTools(undefined, persistence) returns 27 keys (base 19 + 8 
   assert.deepEqual(
     keys,
     expected,
-    `persistence-only must yield 27 tools in P-SP-A (base 19 + 8 memory/identity); got: ${keys.join(", ")}`,
+    `persistence-only must yield 29 tools in P-SP-A+B (base 21 + 8 memory/identity); got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 27, "must have exactly 27 tools with persistence-only (P-SP-A: was 15 in P-44)");
+  assert.equal(keys.length, 29, "must have exactly 29 tools with persistence-only (P-SP-B: +2 score tools; was 27 in P-SP-A)");
 });
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
@@ -238,9 +240,9 @@ test("T-M122: makeAllTools(session, persistence) returns 39 keys — P-SP-A upda
   assert.deepEqual(
     keys,
     expected,
-    `makeAllTools(session, persistence) must yield 39 keys in P-SP-A; got: ${keys.join(", ")}`,
+    `makeAllTools(session, persistence) must yield 41 keys in P-SP-A+B; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 39, "must have exactly 39 tools with session + persistence (P-SP-A: was 27 in P-44)");
+  assert.equal(keys.length, 41, "must have exactly 41 tools with session + persistence (P-SP-B: +2 score tools; was 39 in P-SP-A)");
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
@@ -277,8 +279,8 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 39 keys including 'q
   assert.ok("get_memory_note" in t, "T-M_p5.18: makeAllTools must include 'get_memory_note' tool (P-39)");
   assert.equal(
     keys.length,
-    39,
-    `T-M_p5.18: must have exactly 39 tools in P-SP-A; got ${keys.length}: ${keys.sort().join(", ")}`,
+    41,
+    `T-M_p5.18: must have exactly 41 tools in P-SP-A+B; got ${keys.length}: ${keys.sort().join(", ")}`,
   );
   console.log("T-M_p5.18: makeAllTools returns 39 tools including qualify_profile + sales kernel tools");
 });
@@ -352,9 +354,9 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 47 keys (P-
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 47 keys in P-SP-A; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 49 keys in P-SP-A+B; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 47, `T-M_p6.21: must have exactly 47 tools in P-SP-A; got ${keys.length}`);
+  assert.equal(keys.length, 49, `T-M_p6.21: must have exactly 49 tools in P-SP-A+B; got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -399,9 +401,9 @@ test("T-M_p6.22: makeAllTools() returns 19 keys — P-SP-A update; base includes
   assert.deepEqual(
     keys,
     expected.sort(),
-    `T-M_p6.22: makeAllTools() must return 19 base tools in P-SP-A; got: ${keys.join(", ")}`,
+    `T-M_p6.22: makeAllTools() must return 21 base tools in P-SP-A+B; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 19, "T-M_p6.22: must have exactly 19 tools with no args (P-SP-A: was 7 in P-44)");
+  assert.equal(keys.length, 21, "T-M_p6.22: must have exactly 21 tools with no args (P-SP-B: +2 score tools; was 19 in P-SP-A)");
   console.log("T-M_p6.22: makeAllTools() -> 19 keys (base set)");
 });
 
@@ -424,14 +426,31 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
   const control = { requestStop: () => {}, auditPath: "/tmp/p-sp-b-wiring1-audit.jsonl" } as any;
   // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
   const t = makeAllTools(undefined, undefined, control, undefined, { mode: "worker", tier: "power" } as any);
-  void t; // available for Step 5 assertion bodies
+  // score_lead + score_account must be present in the full worker+power registry
   assert.ok(
-    false,
-    [
-      "T-SP-B.Wiring.1 TODO: fill at Step 5 — FAILS pre-builder:",
-      "score_lead + score_account not registered in makeAllTools until P-SP-B §6.4(C) wiring ships.",
-      `Current worker-power keys: ${Object.keys(t).sort().join(", ")}.`,
-    ].join(" "),
+    "score_lead" in t,
+    `T-SP-B.Wiring.1: score_lead must be in makeAllTools worker+power registry (P-SP-B §6.4(C)). ` +
+      `Got keys: ${Object.keys(t).sort().join(", ")}`,
+  );
+  assert.ok(
+    "score_account" in t,
+    `T-SP-B.Wiring.1: score_account must be in makeAllTools worker+power registry (P-SP-B §6.4(C)). ` +
+      `Got keys: ${Object.keys(t).sort().join(", ")}`,
+  );
+  // Verify valid Vercel AI SDK tool shapes (description + parameters + execute)
+  // biome-ignore lint/suspicious/noExplicitAny: test assertion on dynamic registry
+  const scoreLead = (t as any).score_lead;
+  // biome-ignore lint/suspicious/noExplicitAny: test assertion on dynamic registry
+  const scoreAccount = (t as any).score_account;
+  assert.equal(typeof scoreLead.description, "string", "score_lead must have a string description");
+  assert.ok(scoreLead.parameters, "score_lead must have a .parameters (Zod schema)");
+  assert.equal(typeof scoreLead.execute, "function", "score_lead must have an .execute function");
+  assert.equal(typeof scoreAccount.description, "string", "score_account must have a string description");
+  assert.ok(scoreAccount.parameters, "score_account must have a .parameters (Zod schema)");
+  assert.equal(typeof scoreAccount.execute, "function", "score_account must have an .execute function");
+  console.log(
+    `T-SP-B.Wiring.1 PASS: score_lead + score_account registered in makeAllTools worker+power ` +
+      `(${Object.keys(t).length} total keys).`,
   );
 });
 
@@ -491,9 +510,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 39 keys in P-SP-A; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 41 keys in P-SP-A+B; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 39, `T-M_p6.23: must have exactly 39 tools in P-SP-A; got ${keys.length}`);
+  assert.equal(keys.length, 41, `T-M_p6.23: must have exactly 41 tools in P-SP-A+B; got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");

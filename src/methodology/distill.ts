@@ -2,7 +2,7 @@
  * Methodology distillation — folded into the Soul band per CLAUDE.md Q-4.
  * Source: references/methodology*.md (port of mai-linkedin's Solution Selling® notes).
  *
- * Token budget: ≤ 800 tokens per ROADMAP G-P5.6. Current: ~720 tok (~2,860 chars at ~4 char/token).
+ * Token budget: ≤ 800 tokens per ROADMAP G-P5.6. Current: ~776 tok (~3,100 chars at ~4 char/token) post P-SP-B.
  * Team-lead's tighter target was ≤700; ROADMAP gate is 800. Validator's T-M_p5.1 measures actual.
  * If this constant grows, re-distill before exceeding 800 tok — the full Soul band has a
  * ~1,200-tok ceiling per ROADMAP G-P5.6 and the other 4 sections together take ~280 tok.
@@ -12,7 +12,6 @@
  *  - R1/I1/C1 canonical open-question phrasings (3 each)
  *  - Pain Chain pre-call frame (Step 3 walk-up + Step 4 walk-down)
  *  - Key Players List one-line note
- *  - qualify_profile habit anchor (the rapport-vs-tool tradeoff)
  *  - Value Cycle 4 phases (validate / close / post)
  *  - 3:1 controlled:open ratio guideline
  *  - Regression rule (discomfort → regress to OPEN row)
@@ -33,8 +32,6 @@ Aim short (≤ 30 words). Capability stays implicit at this row — the point is
 
 Pain Chain + Key Players List (precall artifacts): KPL is the per-ICP table of target titles + likely pains; book base 7-role skeleton (CEO/COO/CFO/CIO/VP Sales/VP Mfg/VP Eng) is adapted per ICP. Pain Chain links each title's pain to the title whose pain it feeds — Step 3 walks up (whose quarterly number is affected?) feeds I2-controlled; Step 4 walks down (what daily-execution friction causes this pain?) feeds R2-controlled. Start at the title most plausibly contactable on LinkedIn — usually VP-level or Head-of. Build speculatively before outreach; revise as buyer evidence confirms or replaces nodes.
 
-qualify_profile habit anchor: You trust your judgment, but you also know you can misread people sometimes. Your habit: before deciding to engage, give it an objective check with \`qualify_profile\`. When the result conflicts with your gut, you tend to trust the tool — people get impulsive, tools don't.
-
 remember habit anchor: immediately \`remember\` after \`qualify_profile\` confirms an ICP match — this is your pipeline discipline. Every ICP-qualified lead only counts once it's recorded; missing any wastes this search. qualify → remember, two steps, neither optional.
 
 Value Cycle (4 gates after C3-confirming): validate (deliver formal 5-slot Value Proposition with buyer-attested numbers from R2/C2 digs) → close (quantified outcome motivates action — procurement call, intro to economic buyer) → post (record baseline → actual; feeds next Reference Story).
@@ -42,4 +39,6 @@ Value Cycle (4 gates after C3-confirming): validate (deliver formal 5-slot Value
 Ratio guideline: top performers run controlled:open ≈ 3:1 across the 9-block; poor performers run 1:3. A thread dominated by open questions past R1 signals top performers shift to controlled on the next turn.
 
 Regression rule: on buyer discomfort (short replies, pushback, topic deflection at any confirming-row turn), regress to the OPEN row (R1/I1/C1) for that investigative area — controlled-question density against discomfort backfires (the worked behavior is to regress, not press). After buyer relaxes, progress through controlled and confirming again.
+
+Methodology repertoire (record in score_lead.methodUsed): solution_selling (default; strong Pain Chain evidence), spin (open discovery: Situation/Problem/Implication/Need-payoff), challenger (complacent buyer; teach an insight), meddic (enterprise multi-stakeholder).
 `.trim();

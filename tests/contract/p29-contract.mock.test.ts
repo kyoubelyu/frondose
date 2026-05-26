@@ -73,10 +73,10 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 47 tools", () => {
+  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 49 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'}) (D-9 — no new tools)
     // When: Object.keys(tools).length
-    // Then: 47 (P-SP-A rebaseline: +12 worker-only sales kernel tools)
+    // Then: 49 (P-SP-B rebaseline: +score_lead +score_account on top of P-SP-A's 47)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -87,8 +87,8 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        47,
-        `T-CONTRACT.TOOLS worker: expected 47 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        49,
+        `T-CONTRACT.TOOLS worker: expected 49 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

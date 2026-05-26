@@ -96,6 +96,9 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "upload",
   "web_fetch",
   "web_search",
+  // P-SP-B: +2 sales-value scoring tools
+  "score_account",
+  "score_lead",
 ].sort();
 
 const FROZEN_SERVER_TOOL_KEYS_P38 = [
@@ -221,11 +224,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 47 / server 26 (G-P38.8/.11, rebaselined at P-SP-A)", () => {
-  it("T-CONTRACT.TOOLS: tool set after P-SP-A is worker 47 / server 26 (P-SP-A adds 12 worker-only sales tools)", () => {
+describe("tool counts: worker 49 / server 26 (G-P38.8/.11, rebaselined at P-SP-B)", () => {
+  it("T-CONTRACT.TOOLS: tool set after P-SP-B is worker 49 / server 26 (P-SP-B adds score_lead + score_account)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 47 / server 26 (P-SP-A adds sales kernel tools only to worker mode)
+    // Then:  worker 49 / server 26 (P-SP-B adds 2 scoring tools only to worker mode)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -240,10 +243,10 @@ describe("tool counts: worker 47 / server 26 (G-P38.8/.11, rebaselined at P-SP-A
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        47,
-        `worker tool count must be 47; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        49,
+        `worker tool count must be 49; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot");
+      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot (P-SP-B rebaseline)");
 
       const serverTools = makeAllTools(
         undefined,

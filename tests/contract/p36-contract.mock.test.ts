@@ -45,9 +45,10 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Current worker tool name snapshot (47 tools after P-SP-A sales kernel rebaseline).
+// Current worker tool name snapshot (49 tools after P-SP-B adds score_lead + score_account).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 // Identical to FROZEN_WORKER_TOOL_KEYS in p33-contract.mock.test.ts (P-36 contract freeze).
+// P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
 const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "analyze_screenshot",
   "clear_cookies",
@@ -97,6 +98,9 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "upload",
   "web_fetch",
   "web_search",
+  // P-SP-B: +2 sales-value scoring tools
+  "score_account",
+  "score_lead",
 ].sort();
 
 // Post-P-31 server tool name snapshot (23 tools — P-36 adds NO new tools).
@@ -161,11 +165,11 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 47 / server 26 rebaselined at P-SP-A (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 47 / server 26)", () => {
+describe("tool counts: worker 49 / server 26 rebaselined at P-SP-B (G-P36.14)", () => {
+  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 49 / server 26)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 47; server count === 26 (P-SP-A adds sales kernel tools only to worker mode)
+    // Then:  worker count === 49; server count === 26 (P-SP-B adds score_lead + score_account to worker mode)
     const { dir, cleanup } = makeTmpDir();
     try {
       // Worker mode — 29 tools
@@ -180,13 +184,13 @@ describe("tool counts: worker 47 / server 26 rebaselined at P-SP-A (G-P36.14)", 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        47,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 47 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        49,
+        `T-CONTRACT.TOOLS: worker mode must have exactly 49 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
       );
       assert.deepEqual(
         workerKeys,
         FROZEN_WORKER_TOOL_KEYS_P36,
-        "T-CONTRACT.TOOLS: worker tool names must match P-36 snapshot (47 tools, P-SP-A rebaseline)",
+        "T-CONTRACT.TOOLS: worker tool names must match P-36 snapshot (49 tools, P-SP-B rebaseline)",
       );
 
       // Server mode — 20 tools
