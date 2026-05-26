@@ -42,6 +42,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 // Frozen P-39 tool name snapshots — P-38 (29/20) + 3 new memory tools.
+// P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
 const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "analyze_screenshot",
   "clear_cookies",
@@ -91,6 +92,9 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "upload",
   "web_fetch",
   "web_search",
+  // P-SP-B: +2 sales-value scoring tools
+  "score_account",
+  "score_lead",
 ].sort();
 
 const FROZEN_SERVER_TOOL_KEYS_P39 = [
@@ -125,11 +129,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: worker 47 (rebaselined to P-SP-A from post-P-Y1) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 47 tools, including search_memory / set_memory_note / get_memory_note", () => {
+describe("P-39 tool count: worker 49 (rebaselined to P-SP-B) (G-P39.11)", () => {
+  it("T-Count.1: makeAllTools worker mode → exactly 49 tools, including search_memory / set_memory_note / get_memory_note + score_lead + score_account", () => {
     // Given: makeAllTools called with a fake session + persistence + control in worker mode
-    // When:  Object.keys(workerTools).length checked; set includes the 3 new P-39 tools
-    // Then:  47 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-SP-A rebaseline)
+    // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools
+    // Then:  49 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-SP-B rebaseline)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -143,10 +147,10 @@ describe("P-39 tool count: worker 47 (rebaselined to P-SP-A from post-P-Y1) (G-P
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        47,
-        `worker tool count must be 47; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        49,
+        `worker tool count must be 49; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-39 snapshot");
+      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-SP-B snapshot (P-39 + score_lead + score_account)");
     } finally {
       cleanup();
     }

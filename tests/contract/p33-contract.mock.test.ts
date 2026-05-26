@@ -65,9 +65,10 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Current worker tool name snapshot (47 tools after P-SP-A sales kernel rebaseline).
+// Current worker tool name snapshot (49 tools after P-SP-B adds score_lead + score_account).
 // P-33 froze counts at 28/19; P-31 supersedes (adds schedule_task); P-39 supersedes (adds 3 memory tools).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
+// P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
 const FROZEN_WORKER_TOOL_KEYS = [
   "analyze_screenshot",
   "clear_cookies",
@@ -117,6 +118,9 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "upload",
   "web_fetch",
   "web_search",
+  // P-SP-B: +2 sales-value scoring tools
+  "score_account",
+  "score_lead",
 ].sort();
 
 // Post-P-31 server tool name snapshot (23 tools — P-31 adds schedule_task to the P-33 reorg baseline).
@@ -154,10 +158,11 @@ const FROZEN_SERVER_TOOL_KEYS = [
 // ─── T-P33.STRUCT.1 ───────────────────────────────────────────────────────────
 
 describe("P-33 source tree structure (G-P33.1)", () => {
-  it("T-P33.STRUCT.1: src/tools/browser/ has 11 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
-    // Given: post-reorg source tree (builder Step 4b complete)
+  it("T-P33.STRUCT.1: src/tools/browser/ has 12 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
+    // Given: post-reorg source tree (P-33 builder Step 4b + P-63 outboundGuard.ts)
     // When:  listing src/tools/browser/ and src/tools/linkedin/ directory contents
-    // Then:  browser/ = 12 .ts files (11 tools + index.ts); linkedin/ = 2 .ts files only
+    // Then:  browser/ = 13 .ts files (12 tools + index.ts); linkedin/ = 2 .ts files only
+    //        P-63 added outboundGuard.ts (silent-send safety) → 12 browser tool files total
 
     const browserDir = join(SRC_ROOT, "tools", "browser");
     const linkedinDir = join(SRC_ROOT, "tools", "linkedin");
@@ -176,6 +181,7 @@ describe("P-33 source tree structure (G-P33.1)", () => {
       "index.ts",
       "inspect.ts",
       "navigateToUrl.ts",
+      "outboundGuard.ts", // P-63: sidebar silent-send safety guard (pre-existing regression fix)
       "press.ts",
       "reload.ts",
       "screenshot.ts",
@@ -254,10 +260,10 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 47 tool keys (P-SP-A updates count)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 49 tool keys (P-SP-B +score_lead +score_account)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
-    // When:  worker mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
-    // Then:  exactly 47 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    // When:  worker mode tool set is built (post-P-SP-B which adds score_lead + score_account)
+    // Then:  exactly 49 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -274,13 +280,13 @@ describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () =
 
       assert.equal(
         keys.length,
-        47,
-        `worker mode must have exactly 47 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        49,
+        `worker mode must have exactly 49 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         FROZEN_WORKER_TOOL_KEYS,
-        "worker tool names must match current snapshot (P-Z2 rebaseline: +P-57a suggestion tools + P-Y1 todo_write)",
+        "worker tool names must match current snapshot (P-SP-B rebaseline: +score_lead +score_account)",
       );
     } finally {
       cleanup();
