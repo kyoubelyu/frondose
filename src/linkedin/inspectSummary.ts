@@ -122,6 +122,9 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   if (hasComposerSignals(ctx.entries) && !availableScopes.includes("composerModal")) {
     availableScopes.push("composerModal");
   }
+  if (ctx.activeLayer === "overlay" && !availableScopes.includes("overlay")) {
+    availableScopes.push("overlay");
+  }
 
   return {
     surface: ctx.surface,
@@ -138,6 +141,9 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
 function filterByScope(entries: SnapshotEntry[], scope: string): SnapshotEntry[] {
   if (scope === "composerModal") {
     return entries.filter((e) => isComposerButtonEntry(e) || isComposerInputEntry(e));
+  }
+  if (scope === "overlay") {
+    return entries.filter((e) => e.ref.startsWith("@ov"));
   }
   return entries;
 }

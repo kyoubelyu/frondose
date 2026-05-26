@@ -38,6 +38,7 @@ export function createCronDriver(
     const turnId = randomBytes(4).toString("hex");
     const abortController = new AbortController();
     state.currentTurn = { turnId, abortController };
+    deps.emitFrame({ type: "turn-started", turnId, source: "cron" });
     const taskHint = trimmed.length > 0 ? trimmed.slice(0, 60) : undefined;
     deps.emitFrame({
       type: "cron-tick",

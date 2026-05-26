@@ -1,0 +1,282 @@
+<h2 class="sr-only">Frondose Chrome extension in Auto mode showing both a glowing edge around the entire webpage and a precise highlight on the specific button being clicked.</h2>
+
+<style>
+.sceneHA { position: relative; width: 100%; min-height: 620px; background: linear-gradient(180deg, #E8EAEE 0%, #D8DCE2 100%); border-radius: 12px; overflow: hidden; border: 0.5px solid #C8CCD2; padding: 28px; box-sizing: border-box; }
+
+/* The whole-page takeover indicator */
+.wpA-frame {
+  position: relative;
+  border-radius: 10px;
+  padding: 2px;
+  background: linear-gradient(135deg, rgba(217, 167, 95, 0.7) 0%, rgba(217, 167, 95, 0.3) 25%, rgba(217, 167, 95, 0.7) 50%, rgba(217, 167, 95, 0.3) 75%, rgba(217, 167, 95, 0.7) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 6s linear infinite;
+  box-shadow:
+    0 0 0 1px rgba(217, 167, 95, 0.15),
+    0 0 24px rgba(217, 167, 95, 0.18),
+    0 0 48px rgba(217, 167, 95, 0.08);
+}
+@keyframes borderFlow {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 300% 0%; }
+}
+
+.wpA-frame::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 18px;
+  background: #1F231C;
+  color: #D9A75F;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 0 0 6px 6px;
+  font-family: ui-monospace, "SF Mono", monospace;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wpA-frame::after {
+  content: "● FRONDOSE AGENT IS CONTROLLING THIS TAB";
+  position: absolute;
+  top: -1px; left: 18px;
+  background: #1F231C;
+  color: #D9A75F;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 0 0 6px 6px;
+  font-family: ui-monospace, "SF Mono", monospace;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.wpA { background: white; border-radius: 8px; padding: 16px 22px; min-height: 540px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; position: relative; }
+.wpA-header { padding-bottom: 12px; border-bottom: 0.5px solid #EEE; display: flex; align-items: center; gap: 10px; padding-top: 8px; }
+.wpA-logo { font-size: 14px; font-weight: 700; color: #0A66C2; }
+.wpA-tab { font-size: 11.5px; color: #666; padding: 4px 10px; }
+.wpA-tab.active { color: #0A66C2; font-weight: 500; border-bottom: 2px solid #0A66C2; padding-bottom: 9px; margin-bottom: -10px; }
+.wpA-icons { margin-left: auto; display: flex; gap: 14px; font-size: 11px; color: #666; }
+
+.wpA-row-h { padding: 14px 0 8px; font-size: 13px; font-weight: 600; color: #222; display: flex; align-items: center; gap: 8px; }
+.wpA-count { font-size: 11px; color: #666; font-weight: 400; margin-left: auto; }
+
+.wpA-card { background: #F7F8F9; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; gap: 10px; align-items: center; position: relative; }
+.wpA-card.focused-row {
+  background: rgba(217, 167, 95, 0.04);
+  border: 0.5px solid rgba(217, 167, 95, 0.2);
+}
+.wpA-avatar { width: 36px; height: 36px; border-radius: 4px; background: linear-gradient(135deg, #C7D0DA, #A8B5C4); flex-shrink: 0; }
+.wpA-card-title { font-size: 12px; font-weight: 600; color: #0A66C2; }
+.wpA-card-sub { font-size: 11px; color: #666; margin-top: 1px; }
+.wpA-card-action { font-size: 10.5px; color: #999; margin-top: 3px; font-family: ui-monospace, "SF Mono", monospace; }
+
+.wpA-btn {
+  font-size: 11px; padding: 5px 12px; border-radius: 14px;
+  background: white; color: #0A66C2; border: 1px solid #0A66C2; font-weight: 600;
+  cursor: pointer; flex-shrink: 0;
+}
+
+/* Precision element-level highlight */
+.agent-target {
+  position: relative;
+  outline: 2px dashed #D9A75F;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(217, 167, 95, 0.14), 0 0 18px rgba(217, 167, 95, 0.3);
+  animation: targetPulse 1.6s ease-in-out infinite;
+}
+@keyframes targetPulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(217, 167, 95, 0.14), 0 0 18px rgba(217, 167, 95, 0.3); }
+  50%      { box-shadow: 0 0 0 10px rgba(217, 167, 95, 0.06), 0 0 24px rgba(217, 167, 95, 0.4); }
+}
+
+.agent-cursor-h { position: absolute; pointer-events: none; z-index: 5; }
+.cursor-arrow { width: 0; height: 0; border-left: 8px solid transparent; border-top: 13px solid #D9A75F; transform: rotate(-28deg); filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3)); }
+.cursor-tag { background: #1F231C; color: white; font-size: 10px; padding: 3px 8px; border-radius: 5px; font-weight: 500; white-space: nowrap; margin-top: 6px; margin-left: 4px; font-family: ui-monospace, "SF Mono", monospace; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+.cursor-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: #D9A75F; animation: pulseDot 1.2s ease-in-out infinite; }
+@keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.fpanelA { position: absolute; bottom: 28px; right: 28px; width: 300px; border-radius: 14px; overflow: hidden; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; box-shadow: 0 18px 44px rgba(20, 25, 18, 0.32), 0 4px 14px rgba(20, 25, 18, 0.15); border: 0.5px solid rgba(0,0,0,0.1); background: #161A14; position: relative; z-index: 20; }
+.fpanelA::before {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(217, 167, 95, 0.12) 0%, transparent 55%),
+    radial-gradient(circle at 0% 100%, rgba(90, 128, 67, 0.08) 0%, transparent 50%);
+  pointer-events: none;
+}
+.fpanelA > * { position: relative; }
+
+.fpA-tb { background: rgba(15, 18, 13, 0.85); padding: 8px 10px; display: flex; align-items: center; gap: 8px; border-bottom: 0.5px solid #2A2E26; }
+.fpA-grip { display: flex; flex-direction: column; gap: 2px; opacity: 0.35; }
+.fpA-grip-row { display: flex; gap: 2px; }
+.fpA-grip-dot { width: 3px; height: 3px; background: #C0BBA8; border-radius: 50%; }
+.fpA-brand { display: flex; align-items: center; gap: 5px; padding-right: 5px; border-right: 0.5px solid #2A2E26; margin-right: 2px; }
+.fpA-logo { width: 13px; height: 13px; border-radius: 3px; background: linear-gradient(135deg, #5A8043, #3A5A2C); display: flex; align-items: center; justify-content: center; }
+.fpA-brand-name { font-size: 9.5px; font-weight: 700; color: #ECE6CC; letter-spacing: 0.4px; }
+.fpA-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #D9A75F; box-shadow: 0 0 8px #D9A75F; animation: pulseDot 1.2s infinite; }
+.fpA-status { font-size: 11px; font-weight: 600; color: #ECE6CC; }
+.fpA-mode { font-size: 9.5px; color: #2A1F0A; background: linear-gradient(135deg, #D9A75F, #B58740); padding: 2px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.4px; display: inline-flex; align-items: center; gap: 3px; }
+.fpA-tb-actions { margin-left: auto; display: flex; gap: 8px; color: #6A7062; }
+
+.fpA-hero { padding: 11px 12px 9px; display: flex; align-items: center; gap: 9px; }
+.fpA-hero-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #D9A75F, #B58740); display: flex; align-items: center; justify-content: center; color: #2A1F0A; box-shadow: 0 0 14px rgba(217, 167, 95, 0.35); flex-shrink: 0; }
+.fpA-hero-text { flex: 1; min-width: 0; }
+.fpA-hero-title { font-size: 12px; font-weight: 600; color: #ECE6CC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpA-hero-meta { font-size: 10px; color: #8B8674; margin-top: 2px; font-family: ui-monospace, monospace; }
+.fpA-takeover { background: rgba(46, 32, 28, 0.6); border: 0.5px solid rgba(184, 85, 71, 0.4); color: #E8A095; padding: 5px 9px; font-size: 10.5px; border-radius: 6px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+.fpA-action { padding: 9px 12px; border-top: 0.5px solid #2A2E26; background: rgba(32, 35, 27, 0.4); }
+.fpA-action-label { font-size: 9.5px; color: #6A7062; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 3px; }
+.fpA-action-mono { font-size: 11px; color: #D9A75F; font-family: ui-monospace, monospace; line-height: 1.45; }
+.fpA-action-target { color: #8FAFD4; }
+
+.fpA-dock { background: rgba(18, 20, 16, 0.92); border-top: 0.5px solid #2A2E26; padding: 7px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.fpA-dock-grip { display: flex; flex-direction: column; gap: 1.5px; }
+.fpA-dock-grip span { display: block; width: 12px; height: 1px; background: #4A4D40; border-radius: 1px; }
+.fpA-dock-label { font-size: 11px; color: #BEB8A2; font-weight: 500; }
+.fpA-dock-snippet { font-size: 10.5px; color: #6A7062; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpA-dock-unread { background: #D9A75F; color: #2A1F0A; font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 700; min-width: 14px; text-align: center; }
+
+.legendH { position: absolute; top: 28px; left: 28px; background: #1F231C; color: white; padding: 9px 13px; border-radius: 8px; font-size: 10.5px; max-width: 240px; line-height: 1.55; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.legendH-title { font-weight: 600; color: #D9A75F; margin-bottom: 4px; font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; }
+.legendH-row { margin-top: 4px; display: flex; gap: 6px; align-items: baseline; }
+.legendH-num { color: #D9A75F; font-weight: 700; font-family: ui-monospace, monospace; font-size: 11px; flex-shrink: 0; }
+</style>
+
+<div class="sceneHA">
+
+  <div class="wpA-frame">
+    <div class="wpA">
+      <div class="wpA-header">
+        <div class="wpA-logo">in</div>
+        <div class="wpA-tab">Home</div>
+        <div class="wpA-tab active">Sales Navigator</div>
+        <div class="wpA-tab">Network</div>
+        <div class="wpA-icons">
+          <i class="ti ti-search" style="font-size:14px;" aria-hidden="true"></i>
+          <i class="ti ti-bell" style="font-size:14px;" aria-hidden="true"></i>
+        </div>
+      </div>
+
+      <div class="wpA-row-h">
+        <i class="ti ti-users" style="font-size: 14px; color:#666;" aria-hidden="true"></i>
+        Filtered leads
+        <span class="wpA-count">17 of 50 processed · 33 remaining</span>
+      </div>
+
+      <div class="wpA-card" style="opacity: 0.55;">
+        <div class="wpA-avatar"></div>
+        <div style="flex:1;">
+          <div class="wpA-card-title">PolymerCraft UK</div>
+          <div class="wpA-card-sub">Plastic Manufacturing · 87 employees · Birmingham</div>
+          <div class="wpA-card-action">✓ contact extracted · added to sheet</div>
+        </div>
+        <button class="wpA-btn" style="opacity: 0.6;">Contact info</button>
+      </div>
+
+      <div class="wpA-card focused-row" style="position: relative;">
+        <div class="wpA-avatar" style="background: linear-gradient(135deg, #D4A574, #B88C5C);"></div>
+        <div style="flex:1;">
+          <div class="wpA-card-title">Britlon Plastics Ltd</div>
+          <div class="wpA-card-sub">Plastic Manufacturing · 240 employees · Manchester</div>
+          <div class="wpA-card-action" style="color:#9A6F1F; font-weight: 500;">→ clicking "Contact info"…</div>
+        </div>
+        <button class="wpA-btn agent-target">Contact info</button>
+
+        <div class="agent-cursor-h" style="top: 32px; right: -30px;">
+          <div class="cursor-arrow"></div>
+          <div class="cursor-tag">
+            <div class="cursor-tag-dot"></div>
+            agent · click
+          </div>
+        </div>
+      </div>
+
+      <div class="wpA-card" style="opacity: 0.6;">
+        <div class="wpA-avatar" style="background: linear-gradient(135deg, #B5C4B8, #94A89A);"></div>
+        <div style="flex:1;">
+          <div class="wpA-card-title">MouldTech Industries</div>
+          <div class="wpA-card-sub">Plastic Manufacturing · 110 employees · Leeds</div>
+          <div class="wpA-card-action">queued · next up</div>
+        </div>
+        <button class="wpA-btn" style="opacity: 0.5;">Contact info</button>
+      </div>
+
+      <div class="wpA-card" style="opacity: 0.45;">
+        <div class="wpA-avatar" style="background: linear-gradient(135deg, #C8B4D4, #A894B8);"></div>
+        <div style="flex:1;">
+          <div class="wpA-card-title">Severn Polymers</div>
+          <div class="wpA-card-sub">Plastic Manufacturing · 180 employees · Bristol</div>
+          <div class="wpA-card-action">queued</div>
+        </div>
+        <button class="wpA-btn" style="opacity: 0.5;">Contact info</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="fpanelA">
+
+    <div class="fpA-tb">
+      <div class="fpA-grip">
+        <div class="fpA-grip-row"><div class="fpA-grip-dot"></div><div class="fpA-grip-dot"></div></div>
+        <div class="fpA-grip-row"><div class="fpA-grip-dot"></div><div class="fpA-grip-dot"></div></div>
+        <div class="fpA-grip-row"><div class="fpA-grip-dot"></div><div class="fpA-grip-dot"></div></div>
+      </div>
+      <div class="fpA-brand">
+        <div class="fpA-logo">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22V8"/>
+            <path d="M12 14C12 14 7 13 5 10C7 9 12 10 12 14Z"/>
+            <path d="M12 17C12 17 17 16 19 13C17 12 12 13 12 17Z"/>
+          </svg>
+        </div>
+        <div class="fpA-brand-name">FRONDOSE</div>
+      </div>
+      <div class="fpA-status-dot"></div>
+      <div class="fpA-status">Working</div>
+      <div class="fpA-mode"><i class="ti ti-bolt" style="font-size:9px;" aria-hidden="true"></i>AUTO</div>
+      <div class="fpA-tb-actions">
+        <i class="ti ti-minus" style="font-size:13px; cursor:pointer;" aria-hidden="true"></i>
+        <i class="ti ti-x" style="font-size:13px; cursor:pointer;" aria-hidden="true"></i>
+      </div>
+    </div>
+
+    <div class="fpA-hero">
+      <div class="fpA-hero-icon"><i class="ti ti-route" style="font-size: 14px;" aria-hidden="true"></i></div>
+      <div class="fpA-hero-text">
+        <div class="fpA-hero-title">LinkedIn supplier discovery</div>
+        <div class="fpA-hero-meta">4m 22s · ~2m left · 17/50</div>
+      </div>
+      <button class="fpA-takeover"><i class="ti ti-hand-stop" style="font-size:11px;" aria-hidden="true"></i>Take over</button>
+    </div>
+
+    <div class="fpA-action">
+      <div class="fpA-action-label">Live action</div>
+      <div class="fpA-action-mono">
+        → click <span class="fpA-action-target">[button "Contact info"]</span><br>
+        <span style="color:#6A7062;">in card "Britlon Plastics Ltd"</span>
+      </div>
+    </div>
+
+    <div class="fpA-dock">
+      <div class="fpA-dock-grip"><span></span><span></span><span></span></div>
+      <i class="ti ti-message-circle" style="font-size:12px; color:#8BBE6F;" aria-hidden="true"></i>
+      <span class="fpA-dock-label">Chat</span>
+      <span class="fpA-dock-snippet">Skip MouldTech if last post …</span>
+      <span class="fpA-dock-unread">2</span>
+    </div>
+
+  </div>
+
+  <div class="legendH">
+    <div class="legendH-title">Two-layer takeover signal</div>
+    <div class="legendH-row"><span class="legendH-num">1.</span>Page-edge gradient ring + label = "this whole tab is under agent control"</div>
+    <div class="legendH-row"><span class="legendH-num">2.</span>Element outline + cursor tag = "this specific button is being clicked right now"</div>
+  </div>
+
+</div>

@@ -20,7 +20,15 @@ interface AXNode {
  */
 export async function getSnapshot(client: CdpHandle, _opts?: SnapshotOptions): Promise<Snapshot> {
   await client.Accessibility.enable();
-  const { nodes } = (await client.Accessibility.getFullAXTree({})) as { nodes: AXNode[] };
+  let nodes: AXNode[];
+  try {
+    ({ nodes } = (await client.Accessibility.getFullAXTree({})) as { nodes: AXNode[] });
+  } catch {
+    // [INSPECT-1] RC-2: getFullAXTree can throw on a transitioning/animating AX tree (e.g. a
+    // dropdown re-open). Retry ONCE after a short settle delay before surfacing the failure.
+    await new Promise((r) => setTimeout(r, 100));
+    ({ nodes } = (await client.Accessibility.getFullAXTree({})) as { nodes: AXNode[] });
+  }
 
   const refs: RefMap = {};
   const lines: string[] = [];

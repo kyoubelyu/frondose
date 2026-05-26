@@ -1,10 +1,10 @@
 /**
  * P-16 Step 4a — T-Tools.1 (tool count verification scaffold)
  *
- * Tests that all 24 tools are registered with a fake LinkedIn session.
+ * Tests that all 47 worker tools are registered with a fake LinkedIn session.
  * Does NOT use real LLM calls — only makeAllTools + assertion.
  *
- * T-Tools.1: All 24 tools registered with fake session
+ * T-Tools.1: All 47 tools registered with fake session
  *
  * Gate coverage: G-P16.7
  *
@@ -37,9 +37,9 @@ const LINKEDIN_TOOL_NAMES = [
 // ─── T-Tools.1 ────────────────────────────────────────────────────
 // Given: FakeLinkedInWorld session + test identity persistence
 // When:  makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "...control })
-// Then:  returned ToolSet has exactly 24 keys. All 10 LinkedIn tool names present.
+// Then:  returned ToolSet has exactly 47 keys. All 10 LinkedIn tool names present.
 
-test("T-Tools.1: all 24 tools registered with fake session", async () => {
+test("T-Tools.1: all 47 tools registered with fake session", async () => {
   const world = new FakeLinkedInWorld();
   const session = world.makeSession();
   const control: ControlSignals = {
@@ -50,9 +50,8 @@ test("T-Tools.1: all 24 tools registered with fake session", async () => {
   const tools = makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "" }, control);
   const toolNames = Object.keys(tools);
 
-  // Total count assertion (P-Z3 rebaseline: was 24; default-mode makeAllTools is now 35
-  // post-P-Y1 — +memory/coords/cron/suggestion/todo_write tools accreted since P-16)
-  assert.equal(toolNames.length, 35, `Expected 35 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
+  // Total count assertion (P-SP-A rebaseline: +12 worker-only sales kernel tools)
+  assert.equal(toolNames.length, 47, `Expected 47 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
 
   // All 10 LinkedIn tool names present
   const missing = LINKEDIN_TOOL_NAMES.filter((name) => !toolNames.includes(name));

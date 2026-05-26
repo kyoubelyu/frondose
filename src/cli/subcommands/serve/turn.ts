@@ -5,6 +5,8 @@ import { callInOverlay } from "../../../overlay/inject.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
 import { hideEdgeRing, showEdgeRing } from "./takeover.js";
 
+const RESUME_EXCLUDED_TOOLS = new Set(["search_memory", "getMemory", "get_memory_note", "suggest_card"]);
+
 export interface TurnArgs {
   turnId: string;
   abortController: AbortController;
@@ -12,6 +14,7 @@ export interface TurnArgs {
   isRetryable: boolean;
   maxSteps?: number;
   isCronTurn?: boolean;
+  isWorkflowResume?: boolean;
 }
 
 export function createTurnRunner(
@@ -20,8 +23,8 @@ export function createTurnRunner(
 ): {
   runOneTurn(args: TurnArgs): Promise<void>;
   triggerAnalyzeProfile(pageUrl: string, turnId: string, abortController: AbortController): Promise<void>;
-  steerThenTrigger(newPrompt: string): Promise<void>;
-  triggerCardActionTurn(actionPrompt: string): Promise<void>;
+  steerThenTrigger(newPrompt: string, isWorkflowResume?: boolean): Promise<void>;
+  triggerCardActionTurn(actionPrompt: string, isWorkflowResume?: boolean): Promise<void>;
   resumeWorkflowTurn(prompt: string): Promise<void>;
 } {
   async function runOneTurn(args: TurnArgs): Promise<void> {
@@ -33,11 +36,15 @@ export function createTurnRunner(
     }
     showEdgeRing(state, deps.session); // P-Y2.3: Auto-mode page-edge ring for the turn (no-op in Manual)
     try {
+      const activeTools = args.isWorkflowResume
+        ? Object.keys(deps.tools).filter((n) => !RESUME_EXCLUDED_TOOLS.has(n))
+        : undefined;
       await runAgentLoop({
         model: deps.model,
-        system: deps.system,
+        system: args.isWorkflowResume ? deps.systemResume : deps.system,
         messages: state.messages,
         tools: deps.tools,
+        activeTools,
         maxSteps: args.maxSteps ?? deps.maxSteps,
         abortSignal: abortController.signal,
         onStepFinish: async (step: StepResult<ToolSet>) => {
@@ -153,6 +160,7 @@ export function createTurnRunner(
     turnId: string,
     abortController: AbortController,
   ): Promise<void> {
+    deps.emitFrame({ type: "turn-started", turnId, source: "server" });
     const analyzePrompt =
       `Operator is on profile ${pageUrl}. Analyze this profile against the operator's ICP. ` +
       "First call `inspect` to extract role/industry/region/companyName from the page. " +
@@ -182,9 +190,9 @@ export function createTurnRunner(
     }
   }
 
-  async function steerThenTrigger(newPrompt: string): Promise<void> {
+  async function steerThenTrigger(newPrompt: string, isWorkflowResume = false): Promise<void> {
     if (state.currentTurn === null) {
-      void triggerCardActionTurn(newPrompt);
+      void triggerCardActionTurn(newPrompt, isWorkflowResume);
       return;
     }
     const previousTurnId = state.currentTurn.turnId;
@@ -201,10 +209,10 @@ export function createTurnRunner(
       });
       return;
     }
-    void triggerCardActionTurn(newPrompt);
+    void triggerCardActionTurn(newPrompt, isWorkflowResume);
   }
 
-  async function triggerCardActionTurn(actionPrompt: string): Promise<void> {
+  async function triggerCardActionTurn(actionPrompt: string, isWorkflowResume = false): Promise<void> {
     if (state.currentTurn !== null) {
       deps.emitFrame({
         type: "error",
@@ -215,6 +223,7 @@ export function createTurnRunner(
     const turnId = randomBytes(4).toString("hex");
     const abortController = new AbortController();
     state.currentTurn = { turnId, abortController };
+    deps.emitFrame({ type: "turn-started", turnId, source: "server" });
     state.messages.push({ role: "user", content: actionPrompt });
     state.lastTurnUserPrompt = actionPrompt;
     try {
@@ -224,6 +233,7 @@ export function createTurnRunner(
         userPrompt: actionPrompt,
         isRetryable: true,
         isCronTurn: false,
+        isWorkflowResume,
       });
     } catch (e) {
       deps.emitFrame({
@@ -237,7 +247,7 @@ export function createTurnRunner(
   }
 
   async function resumeWorkflowTurn(prompt: string): Promise<void> {
-    await steerThenTrigger(prompt);
+    await steerThenTrigger(prompt, true);
   }
 
   return {

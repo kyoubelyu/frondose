@@ -41,10 +41,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P27.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () => {
-  it("T-CONTRACT.P27.WORKER: worker mode → exactly 35 tools", () => {
+  it("T-CONTRACT.P27.WORKER: worker mode → exactly 47 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'})
     // When:  Object.keys(tools).length
-    // Then:  35 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: P-39 +3; P-26 +2; P-31 +1)
+    // Then:  47 (P-SP-A rebaseline: +12 worker-only sales kernel tools)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -55,8 +55,8 @@ describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        35,
-        `T-CONTRACT.P27.WORKER: expected 35 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        47,
+        `T-CONTRACT.P27.WORKER: expected 47 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

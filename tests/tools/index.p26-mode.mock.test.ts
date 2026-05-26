@@ -37,11 +37,10 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 35 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 47 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  35 (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions;
-    //        P-44: P-39 +search_memory/set_memory_note/get_memory_note +3; P-26 +query_lead_globally/publish_event; P-31 +schedule_task)
+    // Then:  47 (P-SP-A rebaseline: +12 worker-only sales kernel tools)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -52,8 +51,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        35, // P-Y1: correct current count (worker 35)
-        `T-CONTRACT.WORKER.TOOLS: expected 35 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        47, // P-SP-A: current worker power count
+        `T-CONTRACT.WORKER.TOOLS: expected 47 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

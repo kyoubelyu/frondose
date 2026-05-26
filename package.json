@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.5.0-alpha.28",
+  "version": "0.5.0-alpha.33",
   "description": "Single-binary LinkedIn autonomous agent. Vercel AI SDK base + embedded CDP + ICP-as-soul system prompt + ported mai-linkedin primitives. Operator-facing CLI: `mai`. Private package; not for general distribution.",
   "type": "module",
   "license": "UNLICENSED",
@@ -32,7 +32,10 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/**/*.test.ts'",
+    "test": "npm run test:fast",
+    "test:fast": "node scripts/test-fast.mjs",
+    "test:integration": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/cli/commander-p45.mock.test.ts' 'tests/cli/autoUpdate.mock.test.ts' 'tests/cli/launchd.mock.test.ts' 'tests/cli/install-sh.test.ts' 'tests/cli/update-subcommand.mock.test.ts' 'tests/cli/subcommands/serverLaunchd.mock.test.ts' 'tests/tauri/button-click-pY2.1.test.ts' 'tests/tauri/button-integ-pY2.1.test.ts' 'tests/tauri/lifecycle-drun1-pY5.test.ts' 'tests/tauri/entry-flow-pY4.mock.test.ts'",
+    "test:all": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/**/*.test.ts'",
     "test:live": "tsx --test 'tests/live/**/*.smoke.ts'"
   },
   "dependencies": {

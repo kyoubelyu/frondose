@@ -1,11 +1,25 @@
 import { tool } from "ai";
 import { z } from "zod";
+import type { CdpClient } from "../../cdp/client.js";
 import { hardwareTypeAt } from "../../cdp/hardwareInput.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
 /** Resolve after `ms` milliseconds. */
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+const REACT_SAFE_CLEAR_ACTIVE_INPUT_JS = `(() => {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return false;
+  el.focus();
+  const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  const nativeTextareaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+  const setter = (el instanceof HTMLTextAreaElement) ? nativeTextareaSetter : nativeInputSetter;
+  if (setter) setter.call(el, '');
+  else el.value = '';
+  el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+  return true;
+})()`;
 
 /**
  * P-47 G-2 / OQ-1: per-character typing delay in ms. Produces human keystroke
@@ -25,6 +39,31 @@ export function computeCharDelay(textLength: number, rand: number): number {
   return Math.max(floor, Math.floor(budget * (0.3 + rand * 0.7)));
 }
 
+async function clearActiveInput(client: CdpClient): Promise<void> {
+  let reactSafeClearSucceeded = false;
+  try {
+    reactSafeClearSucceeded = await client.evaluate<boolean>(REACT_SAFE_CLEAR_ACTIVE_INPUT_JS);
+  } catch {
+    reactSafeClearSucceeded = false;
+  }
+  if (reactSafeClearSucceeded) return;
+
+  await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: "a", modifiers: 4 });
+  await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: "a", modifiers: 4 });
+  await client.handle.Input.dispatchKeyEvent({
+    type: "keyDown",
+    key: "Backspace",
+    code: "Backspace",
+    windowsVirtualKeyCode: 8,
+  });
+  await client.handle.Input.dispatchKeyEvent({
+    type: "keyUp",
+    key: "Backspace",
+    code: "Backspace",
+    windowsVirtualKeyCode: 8,
+  });
+}
+
 const typeParams = z.object({
   text: z.string().describe("Text to type into the resolved input. Replaces existing value."),
   ref: z.string().optional().describe("Input ref from inspect, e.g. '@e3'."),
@@ -36,7 +75,7 @@ export function makeTypeTool(session: LinkedinSession) {
   return tool({
     description:
       "Type text into a page input. Provide either a ref or a label. Existing value is cleared first " +
-      "(select-all + insertText replacement).",
+      "(React-safe clear + insertText replacement).",
     parameters: typeParams,
     execute: async ({ text, ref, label, scope }) => {
       try {
@@ -93,22 +132,15 @@ export function makeTypeTool(session: LinkedinSession) {
         } else {
           // Focus the input.
           await client.clickAt(target);
-          // Select-all (Ctrl+A — modifiers bitmask 2).
-          await client.handle.Input.dispatchKeyEvent({ type: "keyDown", key: "a", modifiers: 2 });
-          await client.handle.Input.dispatchKeyEvent({ type: "keyUp", key: "a", modifiers: 2 });
+          // [P-59 D-RUN-3] Try React-safe DOM clear first; fall back to Cmd+A+Backspace only when the
+          // focused element is not a native input/textarea or the evaluate path fails.
+          await clearActiveInput(client);
           // P-47 G-2: per-character dispatch — replaces the atomic insertText.
           // Each printable char is its own insertText call (fires a discrete
           // `input` event React/LinkedIn listens to); `\n` is a real Enter key
           // event. Jittered inter-char delays give a human keystroke-timing
           // fingerprint; computeCharDelay caps the total at ~8s for long text.
-          if (text.length === 0) {
-            // Empty text → explicit clear: replace the Ctrl+A selection with
-            // nothing. Ctrl+A only SELECTS — without this insertText the field
-            // keeps its (still-selected) content. Preserves the documented
-            // "`type` clears existing content by default" primitive contract
-            // (references/cli-primitives.md). [P-47 B-1]
-            await client.handle.Input.insertText({ text: "" });
-          } else {
+          if (text.length > 0) {
             for (const ch of text) {
               if (ch === "\n") {
                 await client.handle.Input.dispatchKeyEvent({

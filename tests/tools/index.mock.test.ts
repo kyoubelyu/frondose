@@ -5,18 +5,18 @@
  * regardless of session/persistence/control args. All tool counts increase by +3 from P-6 baselines.
  *
  * P-26 UPDATE: publish_event + query_lead_globally added to base (always registered).
- * P-31 UPDATE: schedule_task added to base (always registered). No-args now returns 7 tools.
+ * P-31 UPDATE: schedule_task added to base (always registered).
  * P-39 UPDATE: search_memory + set_memory_note + get_memory_note added to persistence block (+3).
- * P-44: All stale counts corrected to measured actuals.
+ * P-SP-A: 12 sales kernel tools added to worker mode (including no-args base).
  *
- * Measured sub-combo counts (post-P-39, no mode arg):
- *   no-args:            7  (echo + analyze_screenshot + web_fetch + web_search + publish_event + query_lead_globally + schedule_task)
- *   session-only:      19  (base 7 + 12 browser tools)
- *   persistence-only:  15  (base 7 + 8 memory/identity tools)
- *   session+persist:   27  (base 7 + 12 browser + 8 persistence)
- *   control-only:      12  (base 7 + 5 control tools)
- *   session+control:   24  (base 7 + 12 browser + 5 control)
- *   full (s+p+c):      32  (base 7 + 12 browser + 8 persistence + 5 control)
+ * Measured sub-combo counts (post-P-SP-A, no mode arg):
+ *   no-args:           19  (base 7 + 12 sales kernel tools)
+ *   session-only:      31  (base 19 + 12 browser tools)
+ *   persistence-only:  27  (base 19 + 8 memory/identity tools)
+ *   session+persist:   39  (base 19 + 12 browser + 8 persistence)
+ *   control-only:      27  (base 19 + 8 control tools)
+ *   session+control:   39  (base 19 + 12 browser + 8 control)
+ *   full (s+p+c):      47  (base 19 + 12 browser + 8 persistence + 8 control)
  *
  * No Chrome or LLM required.
  */
@@ -29,23 +29,47 @@ import { makeAllTools, tools } from "../../src/tools/index.js";
 
 process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
+const SALES_TOOL_NAMES = [
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
+  "list_due_followups",
+  "mark_message_sent",
+  "promote_candidate_to_lead",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
+  "save_message_draft",
+  "schedule_follow_up",
+  "update_lead_stage",
+] as const;
+
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
-test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_event+query_lead_globally+schedule_task); with session returns 19 keys [P-44 updated]", () => {
-  // No session → 7 base tools (P-26 adds publish_event+query_lead_globally; P-31 adds schedule_task)
+test("T-M81: makeAllTools with no session returns 19 keys; with session returns 31 keys [P-SP-A updated]", () => {
+  // No session → 19 base tools (P-SP-A adds 12 sales kernel tools)
   const echoOnly = makeAllTools();
   const echoKeys = Object.keys(echoOnly).sort();
   assert.deepEqual(
     echoKeys,
-    ["analyze_screenshot", "echo", "publish_event", "query_lead_globally", "schedule_task", "web_fetch", "web_search"],
-    "makeAllTools() (no session) must return 7 base tools in P-44",
+    [
+      "analyze_screenshot",
+      "echo",
+      "publish_event",
+      "query_lead_globally",
+      "schedule_task",
+      "web_fetch",
+      "web_search",
+      ...SALES_TOOL_NAMES,
+    ].sort(),
+    "makeAllTools() (no session) must return 19 base tools in P-SP-A",
   );
 
   // Static export `tools` must also be echo-only (P-1 backward compat)
   const staticKeys = Object.keys(tools);
   assert.deepEqual(staticKeys, ["echo"], "static `tools` export must contain only 'echo'");
 
-  // With session → 19 keys (base 7 + 12 browser tools)
+  // With session → 31 keys (base 19 + 12 browser tools)
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -61,7 +85,7 @@ test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_eve
   const allKeys = Object.keys(allTools).sort();
 
   const expectedKeys = [
-    // base (7)
+    // base (19)
     "analyze_screenshot",
     "echo",
     "publish_event",
@@ -69,6 +93,7 @@ test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_eve
     "schedule_task",
     "web_fetch",
     "web_search",
+    ...SALES_TOOL_NAMES,
     // browser (12)
     "clear_cookies",
     "click",
@@ -84,8 +109,8 @@ test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_eve
     "upload",
   ].sort();
 
-  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 19 keys in P-44");
-  assert.equal(allKeys.length, 19, "must have exactly 19 tools with session (P-44)");
+  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 31 keys in P-SP-A");
+  assert.equal(allKeys.length, 31, "must have exactly 31 tools with session (P-SP-A)");
 
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in minimal set");
@@ -97,8 +122,8 @@ test("T-M81: makeAllTools with no session returns 7 keys (echo+3 web+publish_eve
 
 // ─── T-M120 ─────────────────────────────────────────────────────────────────
 
-test("T-M120: makeAllTools() with no args returns exactly 7 keys — P-44 updated (P-31 adds schedule_task to base; P-26 adds publish_event+query_lead_globally)", () => {
-  // P-44: no-args now returns 7 tools (echo + 3 web + publish_event + query_lead_globally + schedule_task)
+test("T-M120: makeAllTools() with no args returns exactly 19 keys — P-SP-A updated", () => {
+  // P-SP-A: no-args now returns 19 tools (previous 7 base + 12 sales kernel tools)
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
@@ -109,16 +134,16 @@ test("T-M120: makeAllTools() with no args returns exactly 7 keys — P-44 update
     "schedule_task",
     "web_fetch",
     "web_search",
+    ...SALES_TOOL_NAMES,
   ];
-  assert.deepEqual(keys, expected, `makeAllTools() must return 7 base tools in P-44; got: ${keys.join(", ")}`);
-  assert.equal(keys.length, 7, "makeAllTools() must have exactly 7 tools (P-44: was 4 in P-9)");
+  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 19 base tools in P-SP-A; got: ${keys.join(", ")}`);
+  assert.equal(keys.length, 19, "makeAllTools() must have exactly 19 tools (P-SP-A: was 7 in P-44)");
 });
 
 // ─── T-M121 ─────────────────────────────────────────────────────────────────
 
-test("T-M121: makeAllTools(undefined, persistence) returns 15 keys (base 7 + 8 memory/identity) [P-44 updated from 9]", () => {
-  // P-44 update: was 9 keys (P-9); +3 from P-39 memory tools (search_memory/set_memory_note/get_memory_note);
-  //              +3 from P-26/P-31 base additions (publish_event/query_lead_globally/schedule_task) = 15.
+test("T-M121: makeAllTools(undefined, persistence) returns 27 keys (base 19 + 8 memory/identity) [P-SP-A updated]", () => {
+  // P-SP-A update: previous 15 keys + 12 sales kernel tools = 27.
   const persistence = {
     memoryDbPath: "/tmp/p4-t121-memory.sqlite",
     identityPath: "/tmp/p4-t121-identity.json",
@@ -127,7 +152,7 @@ test("T-M121: makeAllTools(undefined, persistence) returns 15 keys (base 7 + 8 m
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (7)
+    // base (19)
     "analyze_screenshot",
     "echo",
     "publish_event",
@@ -135,6 +160,7 @@ test("T-M121: makeAllTools(undefined, persistence) returns 15 keys (base 7 + 8 m
     "schedule_task",
     "web_fetch",
     "web_search",
+    ...SALES_TOOL_NAMES,
     // persistence (8)
     "get_memory_note",
     "getIdentity",
@@ -148,15 +174,15 @@ test("T-M121: makeAllTools(undefined, persistence) returns 15 keys (base 7 + 8 m
   assert.deepEqual(
     keys,
     expected,
-    `persistence-only must yield 15 tools in P-44 (base 7 + 8 memory/identity); got: ${keys.join(", ")}`,
+    `persistence-only must yield 27 tools in P-SP-A (base 19 + 8 memory/identity); got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 15, "must have exactly 15 tools with persistence-only (P-44: was 9 in P-9)");
+  assert.equal(keys.length, 27, "must have exactly 27 tools with persistence-only (P-SP-A: was 15 in P-44)");
 });
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
 
-test("T-M122: makeAllTools(session, persistence) returns 27 keys — P-44 updated (was 19 in P-9; +3 P-26/P-31 base; +3 P-39 memory; +2 P-28.5 browser)", () => {
-  // P-44 update: 7 base + 12 browser + 8 persistence = 27.
+test("T-M122: makeAllTools(session, persistence) returns 39 keys — P-SP-A updated", () => {
+  // P-SP-A update: 19 base + 12 browser + 8 persistence = 39.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -176,7 +202,7 @@ test("T-M122: makeAllTools(session, persistence) returns 27 keys — P-44 update
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (7)
+    // base (19)
     "analyze_screenshot",
     "echo",
     "publish_event",
@@ -184,6 +210,7 @@ test("T-M122: makeAllTools(session, persistence) returns 27 keys — P-44 update
     "schedule_task",
     "web_fetch",
     "web_search",
+    ...SALES_TOOL_NAMES,
     // browser (12)
     "clear_cookies",
     "click",
@@ -211,15 +238,15 @@ test("T-M122: makeAllTools(session, persistence) returns 27 keys — P-44 update
   assert.deepEqual(
     keys,
     expected,
-    `makeAllTools(session, persistence) must yield 27 keys in P-44; got: ${keys.join(", ")}`,
+    `makeAllTools(session, persistence) must yield 39 keys in P-SP-A; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 27, "must have exactly 27 tools with session + persistence (P-44: was 19 in P-9)");
+  assert.equal(keys.length, 39, "must have exactly 39 tools with session + persistence (P-SP-A: was 27 in P-44)");
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
 
-test("T-M_p5.18: makeAllTools(session, persistence) returns 27 keys including 'qualify_profile' (P-44 updated)", () => {
-  // P-44 update: was 19 in P-9; now 27 (base 7 + 12 browser + 8 persistence).
+test("T-M_p5.18: makeAllTools(session, persistence) returns 39 keys including 'qualify_profile' (P-SP-A updated)", () => {
+  // P-SP-A update: now 39 (base 19 + 12 browser + 8 persistence).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -250,16 +277,16 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 27 keys including 'q
   assert.ok("get_memory_note" in t, "T-M_p5.18: makeAllTools must include 'get_memory_note' tool (P-39)");
   assert.equal(
     keys.length,
-    27,
-    `T-M_p5.18: must have exactly 27 tools in P-44; got ${keys.length}: ${keys.sort().join(", ")}`,
+    39,
+    `T-M_p5.18: must have exactly 39 tools in P-SP-A; got ${keys.length}: ${keys.sort().join(", ")}`,
   );
-  console.log(`T-M_p5.18: makeAllTools returns 27 tools including qualify_profile + 3 web + 3 memory ✓`);
+  console.log("T-M_p5.18: makeAllTools returns 39 tools including qualify_profile + sales kernel tools");
 });
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-Y1: +todo_write; P-57a: +suggest_card/suggest_next_actions; P-44: was 24 in P-9; base 7 + browser 12 + persistence 8 + control 8)", () => {
-  // P-Y1 update: 7 base + 12 browser + 8 persistence + 8 control (was 5 in P-44, +suggest_card/suggest_next_actions/todo_write) = 35.
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 47 keys (P-SP-A: +12 sales kernel tools)", () => {
+  // P-SP-A update: 19 base + 12 browser + 8 persistence + 8 control = 47.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -280,7 +307,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (7)
+    // base (19)
     "echo",
     "analyze_screenshot",
     "web_fetch",
@@ -288,6 +315,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-
     "publish_event",
     "query_lead_globally",
     "schedule_task",
+    ...SALES_TOOL_NAMES,
     // browser (12)
     "clear_cookies",
     "click",
@@ -324,9 +352,9 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 35 keys in P-Y1; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 47 keys in P-SP-A; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 35, `T-M_p6.21: must have exactly 35 tools in P-Y1; got ${keys.length}`);
+  assert.equal(keys.length, 47, `T-M_p6.21: must have exactly 47 tools in P-SP-A; got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -349,13 +377,13 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 35 keys (P-
   // Spot-check P-Y1 workflow tool
   assert.ok("todo_write" in t, "T-M_p6.21: todo_write must be registered (P-Y1)");
 
-  console.log(`T-M_p6.21: makeAllTools(session, persistence, control) → 35 keys (P-Y1 updated) ✓`);
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 47 keys (P-SP-A updated)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
 
-test("T-M_p6.22: makeAllTools() returns 7 keys — P-44 update; base = echo+3 web+publish_event+query_lead_globally+schedule_task", () => {
-  // P-44: no-args returns 7 tools (was 4 in P-9 before P-26/P-31 base additions).
+test("T-M_p6.22: makeAllTools() returns 19 keys — P-SP-A update; base includes sales kernel tools", () => {
+  // P-SP-A: no-args returns 19 tools (previous 7 base + 12 sales kernel tools).
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
@@ -366,20 +394,51 @@ test("T-M_p6.22: makeAllTools() returns 7 keys — P-44 update; base = echo+3 we
     "schedule_task",
     "web_fetch",
     "web_search",
+    ...SALES_TOOL_NAMES,
   ];
   assert.deepEqual(
     keys,
-    expected,
-    `T-M_p6.22: makeAllTools() must return 7 base tools in P-44; got: ${keys.join(", ")}`,
+    expected.sort(),
+    `T-M_p6.22: makeAllTools() must return 19 base tools in P-SP-A; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 7, "T-M_p6.22: must have exactly 7 tools with no args (P-44: was 4 in P-9)");
-  console.log("T-M_p6.22: makeAllTools() → 7 keys (base set) ✓");
+  assert.equal(keys.length, 19, "T-M_p6.22: must have exactly 19 tools with no args (P-SP-A: was 7 in P-44)");
+  console.log("T-M_p6.22: makeAllTools() -> 19 keys (base set)");
 });
 
 // ─── T-M_p6.23 — session + control (no persistence) ──────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P-Y1 update (base 7 + browser 12 + control 8; was 24 in P-44)", () => {
-  // P-Y1 update: 7 base + 12 browser + 8 control (was 5 in P-44, +suggest_card/suggest_next_actions/todo_write) = 27.
+// ─── T-SP-B.Wiring.1 — score_lead + score_account registered (P-SP-B) ────────
+// NOTE: This scaffold INTENTIONALLY FAILS pre-builder (Step 4a). After P-SP-A + P-SP-B
+// code ships, makeAllTools with worker-mode + power tier must include BOTH new tools.
+
+test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the returned registry contains score_lead AND score_account with valid Vercel tool shapes", () => {
+  // Given: makeAllTools called with (undefined, undefined, control, undefined, {mode:"worker", tier:"power"})
+  //        after P-SP-B §6.4(C) wiring edit (score_lead + score_account added to makeSalesTools)
+  // When:  Object.keys(toolSet) inspected
+  // Then:  includes "score_lead" AND "score_account"; both have .description (string) + .parameters + .execute (function)
+  //
+  // Pre-builder state: makeSalesTools does NOT yet register score_lead / score_account
+  // → assert.ok(false, …) immediately fails (expected at Step 4a).
+  process.env.MAI_TIER = "power";
+  // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
+  const control = { requestStop: () => {}, auditPath: "/tmp/p-sp-b-wiring1-audit.jsonl" } as any;
+  // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
+  const t = makeAllTools(undefined, undefined, control, undefined, { mode: "worker", tier: "power" } as any);
+  void t; // available for Step 5 assertion bodies
+  assert.ok(
+    false,
+    [
+      "T-SP-B.Wiring.1 TODO: fill at Step 5 — FAILS pre-builder:",
+      "score_lead + score_account not registered in makeAllTools until P-SP-B §6.4(C) wiring ships.",
+      `Current worker-power keys: ${Object.keys(t).sort().join(", ")}.`,
+    ].join(" "),
+  );
+});
+
+// ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
+
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P-SP-A update (base 19 + browser 12 + control 8)", () => {
+  // P-SP-A update: 19 base + 12 browser + 8 control = 39.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -396,7 +455,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (7)
+    // base (19)
     "echo",
     "analyze_screenshot",
     "web_fetch",
@@ -404,6 +463,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P
     "publish_event",
     "query_lead_globally",
     "schedule_task",
+    ...SALES_TOOL_NAMES,
     // browser (12)
     "clear_cookies",
     "click",
@@ -431,9 +491,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 27 keys in P-Y1; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 39 keys in P-SP-A; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 27, `T-M_p6.23: must have exactly 27 tools in P-Y1; got ${keys.length}`);
+  assert.equal(keys.length, 39, `T-M_p6.23: must have exactly 39 tools in P-SP-A; got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -450,6 +510,6 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 27 keys — P
   assert.ok("web_search" in t, "T-M_p6.23: web_search must be present (P-9 always-registered)");
 
   console.log(
-    `T-M_p6.23: makeAllTools(session, undefined, control) → 24 keys (P-44 updated; CONCERN-MR-1 preserved) ✓`,
+    "T-M_p6.23: makeAllTools(session, undefined, control) -> 39 keys (P-SP-A updated; CONCERN-MR-1 preserved)",
   );
 });

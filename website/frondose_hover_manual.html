@@ -1,0 +1,222 @@
+<h2 class="sr-only">Frondose Chrome extension in Manual mode with new palette.</h2>
+
+<style>
+.sceneH { position: relative; width: 100%; min-height: 580px; background: linear-gradient(180deg, #F0F2F5 0%, #E4E6EB 100%); border-radius: 12px; overflow: hidden; border: 0.5px solid #D0D2D6; padding: 18px; box-sizing: border-box; }
+
+.webpage { background: white; border-radius: 8px; padding: 16px 22px; min-height: 540px; border: 0.5px solid #E0E0E0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.wp-header { padding-bottom: 12px; border-bottom: 0.5px solid #EEE; display: flex; align-items: center; gap: 10px; }
+.wp-logo { font-size: 14px; font-weight: 700; color: #0A66C2; }
+.wp-search { flex: 1; max-width: 280px; background: #EEF3F8; border-radius: 16px; padding: 5px 12px; font-size: 11px; color: #888; }
+.wp-content { padding: 16px 0; }
+.wp-h { font-size: 14px; font-weight: 600; color: #222; margin-bottom: 10px; }
+.wp-card { background: #F7F8F9; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.wp-card-row { display: flex; align-items: center; gap: 10px; }
+.wp-card-avatar { width: 32px; height: 32px; border-radius: 4px; background: linear-gradient(135deg, #C7D0DA, #A8B5C4); }
+.wp-card-title { font-size: 12px; font-weight: 600; color: #0A66C2; }
+.wp-card-sub { font-size: 11px; color: #666; margin-top: 1px; }
+.wp-card-meta { font-size: 10.5px; color: #999; margin-top: 4px; }
+
+.fpanel { position: absolute; bottom: 24px; right: 24px; width: 320px; background: white; border-radius: 14px; box-shadow: 0 16px 40px rgba(30, 35, 25, 0.18), 0 4px 12px rgba(30, 35, 25, 0.08); border: 0.5px solid rgba(0,0,0,0.08); overflow: hidden; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+
+.fpanel-tb { background: #FAFAF5; border-bottom: 0.5px solid #EFEAE0; padding: 8px 10px; display: flex; align-items: center; gap: 8px; cursor: grab; }
+.fpanel-brand { display: flex; align-items: center; gap: 5px; padding-right: 4px; border-right: 0.5px solid #E0DDD2; margin-right: 2px; }
+.fpanel-logo { width: 13px; height: 13px; border-radius: 3px; background: linear-gradient(135deg, #5A8043, #3A5A2C); display: flex; align-items: center; justify-content: center; }
+.fpanel-brand-name { font-size: 9.5px; font-weight: 700; color: #2A2A22; letter-spacing: 0.4px; }
+.fpanel-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #6FA86F; }
+.fpanel-status { font-size: 11px; font-weight: 600; color: #2A2A22; }
+.fpanel-mode { font-size: 10px; color: #2A2A22; background: #EFEAE0; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+.fpanel-tb-actions { margin-left: auto; display: flex; gap: 8px; color: #8B8475; }
+
+.drag-grip { display: flex; flex-direction: column; gap: 2px; opacity: 0.35; cursor: grab; }
+.drag-grip-row { display: flex; gap: 2px; }
+.drag-grip-dot { width: 3px; height: 3px; background: #555; border-radius: 50%; }
+
+.fpanel-conv { padding: 12px; max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+
+.fmsg-user { align-self: flex-end; max-width: 78%; background: #2A2A22; color: white; padding: 7px 11px; border-radius: 12px 12px 3px 12px; font-size: 12px; line-height: 1.45; }
+
+.fmsg-agent { display: flex; gap: 8px; }
+.fmsg-avatar { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; box-shadow: 0 0 6px rgba(90, 128, 67, 0.3); }
+.fmsg-agent-body { flex: 1; max-width: 88%; }
+.fmsg-agent-text { font-size: 12px; color: #2A2A22; line-height: 1.5; }
+
+.mini-wf { margin-top: 6px; background: #FAFAF5; border: 0.5px solid #EFEAE0; border-radius: 9px; overflow: hidden; }
+.mwf-head { padding: 8px 10px; display: flex; align-items: center; gap: 8px; border-bottom: 0.5px solid #EFEAE0; }
+.mwf-icon { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; }
+.mwf-title { font-size: 11.5px; font-weight: 600; color: #2A2A22; }
+.mwf-progress-mini { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.mwf-progress-mini-bar { width: 40px; height: 3px; background: #EFEAE0; border-radius: 2px; overflow: hidden; }
+.mwf-progress-mini-fill { height: 100%; background: linear-gradient(90deg, #5A8043, #7AA060); }
+.mwf-progress-mini-text { font-size: 10px; color: #8B8475; font-variant-numeric: tabular-nums; }
+
+.mwf-steps { padding: 4px 0; }
+.mwf-step { display: flex; align-items: center; gap: 8px; padding: 3px 10px; font-size: 11px; }
+.mwf-step-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.mwf-step-text { color: #2A2A22; flex: 1; }
+.mwf-step-text.muted { color: #8B8475; }
+
+.mwf-handoff { padding: 6px 10px; background: white; border-top: 0.5px solid #EFEAE0; display: flex; align-items: center; gap: 6px; }
+.mwf-handoff-btn { margin-left: auto; font-size: 10.5px; padding: 4px 9px; border-radius: 5px; background: linear-gradient(180deg, #E0B070, #C8943A); color: #3A2A0A; border: none; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(200, 148, 58, 0.25); }
+
+.fpanel-input { padding: 8px 10px; border-top: 0.5px solid #EFEAE0; display: flex; gap: 6px; align-items: center; background: white; }
+.fpanel-input input { flex: 1; border: none; background: transparent; font-size: 12px; outline: none; color: #2A2A22; font-family: inherit; }
+.fpanel-send { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 2px rgba(90, 128, 67, 0.3); }
+
+.legend { position: absolute; bottom: 24px; left: 24px; background: #1F231C; color: white; padding: 8px 12px; border-radius: 8px; font-size: 10.5px; max-width: 220px; line-height: 1.5; }
+.legend-title { font-weight: 600; color: #D9A75F; margin-bottom: 3px; font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; }
+
+@keyframes pulseSubtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.pulse { animation: pulseSubtle 1.6s infinite; }
+</style>
+
+<div class="sceneH">
+
+  <div class="webpage">
+    <div class="wp-header">
+      <div class="wp-logo">in</div>
+      <div class="wp-search">Search · companies, people, jobs</div>
+      <div style="margin-left: auto; display: flex; gap: 14px; font-size: 11px; color: #666;">
+        <i class="ti ti-home" style="font-size:14px;" aria-hidden="true"></i>
+        <i class="ti ti-users" style="font-size:14px;" aria-hidden="true"></i>
+        <i class="ti ti-briefcase" style="font-size:14px;" aria-hidden="true"></i>
+        <i class="ti ti-message" style="font-size:14px;" aria-hidden="true"></i>
+        <i class="ti ti-bell" style="font-size:14px;" aria-hidden="true"></i>
+      </div>
+    </div>
+    <div class="wp-content">
+      <div class="wp-h">Sales Navigator · Lead search</div>
+      <div class="wp-card">
+        <div class="wp-card-row">
+          <div class="wp-card-avatar"></div>
+          <div style="flex:1;">
+            <div class="wp-card-title">PolymerCraft UK</div>
+            <div class="wp-card-sub">Plastic Manufacturing · 87 employees · Birmingham</div>
+            <div class="wp-card-meta">Mutual connections: 3 · Active hiring</div>
+          </div>
+        </div>
+      </div>
+      <div class="wp-card">
+        <div class="wp-card-row">
+          <div class="wp-card-avatar" style="background: linear-gradient(135deg, #D4A574, #B88C5C);"></div>
+          <div style="flex:1;">
+            <div class="wp-card-title">Britlon Plastics Ltd</div>
+            <div class="wp-card-sub">Plastic Manufacturing · 240 employees · Manchester</div>
+            <div class="wp-card-meta">Mutual connections: 1</div>
+          </div>
+        </div>
+      </div>
+      <div class="wp-card" style="opacity: 0.55;">
+        <div class="wp-card-row">
+          <div class="wp-card-avatar" style="background: linear-gradient(135deg, #B5C4B8, #94A89A);"></div>
+          <div style="flex:1;">
+            <div class="wp-card-title">MouldTech Industries</div>
+            <div class="wp-card-sub">Plastic Manufacturing · 110 employees · Leeds</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fpanel">
+
+    <div class="fpanel-tb">
+      <div class="drag-grip">
+        <div class="drag-grip-row"><div class="drag-grip-dot"></div><div class="drag-grip-dot"></div></div>
+        <div class="drag-grip-row"><div class="drag-grip-dot"></div><div class="drag-grip-dot"></div></div>
+        <div class="drag-grip-row"><div class="drag-grip-dot"></div><div class="drag-grip-dot"></div></div>
+      </div>
+      <div class="fpanel-brand">
+        <div class="fpanel-logo">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22V8"/>
+            <path d="M12 14C12 14 7 13 5 10C7 9 12 10 12 14Z"/>
+            <path d="M12 17C12 17 17 16 19 13C17 12 12 13 12 17Z"/>
+          </svg>
+        </div>
+        <div class="fpanel-brand-name">FRONDOSE</div>
+      </div>
+      <div class="fpanel-status-dot"></div>
+      <div class="fpanel-status">Listening</div>
+      <div class="fpanel-mode"><i class="ti ti-message-circle" style="font-size:9px; vertical-align:-1px; margin-right:2px;" aria-hidden="true"></i>MANUAL</div>
+      <div class="fpanel-tb-actions">
+        <i class="ti ti-minus" style="font-size:13px; cursor:pointer;" aria-hidden="true"></i>
+        <i class="ti ti-x" style="font-size:13px; cursor:pointer;" aria-hidden="true"></i>
+      </div>
+    </div>
+
+    <div class="fpanel-conv">
+
+      <div class="fmsg-user">What does PolymerCraft's hiring activity tell us about them?</div>
+
+      <div class="fmsg-agent">
+        <div class="fmsg-avatar"><i class="ti ti-sparkles" style="font-size:10px;" aria-hidden="true"></i></div>
+        <div class="fmsg-agent-body">
+          <div class="fmsg-agent-text">
+            They're posting for 4 production roles right now — usually means capacity expansion. Good moment to reach out.
+          </div>
+        </div>
+      </div>
+
+      <div class="fmsg-user">Add them and the next 49 similar UK manufacturers to outreach</div>
+
+      <div class="fmsg-agent">
+        <div class="fmsg-avatar"><i class="ti ti-sparkles" style="font-size:10px;" aria-hidden="true"></i></div>
+        <div class="fmsg-agent-body">
+          <div class="fmsg-agent-text">
+            On it. I'll source from your current filter, then check in before adding.
+          </div>
+
+          <div class="mini-wf">
+            <div class="mwf-head">
+              <div class="mwf-icon"><i class="ti ti-route" style="font-size:11px;" aria-hidden="true"></i></div>
+              <div class="mwf-title">Bulk outreach add</div>
+              <div class="mwf-progress-mini">
+                <div class="mwf-progress-mini-bar"><div class="mwf-progress-mini-fill" style="width: 20%;"></div></div>
+                <div class="mwf-progress-mini-text">1 / 5</div>
+              </div>
+            </div>
+
+            <div class="mwf-steps">
+              <div class="mwf-step">
+                <div class="mwf-step-dot" style="background: #6FA86F;"><i class="ti ti-check" style="font-size:7px; color:white;" aria-hidden="true"></i></div>
+                <div class="mwf-step-text">Verified current filter</div>
+              </div>
+              <div class="mwf-step">
+                <div class="mwf-step-dot pulse" style="background: #F2DCAE; border: 1px solid #D9A75F;"><div style="width:3px; height:3px; background:#9A6F1F; border-radius:50%;"></div></div>
+                <div class="mwf-step-text">Collecting 50 companies</div>
+              </div>
+              <div class="mwf-step">
+                <div class="mwf-step-dot" style="background: #E3ECF6; border: 1px solid #B5C6DC;"></div>
+                <div class="mwf-step-text muted">Review before add · needs you</div>
+              </div>
+              <div class="mwf-step">
+                <div class="mwf-step-dot" style="background: #EFEAE0;"></div>
+                <div class="mwf-step-text muted">Extract contacts · +1 more</div>
+              </div>
+            </div>
+
+            <div class="mwf-handoff">
+              <i class="ti ti-info-circle" style="font-size:11px; color:#8B8475;" aria-hidden="true"></i>
+              <span style="font-size: 10.5px; color: #7A7468;">This may take ~3 min</span>
+              <button class="mwf-handoff-btn"><i class="ti ti-bolt" style="font-size:10px;" aria-hidden="true"></i>Run on Auto</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <div class="fpanel-input">
+      <i class="ti ti-message" style="color:#8B8475; font-size:13px;" aria-hidden="true"></i>
+      <input type="text" placeholder="Ask about this page, or give a task…" />
+      <button class="fpanel-send"><i class="ti ti-arrow-up" style="font-size:11px;" aria-hidden="true"></i></button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Hover · Manual</div>
+    Conversation-first. Moss green for brand & agent. Warm sand for "running". Run on Auto promotes the task.
+  </div>
+
+</div>

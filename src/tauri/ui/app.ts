@@ -61,6 +61,7 @@ type SseFrame =
   | { type: "passive-mode"; passiveEnabled?: boolean }
   | { type: "cron-tick"; cronRunId: string; taskHint?: string; ts: number }
   | { type: "cron-done"; cronRunId: string; ts: number }
+  | { type: "turn-started"; turnId: string; source?: "server" | "cron" }
   | {
       type: "workflow-proposed";
       workflowId: string;
@@ -477,6 +478,17 @@ function handleEvent(payload: SseFrame): void {
     case "cron-done":
       cronTickBannerEl.classList.add("hidden");
       cronTickBannerEl.textContent = "";
+      break;
+    case "turn-started":
+      // [P-59 FIX-2/3b] Server-initiated turns (resume/card via triggerCardActionTurn,
+      // profile-activate via triggerAnalyzeProfile, and cron) have NO mai_agent_turn invoke
+      // to set currentTurnId, so their tool-call/text/done frames were dropped by the
+      // `=== currentTurnId` guard. Adopt the announced turn (mirrors sendCommand L263-268).
+      currentTurnId = payload.turnId;
+      outputEl.textContent = "";
+      refreshOutputVisibility();
+      tickerEl.textContent = payload.source === "cron" ? "cron running..." : "resuming...";
+      transition("running");
       break;
     case "workflow-proposed":
       workflowView = {

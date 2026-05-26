@@ -49,6 +49,9 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
   "get_memory_note",
   "getIdentity",
   "getMemory",
@@ -56,14 +59,22 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "identity",
   "inspect",
   "launch",
+  "list_due_followups",
+  "mark_message_sent",
   "navigate_to_url",
   "press",
+  "promote_candidate_to_lead",
   "publish_event",
   "qualify_profile",
   "query_lead_globally",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
   "reload",
   "remember",
+  "save_message_draft",
   "schedule_task",
+  "schedule_follow_up",
   "screenshot",
   "scroll",
   "search_memory",
@@ -76,6 +87,7 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "telegram_notify",
   "todo_write",
   "type",
+  "update_lead_stage",
   "upload",
   "web_fetch",
   "web_search",
@@ -113,11 +125,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: worker 35 (rebaselined to current post-P-Y1; was P-39-era 32) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 35 tools, including search_memory / set_memory_note / get_memory_note", () => {
+describe("P-39 tool count: worker 47 (rebaselined to P-SP-A from post-P-Y1) (G-P39.11)", () => {
+  it("T-Count.1: makeAllTools worker mode → exactly 47 tools, including search_memory / set_memory_note / get_memory_note", () => {
     // Given: makeAllTools called with a fake session + persistence + control in worker mode
     // When:  Object.keys(workerTools).length checked; set includes the 3 new P-39 tools
-    // Then:  35 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-Z2 rebaseline)
+    // Then:  47 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-SP-A rebaseline)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -131,8 +143,8 @@ describe("P-39 tool count: worker 35 (rebaselined to current post-P-Y1; was P-39
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        35,
-        `worker tool count must be 35; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        47,
+        `worker tool count must be 47; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-39 snapshot");
     } finally {

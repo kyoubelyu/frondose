@@ -65,7 +65,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Post-P-31 worker tool name snapshot (32 tools — P-31 adds schedule_task to the P-33 reorg baseline).
+// Current worker tool name snapshot (47 tools after P-SP-A sales kernel rebaseline).
 // P-33 froze counts at 28/19; P-31 supersedes (adds schedule_task); P-39 supersedes (adds 3 memory tools).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 const FROZEN_WORKER_TOOL_KEYS = [
@@ -75,6 +75,9 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
   "get_memory_note",
   "getIdentity",
   "getMemory",
@@ -82,14 +85,22 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "identity",
   "inspect",
   "launch",
+  "list_due_followups",
+  "mark_message_sent",
   "navigate_to_url",
   "press",
+  "promote_candidate_to_lead",
   "publish_event",
   "qualify_profile",
   "query_lead_globally",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
   "reload",
   "remember",
+  "save_message_draft",
   "schedule_task",
+  "schedule_follow_up",
   "screenshot",
   "scroll",
   "search_memory",
@@ -102,6 +113,7 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "telegram_notify",
   "todo_write",
   "type",
+  "update_lead_stage",
   "upload",
   "web_fetch",
   "web_search",
@@ -242,10 +254,10 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 32 tool keys (P-31 adds schedule_task; P-39 adds 3 memory tools; P-44 updates count)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 47 tool keys (P-SP-A updates count)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
     // When:  worker mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
-    // Then:  exactly 32 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    // Then:  exactly 47 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -262,8 +274,8 @@ describe("makeAllTools worker mode (G-P33.5 + P-31/P-39 supersedes count)", () =
 
       assert.equal(
         keys.length,
-        35,
-        `worker mode must have exactly 35 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        47,
+        `worker mode must have exactly 47 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,

@@ -222,15 +222,15 @@ describe("P-23 contract: Hard Rule 8 + tool count", () => {
     assert.strictEqual(result.trim(), "", `child_process found in src/tools/: ${result.trim()}`);
   });
 
-  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) returns exactly 35 tools", () => {
+  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) returns exactly 47 tools", () => {
     // Given:  full tool inventory (worker mode: session + persistence + control)
     // When:   Object.keys(makeAllTools(session, persistence, control)) counted
-    // Then:   count === 35 (P-Z3 rebaseline: was 32 at P-44; +suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1])
+    // Then:   count === 47 (P-SP-A rebaseline: +12 worker-only sales kernel tools)
     const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
     const persistence = { memoryDbPath: ":memory:", identityPath: "/tmp/fake-identity.json" };
     const control = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" };
     const toolSet = makeAllTools(session, persistence, control);
     const count = Object.keys(toolSet).length;
-    assert.strictEqual(count, 35, `expected 35 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
+    assert.strictEqual(count, 47, `expected 47 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
   });
 });

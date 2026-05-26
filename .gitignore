@@ -28,14 +28,6 @@ build/
 # Claude Code local artifacts — not shipped.
 .claude/
 
-# Phase Gate Matrix process documents — local only, not shipped.
-docs/
-
-# Team bootstrap guide — for local session reset only.
-bootstrap.md
-CLAUDE.md
-.gitignore
-ROADMAP.md
 .omx/
 
 # P-56a M-1 Tauri scaffold

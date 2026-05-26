@@ -74,7 +74,7 @@ export type WorkflowSseFrame =
     }
   | {
       type: "workflow-approval-resolved";
-      turnId: string;
+      turnId?: string;
       workflowId: string;
       stepId: string;
       decision: "approved" | "declined";

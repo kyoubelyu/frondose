@@ -1,6 +1,7 @@
 import { CdpClient } from "../cdp/client.js";
 import { resolveInputMode } from "../cdp/hardwareInput.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
+import { STEALTH_INIT_SCRIPT } from "../cdp/stealth.js";
 import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
 import { installOverlay } from "../overlay/inject.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
@@ -31,6 +32,42 @@ export interface CreateLinkedinSessionOpts {
    * swallowed so it never breaks the browser tool that triggered the boot.
    */
   onClientBooted?: (client: CdpClient) => void | Promise<void>;
+}
+
+/** [P-62 OQ-5] Subscribe to Target.targetCreated; on each new `page` target, attach with
+ *  flat sessions and register STEALTH_INIT_SCRIPT on that sub-session. Best-effort: any
+ *  failure is logged + does NOT throw (a single popup's stealth miss is not boot-fatal).
+ *  The primary `client` retains its full CdpClient + stealthInjected flag (the new-target
+ *  sub-session is NOT a CdpClient — it's a flat-session sub-channel for script registration).
+ *  NOT exported. */
+async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void> {
+  try {
+    await client.handle.Target.setDiscoverTargets({ discover: true });
+  } catch (e) {
+    console.error("[mai] Target.setDiscoverTargets failed (OQ-5):", e);
+    return;
+  }
+  client.handle.on(
+    "Target.targetCreated",
+    async (params: { targetInfo: { type: string; targetId: string; url?: string } }) => {
+      if (params.targetInfo.type !== "page") return;
+      try {
+        // BUILDER-VERIFY (4b): chrome-remote-interface 0.34.0 exposes flat sessions via
+        // client.send(method, params, sessionId, callback), so use handle.send(..., sessionId).
+        const { sessionId } = await client.handle.Target.attachToTarget({
+          targetId: params.targetInfo.targetId,
+          flatten: true,
+        });
+        await client.handle.send(
+          "Page.addScriptToEvaluateOnNewDocument",
+          { source: STEALTH_INIT_SCRIPT, runImmediately: true },
+          sessionId,
+        );
+      } catch (e) {
+        console.error(`[mai] OQ-5 auto-inject failed for target ${params.targetInfo.targetId}:`, e);
+      }
+    },
+  );
 }
 
 /**
@@ -78,7 +115,12 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
         }
         // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
         const client = await CdpClient.connect(handle.port);
-        await injectStealth(client.handle);
+        await injectStealth(client);
+        // [P-62 OQ-5] Auto-inject stealth on EVERY new page target (popups, OAuth windows, new
+        // tabs). Without this, addScriptToEvaluateOnNewDocument's per-target/per-session scope
+        // leaves new targets unprotected. Minimal: only `page`-type targets; iframes / workers
+        // are skipped (out of scope per source §6).
+        await registerTargetCreatedAutoInject(client);
         // P-55 M-0 overlay spike — throwaway
         await installOverlay(client.handle);
         attachEventBus(client.handle, appendOverlayEventRow);

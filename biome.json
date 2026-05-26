@@ -12,7 +12,12 @@
       "!.omx",
       "!src/tauri",
       "!src/overlay/sharedRenderBundle.generated.ts",
-      "!src/overlay/frondoseCss.generated.ts"
+      "!src/overlay/frondoseCss.generated.ts",
+      "!.zed",
+      "!docs",
+      "!website",
+      "!.codegraph",
+      "!.github"
     ]
   },
   "formatter": {
@@ -55,6 +60,39 @@
             }
           }
         }
+      }
+    },
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["tests/health/healthGates-p60.1.mock.test.ts"],
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noAssignInExpressions": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "tests/live/p-sp-b-live.smoke.ts",
+        "tests/tools/sales/scoreAccount.mock.test.ts",
+        "tests/tools/sales/scoreLead.mock.test.ts"
+      ],
+      "formatter": {
+        "enabled": false
       }
     }
   ]

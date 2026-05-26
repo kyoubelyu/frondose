@@ -567,12 +567,12 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: tool() count in src/tools/ (P-Z3 rebaseline → 41)", () => {
+  it("T-CONTRACT: tool() count in src/tools/ (P-SP-A rebaseline → 53)", () => {
     // Given: src/tools/ directory with Vercel tool definitions
     // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  41 — P-Z3 rebaseline from P-39-era 38; +suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]
+    // Then:  53 — P-SP-A rebaseline adds 12 sales kernel tool definitions.
     const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 41, `Expected exactly 41 tool() calls in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
   });
 });

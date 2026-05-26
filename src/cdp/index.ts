@@ -4,7 +4,7 @@
  * Imports from this module:
  *   - CdpClient                — typed wrapper around chrome-remote-interface
  *   - ensureChrome             — launch-or-reuse helper
- *   - injectStealth            — apply STEALTH_INIT_SCRIPT to a CDP client
+ *   - injectStealth            — apply STEALTH_INIT_SCRIPT to a CdpClient
  *   - STEALTH_INIT_SCRIPT      — the raw stealth script string
  *   - getSnapshot              — Accessibility-tree snapshot helper
  *   - waitForUrl/Load/Text/Fn  — wait primitives

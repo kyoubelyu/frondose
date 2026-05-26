@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
+import { CdpClient } from "../../src/cdp/client.js";
 import { injectStealth, STEALTH_INIT_SCRIPT } from "../../src/cdp/stealth.js";
 
 // ─── T-M4 ─────────────────────────────────────────────────────────────────────
@@ -107,10 +108,11 @@ test("T-M6: navigator.plugins stub returns 5 entries each with name/filename/des
 // ─── T-M7 ─────────────────────────────────────────────────────────────────────
 
 test("T-M7: injectStealth calls Page.enable then addScriptToEvaluateOnNewDocument with runImmediately:true", async () => {
-  // Track call order with a shared sequence log
+  // [P-62 Step 5 fix] injectStealth now takes CdpClient (not raw handle).
+  // Use CdpClient.fromHandle(fakeHandle) to wrap the fake Page domain.
   const callLog: string[] = [];
 
-  const fakeClient = {
+  const fakeHandle = {
     Page: {
       enable: async () => {
         callLog.push("Page.enable");
@@ -131,7 +133,8 @@ test("T-M7: injectStealth calls Page.enable then addScriptToEvaluateOnNewDocumen
     },
   };
 
-  const identifier = await injectStealth(fakeClient);
+  const client = CdpClient.fromHandle(fakeHandle);
+  const identifier = await injectStealth(client);
 
   assert.equal(identifier, "stealth-id-1", "injectStealth must return the identifier");
   assert.deepEqual(
