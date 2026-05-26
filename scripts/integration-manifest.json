@@ -1,0 +1,12 @@
+[
+  "tests/cli/commander-p45.mock.test.ts",
+  "tests/cli/autoUpdate.mock.test.ts",
+  "tests/cli/launchd.mock.test.ts",
+  "tests/cli/install-sh.test.ts",
+  "tests/cli/update-subcommand.mock.test.ts",
+  "tests/cli/subcommands/serverLaunchd.mock.test.ts",
+  "tests/tauri/button-click-pY2.1.test.ts",
+  "tests/tauri/button-integ-pY2.1.test.ts",
+  "tests/tauri/lifecycle-drun1-pY5.test.ts",
+  "tests/tauri/entry-flow-pY4.mock.test.ts"
+]

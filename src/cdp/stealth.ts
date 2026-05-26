@@ -1,4 +1,4 @@
-import type { CdpHandle } from "./types.js";
+import type { CdpClient } from "./client.js";
 
 /**
  * Stealth init script — applied via Page.addScriptToEvaluateOnNewDocument
@@ -9,7 +9,7 @@ import type { CdpHandle } from "./types.js";
  *  1. navigator.webdriver → undefined
  *  2. Delete cdc_* Chromedriver globals (no-op under raw CDP, defense-in-depth)
  *  3. Restore window.chrome.runtime if absent
- *  4. navigator.plugins → 5 realistic PDF stubs
+ *  4. navigator.plugins → 5 realistic PDF stubs only when native plugins are empty
  *  5. permissions.query notification path returns Notification.permission
  */
 export const STEALTH_INIT_SCRIPT = `
@@ -28,28 +28,32 @@ export const STEALTH_INIT_SCRIPT = `
   if (!window.chrome) window.chrome = {};
   window.chrome.runtime = window.chrome.runtime || {};
 
-  // 4. navigator.plugins — 5 PDF stubs. Capture the real PluginArray prototype
-  //    from navigator.plugins BEFORE overriding it (PluginArray is not a global in
-  //    modern Chrome, so PluginArray.prototype would ReferenceError).
-  const realPluginsProto = Object.getPrototypeOf(navigator.plugins);
-  const fakePlugin = (name, filename, description) => ({
-    name, filename, description, length: 0,
-    item: () => null, namedItem: () => null,
-    [Symbol.iterator]: function*() {},
-    [Symbol.toStringTag]: 'Plugin',  // makes .toString() return '[object Plugin]'
-  });
-  const fakePlugins = Object.assign([
-    fakePlugin('PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
-    fakePlugin('Chrome PDF Viewer', 'internal-pdf-viewer', ''),
-    fakePlugin('Chromium PDF Viewer', 'internal-pdf-viewer', ''),
-    fakePlugin('Microsoft Edge PDF Viewer', 'internal-pdf-viewer', ''),
-    fakePlugin('WebKit built-in PDF', 'internal-pdf-viewer', ''),
-  ], { item: () => null, namedItem: () => null, refresh: () => null });
-  try { Object.setPrototypeOf(fakePlugins, realPluginsProto); } catch (_) {}
-  Object.defineProperty(navigator, 'plugins', {
-    get: () => fakePlugins,
-    configurable: true,
-  });
+  // 4. navigator.plugins — [P-62 F-2 / OQ-2] PRESERVE NATIVE non-empty. Only patch when Chrome
+  //    natively exposes ZERO plugins (automation-empty Chrome / fresh container / some headless
+  //    builds). Real Chrome 148 on macOS natively exposes PDF plugins → we leave them intact.
+  if (navigator.plugins.length === 0) {
+    const realPluginsProto = Object.getPrototypeOf(navigator.plugins);
+    const fakePlugin = (name, filename, description) => ({
+      name, filename, description, length: 0,
+      item: () => null, namedItem: () => null,
+      [Symbol.iterator]: function*() {},
+      [Symbol.toStringTag]: 'Plugin',
+    });
+    const fakePlugins = Object.assign([
+      fakePlugin('PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+      fakePlugin('Chrome PDF Viewer', 'internal-pdf-viewer', ''),
+      fakePlugin('Chromium PDF Viewer', 'internal-pdf-viewer', ''),
+      fakePlugin('Microsoft Edge PDF Viewer', 'internal-pdf-viewer', ''),
+      fakePlugin('WebKit built-in PDF', 'internal-pdf-viewer', ''),
+    ], { item: () => null, namedItem: () => null, refresh: () => null });
+    try { Object.setPrototypeOf(fakePlugins, realPluginsProto); } catch (_) {}
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => fakePlugins,
+      configurable: true,
+    });
+  }
+  // 4b. [P-62 F-3 / OQ-3] WebRTC policy: NATIVE — no mitigation in this script. See
+  //     docs/phase-62-webrtc-policy.md for the operator-set decision + revisit conditions.
 
   // 5. permissions.query notifications path
   if (navigator.permissions && navigator.permissions.query) {
@@ -63,15 +67,20 @@ export const STEALTH_INIT_SCRIPT = `
 `.trim();
 
 /**
- * Inject the stealth script into the current page target.
- * MUST be called before the first navigation, OR with runImmediately: true to
- * patch an already-loaded page.
+ * [P-62 F-1] Inject the stealth script into the current page target. Idempotent (OQ-4):
+ * a second call on the same client EARLY-RETURNS without re-registering. The client's
+ * `stealthInjected` flag becomes the navigate() precondition — see CdpClient.navigate().
+ *
+ * Signature change vs P-2: accepts a CdpClient (not a raw CdpHandle) so we can mark the
+ * flag after registration. Callers that previously passed `client.handle` must pass `client`.
  */
-export async function injectStealth(client: CdpHandle): Promise<string> {
-  await client.Page.enable();
-  const result = await client.Page.addScriptToEvaluateOnNewDocument({
+export async function injectStealth(client: CdpClient): Promise<string | undefined> {
+  if (client.isStealthInjected()) return undefined;
+  await client.handle.Page.enable();
+  const result = await client.handle.Page.addScriptToEvaluateOnNewDocument({
     source: STEALTH_INIT_SCRIPT,
     runImmediately: true,
   });
+  client.markStealthInjected();
   return result.identifier as string;
 }

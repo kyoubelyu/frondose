@@ -1,0 +1,251 @@
+<h2 class="sr-only">Frondose desktop app in Auto mode with the new Living Moss and Warm Sand palette.</h2>
+
+<style>
+.appA2 { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #16151300; border-radius: 14px; overflow: hidden; border: 0.5px solid #2A2E26; position: relative; }
+.appA2::before {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 85% 5%, rgba(217, 167, 95, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 5% 95%, rgba(90, 128, 67, 0.06) 0%, transparent 40%),
+    #161A14;
+  pointer-events: none;
+  z-index: 0;
+}
+.appA2 > * { position: relative; z-index: 1; }
+
+.tbA2 { display: flex; align-items: center; padding: 9px 14px; background: rgba(15, 18, 13, 0.7); backdrop-filter: blur(20px); border-bottom: 0.5px solid #2A2E26; gap: 12px; }
+.tbA2-dots { display: flex; gap: 6px; }
+.tbA2-dot { width: 11px; height: 11px; border-radius: 50%; }
+.tbA2-brand { display: flex; align-items: center; gap: 6px; }
+.tbA2-logo { width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, #5A8043, #3A5A2C); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 8px rgba(90, 128, 67, 0.4); }
+.tbA2-name { font-size: 12px; color: #B5BEA8; font-weight: 600; letter-spacing: 0.3px; }
+.tbA2-switcher { margin-left: auto; display: flex; background: #1F231C; border-radius: 7px; padding: 2px; gap: 2px; }
+.tbA2-tab { padding: 4px 12px; font-size: 11px; font-weight: 500; border-radius: 5px; color: #6A7062; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+.tbA2-tab.active { background: linear-gradient(135deg, #D9A75F, #B58740); color: #2A1F0A; box-shadow: 0 0 12px rgba(217, 167, 95, 0.3); }
+
+.bodyA2 { padding: 16px 18px 0; display: flex; flex-direction: column; gap: 12px; min-height: 530px; }
+
+.hero { display: flex; align-items: center; gap: 14px; padding: 4px 4px 0; }
+.hero-icon-wrap { position: relative; }
+.hero-icon { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, #D9A75F, #B58740); display: flex; align-items: center; justify-content: center; color: #2A1F0A; box-shadow: 0 0 20px rgba(217, 167, 95, 0.35), inset 0 1px 0 rgba(255,255,255,0.25); }
+.hero-icon-ring { position: absolute; inset: -4px; border-radius: 14px; border: 1.5px solid rgba(217, 167, 95, 0.3); animation: ringPulse 2s ease-in-out infinite; }
+@keyframes ringPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.08); } }
+.hero-text { flex: 1; }
+.hero-title { font-size: 14px; font-weight: 600; color: #ECE8D8; letter-spacing: 0.1px; }
+.hero-sub { font-size: 11.5px; color: #8B8674; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+.hero-sub-dot { width: 4px; height: 4px; border-radius: 50%; background: #4A4D40; }
+.hero-actions { display: flex; gap: 6px; }
+.hero-btn { padding: 6px 12px; font-size: 11.5px; border-radius: 7px; border: 0.5px solid #3A3D32; background: rgba(35, 38, 30, 0.6); color: #BEB8A2; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; backdrop-filter: blur(10px); }
+.hero-btn-stop { border-color: rgba(184, 85, 71, 0.4); color: #E8A095; }
+
+.progress-strip { background: rgba(32, 35, 27, 0.5); border: 0.5px solid #2A2E26; border-radius: 11px; padding: 14px 16px; backdrop-filter: blur(10px); }
+.ps-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.ps-step-label { font-size: 10px; color: #6A7062; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+.ps-current { font-size: 13px; color: #ECE8D8; font-weight: 500; }
+.ps-current-mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 11.5px; color: #D9A75F; background: rgba(217, 167, 95, 0.1); padding: 2px 7px; border-radius: 4px; margin-left: 6px; }
+.ps-elapsed { margin-left: auto; font-size: 11px; color: #8B8674; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", monospace; }
+.ps-bar-wrap { display: flex; gap: 4px; height: 4px; }
+.ps-seg { flex: 1; border-radius: 2px; background: #2A2E26; }
+.ps-seg.done { background: linear-gradient(90deg, #5A8043, #7AA060); }
+.ps-seg.current { background: linear-gradient(90deg, #D9A75F, #F0C285); box-shadow: 0 0 8px rgba(217, 167, 95, 0.5); }
+
+.timeline { background: rgba(32, 35, 27, 0.4); border: 0.5px solid #2A2E26; border-radius: 11px; padding: 4px 0; backdrop-filter: blur(10px); flex: 1; }
+.tlA-step { display: flex; gap: 12px; padding: 9px 16px; align-items: flex-start; }
+.tlA-rail { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+.tlA-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.tlA-line { width: 1.5px; flex: 1; background: #2A2E26; margin: 3px 0; min-height: 8px; }
+.tlA-line.done { background: linear-gradient(180deg, #5A8043, #3F6230); }
+.tlA-line.current { background: linear-gradient(180deg, #D9A75F, #2A2E26); }
+.tlA-body { flex: 1; padding-bottom: 2px; }
+.tlA-title { font-size: 12.5px; color: #ECE6CC; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tlA-title.muted { color: #5F6258; }
+.tlA-title.done { color: #B0B49E; }
+.tlA-meta { font-size: 10.5px; color: #5F6258; margin-top: 2px; font-family: ui-monospace, "SF Mono", monospace; }
+.tlA-chip { font-size: 9.5px; background: rgba(217, 167, 95, 0.12); color: #D9A75F; padding: 1px 6px; border-radius: 3px; font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; }
+.tlA-chip-success { background: rgba(90, 128, 67, 0.15); color: #8BBE6F; }
+.tlA-meta-link { color: #8FAFD4; }
+
+.dock { background: rgba(18, 20, 16, 0.85); border-top: 0.5px solid #2A2E26; padding: 0; backdrop-filter: blur(24px); }
+.dock-tab { padding: 9px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 11.5px; color: #8B8674; border-bottom: 0.5px solid #2A2E26; }
+.dock-tab-grip { display: flex; flex-direction: column; gap: 1.5px; }
+.dock-tab-grip span { display: block; width: 14px; height: 1px; background: #4A4D40; border-radius: 1px; }
+.dock-unread { background: #D9A75F; color: #2A1F0A; font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 700; margin-left: auto; min-width: 14px; text-align: center; }
+.dock-collapse-hint { font-size: 10px; color: #4F5248; }
+
+.dock-conv { padding: 10px 16px; max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.dmsg-agent { display: flex; gap: 8px; align-items: flex-start; }
+.dmsg-avatar { width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; display: flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; margin-top: 1px; }
+.dmsg-text { font-size: 11.5px; color: #BEB8A2; line-height: 1.5; }
+.dmsg-user { align-self: flex-end; max-width: 75%; background: #2A2E26; color: #ECE6CC; padding: 5px 10px; border-radius: 10px 10px 3px 10px; font-size: 11.5px; line-height: 1.4; }
+
+.dock-input { padding: 8px 12px 12px; display: flex; gap: 8px; align-items: center; }
+.dock-input-inner { flex: 1; background: rgba(42, 46, 38, 0.6); border: 0.5px solid #3A3D32; border-radius: 9px; padding: 7px 11px; display: flex; align-items: center; gap: 8px; }
+.dock-input-inner input { flex: 1; border: none; background: transparent; font-size: 12px; outline: none; color: #ECE6CC; font-family: inherit; }
+.dock-input-inner input::placeholder { color: #5F6258; }
+.dock-send { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #5A8043, #3A5A2C); color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(90, 128, 67, 0.3); }
+</style>
+
+<div class="appA2">
+
+  <div class="tbA2">
+    <div class="tbA2-dots">
+      <div class="tbA2-dot" style="background: #E26B62;"></div>
+      <div class="tbA2-dot" style="background: #E5B147;"></div>
+      <div class="tbA2-dot" style="background: #6FA86F;"></div>
+    </div>
+    <div class="tbA2-brand">
+      <div class="tbA2-logo">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22V8"/>
+          <path d="M12 14C12 14 7 13 5 10C7 9 12 10 12 14Z"/>
+          <path d="M12 17C12 17 17 16 19 13C17 12 12 13 12 17Z"/>
+          <path d="M12 11C12 11 8 9 7 6C9 5 12 7 12 11Z"/>
+        </svg>
+      </div>
+      <div class="tbA2-name">Frondose</div>
+    </div>
+    <div class="tbA2-switcher">
+      <div class="tbA2-tab">
+        <i class="ti ti-message-circle" style="font-size:11px;" aria-hidden="true"></i>
+        Manual
+      </div>
+      <div class="tbA2-tab active">
+        <i class="ti ti-bolt" style="font-size:11px;" aria-hidden="true"></i>
+        Auto
+      </div>
+    </div>
+  </div>
+
+  <div class="bodyA2">
+
+    <div class="hero">
+      <div class="hero-icon-wrap">
+        <div class="hero-icon"><i class="ti ti-bolt" style="font-size: 19px;" aria-hidden="true"></i></div>
+        <div class="hero-icon-ring"></div>
+      </div>
+      <div class="hero-text">
+        <div class="hero-title">LinkedIn supplier discovery</div>
+        <div class="hero-sub">
+          <span>Running in Chrome</span>
+          <span class="hero-sub-dot"></span>
+          <span>linkedin.com</span>
+          <span class="hero-sub-dot"></span>
+          <span>elapsed 4m 22s</span>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="hero-btn"><i class="ti ti-player-pause" style="font-size:12px;" aria-hidden="true"></i>Pause</button>
+        <button class="hero-btn hero-btn-stop"><i class="ti ti-hand-stop" style="font-size:12px;" aria-hidden="true"></i>Take over</button>
+      </div>
+    </div>
+
+    <div class="progress-strip">
+      <div class="ps-row">
+        <div>
+          <div class="ps-step-label">Now</div>
+          <div class="ps-current" style="margin-top: 3px;">
+            Extract contact details
+            <span class="ps-current-mono">17 / 50</span>
+          </div>
+        </div>
+        <div class="ps-elapsed">+ 2m 14s</div>
+      </div>
+      <div class="ps-bar-wrap">
+        <div class="ps-seg done"></div>
+        <div class="ps-seg done"></div>
+        <div class="ps-seg done"></div>
+        <div class="ps-seg done"></div>
+        <div class="ps-seg current"></div>
+        <div class="ps-seg"></div>
+        <div class="ps-seg"></div>
+      </div>
+    </div>
+
+    <div class="timeline">
+
+      <div class="tlA-step">
+        <div class="tlA-rail">
+          <div class="tlA-dot" style="background: #3F6230;"><i class="ti ti-check" style="font-size: 9px; color:white;" aria-hidden="true"></i></div>
+          <div class="tlA-line done"></div>
+        </div>
+        <div class="tlA-body">
+          <div class="tlA-title done">Open LinkedIn Sales Navigator <span class="tlA-chip tlA-chip-success">done</span></div>
+          <div class="tlA-meta">navigate · <span class="tlA-meta-link">linkedin.com/sales</span> · 1.8s</div>
+        </div>
+      </div>
+
+      <div class="tlA-step">
+        <div class="tlA-rail">
+          <div class="tlA-dot" style="background: #3F6230;"><i class="ti ti-check" style="font-size: 9px; color:white;" aria-hidden="true"></i></div>
+          <div class="tlA-line done"></div>
+        </div>
+        <div class="tlA-body">
+          <div class="tlA-title done">Apply filters · 142 → 52 results</div>
+          <div class="tlA-meta">click · 3 filters · 2.1s</div>
+        </div>
+      </div>
+
+      <div class="tlA-step">
+        <div class="tlA-rail">
+          <div class="tlA-dot" style="background: #3F6230;"><i class="ti ti-check" style="font-size: 9px; color:white;" aria-hidden="true"></i></div>
+          <div class="tlA-line done"></div>
+        </div>
+        <div class="tlA-body">
+          <div class="tlA-title done">Review filtered companies <span class="tlA-chip">auto-approved</span></div>
+          <div class="tlA-meta">skipped · per Auto policy</div>
+        </div>
+      </div>
+
+      <div class="tlA-step">
+        <div class="tlA-rail">
+          <div class="tlA-dot" style="background: #D9A75F; box-shadow: 0 0 10px rgba(217, 167, 95, 0.6);">
+            <div style="width:5px; height:5px; background:white; border-radius:50%;"></div>
+          </div>
+          <div class="tlA-line current"></div>
+        </div>
+        <div class="tlA-body">
+          <div class="tlA-title">Extract contact details <span class="tlA-chip">working</span></div>
+          <div class="tlA-meta">click · <span class="tlA-meta-link">linkedin.com/company/polymercraft-uk</span> · ↓ 412ms · ↑ 89ms</div>
+        </div>
+      </div>
+
+      <div class="tlA-step">
+        <div class="tlA-rail">
+          <div class="tlA-dot" style="background: #2A2E26; border: 1px solid #3A3D32;"></div>
+        </div>
+        <div class="tlA-body">
+          <div class="tlA-title muted">Add to Interplas outreach sheet</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="dock">
+    <div class="dock-tab">
+      <div class="dock-tab-grip"><span></span><span></span><span></span></div>
+      <i class="ti ti-message-circle" style="font-size:12px; color:#8BBE6F;" aria-hidden="true"></i>
+      <span style="color:#ECE6CC; font-weight: 500;">Conversation</span>
+      <span class="dock-unread">2</span>
+      <span class="dock-collapse-hint" style="margin-left: 8px;"><i class="ti ti-chevron-down" style="font-size:11px;" aria-hidden="true"></i> drag or click to collapse</span>
+    </div>
+    <div class="dock-conv">
+      <div class="dmsg-user">Skip MouldTech if their last post is older than 6 months</div>
+      <div class="dmsg-agent">
+        <div class="dmsg-avatar"><i class="ti ti-sparkles" style="font-size:9px;" aria-hidden="true"></i></div>
+        <div class="dmsg-text">Noted — applied as a runtime rule. MouldTech's last post is 4 months ago, so they stay in.</div>
+      </div>
+    </div>
+    <div class="dock-input">
+      <div class="dock-input-inner">
+        <i class="ti ti-message" style="color:#5F6258; font-size:13px;" aria-hidden="true"></i>
+        <input type="text" placeholder="Inject a rule, ask a question, or interrupt…" />
+        <span style="font-size: 9.5px; color: #5F6258; background: rgba(42, 46, 38, 0.6); padding: 2px 5px; border-radius: 3px;">⌘↵</span>
+      </div>
+      <button class="dock-send"><i class="ti ti-arrow-up" style="font-size:12px;" aria-hidden="true"></i></button>
+    </div>
+  </div>
+
+</div>

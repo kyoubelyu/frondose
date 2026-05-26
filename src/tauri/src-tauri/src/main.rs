@@ -310,6 +310,13 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
     Ok((token, sock_path, parent_dir))
 }
 
+/// [P-58d.3] Resource dir WITHOUT an AppHandle — resolve_* run before Tauri is built.
+/// macOS: Contents/MacOS/mai-tauri -> Contents -> Contents/Resources.
+fn bundled_resource_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    exe.parent()?.parent()?.join("Resources").into()
+}
+
 /// Resolve an absolute `node` executable. A GUI-launched `.app` inherits launchd's
 /// minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) — Homebrew node at
 /// `/opt/homebrew/bin` is NOT on it — so a bare `Command::new("node")` fails from
@@ -317,8 +324,18 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
 /// "node" for the `cargo tauri dev` shell-PATH case.
 fn resolve_node() -> String {
     if let Ok(p) = std::env::var("MAI_NODE_PATH") {
-        if !p.trim().is_empty() {
-            return p;
+        let p = p.trim();
+        if !p.is_empty() {
+            if std::path::Path::new(p).is_file() {
+                return p.to_string();
+            }
+            eprintln!("[mai-tauri] ignoring MAI_NODE_PATH={} (not a file)", p);
+        }
+    }
+    if let Some(dir) = bundled_resource_dir() {
+        let node = dir.join("runtime").join("node");
+        if node.is_file() {
+            return node.to_string_lossy().into_owned();
         }
     }
     for candidate in [
@@ -326,7 +343,7 @@ fn resolve_node() -> String {
         "/usr/local/bin/node",    // Intel Homebrew
         "/usr/bin/node",          // system
     ] {
-        if std::path::Path::new(candidate).exists() {
+        if std::path::Path::new(candidate).is_file() {
             return candidate.to_string();
         }
     }
@@ -343,15 +360,25 @@ fn resolve_node() -> String {
 /// timeout — DEFERRED to P-58c (self-contained bundle).
 fn resolve_mai_bin() -> String {
     if let Ok(p) = std::env::var("MAI_BIN_PATH") {
-        if !p.trim().is_empty() {
-            return p;
+        let p = p.trim();
+        if !p.is_empty() {
+            if std::path::Path::new(p).is_file() {
+                return p.to_string();
+            }
+            eprintln!("[mai-tauri] ignoring MAI_BIN_PATH={} (not a file)", p);
+        }
+    }
+    if let Some(dir) = bundled_resource_dir() {
+        let main_js = dir.join("runtime").join("dist").join("cli").join("main.js");
+        if main_js.is_file() {
+            return main_js.to_string_lossy().into_owned();
         }
     }
     for candidate in [
         "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js", // Apple Silicon
         "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",    // Intel
     ] {
-        if std::path::Path::new(candidate).exists() {
+        if std::path::Path::new(candidate).is_file() {
             return candidate.to_string();
         }
     }
@@ -424,9 +451,14 @@ async fn run_update_check(app: AppHandle) {
 async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
     // P-58b: resolve node + the install.sh-installed CLI by absolute path so a
     // Finder-launched bundle (launchd minimal PATH) can spawn the sidecar.
-    let mai_bin = resolve_mai_bin();
-    let node_bin = resolve_node();
-    let child = Command::new(&node_bin)
+    let mai_bin = PathBuf::from(resolve_mai_bin());
+    let node_path = PathBuf::from(resolve_node());
+    eprintln!(
+        "[mai-tauri] node={} mai={}",
+        node_path.display(),
+        mai_bin.display()
+    );
+    let child = Command::new(&node_path)
         .arg(&mai_bin)
         .arg("serve")
         .arg("--sock")
@@ -579,8 +611,10 @@ async fn main() {
                 ..
             } => {
                 let state_for_shutdown = state_clone.clone();
-                tauri::async_runtime::block_on(async {
-                    shutdown_sidecar(&state_for_shutdown).await;
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        shutdown_sidecar(&state_for_shutdown).await;
+                    })
                 });
                 app_handle.exit(0);
             }
@@ -588,8 +622,10 @@ async fn main() {
             // idempotent (child handle is take()n once) so double-invocation is safe.
             RunEvent::ExitRequested { .. } => {
                 let state_for_shutdown = state_clone.clone();
-                tauri::async_runtime::block_on(async {
-                    shutdown_sidecar(&state_for_shutdown).await;
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        shutdown_sidecar(&state_for_shutdown).await;
+                    })
                 });
             }
             _ => {}

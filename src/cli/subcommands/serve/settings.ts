@@ -3,8 +3,8 @@
 // (routes.ts) sendJsons the result — the raw key never reaches SSE/audit/logs.
 import { z } from "zod";
 import { resolveModel } from "../../../agent/modelResolver.js";
-import { BOUNDARY } from "../../../agent/systemPrompt/boundary.js";
-import { CHECKPOINT } from "../../../agent/systemPrompt/checkpoint.js";
+import { BOUNDARY, BOUNDARY_RESUME } from "../../../agent/systemPrompt/boundary.js";
+import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../agent/systemPrompt/soul.js";
 import { maskKey, readAuth, writeAuth } from "../../../persistence/auth.js";
@@ -125,17 +125,22 @@ export function applySettings(patch: SettingsPatch): void {
 
 // Hot-reload the per-turn-read deps (turn.ts reads deps.system/deps.model each turn). Compute BOTH into
 // locals BEFORE assigning so a resolveModel throw leaves the OLD deps fully intact (atomic).
-export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model">): { restartRequired: boolean } {
+export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "systemResume">): {
+  restartRequired: boolean;
+} {
   try {
     const cfg = readConfig();
     const identity = readIdentity();
-    const newSystem = composeSystemPrompt({
-      boundary: BOUNDARY,
-      soul: `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`,
-      checkpoint: CHECKPOINT,
+    const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`;
+    const newSystem = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
+    const newSystemResume = composeSystemPrompt({
+      boundary: BOUNDARY_RESUME,
+      soul: soulBand,
+      checkpoint: CHECKPOINT_RESUME,
     });
     const newModel = resolveModel({}); // may throw if the new config is invalid
     deps.system = newSystem;
+    deps.systemResume = newSystemResume;
     deps.model = newModel;
     return { restartRequired: false };
   } catch (e) {

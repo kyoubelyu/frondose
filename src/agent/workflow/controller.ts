@@ -20,6 +20,7 @@ interface TodoWriteResult {
 
 export interface WorkflowController {
   onToolResults(toolResults: ToolResultLike[], ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean };
+  // approve() resumePrompt includes "Do NOT call suggest_card" so approved steps resume into execution.
   handleEndpoint(
     url: string,
     body: Record<string, unknown> | null,
@@ -97,10 +98,26 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
   ): { abort: boolean } {
     const now = new Date().toISOString();
     const prior = state.current;
-    const priorByTitle = new Map((prior?.steps ?? []).map((s) => [s.title, s]));
+    // [P-59 WF-1 / 5a] A todo_write is a CONTINUATION of the current workflow ONLY when it is the SAME,
+    // still-active workflow AND the prior ordered step set remains a prefix of the new plan. This preserves
+    // step ids when the same workflow grows (A,B → A,B,C), but fails closed for a changed/reordered first
+    // step, which must become a NEW workflow → fresh ids, cleared approvals, and a new approval gate.
+    const sameStepPrefix =
+      prior !== null &&
+      result.steps.length >= prior.steps.length &&
+      prior.steps.every((s, i) => s.title === result.steps[i]?.title);
+    const isContinuation =
+      prior !== null && prior.title === result.workflowTitle && !terminalWorkflowIds.has(prior.id) && sameStepPrefix;
+    const priorByTitle = isContinuation ? new Map(prior!.steps.map((s) => [s.title, s])) : new Map<string, TodoStep>(); // NEW workflow → fresh step IDs, no title-keyed inheritance
+    const STEP_RANK = { pending: 0, in_progress: 1, completed: 2 } as const;
     const steps = result.steps.map((s, idx): TodoStep => {
       const priorStep = priorByTitle.get(s.title);
-      const nextState = inferStepState(result.steps, idx, s.state);
+      let nextState = inferStepState(result.steps, idx, s.state);
+      if (priorStep !== undefined && priorStep.state !== "failed" && nextState !== "failed") {
+        const regresses = STEP_RANK[nextState] < STEP_RANK[priorStep.state];
+        const unApproves = nextState === "pending" && approvedStepIds.has(priorStep.id);
+        if (regresses || unApproves) nextState = priorStep.state;
+      }
       return {
         id: priorStep?.id ?? s.id,
         title: s.title,
@@ -112,16 +129,19 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
       };
     });
     const wf: Workflow = {
-      id: prior?.id ?? `wf_${randomUUID()}`,
+      id: isContinuation ? prior!.id : `wf_${randomUUID()}`,
       title: result.workflowTitle,
-      approvalMode: prior?.approvalMode ?? (ctx.isCronTurn ? "auto" : "manual"),
+      // [P-59 WF-1] a NEW workflow must NOT inherit a prior handoff "auto" mode — that would skip the gate.
+      approvalMode: isContinuation ? prior!.approvalMode : ctx.isCronTurn ? "auto" : "manual",
       steps,
       state: "active",
-      createdAt: prior?.createdAt ?? now,
+      createdAt: isContinuation ? prior!.createdAt : now,
       updatedAt: now,
     };
     state.current = wf;
-    if (prior === null) {
+    // [P-59 WF-1] a NEW workflow invalidates all prior approvals (approvedStepIds is session-global).
+    if (!isContinuation && prior !== null) approvedStepIds.clear();
+    if (!isContinuation) {
       deps.emitFrame({
         type: "workflow-proposed",
         turnId: ctx.turnId,
@@ -140,7 +160,7 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
       });
     } else {
       for (const step of wf.steps) {
-        const prev = prior.steps.find((p) => p.id === step.id);
+        const prev = prior!.steps.find((p) => p.id === step.id);
         if (!prev || prev.state === step.state) continue;
         deps.emitFrame({
           type: "workflow-step-advanced",
@@ -247,14 +267,24 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     wf.state = "active";
     deps.emitFrame({
       type: "workflow-approval-resolved",
-      turnId: "",
       workflowId: wf.id,
       stepId: step.id,
       decision: "approved",
       ts: Date.now(),
     });
     deps.writeWorkflowAudit({ kind: "approval_resolved", workflowId: wf.id, stepId: step.id, decision: "approved" });
-    return { status: 200, response: { ok: true }, resumePrompt: `Approved: proceed with the step "${step.title}".` };
+    return {
+      status: 200,
+      response: { ok: true },
+      resumePrompt:
+        `WORKFLOW RESUME (not a new task). ` +
+        `Operator approved step "${step.title}" in workflow "${wf.title}". ` +
+        `Do not start this resume turn with search_memory or a new todo_write plan — ` +
+        `the workflow plan is already declared and active. ` +
+        `Continue from the existing in_progress step: perform the approved step "${step.title}" ` +
+        `using browser tools now, then update the existing workflow state with todo_write as you progress. ` +
+        `Do NOT call suggest_card for this approved step — it is approved for EXECUTION; perform it with browser tools directly.`,
+    };
   }
 
   function decline(
@@ -272,7 +302,6 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     wf.state = "active";
     deps.emitFrame({
       type: "workflow-approval-resolved",
-      turnId: "",
       workflowId: wf.id,
       stepId: step.id,
       decision: "declined",
@@ -313,6 +342,7 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     state.awaitingApprovalStepId = null;
     deps.emitFrame({ type: "workflow-completed", workflowId: wf.id, finalState: "cancelled", ts: Date.now() });
     deps.writeWorkflowAudit({ kind: "completed", workflowId: wf.id, finalState: "cancelled" });
+    terminalWorkflowIds.add(wf.id);
     state.current = null;
     return { status: 200, response: { ok: true } };
   }

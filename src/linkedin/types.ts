@@ -28,19 +28,18 @@ export interface SnapshotEntry {
 export interface CurrentSurfaceContext {
   pageUrl: string;
   surface: LinkedInSurface;
-  /** P-3: always "page" (modal detection deferred to P-4). */
-  activeLayer: "page";
+  /** P-59 INSPECT-1: "overlay" when an open dropdown/dialog layer is synthesized. */
+  activeLayer: "page" | "overlay";
   entries: SnapshotEntry[];
 }
 
 /**
  * Zod schema + inferred type for the `inspect` tool's return shape.
- * Per guardian critic CONCERN-MR-5: `activeLayer` is `z.literal("page")` (not enum),
- * matching the implementation literal. P-4 will widen additively when modal lands.
+ * P-59 INSPECT-1 widens `activeLayer` additively to signal synthesized overlay entries.
  */
 export const inspectSummarySchema = z.object({
   surface: z.string(),
-  activeLayer: z.literal("page"),
+  activeLayer: z.enum(["page", "overlay"]),
   availableScopes: z.array(z.string()),
   text: z.array(z.string()),
   buttons: z.array(z.object({ ref: z.string(), label: z.string() })),

@@ -177,9 +177,9 @@ test("T-M66: type tool execute via ref dispatches click → Ctrl+A → insertTex
   const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
   assert.equal(singleCharInserts.length, 11, "insertText must be called 11× (one per char of 'hello world')");
 
-  // Ctrl+A: dispatchKeyEvent with key='a' and modifiers=2 (Ctrl)
-  const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
-  assert.ok(ctrlA !== undefined, "Ctrl+A (keyDown a modifiers=2) must be dispatched before insertText");
+  // Cmd+A: dispatchKeyEvent with key='a' and modifiers=4 (Cmd on macOS; P-59 D-RUN-3 fix)
+  const cmdA = log.find((e) => e === "key:keyDown:a:mod4");
+  assert.ok(cmdA !== undefined, "Cmd+A (keyDown a modifiers=4) must be dispatched before insertText");
 
   // Mouse click must precede first insertText
   const mouseMoveIdx = log.indexOf("mouse:mouseMoved");
@@ -232,7 +232,7 @@ test("T-Type.3: ambiguous_target when >1 input matches scope and no label", { ti
 test("T-Type.4: succeeds with label disambiguation on >1 input scope", { timeout: 5000 }, async () => {
   // Given: same dual-input context as T-Type.3
   // When:  type({ text: "hello", scope: "threadInput", label: "Write a message…" }) called
-  // Then:  ok=true; data.target==="@e1"; Ctrl+A + insertText dispatched to the correct input
+  // Then:  ok=true; data.target==="@e1"; Cmd+A + insertText dispatched to the correct input
 
   const session = makeFakeSessionWithEntries([
     { ref: "@e1", role: "textbox", name: "Write a message…" },
@@ -252,10 +252,10 @@ test("T-Type.4: succeeds with label disambiguation on >1 input scope", { timeout
   const data = (result as any).data;
   assert.equal(data.target, "@e1", "data.target must be the resolved ref of the label-matched input");
 
-  // Verify Ctrl+A + per-char insertText dispatched
+  // Verify Cmd+A + per-char insertText dispatched (P-59 D-RUN-3: Cmd+A mod4 on macOS)
   const log = session.callLog;
-  const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
-  assert.ok(ctrlA !== undefined, "Ctrl+A must be dispatched before insertText");
+  const cmdA = log.find((e) => e === "key:keyDown:a:mod4");
+  assert.ok(cmdA !== undefined, "Cmd+A (mod4) must be dispatched before insertText");
   // P-47 G-2: per-char dispatch — "hello" (5 chars) → 5 single-char insertText calls
   const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
   assert.equal(singleCharInserts.length, 5, "insertText must be called 5× (one per char of 'hello')");
@@ -285,8 +285,8 @@ test("T-Type.5: no error on single-input scope without label", { timeout: 5000 }
 
   // Verify typing dispatched to correct input
   const log = session.callLog;
-  const ctrlA = log.find((e) => e === "key:keyDown:a:mod2");
-  assert.ok(ctrlA !== undefined, "Ctrl+A must be dispatched");
+  const cmdA = log.find((e) => e === "key:keyDown:a:mod4");
+  assert.ok(cmdA !== undefined, "Cmd+A (mod4) must be dispatched"); // P-59 D-RUN-3: macOS select-all
   // P-47 G-2: per-char dispatch — "query" (5 chars) → 5 single-char insertText calls
   const singleCharInserts = log.filter((e) => e.startsWith("insertText:") && e.length === 12);
   assert.equal(singleCharInserts.length, 5, "insertText must be called 5× (one per char of 'query')");
@@ -309,8 +309,9 @@ describe("T-Type.1 (G-P47.2): per-char dispatch — 'hello' → 5 single-char in
       // Then:  (a) insertText called exactly 5 times, each call's text is ONE character
       //             ("h", "e", "l", "l", "o" in order)
       //         (b) insertText is NEVER called with the full string "hello"
-      //         (c) dispatchKeyEvent called exactly twice: Ctrl+A keyDown + Ctrl+A keyUp
-      //             (key:"a", modifiers:2) — and NOT for any of the 5 printable chars
+      //         (c) dispatchKeyEvent called exactly twice: Cmd+A keyDown + Cmd+A keyUp
+      //             (key:"a", modifiers:4, macOS) — and NOT for any of the 5 printable chars
+      //             Plus: Backspace keyDown + keyUp (to delete the selection — P-59 D-RUN-3)
       const session = makeFakeSession();
       await session.getClient().snapshot();
       const tool = makeTypeTool(session);
@@ -334,11 +335,14 @@ describe("T-Type.1 (G-P47.2): per-char dispatch — 'hello' → 5 single-char in
         "T-Type.1: atomic insertText('hello') must never be called",
       );
 
-      // (c) dispatchKeyEvent only for Ctrl+A — no Enter events (no \\n in "hello")
+      // (c) dispatchKeyEvent for Cmd+A (mod4) — no Enter events (no \\n in "hello")
       const enterEvents = log.filter((e) => e.includes(":Enter:"));
       assert.equal(enterEvents.length, 0, "T-Type.1: no Enter key events for text with no newlines");
-      const ctrlAEvents = log.filter((e) => e.includes(":a:mod2"));
-      assert.equal(ctrlAEvents.length, 2, "T-Type.1: exactly 2 Ctrl+A events (keyDown + keyUp)");
+      // [P-59 D-RUN-3] Cmd+A (macOS modifier 4) + Backspace to clear field before typing
+      const cmdAEvents = log.filter((e) => e.includes(":a:mod4"));
+      assert.equal(cmdAEvents.length, 2, "T-Type.1: exactly 2 Cmd+A events (keyDown + keyUp, macOS mod4)");
+      const backspaceEvents = log.filter((e) => e.includes(":Backspace:"));
+      assert.equal(backspaceEvents.length, 2, "T-Type.1: Backspace keyDown + keyUp to delete Cmd+A selection");
     },
   );
 });
@@ -354,8 +358,8 @@ describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent betwee
       // When:  execute({ text: "a\nb", ref: "@e1" }) runs
       // Then:  (a) insertText called for "a" then "b" (2 single-char calls, in order)
       //         (b) dispatchKeyEvent called with {type:"keyDown", key:"Enter"} then
-      //             {type:"keyUp", key:"Enter"} for the \n (in addition to Ctrl+A pair)
-      //         (c) dispatch ORDER is: [Ctrl+A keyDown, Ctrl+A keyUp,]
+      //             {type:"keyUp", key:"Enter"} for the \n (in addition to Cmd+A+Backspace clear)
+      //         (c) dispatch ORDER is: [Cmd+A↓, Cmd+A↑, Backspace↓, Backspace↑,]
       //             insertText("a") → Enter keyDown → Enter keyUp → insertText("b")
       const session = makeFakeSession();
       await session.getClient().snapshot();
@@ -380,15 +384,18 @@ describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent betwee
       assert.equal(enterDowns.length, 1, "T-Type.2: exactly 1 Enter keyDown for the \\n");
       assert.equal(enterUps.length, 1, "T-Type.2: exactly 1 Enter keyUp for the \\n");
 
-      // (c) ORDER: [CtrlA↓ CtrlA↑] insertText("a") → Enter↓ → Enter↑ → insertText("b")
+      // (c) ORDER: [CmdA↓ CmdA↑ Backspace↓ Backspace↑] insertText("a") → Enter↓ → Enter↑ → insertText("b")
+      // [P-59 D-RUN-3] Cmd+A (mod4) + Backspace precede insertText on macOS
       const aIdx = log.indexOf("insertText:a");
       const enterDownIdx = log.indexOf("key:keyDown:Enter:mod0");
       const enterUpIdx = log.indexOf("key:keyUp:Enter:mod0");
       const bIdx = log.indexOf("insertText:b");
-      const ctrlADownIdx = log.indexOf("key:keyDown:a:mod2");
-      const ctrlAUpIdx = log.indexOf("key:keyUp:a:mod2");
-      assert.ok(ctrlADownIdx < ctrlAUpIdx, "T-Type.2: Ctrl+A keyDown before keyUp");
-      assert.ok(ctrlAUpIdx < aIdx, "T-Type.2: Ctrl+A before first insertText");
+      const cmdADownIdx = log.indexOf("key:keyDown:a:mod4");
+      const cmdAUpIdx = log.indexOf("key:keyUp:a:mod4");
+      const backspaceUpIdx = log.indexOf("key:keyUp:Backspace:mod0");
+      assert.ok(cmdADownIdx < cmdAUpIdx, "T-Type.2: Cmd+A keyDown before keyUp");
+      assert.ok(cmdAUpIdx < backspaceUpIdx, "T-Type.2: Cmd+A before Backspace");
+      assert.ok(backspaceUpIdx < aIdx, "T-Type.2: Backspace before first insertText");
       assert.ok(aIdx < enterDownIdx, "T-Type.2: insertText('a') before Enter keyDown");
       assert.ok(enterDownIdx < enterUpIdx, "T-Type.2: Enter keyDown before Enter keyUp");
       assert.ok(enterUpIdx < bIdx, "T-Type.2: Enter keyUp before insertText('b')");
@@ -488,50 +495,52 @@ describe("T-Type.4 (G-P47.2): hardware arm — hardwareTypeAt invoked; CDP inser
 
 // ─── T-Type.5 (G-P47.2 / B-1): empty text clears the field ──────────────────
 
-describe("T-Type.5 (G-P47.2 / B-1 regression): empty text='' calls insertText('') exactly once", () => {
-  it(
-    "Ctrl+A fires; insertText called exactly once with ''; no per-char loop; result.ok===true",
-    { timeout: 3000 },
-    async () => {
-      // Given: CDP-mode session; fake handle records insertText/dispatchKeyEvent; text = ""
-      // When:  execute({ text: "", ref: "@e1" }) runs
-      //        (Step 4b B-1: text.length===0 branch → explicit insertText({ text: "" }) clear)
-      // Then:  (a) dispatchKeyEvent Ctrl+A pair fires: key:"a", modifiers:2 keyDown + keyUp
-      //             (Ctrl+A selects existing content — required step)
-      //         (b) insertText called EXACTLY ONCE with text "" (the explicit B-1 clear branch)
-      //             — replaces the Ctrl+A selection with nothing; this is what CLEARS the field
-      //         (c) NO single-character insertText calls (per-char loop body does NOT run for len=0)
-      //         (d) NO Enter dispatchKeyEvent (no \n in empty string)
-      //         (e) result.ok === true (clear is not an error)
-      const session = makeFakeSession();
-      await session.getClient().snapshot();
-      const tool = makeTypeTool(session);
-      const result = await tool.execute(
-        { text: "", ref: "@e1" },
-        { toolCallId: "t-type5-b1", messages: [], abortSignal },
-      );
+describe("T-Type.5 (G-P47.2 / B-1 regression): empty text='' uses Cmd+A+Backspace clear, no insertText", () => {
+  it("Cmd+A fires; Backspace fires; NO insertText; no per-char loop; result.ok===true", { timeout: 3000 }, async () => {
+    // Given: CDP-mode session; fake handle records insertText/dispatchKeyEvent; text = ""
+    // When:  execute({ text: "", ref: "@e1" }) runs
+    //        [P-59 D-RUN-3] Cmd+A (mod4) + Backspace clears field; for empty text the
+    //        per-char loop (text.length===0) does NOT run so NO insertText is called
+    // Then:  (a) dispatchKeyEvent Cmd+A pair fires: key:"a", modifiers:4 keyDown + keyUp
+    //             (macOS select-all — selects existing content)
+    //         (b) dispatchKeyEvent Backspace fires: keyDown + keyUp
+    //             (deletes the Cmd+A selection — this is what CLEARS the field)
+    //         (c) NO insertText calls at all (per-char loop body does NOT run for len=0)
+    //         (d) NO Enter dispatchKeyEvent (no \n in empty string)
+    //         (e) result.ok === true (clear is not an error)
+    const session = makeFakeSession();
+    await session.getClient().snapshot();
+    const tool = makeTypeTool(session);
+    const result = await tool.execute(
+      { text: "", ref: "@e1" },
+      { toolCallId: "t-type5-b1", messages: [], abortSignal },
+    );
 
-      // (e) result.ok === true
-      assert.equal(result.ok, true, "T-Type.5 B-1: result.ok must be true (clear is valid)");
+    // (e) result.ok === true
+    assert.equal(result.ok, true, "T-Type.5 B-1: result.ok must be true (clear is valid)");
 
-      const log = session.callLog;
+    const log = session.callLog;
 
-      // (a) Ctrl+A pair fires (selects existing content)
-      const ctrlADown = log.filter((e) => e === "key:keyDown:a:mod2");
-      const ctrlAUp = log.filter((e) => e === "key:keyUp:a:mod2");
-      assert.equal(ctrlADown.length, 1, "T-Type.5 B-1: Ctrl+A keyDown must fire");
-      assert.equal(ctrlAUp.length, 1, "T-Type.5 B-1: Ctrl+A keyUp must fire");
+    // (a) Cmd+A pair fires (macOS select-all, modifiers:4)
+    const cmdADown = log.filter((e) => e === "key:keyDown:a:mod4");
+    const cmdAUp = log.filter((e) => e === "key:keyUp:a:mod4");
+    assert.equal(cmdADown.length, 1, "T-Type.5 B-1: Cmd+A keyDown must fire (macOS mod4)");
+    assert.equal(cmdAUp.length, 1, "T-Type.5 B-1: Cmd+A keyUp must fire");
 
-      // (b)+(c) insertText called EXACTLY ONCE with "" (B-1 explicit clear; per-char loop does not run)
-      const insertCalls = log.filter((e) => e.startsWith("insertText:"));
-      assert.equal(insertCalls.length, 1, "T-Type.5 B-1: insertText must be called exactly once");
-      assert.equal(insertCalls[0], "insertText:", "T-Type.5 B-1: the one insertText call uses '' (empty string)");
+    // (b) Backspace fires (deletes Cmd+A selection)
+    const bsDown = log.filter((e) => e === "key:keyDown:Backspace:mod0");
+    const bsUp = log.filter((e) => e === "key:keyUp:Backspace:mod0");
+    assert.equal(bsDown.length, 1, "T-Type.5 B-1: Backspace keyDown must fire");
+    assert.equal(bsUp.length, 1, "T-Type.5 B-1: Backspace keyUp must fire");
 
-      // (d) NO Enter key events (no \\n in empty string)
-      const enterEvents = log.filter((e) => e.includes(":Enter:"));
-      assert.equal(enterEvents.length, 0, "T-Type.5 B-1: no Enter key events for empty text");
-    },
-  );
+    // (c) NO insertText calls (per-char loop does not run for empty text)
+    const insertCalls = log.filter((e) => e.startsWith("insertText:"));
+    assert.equal(insertCalls.length, 0, "T-Type.5 B-1: insertText must NOT be called for empty text");
+
+    // (d) NO Enter key events (no \\n in empty string)
+    const enterEvents = log.filter((e) => e.includes(":Enter:"));
+    assert.equal(enterEvents.length, 0, "T-Type.5 B-1: no Enter key events for empty text");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

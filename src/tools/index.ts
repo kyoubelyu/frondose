@@ -23,6 +23,7 @@ import { makeLinkedinTools } from "./linkedin/index.js";
 import { makeMemoryTools } from "./memory/index.js";
 import { makeMethodologyTools } from "./methodology/index.js";
 import { makeOperatorOutputTools } from "./operatorOutput/index.js";
+import { makeSalesTools } from "./sales/index.js";
 import { makeDispatchGoogleLoginTool } from "./server/dispatchGoogleLogin.js";
 import { makeListPersonasTool } from "./server/listPersonas.js";
 import { makeListWorkersTool } from "./server/listWorkers.js";
@@ -68,12 +69,14 @@ export interface PersistencePaths {
   credentialsDbPath?: string;
   // P-31 Step 4a STUB: schedule.jsonl path for schedule_task tool. Builder wires at Step 4b.
   schedulePath?: string;
+  // P-SP-A: sales kernel SQLite path (~/.mai/agent/sales.sqlite by default).
+  salesDbPath?: string;
 }
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 32 tools
- *   - server  mode: 23 tools
+ *   - worker mode: 47 tools
+ *   - server  mode: 26 tools
  *
  * Layer order applied across BOTH modes (outermost → innermost):
  *   hookWrapper → safeModeWrap → retryWrap → original execute
@@ -204,6 +207,9 @@ export function makeAllTools(
     // P-31: schedule_task — server agent self-scheduling.
     Object.assign(out, makeCronTools(persistence?.schedulePath ?? SERVER_SCHEDULE_PATH()));
   } else {
+    // P-SP-A: sales kernel — worker-only (server has no LinkedIn primitives).
+    const salesDbPath = persistence?.salesDbPath ?? join(getHomeBase(), ".mai", "agent", "sales.sqlite");
+    Object.assign(out, makeSalesTools(salesDbPath));
     // worker-only: query_lead_globally + publish_event. Both always register;
     // both return a structured envelope when serverCoords===null.
     Object.assign(out, {

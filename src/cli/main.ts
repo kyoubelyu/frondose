@@ -601,6 +601,20 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
+  // P-58d.2: `mai update-server` — serve ~/.mai/site/ (download portal + Tauri
+  // updater manifest) over LAN HTTP. Operator-internal infra command (not gated
+  // by tier — like `mai update`). Blocks until SIGINT/SIGTERM.
+  program
+    .command("update-server")
+    .description("Serve the local Frondose download portal + updater manifest (~/.mai/site/) over LAN HTTP")
+    .option("--port <n>", "TCP port to bind (default 4875)")
+    .option("--site-dir <dir>", "Site directory to serve (default ~/.mai/site)")
+    .action(async (cliOpts: { port?: string; siteDir?: string }) => {
+      const { runUpdateServerSubcommand } = await import("./subcommands/updateServer.js");
+      await runUpdateServerSubcommand({ port: cliOpts.port, siteDir: cliOpts.siteDir });
+      process.exit(0);
+    });
+
   // P-38: `mai uninstall` — remove the global install. fs-only; --purge wipes ~/.mai/.
   program
     .command("uninstall")

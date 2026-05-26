@@ -19,8 +19,8 @@ import { dirname, join } from "node:path";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
 import { resolveModel } from "../../agent/modelResolver.js";
-import { BOUNDARY } from "../../agent/systemPrompt/boundary.js";
-import { CHECKPOINT } from "../../agent/systemPrompt/checkpoint.js";
+import { BOUNDARY, BOUNDARY_RESUME } from "../../agent/systemPrompt/boundary.js";
+import { CHECKPOINT, CHECKPOINT_RESUME } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../agent/systemPrompt/soul.js";
 import { createWorkflowController } from "../../agent/workflow/controller.js";
@@ -62,14 +62,16 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   const cfg = readConfig(DEFAULT_CONFIG_PATH());
   const identity = readIdentity(DEFAULT_IDENTITY_PATH());
-  const system = composeSystemPrompt({
-    boundary: BOUNDARY,
-    soul: `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`,
-    checkpoint: CHECKPOINT,
+  const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`;
+  const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
+  const systemResume = composeSystemPrompt({
+    boundary: BOUNDARY_RESUME,
+    soul: soulBand,
+    checkpoint: CHECKPOINT_RESUME,
   });
   const model = resolveModel({});
   const maxSteps = resolveMaxSteps(undefined);
-  const profileDir = join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const profileDir = process.env.MAI_PROFILE_DIR ?? join(getHomeBase(), ".mai", "agent", "chrome-profile");
   const memoryDbPath = join(getHomeBase(), ".mai", "agent", "memory.sqlite");
   const identityPath = DEFAULT_IDENTITY_PATH();
   const schedulePath = join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
@@ -138,6 +140,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const deps: ServeDeps = {
     model,
     system,
+    systemResume,
     tools,
     maxSteps,
     auditWriter,

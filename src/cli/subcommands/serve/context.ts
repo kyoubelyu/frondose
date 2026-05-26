@@ -26,8 +26,10 @@ export type SseFrame =
         | "cron-mode"
         | "cron-tick"
         | "cron-done"
+        | "turn-started"
         | "passive-mode";
       turnId?: string;
+      source?: "server" | "cron";
       toolName?: string;
       toolNames?: string[];
       chunk?: string;
@@ -95,6 +97,7 @@ export interface ServeState {
 export interface ServeDeps {
   model: ReturnType<typeof import("../../../agent/modelResolver.js").resolveModel>;
   system: string;
+  systemResume: string;
   tools: ReturnType<typeof import("../../../tools/index.js").makeAllTools>;
   maxSteps: number;
   auditWriter: ReturnType<typeof import("../../../persistence/audit.js").makeAuditWriter>;

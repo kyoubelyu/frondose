@@ -54,6 +54,9 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "close",
   "echo",
   "escalate_for_capability",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
   "get_memory_note",
   "getIdentity",
   "getMemory",
@@ -61,14 +64,22 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "identity",
   "inspect",
   "launch",
+  "list_due_followups",
+  "mark_message_sent",
   "navigate_to_url",
   "press",
+  "promote_candidate_to_lead",
   "publish_event",
   "qualify_profile",
   "query_lead_globally",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
   "reload",
   "remember",
+  "save_message_draft",
   "schedule_task",
+  "schedule_follow_up",
   "screenshot",
   "scroll",
   "search_memory",
@@ -81,6 +92,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "telegram_notify",
   "todo_write",
   "type",
+  "update_lead_stage",
   "upload",
   "web_fetch",
   "web_search",
@@ -209,11 +221,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 32 / server 23 (G-P38.8/.11, updated at P-39 Step 5)", () => {
-  it("T-CONTRACT.TOOLS: tool set after P-39 is worker 32 / server 23 (P-38 added 0; P-39 adds 3 memory tools)", () => {
+describe("tool counts: worker 47 / server 26 (G-P38.8/.11, rebaselined at P-SP-A)", () => {
+  it("T-CONTRACT.TOOLS: tool set after P-SP-A is worker 47 / server 26 (P-SP-A adds 12 worker-only sales tools)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 32 / server 23 (P-39 added search_memory + set_memory_note + get_memory_note)
+    // Then:  worker 47 / server 26 (P-SP-A adds sales kernel tools only to worker mode)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -228,8 +240,8 @@ describe("tool counts: worker 32 / server 23 (G-P38.8/.11, updated at P-39 Step 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        35,
-        `worker tool count must be 35; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        47,
+        `worker tool count must be 47; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot");
 

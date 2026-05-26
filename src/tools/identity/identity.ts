@@ -29,7 +29,9 @@ export function makeIdentityTool(identityPath: string) {
   return tool({
     description:
       "Update the operator's identity record. Pass any subset of fields; existing fields are preserved. " +
-      "If the operator hasn't provided a value, ASK them in conversation first — do NOT call this tool with placeholder data.",
+      "Prefer auto-deriving values from the operator's own LinkedIn profile (navigate to " +
+      "https://www.linkedin.com/in/me/ and call inspect) rather than asking the operator to type them in. " +
+      "Do NOT use placeholder data. Missing fields can be filled later.",
     parameters: identityToolParams,
     execute: async (input) => {
       try {

@@ -9,6 +9,7 @@ export interface AgentLoopOpts {
   system: string;
   messages: CoreMessage[];
   tools: ToolSet;
+  activeTools?: string[];
   /** Called for each text-delta chunk. Optional. */
   onText?: (delta: string) => void;
   /** Max LLM round-trips for tool-call loops. Default 200 (P-46 D-1). */
@@ -79,6 +80,7 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
       system: opts.system,
       messages: opts.messages,
       tools: opts.tools,
+      experimental_activeTools: opts.activeTools as (keyof ToolSet)[] | undefined,
       maxSteps: stepCap,
       abortSignal: opts.abortSignal,
       onStepFinish: (step) => {

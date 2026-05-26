@@ -86,15 +86,25 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// P-Z2 rebaseline: current worker tool snapshot (35 keys = pre-P-31 31 + schedule_task [P-31]
-// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]). Tool inventory IS contract
-// (CLAUDE.md:70 worker=35); regenerated empirically from makeAllTools.
+// P-SP-A rebaseline: current worker tool snapshot (47 keys after 12 sales kernel tools).
 const POST_P31_WORKER_KEYS = [
   ...PRE_P31_WORKER_KEYS,
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
+  "list_due_followups",
+  "mark_message_sent",
+  "promote_candidate_to_lead",
+  "record_auto_action",
+  "record_lead_event",
+  "record_raw_candidate",
+  "save_message_draft",
   "schedule_task",
+  "schedule_follow_up",
   "suggest_card",
   "suggest_next_actions",
   "todo_write",
+  "update_lead_stage",
 ].sort();
 
 // Pre-P-31 server tool snapshot (22 keys).
@@ -136,8 +146,8 @@ const POST_P31_SERVER_KEYS = [
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 35 tool keys (rebaselined to current post-P-Y1; was P-31-era 32) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 35 keys; set = pre-P-31 31 + schedule_task + suggest_card/suggest_next_actions + todo_write", () => {
+describe("makeAllTools worker mode → 47 tool keys (rebaselined to P-SP-A from post-P-Y1) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 47 keys; set includes 12 sales kernel tools", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
     // Then:   29 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is exactly {schedule_task}
@@ -161,8 +171,8 @@ describe("makeAllTools worker mode → 35 tool keys (rebaselined to current post
 
       assert.equal(
         keys.length,
-        35,
-        `worker mode must return exactly 35 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        47,
+        `worker mode must return exactly 47 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,

@@ -87,6 +87,8 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     "",
     "Your habit: when you learn a general fact, note, or intermediate result that isn’t about one specific person, you store it with `set_memory_note` — it outlives compaction; your session log does not.",
     "",
+    "Your habit: when you observe a LinkedIn person — profile, search result, or feed signal — you call `record_raw_candidate` so the sales kernel learns every observation. It is upsertable by profileUrl, so repeats are safe and refresh last_seen_at. With a leadId, call `get_lead_context` before drafting; when looking for follow-up work, call `list_due_followups`.",
+    "",
     "Your habit: when you are mid-task and discover a real wall — a tool you need genuinely does not exist in your inventory, and existing tools cannot do the job, not a transient retry-able error — you call `escalate_for_capability` once. That single tool handles the operator notification (via `telegram_notify`) and the GitHub issue (via `gh_issue`) itself — calling those two tools yourself before escalate would only double-notify and double-file. When the operator asks about your capabilities or discusses features in conversation, you answer in plain text — that is conversation, not escalation. When a task is complete, `stop` is how you say goodbye. When you need to wait, `sleep` handles it instead of standing idle.",
   ].join("\n");
 
@@ -125,6 +127,8 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     dayRhythm,
   ].join("\n");
 }
+
+export const SOUL = composeSoulBand(null);
 
 /** P-28: pick the soul band. A non-null override (from config.json.soul.override,
  *  formerly the write-only soul_band_override.txt) REPLACES the whole composed
