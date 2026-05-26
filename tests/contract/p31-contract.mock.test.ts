@@ -86,7 +86,7 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// P-SP-A rebaseline: current worker tool snapshot (47 keys after 12 sales kernel tools).
+// P-SP-B rebaseline: current worker tool snapshot (49 keys after 12 sales kernel + 2 scoring tools).
 const POST_P31_WORKER_KEYS = [
   ...PRE_P31_WORKER_KEYS,
   "get_account_context",
@@ -105,6 +105,9 @@ const POST_P31_WORKER_KEYS = [
   "suggest_next_actions",
   "todo_write",
   "update_lead_stage",
+  // P-SP-B: +2 sales-value scoring tools
+  "score_account",
+  "score_lead",
 ].sort();
 
 // Pre-P-31 server tool snapshot (22 keys).
@@ -146,11 +149,11 @@ const POST_P31_SERVER_KEYS = [
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 47 tool keys (rebaselined to P-SP-A from post-P-Y1) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 47 keys; set includes 12 sales kernel tools", () => {
+describe("makeAllTools worker mode → 49 tool keys (rebaselined to P-SP-B) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 49 keys; set includes 12 sales kernel + 2 scoring tools", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
-    // Then:   29 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is exactly {schedule_task}
+    // Then:   49 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is {schedule_task + sales + scoring}
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -171,13 +174,13 @@ describe("makeAllTools worker mode → 47 tool keys (rebaselined to P-SP-A from 
 
       assert.equal(
         keys.length,
-        47,
-        `worker mode must return exactly 47 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        49,
+        `worker mode must return exactly 49 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_WORKER_KEYS,
-        "worker tool names must match POST_P31_WORKER_KEYS (current post-P-Y1 inventory)",
+        "worker tool names must match POST_P31_WORKER_KEYS (P-SP-B rebaseline: +score_lead +score_account)",
       );
     } finally {
       cleanup();

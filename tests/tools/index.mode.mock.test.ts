@@ -34,17 +34,17 @@ const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" 
 // ─── T-MODE / T-CONTRACT ──────────────────────────────────────────────────────
 
 describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
-  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 47 tools; no 'list_workers'", () => {
+  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 49 tools; no 'list_workers'", () => {
     // Given: full worker startup path — session present, persistence present, mode defaults to "worker"
     // When:  makeAllTools(session, persistence, control, undefined) — no 5th opts arg
-    // Then:  returns ToolSet with 47 keys (P-SP-A: +12 worker-only sales kernel tools)
+    // Then:  returns ToolSet with 49 keys (P-SP-A+B: +14 worker-only sales tools incl. score_lead + score_account)
     //        does NOT include "list_workers"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl, undefined);
       const count = Object.keys(tools).length;
-      assert.equal(count, 47, `worker mode must have 47 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 49, `worker mode must have 49 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok(!("list_workers" in tools), "worker mode must NOT include 'list_workers'");
     } finally {
       cleanup();
@@ -112,16 +112,16 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 47", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 49", () => {
     // Given: worker startup path — session present, persistence present, mode not set
     // When:  Object.keys(makeAllTools(session, persistence, control)).length checked
-    // Then:  47 (P-SP-A: +12 worker-only sales kernel tools)
+    // Then:  49 (P-SP-B: +2 score_lead/score_account on top of P-SP-A's 47)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl);
       const count = Object.keys(tools).length;
-      assert.equal(count, 47, `worker tool count must be 47; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 49, `worker tool count must be 49; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }

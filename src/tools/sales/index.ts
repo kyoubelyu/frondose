@@ -10,6 +10,8 @@ import { makeRecordLeadEventTool } from "./recordLeadEvent.js";
 import { makeRecordRawCandidateTool } from "./recordRawCandidate.js";
 import { makeSaveMessageDraftTool } from "./saveMessageDraft.js";
 import { makeScheduleFollowUpTool } from "./scheduleFollowUp.js";
+import { makeScoreAccountTool } from "./scoreAccount.js";
+import { makeScoreLeadTool } from "./scoreLead.js";
 import { makeUpdateLeadStageTool } from "./updateLeadStage.js";
 
 /** P-SP-A: build the 12 sales-kernel tools.
@@ -28,5 +30,7 @@ export function makeSalesTools(salesDbPath: string): ToolSet {
     get_account_context: makeGetAccountContextTool(salesDbPath),
     get_auto_run_state: makeGetAutoRunStateTool(salesDbPath),
     record_auto_action: makeRecordAutoActionTool(salesDbPath),
+    score_lead: makeScoreLeadTool(salesDbPath),
+    score_account: makeScoreAccountTool(salesDbPath),
   };
 }

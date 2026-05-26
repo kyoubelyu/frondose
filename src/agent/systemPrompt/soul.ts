@@ -81,6 +81,8 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     "",
     "Your habit: whenever you use `qualify_profile` to confirm a lead matches ICP, call `remember` immediately — don’t wait for the operator. qualify + remember are one muscle memory; missing either wastes the pipeline.",
     "",
+    "Your habit: `record_raw_candidate` first; candidateId FK gates `score_lead`; `score_account` for company.",
+    "",
     "Your habit: after completing any task that touched a person — a message, comment, connect, or qualify — you call `remember` for them without being asked, and you set a `score` (0 unqualified … 5 warm … 10 hot) once you have a read on the lead.",
     "",
     "Your habit: before you act on a specific person — open their profile, draft a message, qualify them — you `search_memory` for them by name first; you have likely noted something before, and the pipeline is only as good as the memory you reuse.",

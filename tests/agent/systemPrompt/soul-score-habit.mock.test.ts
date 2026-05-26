@@ -1,16 +1,10 @@
 /**
- * P-SP-B Step 4a scaffold — T-SP-B.SoulHabit.1: soul.ts score_lead trigger habit.
+ * P-SP-B Step 5 — T-SP-B.SoulHabit.1: soul.ts score_lead trigger habit.
  *
- * Assertion body is a TODO stub that intentionally fails pre-builder (Step 4a).
- * Pre-builder failure: composeSoulBand output does NOT yet contain "score_lead" or
- * the "record_raw_candidate → score_lead" muscle-memory pairing — those are added by
- * the P-SP-B §6.4(G) trigger-habit edit in src/agent/systemPrompt/soul.ts.
+ * FILLED at Step 5. Pre-builder stub replaced with real assertions.
  *
  * Gates covered: §4 T-SP-B.SoulHabit.1 (soul band contains score_lead + record_raw_candidate
  * pairing + candidateId FK pre-condition mention).
- *
- * Note: composeSoulBand already exists (pre-builder), so the static import SUCCEEDS.
- * The scaffold fails because the assertion immediately calls assert.ok(false, "TODO …").
  *
  * Run (mock only):
  *   node --import tsx --test --test-force-exit \
@@ -40,18 +34,35 @@ describe("T-SP-B.SoulHabit — soul.ts score_lead trigger habit (§6.4(G))", () 
     // When:  composeSoulBand(identity) called with a minimal identity fixture
     // Then:  output string contains "score_lead" AND "record_raw_candidate" AND "candidateId"
     //        (the FK pre-condition mention in the habit text per §6.4(G) sketch)
-    //
-    // Pre-builder state: triggerHabits does NOT yet contain the score_lead pairing
-    // → the assertion fails pre-builder (assert.ok(false, "TODO …")).
+
     const soulBand = composeSoulBand(FIXTURE_IDENTITY);
-    void soulBand; // available for Step 5 assertion bodies
+
     assert.ok(
-      false,
-      [
-        "T-SP-B.SoulHabit.1 TODO: fill at Step 5 — FAILS pre-builder:",
-        "'score_lead' and 'record_raw_candidate' pairing not yet in soul.ts triggerHabits.",
-        "After P-SP-B §6.4(G): assert soulBand contains 'score_lead', 'record_raw_candidate', 'candidateId'.",
-      ].join(" "),
+      typeof soulBand === "string" && soulBand.length > 0,
+      "composeSoulBand must return a non-empty string",
+    );
+
+    assert.ok(
+      soulBand.includes("score_lead"),
+      `Soul band must mention "score_lead" (P-SP-B §6.4(G) trigger habit). ` +
+        `Current soul band does NOT contain "score_lead". Builder must add the score_lead habit to triggerHabits.`,
+    );
+
+    assert.ok(
+      soulBand.includes("record_raw_candidate"),
+      `Soul band must mention "record_raw_candidate" (the FK gate before score_lead). ` +
+        `Missing from soul band — §6.4(G) habit not yet added.`,
+    );
+
+    assert.ok(
+      soulBand.includes("candidateId"),
+      `Soul band must mention "candidateId" (the FK pre-condition: candidateId gates score_lead). ` +
+        `Missing from soul band — §6.4(G) habit not yet added.`,
+    );
+
+    console.log(
+      `T-SP-B.SoulHabit.1 PASS: soul band contains score_lead + record_raw_candidate + candidateId ` +
+        `(§6.4(G) trigger habit present; soul band length = ${soulBand.length} chars).`,
     );
   });
 });
