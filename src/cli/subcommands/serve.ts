@@ -122,6 +122,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     },
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
   });
+  session.canClickOutbound = (_label, _surface) => workflow.hasApprovedOutboundStep();
   const broadcast = (frame: SseFrame): void => {
     const data = `data: ${JSON.stringify(frame)}\n\n`;
     for (const res of state.sseClients) {

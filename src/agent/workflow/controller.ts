@@ -26,6 +26,7 @@ export interface WorkflowController {
     body: Record<string, unknown> | null,
   ): { status: number; response: unknown; resumePrompt?: string };
   getState(): WorkflowState;
+  hasApprovedOutboundStep(): boolean;
 }
 
 export function createWorkflowController(deps: WorkflowControllerDeps): WorkflowController {
@@ -347,7 +348,16 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     return { status: 200, response: { ok: true } };
   }
 
-  return { onToolResults, handleEndpoint, getState: () => state };
+  function hasApprovedOutboundStep(): boolean {
+    if (!state.current) return false;
+    if (state.current.state === "completed" || state.current.state === "cancelled") return false;
+    if (state.current.approvalMode === "auto") return true;
+    const inProgress = state.current.steps.find((s) => s.state === "in_progress");
+    if (!inProgress || !inProgress.requiresApproval) return false;
+    return approvedStepIds.has(inProgress.id);
+  }
+
+  return { onToolResults, handleEndpoint, getState: () => state, hasApprovedOutboundStep };
 }
 
 function isTodoWriteResult(result: unknown): result is TodoWriteResult {

@@ -101,6 +101,7 @@ export interface LinkedinSession {
    */
   setVisualDriver?(driver: (fnDeclaration: string) => boolean): void;
   showAgentTarget?(box: { x: number; y: number; w: number; h: number }, label: string): Promise<void>;
+  canClickOutbound?: (label: string, surface: string) => boolean;
   clearAgentTarget?(): void;
 }
 
