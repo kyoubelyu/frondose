@@ -1,8 +1,9 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
-import { applyPacing, failFromError, ok, resolveByLabel, withHint } from "../../linkedin/index.js";
+import { applyPacing, fail, failFromError, ok, resolveByLabel, withHint } from "../../linkedin/index.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
+import { LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
 
 const clickParams = z
   .object({
@@ -46,6 +47,22 @@ export function makeClickTool(session: LinkedinSession) {
           await session.showAgentTarget?.(box, label ?? target);
         } catch {
           // visual-only; ignore
+        }
+        // Outbound guard — checked before any CDP dispatch
+        const clickContext = session.getLastContext();
+        const targetEntry = clickContext?.entries?.find((e) => e.ref === target);
+        const clickLabel = (targetEntry?.name ?? "").trim();
+        const clickSurface = clickContext?.surface ?? "";
+        if (!LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)) {
+          // P-33 general-web carve-out: not a LinkedIn outbound surface -> skip guard
+        } else if (session.canClickOutbound && requiresApproval(clickLabel, clickSurface)) {
+          if (!session.canClickOutbound(clickLabel, clickSurface)) {
+            return fail(
+              "click",
+              "invalid_input",
+              `Outbound action blocked: label "${clickLabel}" on surface "${clickSurface}" requires operator approval`,
+            );
+          }
         }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
