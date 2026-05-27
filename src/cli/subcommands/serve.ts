@@ -30,6 +30,7 @@ import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { getHomeBase } from "../../persistence/paths.js";
+import { modeFromState } from "../../tauri/ui/mode.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
 import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRateLimit.js";
@@ -62,7 +63,16 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   const cfg = readConfig(DEFAULT_CONFIG_PATH());
   const identity = readIdentity(DEFAULT_IDENTITY_PATH());
-  const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`;
+  // P-SP-C: derive the boot-time mode from the same two source-of-truth flags
+  // used to initialize ServeState below — single read site keeps soul band +
+  // initial state consistent. Runtime mode flips (via /agent/passive-mode or
+  // /agent/cron-mode) update state.passiveEnabled / state.cronEnabled but do
+  // NOT recompose the system prompt; the per-turn passive prompt carries the
+  // Magical directives for the turn that fires.
+  const cronEnabledAtBoot = readMode() === "auto";
+  const passiveEnabledAtBoot = (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on";
+  const bootMode = modeFromState({ cronEnabled: cronEnabledAtBoot, passiveEnabled: passiveEnabledAtBoot });
+  const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment(bootMode)}`;
   const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
   const systemResume = composeSystemPrompt({
     boundary: BOUNDARY_RESUME,
@@ -88,10 +98,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     overlayContextId: undefined,
     unsubscribeContextId: undefined,
     unsubscribeOverlayEvents: undefined,
-    cronEnabled: readMode() === "auto",
+    cronEnabled: cronEnabledAtBoot,
     // P-57g (D-DOGFOOD-07): passive auto-react HIDDEN by default — opt in via MAI.app toggle
     // (mai_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
-    passiveEnabled: (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on",
+    passiveEnabled: passiveEnabledAtBoot,
     lastTurnUserPrompt: null,
     lastFailedTurnPrompt: null,
     retryAttempts: 0,

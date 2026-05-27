@@ -99,14 +99,22 @@ export function createPassiveHandlers(
 
   function buildPassivePrompt(eventType: string, ctx: Record<string, unknown>): string {
     if (eventType === "profile-nav") {
-      // P-57e rev-2 (item e): memory-first; default-to-remember+stop for already-known
-      // profiles; suggest_card reserved for fresh ICP matches with Pain-Chain insight.
+      // P-SP-C: Magical-mode profile-nav sequence — every observation enters the
+      // sales kernel. record_raw_candidate is upsertable by profileUrl (safe to
+      // call on repeat views; just bumps last_seen_at). score_lead requires the
+      // candidateId from step 1's response (P-SP-B FK pre-check at scoreLead.ts).
+      // suggest_card is surfaced only when the score warrants. NO outbound in
+      // Magical mode — never call click/navigate/connect/message in this turn.
       return [
         `Operator viewed LinkedIn profile: ${ctx.handle} (${ctx.url}).`,
         ``,
-        `Default response: if you have NO memory of this person → call \`remember\` (interaction kind: at) to record the profile-view footprint, then \`stop\`.`,
-        `If you ALREADY have memory of this person → \`stop\` directly (avoid duplicate footprint).`,
-        `Call \`suggest_card\` ONLY if this person qualifies as a fresh ICP match AND you have a Pain-Chain insight worth surfacing (use \`qualify_profile\` + \`inspect\` first).`,
+        `Step 1: call \`record_raw_candidate\` with { profileUrl: "${ctx.url}", personName: (inferred from page context or "unknown"), source: "profile-nav", sourceContext: "${ctx.handle}", evidenceSummary: (one-line role/headline if you can read it, else omit) }. The response data.candidateId is required for step 3.`,
+        `Step 2: call \`search_memory\` for "${ctx.handle}" — retrieve any prior context.`,
+        `Step 3a: if context is sufficient (role + company visible OR prior memory found) → call \`score_lead\` with { candidateId: <from step 1>, leadId: null, totalScore: 0–100, confidence: 0.1–0.4 (low for first passive view; higher only if prior memory adds evidence), icpFit, painHypothesis, buyingTrigger, authorityLevel, suggestedOpeningLine, nextAction: "research_more" | "connect" | "message" | "wait_for_signal", evidenceJson, methodUsed: "solution_selling" (or another methodology) }.`,
+        `Step 3b: if context is insufficient → call \`remember\` (kind: "at", note: "profile-view footprint — insufficient evidence for score") and then \`stop\`.`,
+        `Step 4: if step 3a ran AND the returned totalScore ≥ 40 AND painHypothesis is non-empty → call \`suggest_card\` with { title: (personName + " — " + painHypothesis truncated to ~60 chars), totalScore: <from step 3a>, evidenceSummary: (one-line digest), icpMatch: { qualified: icpFit !== "none", matched: [...], missing: [...] }, painChainHypothesis, painChainStage, suggestedMove: { kind: "connect"|"comment"|"message", text: suggestedOpeningLine } }.`,
+        ``,
+        `Hard constraint: NEVER call \`click\`, \`navigate_to_url\`, \`connect\`, \`message\`, or any outbound tool in this turn — Magical mode is observe-and-judge only. Typical sequence length: 3–5 steps; maxSteps is 20.`,
       ].join("\n");
     }
     if (eventType === "click") {

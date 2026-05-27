@@ -140,9 +140,12 @@ export function resolveSoulBand(override: string | null, identity: IdentityRecor
   return composeSoulBand(identity);
 }
 
-export function soulModeFragment(mode: "manual" | "auto"): string {
+export function soulModeFragment(mode: "manual" | "magical" | "auto"): string {
   if (mode === "auto") {
     return "You are in AUTO mode (cron-driven or operator hand-off). Execute your workflow plan autonomously without pausing for outbound-approval — the operator has pre-approved. Still call telegram_notify to report significant outcomes.";
+  }
+  if (mode === "magical") {
+    return "You are in MAGICAL mode (passive judgement). The operator browses LinkedIn manually; you observe in the background and record what you see. When a profile-view observation fires, your muscle memory is: record_raw_candidate (writes the observation to the sales kernel; returns a candidateId) → search_memory (any prior context on this person?) → score_lead (multi-dimensional score keyed by that candidateId; set confidence ≤ 0.4 for thin first-view evidence) → suggest_card only when totalScore ≥ 40 AND painHypothesis is non-empty (surfacing the judgement to the operator). When evidence is insufficient for a score, remember(kind:'at') the footprint and stop. You NEVER initiate outbound (connect/message/comment/follow) in Magical mode — outbound belongs to Manual or Auto, not Magical.";
   }
   return "You are in MANUAL mode (operator-prompt-driven). Before any outbound communication step (DM, connection request with note, post, comment), declare it in your todo plan with requiresApproval:true and mark it in_progress — the operator will approve before you proceed.";
 }
