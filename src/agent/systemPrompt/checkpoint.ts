@@ -26,7 +26,7 @@ export const CHECKPOINT = `CHECKPOINT DISCIPLINE
 
 ${CHECKPOINT_TASK_START}
 
-**Within-cron idempotency** (mandatory for iterative scheduled tasks):
+**Within-cron idempotency**:
 When a scheduled task processes list items (posts, profiles, conversations), each cron prompt starts with:
 
   [CRON_RUN_ID=YYYYMMDD_HHMMSS_<jobId>]
@@ -41,13 +41,13 @@ Extract cron_run_id. For each item:
 Auto-compaction and restarts can drop in-context detail at any time; memory.sqlite is the ONLY durable store. At the end of every task or agent turn, persist new person facts with \`remember\` (include \`score\` 0–10 once qualified) and general facts, notes, or intermediate results with \`set_memory_note\`. Persist proactively; do NOT assume context survives.
 
 **Daily memory organization:**
-Ensure a daily memory-organization job exists. On first use each day, call \`get_memory_note({ key: "memory_org_job_seeded" })\`. If \`found\` is false, call \`schedule_task\` with \`cron_expr: "0 2 * * *"\` and a prompt beginning \`[MEMORY_ORG_RUN]\` (review memory.sqlite, refresh stale nextAction fields, send a telegram_notify digest), then call \`set_memory_note({ key: "memory_org_job_seeded", value: "true" })\`. This seeds once; the operator can remove it with /cron remove.
+Ensure a daily memory-organization job exists. On first use each day, call \`get_memory_note({ key: "memory_org_job_seeded" })\`. If \`found\` is false, call \`schedule_task\` with \`cron_expr: "0 2 * * *"\` and a prompt beginning \`[MEMORY_ORG_RUN]\` (memory review), then call \`set_memory_note({ key: "memory_org_job_seeded", value: "true" })\`.
 
 **Cross-session resume:**
 Conversation history persists across restarts: \`continueRecent\` resumes the same JSONL with prior context, decisions, and identity. Do NOT re-introduce yourself or treat a restart as fresh.
 
 **Cron task completion:**
-After a scheduled task, call \`telegram_notify\` (severity: "info", body ≤ 4000 chars) with a brief digest and outcome. If TELEGRAM_TOKEN is unset, telegram_notify returns an error envelope; log it and continue.
+After a scheduled task, call \`telegram_notify\` (severity: "info", body ≤ 4000 chars) with a brief digest and outcome.
 
 **Bidirectional Telegram channel:**
 Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media tags [TG_PHOTO=<path>] / [TG_VOICE=<path>] mark downloaded files. Respond naturally; replies auto-push to the bound chat (no telegram_notify needed). Do NOT include [TG_FROM=...] in your response.
@@ -56,8 +56,12 @@ Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media ta
 
 **After a Connect/Invite click: \`inspect(scope:"overlay")\`, not \`scope:"page"\`.**
 
+**Connect invite (profile)**: navigate_to_url \`https://www.linkedin.com/preload/custom-invite/?vanityName=<X>\` (Connect link CDP-blocked) → inspect overlay → "Send without a note".
+
 **After a DM/message send: \`inspect(scope:"page")\` to confirm it appears in the thread.**
 
-**Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**`;
+**Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**
+
+**Auto 4-stop**: \`end_auto_run\` on cap, no leads, blocked page, or no next action.`;
 
 export const CHECKPOINT_RESUME = CHECKPOINT.replace(CHECKPOINT_TASK_START, CHECKPOINT_TASK_START_RESUME);

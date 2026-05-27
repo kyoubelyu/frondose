@@ -75,7 +75,7 @@ export interface PersistencePaths {
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 47 tools
+ *   - worker mode: 51 tools (post P-SP-E +2: start_auto_run + end_auto_run)
  *   - server  mode: 26 tools
  *
  * Layer order applied across BOTH modes (outermost → innermost):

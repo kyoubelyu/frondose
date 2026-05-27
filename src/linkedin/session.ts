@@ -6,6 +6,15 @@ import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
 import { installOverlay } from "../overlay/inject.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
 
+declare module "./types.js" {
+  interface LinkedinSession {
+    /** P-SP-E: optional auto-run state probe for cap-aware click guard.
+     *  Returns the current running auto_runs row (with maxConnects) and current
+     *  ledger count for connect_sent. Undefined when serve wiring not applied. */
+    autoRun?: () => { runId: string; maxConnects: number | null; connectSentCount: number } | null;
+  }
+}
+
 const VISUAL_DWELL_MS = 500; // P-Y2.3 (OQ-Y2.3.6): pre-click cursor-travel dwell so the operator sees the
 // cursor land + highlight before the click. 400–600ms range; builder may tune
 // at the live gate. Applied ONLY when the driver actually painted (Auto mode).
