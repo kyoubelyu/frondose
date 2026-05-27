@@ -32,8 +32,6 @@ Aim short (≤ 30 words). Capability stays implicit at this row — the point is
 
 Pain Chain + Key Players List (precall artifacts): KPL is the per-ICP table of target titles + likely pains; book base 7-role skeleton (CEO/COO/CFO/CIO/VP Sales/VP Mfg/VP Eng) is adapted per ICP. Pain Chain links each title's pain to the title whose pain it feeds — Step 3 walks up (whose quarterly number is affected?) feeds I2-controlled; Step 4 walks down (what daily-execution friction causes this pain?) feeds R2-controlled. Start at the title most plausibly contactable on LinkedIn — usually VP-level or Head-of. Build speculatively before outreach; revise as buyer evidence confirms or replaces nodes.
 
-remember habit anchor: immediately \`remember\` after \`qualify_profile\` confirms an ICP match — this is your pipeline discipline. Every ICP-qualified lead only counts once it's recorded; missing any wastes this search. qualify → remember, two steps, neither optional.
-
 Value Cycle (4 gates after C3-confirming): validate (deliver formal 5-slot Value Proposition with buyer-attested numbers from R2/C2 digs) → close (quantified outcome motivates action — procurement call, intro to economic buyer) → post (record baseline → actual; feeds next Reference Story).
 
 Ratio guideline: top performers run controlled:open ≈ 3:1 across the 9-block; poor performers run 1:3. A thread dominated by open questions past R1 signals top performers shift to controlled on the next turn.
