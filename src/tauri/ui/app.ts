@@ -243,11 +243,12 @@ function syncModeUi(mode: AppMode): void {
   buildSwitcher(modeManualTabEl, modeAutoTabEl, mode);
   windowRef.document.documentElement.classList.toggle("mode-auto", mode === "auto");
   windowRef.document.body?.classList.toggle("mode-auto", mode === "auto");
+  windowRef.document.documentElement.classList.toggle("mode-magical", mode === "magical");
+  windowRef.document.body?.classList.toggle("mode-magical", mode === "magical");
   const status = statusForMode(mode);
   statusEl.textContent = status.label;
   statusEl.classList.toggle("working", mode === "auto");
-  // P-Y2-MA G5 desktop: mode-badge text + class flip. Magical defaults to manual styling
-  // until P-Y2-Magical lands proper Magical visual; the .magical class is present as a hook.
+  // P-Y2-MA G5 desktop: mode-badge text + class flip. Magical uses its badge-only visual hook.
   const modeBadgeEl = windowRef.document.getElementById("mode-badge");
   if (modeBadgeEl) {
     modeBadgeEl.textContent = mode === "auto" ? "AUTO" : mode === "magical" ? "MAGICAL" : "MANUAL";

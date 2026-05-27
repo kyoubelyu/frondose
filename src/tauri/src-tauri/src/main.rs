@@ -466,6 +466,7 @@ async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
         .arg("--token")
         .arg(token)
         .env("MAI_AUTOUPDATE", "skip")
+        .env("MAI_SIDECAR_OWNER", "frondose-app")
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .spawn()
