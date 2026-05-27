@@ -43,6 +43,12 @@ export interface CreateLinkedinSessionOpts {
   onClientBooted?: (client: CdpClient) => void | Promise<void>;
 }
 
+/** [P-65] LinkedIn opens Campaign Manager tabs as window.open() side-effects for
+ *  accounts with Campaign Manager enabled. Close only the host-anchored LinkedIn
+ *  Campaign Manager surface; P-33 authorizes general HTTPS automation, so non-LinkedIn
+ *  targets whose URLs merely contain this substring must stay open. */
+const SPURIOUS_LINKEDIN_TAB_RE = /^https:\/\/(?:www\.)?linkedin\.com\/campaignmanager\//;
+
 /** [P-62 OQ-5] Subscribe to Target.targetCreated; on each new `page` target, attach with
  *  flat sessions and register STEALTH_INIT_SCRIPT on that sub-session. Best-effort: any
  *  failure is logged + does NOT throw (a single popup's stealth miss is not boot-fatal).
@@ -60,6 +66,14 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
     "Target.targetCreated",
     async (params: { targetInfo: { type: string; targetId: string; url?: string } }) => {
       if (params.targetInfo.type !== "page") return;
+      const url = params.targetInfo.url ?? "";
+      if (SPURIOUS_LINKEDIN_TAB_RE.test(url)) {
+        void client.handle.Target.closeTarget({ targetId: params.targetInfo.targetId }).catch((err: unknown) => {
+          console.error("[mai] P-65: failed to close Campaign Manager tab", err);
+        });
+        return;
+      }
+
       try {
         // BUILDER-VERIFY (4b): chrome-remote-interface 0.34.0 exposes flat sessions via
         // client.send(method, params, sessionId, callback), so use handle.send(..., sessionId).
@@ -75,6 +89,17 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
       } catch (e) {
         console.error(`[mai] OQ-5 auto-inject failed for target ${params.targetInfo.targetId}:`, e);
       }
+    },
+  );
+  client.handle.on(
+    "Target.targetInfoChanged",
+    async (params: { targetInfo: { type: string; targetId: string; url?: string } }) => {
+      if (params.targetInfo.type !== "page") return;
+      const url = params.targetInfo.url ?? "";
+      if (!SPURIOUS_LINKEDIN_TAB_RE.test(url)) return;
+      void client.handle.Target.closeTarget({ targetId: params.targetInfo.targetId }).catch((err: unknown) => {
+        console.error("[mai] P-65: failed to close Campaign Manager tab", err);
+      });
     },
   );
 }
