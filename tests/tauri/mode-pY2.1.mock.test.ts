@@ -4,6 +4,10 @@
  * Pure-unit tests: import `src/tauri/ui/mode.ts` and assert the cron→mode derivation, the mode→toggles
  * mapping (R-3 = Option II: passive OFF in BOTH modes), and the status microcopy.
  *
+ * P-SP-C Update (Step 5): modeFromToggles was removed from mode.ts (replaced by modeFromState).
+ * T-Mode.1 + T-Mode.2 migrated to use modeFromState({cronEnabled, passiveEnabled:false}) equivalents.
+ * All other tests unchanged.
+ *
  * Gate coverage:
  *   G-PY2.1.2 — mode model folds cron(+passive) correctly; microcopy correct (T-Mode.1..5)
  *   G-PY2.1.3 — auto ⇒ cron-on (drives the approvalMode='auto' chain) (T-Mode.4)
@@ -15,21 +19,21 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { MODE_LABELS, modeFromToggles, statusForMode, togglesForMode } from "../../src/tauri/ui/mode.js";
+import { MODE_LABELS, modeFromState, statusForMode, togglesForMode } from "../../src/tauri/ui/mode.js";
 
 describe("mode — cron→mode derivation (G-PY2.1.2)", () => {
-  it("T-Mode.1: when modeFromToggles(false), returns 'manual'", () => {
-    // Given: modeFromToggles
-    // When:  called with cronEnabled=false
+  it("T-Mode.1: when modeFromState({cronEnabled:false, passiveEnabled:false}), returns 'manual' (P-SP-C: replaces modeFromToggles(false))", () => {
+    // Given: modeFromState (P-SP-C: replaces modeFromToggles with 2-flag version)
+    // When:  called with cronEnabled=false, passiveEnabled=false (both off = manual)
     // Then:  returns 'manual'
-    assert.equal(modeFromToggles(false), "manual");
+    assert.equal(modeFromState({ cronEnabled: false, passiveEnabled: false }), "manual");
   });
 
-  it("T-Mode.2: when modeFromToggles(true), returns 'auto'", () => {
-    // Given: modeFromToggles
-    // When:  called with cronEnabled=true
+  it("T-Mode.2: when modeFromState({cronEnabled:true, passiveEnabled:false}), returns 'auto' (P-SP-C: replaces modeFromToggles(true))", () => {
+    // Given: modeFromState (P-SP-C: replaces modeFromToggles with 2-flag version)
+    // When:  called with cronEnabled=true, passiveEnabled=false
     // Then:  returns 'auto'
-    assert.equal(modeFromToggles(true), "auto");
+    assert.equal(modeFromState({ cronEnabled: true, passiveEnabled: false }), "auto");
   });
 });
 

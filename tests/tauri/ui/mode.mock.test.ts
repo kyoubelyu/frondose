@@ -53,7 +53,10 @@ describe("T-SP-C.Mode — mode.ts 3-mode model (P-SP-C)", () => {
     // When:  MODE_LABELS.magical is read
     // Then:  MODE_LABELS.magical === "Magical" (proves the 3-mode union is complete)
     //   Covers G-SP-C.1
-    assert.ok(false, "TODO: fill at Step 5 — FAILS pre-builder");
+    assert.ok(MODE_LABELS, "MODE_LABELS must be exported");
+    assert.equal(MODE_LABELS.magical, "Magical", "MODE_LABELS.magical must be 'Magical'");
+    assert.equal(MODE_LABELS.manual, "Manual", "MODE_LABELS.manual must be 'Manual'");
+    assert.equal(MODE_LABELS.auto, "Auto", "MODE_LABELS.auto must be 'Auto'");
   });
 
   // ─── T-SP-C.Mode.2 ───────────────────────────────────────────────────────────
@@ -66,7 +69,15 @@ describe("T-SP-C.Mode — mode.ts 3-mode model (P-SP-C)", () => {
     //   {true,  true}  → "auto" (cron wins)
     // Then:  all four return values match expectations
     //   Covers G-SP-C.2
-    assert.ok(false, "TODO: fill at Step 5 — FAILS pre-builder");
+    assert.ok(typeof modeFromState === "function", "modeFromState must be exported");
+    assert.equal(modeFromState({ cronEnabled: false, passiveEnabled: false }), "manual",
+      "{cron:false, passive:false} → 'manual'");
+    assert.equal(modeFromState({ cronEnabled: false, passiveEnabled: true }), "magical",
+      "{cron:false, passive:true} → 'magical'");
+    assert.equal(modeFromState({ cronEnabled: true, passiveEnabled: false }), "auto",
+      "{cron:true, passive:false} → 'auto'");
+    assert.equal(modeFromState({ cronEnabled: true, passiveEnabled: true }), "auto",
+      "{cron:true, passive:true} → 'auto' (cron wins over passive)");
   });
 
   // ─── T-SP-C.Mode.3 ───────────────────────────────────────────────────────────
@@ -75,7 +86,13 @@ describe("T-SP-C.Mode — mode.ts 3-mode model (P-SP-C)", () => {
     // When:  modeFromState(togglesForMode(m)) for m in ["manual", "magical", "auto"]
     // Then:  identity holds for all three: result === m
     //   Covers G-SP-C.3 (derivation consistency)
-    assert.ok(false, "TODO: fill at Step 5 — FAILS pre-builder");
+    assert.ok(typeof togglesForMode === "function", "togglesForMode must be exported");
+    for (const mode of ["manual", "magical", "auto"] as const) {
+      const flags = togglesForMode(mode);
+      const derived = modeFromState(flags);
+      assert.equal(derived, mode,
+        `modeFromState(togglesForMode("${mode}")) must round-trip back to "${mode}"`);
+    }
   });
 
   // ─── T-SP-C.Mode.4 ───────────────────────────────────────────────────────────
@@ -84,6 +101,11 @@ describe("T-SP-C.Mode — mode.ts 3-mode model (P-SP-C)", () => {
     // When:  called with "magical"
     // Then:  { label: "Observing", tone: "observing" }
     //   Covers G-SP-C.4
-    assert.ok(false, "TODO: fill at Step 5 — FAILS pre-builder");
+    assert.ok(typeof statusForMode === "function", "statusForMode must be exported");
+    assert.deepEqual(statusForMode("magical"), { label: "Observing", tone: "observing" },
+      "statusForMode('magical') must return {label:'Observing', tone:'observing'}");
+    // Regression: manual + auto unchanged
+    assert.deepEqual(statusForMode("manual"), { label: "Listening", tone: "listening" });
+    assert.deepEqual(statusForMode("auto"), { label: "Working", tone: "working" });
   });
 });
