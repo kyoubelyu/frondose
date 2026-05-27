@@ -54,6 +54,21 @@ export function createTurnRunner(
             (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown; args?: unknown }> })
               .toolResults ?? [];
           for (const tr of toolResults) {
+            if (tr.toolName === "present_summary") {
+              const summary = (tr.result as { ok?: boolean } | null | undefined) ?? {};
+              if (summary.ok === true) {
+                const ctxId = state.overlayContextId;
+                const client = deps.session.getClient();
+                if (ctxId !== undefined && client) {
+                  const json = JSON.stringify(summary);
+                  void callInOverlay(
+                    client.handle,
+                    ctxId,
+                    `function() { window.__maiShowSummaryCard(${JSON.stringify(json)}); }`,
+                  );
+                }
+              }
+            }
             if (tr.toolName === "suggest_card") {
               const card = (tr.result as unknown as { ok: boolean }) ?? {};
               deps.emitFrame({ type: "suggestion-card", turnId, card: card as SuggestionCardPayload });

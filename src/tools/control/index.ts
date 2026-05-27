@@ -2,6 +2,7 @@ import type { Tool, ToolSet } from "ai";
 import type { HookRunner } from "../../agent/hooks.js";
 import { echoTool } from "./echo.js";
 import { makeEscalateTool } from "./escalate.js";
+import { presentSummaryTool } from "./presentSummary.js";
 import { sleepTool } from "./sleep.js";
 import type { ControlSignals } from "./stop.js";
 import { makeStopTool } from "./stop.js";
@@ -10,6 +11,7 @@ import { suggestNextActionsTool } from "./suggestNextActions.js";
 import { todoWriteTool } from "./todoWrite.js";
 
 export { echoTool } from "./echo.js";
+export { presentSummarySchema, presentSummaryTool } from "./presentSummary.js";
 export type { ControlSignals } from "./stop.js";
 export { todoWriteSchema, todoWriteTool } from "./todoWrite.js";
 
@@ -37,6 +39,7 @@ export function makeControlTools(
     echo: echoTool,
     stop: makeStopTool(control, hookRunner),
     sleep: sleepTool,
+    present_summary: presentSummaryTool,
     suggest_card: suggestCardTool,
     suggest_next_actions: suggestNextActionsTool,
     todo_write: todoWriteTool,
