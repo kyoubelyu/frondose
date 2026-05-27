@@ -10,6 +10,7 @@ import { registerCrashHandlers } from "./crashLogger.js";
 import { loadDotenv } from "./env.js";
 import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
+import { runAnalyticsSubcommand } from "./subcommands/analytics.js";
 import { runAuthSubcommand } from "./subcommands/auth.js";
 import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runGhSubcommand } from "./subcommands/gh.js";
@@ -640,6 +641,17 @@ async function main(): Promise<void> {
         tcPath: telegramConfigPath,
         memoryDbPath,
         cdpPort,
+      });
+      process.exit(0);
+    });
+
+  // P-SP-F: `mai analytics` — operator-facing sales metrics surface (north-star KPI).
+  program
+    .command("analytics")
+    .description("Show sales analytics: funnel, rates, score calibration, auto-run history")
+    .action(async () => {
+      await runWithExitGuard(async () => {
+        await runAnalyticsSubcommand({});
       });
       process.exit(0);
     });
