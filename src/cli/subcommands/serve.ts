@@ -30,9 +30,11 @@ import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { getHomeBase } from "../../persistence/paths.js";
+import { countAutoLedgerByAction, DEFAULT_SALES_DB_PATH, getAutoRun } from "../../persistence/salesDb.js";
 import { modeFromState } from "../../tauri/ui/mode.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
+import { getSalesDb } from "../../tools/sales/_dbHandle.js";
 import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRateLimit.js";
 import type { ServeDeps, ServeEmitter, ServeState, SseFrame } from "./serve/context.js";
 import { createCronDriver } from "./serve/cron.js";
@@ -85,6 +87,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const memoryDbPath = join(getHomeBase(), ".mai", "agent", "memory.sqlite");
   const identityPath = DEFAULT_IDENTITY_PATH();
   const schedulePath = join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+  const salesDbPath = DEFAULT_SALES_DB_PATH();
   const auditPath = AUDIT_PATH();
   const auditWriter = makeAuditWriter(auditPath);
   const session = createLinkedinSession({
@@ -102,6 +105,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     // P-57g (D-DOGFOOD-07): passive auto-react HIDDEN by default — opt in via MAI.app toggle
     // (mai_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
     passiveEnabled: passiveEnabledAtBoot,
+    autoRunId: null,
     lastTurnUserPrompt: null,
     lastFailedTurnPrompt: null,
     retryAttempts: 0,
@@ -119,7 +123,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   };
   const hookRunner = new HookRunner();
   const workerId = identity?.fullName ?? os.hostname();
-  const tools = makeAllTools(session, { memoryDbPath, identityPath, schedulePath }, control, hookRunner, {
+  const tools = makeAllTools(session, { memoryDbPath, identityPath, schedulePath, salesDbPath }, control, hookRunner, {
     mode: "worker",
     workerId,
   });
@@ -133,6 +137,18 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
   });
   session.canClickOutbound = (_label, _surface) => workflow.hasApprovedOutboundStep();
+  session.autoRun = () => {
+    if (state.autoRunId === null) return null;
+    const db = getSalesDb(salesDbPath);
+    const row = getAutoRun(db, state.autoRunId);
+    if (!row || row.status !== "running") return null;
+    const counters = countAutoLedgerByAction(db, row.id);
+    return {
+      runId: row.id,
+      maxConnects: row.maxConnects,
+      connectSentCount: counters.connect_sent ?? 0,
+    };
+  };
   const broadcast = (frame: SseFrame): void => {
     const data = `data: ${JSON.stringify(frame)}\n\n`;
     for (const res of state.sseClients) {
@@ -157,6 +173,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     auditWriter,
     session,
     schedulePath,
+    salesDbPath,
     auditPath,
     expectedToken,
     workflow,

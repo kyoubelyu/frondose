@@ -648,3 +648,51 @@ export function countAutoLedgerByAction(db: DB, runId: string): Record<string, n
   for (const r of rows) out[r.actionType] = r.n;
   return out;
 }
+
+export function insertAutoRun(
+  db: DB,
+  input: { maxDurationMinutes?: number; maxConnects?: number | null },
+): AutoRunRow {
+  const id = randomUUID();
+  const startedAt = Date.now();
+  const maxDurationMinutes = input.maxDurationMinutes ?? 480;
+  const maxConnects = input.maxConnects ?? null;
+  db.prepare(`
+    INSERT INTO auto_runs
+      (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
+    VALUES (?, ?, NULL, ?, ?, 'running', NULL, NULL)
+  `).run(id, startedAt, maxDurationMinutes, maxConnects);
+  return {
+    id,
+    startedAt,
+    endedAt: null,
+    maxDurationMinutes,
+    maxConnects,
+    status: "running",
+    summary: null,
+    counters: null,
+  };
+}
+
+export function updateAutoRunStatus(db: DB, id: string, status: AutoRunStatus): void {
+  db.prepare(`UPDATE auto_runs SET status = ? WHERE id = ?`).run(status, id);
+}
+
+export function endAutoRun(
+  db: DB,
+  id: string,
+  input: { status: AutoRunStatus; summary?: string | null; counters?: Record<string, number> | null },
+): { alreadyEnded: boolean } {
+  const existing = getAutoRun(db, id);
+  if (!existing) throw new Error(`endAutoRun: no auto_runs row with id ${id}`);
+  if (existing.endedAt !== null) return { alreadyEnded: true };
+  const endedAt = Date.now();
+  const summary = input.summary ?? null;
+  const countersJson = input.counters !== undefined && input.counters !== null ? JSON.stringify(input.counters) : null;
+  db.prepare(`
+    UPDATE auto_runs
+       SET status = ?, ended_at = ?, summary = ?, counters = ?
+     WHERE id = ?
+  `).run(input.status, endedAt, summary, countersJson, id);
+  return { alreadyEnded: false };
+}

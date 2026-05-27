@@ -51,7 +51,31 @@ export type SseFrame =
     }
   | { type: "passive-fired"; turnId: string; ts: number; reason: string }
   | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown }
-  | WorkflowSseFrame;
+  | WorkflowSseFrame
+  | {
+      type: "auto-run-started";
+      runId: string;
+      maxDurationMinutes: number;
+      maxConnects: number | null;
+      startedAt: number;
+      ts: number;
+    }
+  | {
+      type: "auto-run-progress";
+      runId: string;
+      elapsedMinutes: number;
+      counters: Record<string, number>;
+      ts: number;
+    }
+  | {
+      type: "auto-run-completed";
+      runId: string;
+      status: "completed" | "stopped_by_agent" | "stopped_by_user" | "blocked";
+      summary: string | null;
+      finalCounters: Record<string, number>;
+      endedAt: number;
+      ts: number;
+    };
 
 export interface SuggestionCardPayload {
   dismissed?: boolean;
@@ -85,6 +109,8 @@ export interface ServeState {
   unsubscribeOverlayEvents: (() => void) | undefined;
   cronEnabled: boolean;
   passiveEnabled: boolean;
+  autoRunId: string | null;
+  lastEmittedAutoCounters?: Record<string, number> | null;
   lastTurnUserPrompt: string | null;
   lastFailedTurnPrompt: string | null;
   retryAttempts: number;
@@ -103,6 +129,7 @@ export interface ServeDeps {
   auditWriter: ReturnType<typeof import("../../../persistence/audit.js").makeAuditWriter>;
   session: ReturnType<typeof import("../../../linkedin/session.js").createLinkedinSession>;
   schedulePath: string;
+  salesDbPath: string;
   auditPath: string;
   expectedToken: Buffer;
   workflow: WorkflowController;

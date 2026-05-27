@@ -1,4 +1,5 @@
 import type { ToolSet } from "ai";
+import { makeEndAutoRunTool } from "./endAutoRun.js";
 import { makeGetAccountContextTool } from "./getAccountContext.js";
 import { makeGetAutoRunStateTool } from "./getAutoRunState.js";
 import { makeGetLeadContextTool } from "./getLeadContext.js";
@@ -12,9 +13,10 @@ import { makeSaveMessageDraftTool } from "./saveMessageDraft.js";
 import { makeScheduleFollowUpTool } from "./scheduleFollowUp.js";
 import { makeScoreAccountTool } from "./scoreAccount.js";
 import { makeScoreLeadTool } from "./scoreLead.js";
+import { makeStartAutoRunTool } from "./startAutoRun.js";
 import { makeUpdateLeadStageTool } from "./updateLeadStage.js";
 
-/** P-SP-A: build the 12 sales-kernel tools.
+/** P-SP-A/P-SP-E: build the 16 sales-kernel tools.
  *  Worker-mode only (per P-SP-A non-goal: server mode has no LinkedIn primitives). */
 export function makeSalesTools(salesDbPath: string): ToolSet {
   return {
@@ -32,5 +34,7 @@ export function makeSalesTools(salesDbPath: string): ToolSet {
     record_auto_action: makeRecordAutoActionTool(salesDbPath),
     score_lead: makeScoreLeadTool(salesDbPath),
     score_account: makeScoreAccountTool(salesDbPath),
+    start_auto_run: makeStartAutoRunTool(salesDbPath),
+    end_auto_run: makeEndAutoRunTool(salesDbPath),
   };
 }
