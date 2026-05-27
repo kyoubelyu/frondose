@@ -166,6 +166,55 @@ export const LEGACY_JS = `
     maiWriteDialogState(maiDialogState);
   };
 
+  window.__maiShowSummaryCard = function(payloadJson) {
+    var payload;
+    try { payload = JSON.parse(payloadJson); } catch (e) { return; }
+    if (!payload) return;
+    if (!dialogExpanded) window.__maiExpandDialog();
+    if (!dialogElements) return;
+    var slot = dialogElements.cardSlot;
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    slot.style.cssText = cardSlotVisibleStyle;
+
+    if (payload.title) {
+      var title = document.createElement('div');
+      title.style.cssText = 'font-weight:600; font-size:14px; line-height:20px; margin-bottom:6px; color:#2A2A22;';
+      title.textContent = payload.title;
+      slot.appendChild(title);
+    }
+    if (payload.summary) {
+      var summary = document.createElement('div');
+      summary.style.cssText = 'font-size:13px; line-height:19px; color:#3B382F; margin-bottom:8px;';
+      summary.textContent = payload.summary;
+      slot.appendChild(summary);
+    }
+    if (Array.isArray(payload.bullets) && payload.bullets.length > 0) {
+      var list = document.createElement('ul');
+      list.style.cssText = 'margin:8px 0 0 18px; padding:0; color:#3B382F; font-size:13px; line-height:18px;';
+      payload.bullets.slice(0, 5).forEach(function(item) {
+        if (typeof item !== 'string') return;
+        var bullet = document.createElement('li');
+        bullet.style.cssText = 'margin:3px 0;';
+        bullet.textContent = item;
+        list.appendChild(bullet);
+      });
+      if (list.firstChild) slot.appendChild(list);
+    }
+    if (payload.nextStep) {
+      var next = document.createElement('div');
+      next.style.cssText = 'background:#FAFAF5; padding:8px; border-radius:4px; margin-top:10px;';
+      var label = document.createElement('div');
+      label.style.cssText = 'font-size:10px; color:#625E53; text-transform:uppercase; margin-bottom:4px;';
+      label.textContent = 'next step';
+      next.appendChild(label);
+      var nextText = document.createElement('div');
+      nextText.style.cssText = 'font-size:13px; line-height:18px; color:#2A2A22;';
+      nextText.textContent = payload.nextStep;
+      next.appendChild(nextText);
+      slot.appendChild(next);
+    }
+  };
+
   window.__maiHideCard = function() {
     if (!dialogElements) return;
     var slot = dialogElements.cardSlot;
