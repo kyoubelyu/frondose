@@ -38,6 +38,11 @@ const sessionCallLog: string[] = [];
 const capturedHandlers: Record<string, (params: unknown) => Promise<void>> = {};
 const sessionSendLog: Array<{ method: string; params: unknown; sessionId: string }> = [];
 
+// ─── P-65 Step 5 addition: closeTarget spy ─────────────────────────────────────
+// Added to bootFakeHandle.Target so T-P65.1/2/3/4 can assert closeTarget was (or
+// wasn't) called. Reset to [] at the start of each P-65 test that cares about it.
+const p65CloseTargetLog: Array<{ targetId: string }> = [];
+
 /**
  * Module-level before() hook (serve-p57f pattern):
  *  1. Mock CdpClient.connect + launcher.js + overlay modules
@@ -71,6 +76,13 @@ before(async () => {
       attachToTarget: async (args: { targetId: string; flatten: boolean }) => {
         sessionCallLog.push(`attachToTarget:${args.targetId}:${args.flatten}`);
         return { sessionId: `sess-${args.targetId}` };
+      },
+      // [P-65 Step 5] closeTarget spy: records calls for T-P65.1/2/3/4 assertions.
+      // Called via `void closeTarget({targetId}).catch(...)` in session.ts — body runs
+      // synchronously (no awaits) so the log entry is present by the time handler returns.
+      closeTarget: async (args: { targetId: string }) => {
+        p65CloseTargetLog.push({ targetId: args.targetId });
+        sessionCallLog.push(`closeTarget:${args.targetId}`);
       },
     },
     on: (event: string, handler: (params: unknown) => Promise<void>) => {
@@ -598,6 +610,16 @@ describe("T-Plugin: F-2 plugin conditional guard (mock)", () => {
   });
 });
 
+// ─── P-65 header patch: expose closeTarget spy via module-level refs ──────────
+//
+// Before the P-65 describe block runs, a module-level `before()` block (below)
+// adds `closeTarget` to the shared bootFakeHandle via an exported reference
+// injected into the p65 module-level state. At Step 4a all bodies are TODO;
+// at Step 5 the spy is wired in and the assertions are filled.
+//
+// NOTE: `capturedHandlers` and `sessionCallLog` are already module-level state
+// (L37-39). The P-65 describe block reads them directly.
+
 // ─── T-M7 (extended) ──────────────────────────────────────────────────────────
 //
 // [F-1] The existing T-M7 in stealth.mock.test.ts verifies the old signature
@@ -660,4 +682,352 @@ describe("T-M7-ext: F-1 injectStealth new signature (mock)", () => {
       "T-M7-ext: addScriptToEvaluateOnNewDocument must be called exactly once across both injectStealth calls",
     );
   });
+});
+
+// ─── T-P65: P-65 Campaign Manager spurious tab handling (mock) ────────────────
+//
+// [P-65] LinkedIn opens `linkedin.com/campaignmanager/...` tabs as a window.open()
+// side-effect for accounts with Campaign Manager enabled. These tests verify that
+// `registerTargetCreatedAutoInject` (Sketch A.2) + the new `Target.targetInfoChanged`
+// listener (Sketch A.3) detect and auto-close those tabs.
+//
+// Mock harness: extends the `capturedHandlers` + `sessionCallLog` populated by the
+// module-level `before()` above. At Step 5 the validator adds a `closeTarget` spy
+// to the fake handle by wiring a second isolated harness inside the describe `before()`.
+//
+// All test bodies are **TODO** at Step 4a (outside-in TDD per CLAUDE.md §Test Discipline).
+// T-P65.5 is the exception: it is a pure regex unit test with no production-code dependency
+// (the regex constant is defined in the test itself) — marked explicitly below.
+//
+// Gates: G-P65.1..6 (T-P65.1..6) + G-P65.7 (T-P65.L1 in separate live file).
+
+describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
+  // ─── T-P65.1 ──────────────────────────────────────────────────────────────────
+  it(
+    "T-P65.1: when Target.targetCreated fires with a Campaign Manager URL, Target.closeTarget is called and Target.attachToTarget is NOT called (G-P65.1)",
+    async () => {
+      // Given: captured Target.targetCreated handler (from module-level before() session boot);
+      //        a closeTarget spy wired on the fake handle (added at Step 5).
+      // When:  handler invoked with targetInfo {type:'page', targetId:'CM-1',
+      //        url:'https://www.linkedin.com/campaignmanager/accounts?businessId=personal'}
+      // Then:  Target.closeTarget({targetId:'CM-1'}) called exactly once;
+      //        Target.attachToTarget NOT called; Page.addScriptToEvaluateOnNewDocument NOT called.
+
+      p65CloseTargetLog.length = 0;
+      const logBefore = sessionCallLog.length;
+      const sendBefore = sessionSendLog.length;
+
+      const handler = capturedHandlers["Target.targetCreated"];
+      assert.ok(
+        handler,
+        "T-P65.1: Target.targetCreated handler must be captured by before() (builder applied A.2; check mock setup if missing)",
+      );
+      if (!handler) return;
+
+      await handler({
+        targetInfo: {
+          type: "page",
+          targetId: "CM-1",
+          url: "https://www.linkedin.com/campaignmanager/accounts?businessId=personal",
+        },
+      });
+
+      // closeTarget called exactly once with targetId 'CM-1'
+      // NOTE: session.ts calls `void closeTarget({targetId}).catch(...)` — fire-and-forget;
+      // the closeTarget body (no await inside spy) runs synchronously before handler returns.
+      assert.equal(
+        p65CloseTargetLog.length,
+        1,
+        `T-P65.1: Target.closeTarget must be called exactly once for CM URL; got ${p65CloseTargetLog.length} calls (log: ${JSON.stringify(p65CloseTargetLog)})`,
+      );
+      assert.equal(
+        p65CloseTargetLog[0].targetId,
+        "CM-1",
+        `T-P65.1: closeTarget must receive {targetId:'CM-1'}; got ${JSON.stringify(p65CloseTargetLog[0])}`,
+      );
+
+      // attachToTarget NOT called for CM-1 (stealth path skipped via early return)
+      const newCalls = sessionCallLog.slice(logBefore);
+      assert.ok(
+        !newCalls.some((c) => c.startsWith("attachToTarget:CM-1")),
+        `T-P65.1: Target.attachToTarget must NOT be called for CM-1 (stealth path skipped); sessionCallLog delta: ${JSON.stringify(newCalls)}`,
+      );
+
+      // Page.addScriptToEvaluateOnNewDocument NOT called on sub-session sess-CM-1
+      const newSends = sessionSendLog.slice(sendBefore).filter((c) => c.sessionId === "sess-CM-1");
+      assert.equal(
+        newSends.length,
+        0,
+        `T-P65.1: Page.addScriptToEvaluateOnNewDocument must NOT be sent to sess-CM-1 (CM tab closed before stealth); got: ${JSON.stringify(newSends)}`,
+      );
+    },
+  );
+
+  // ─── T-P65.2 ──────────────────────────────────────────────────────────────────
+  it(
+    "T-P65.2: when Target.targetCreated fires with a non-CM LinkedIn URL, existing stealth injection path runs and Target.closeTarget is NOT called (G-P65.2)",
+    async () => {
+      // Given: captured Target.targetCreated handler (from module-level before()); non-CM URL.
+      // When:  handler invoked with targetInfo {type:'page', targetId:'LI-1',
+      //        url:'https://www.linkedin.com/in/some-person/'}
+      // Then:  Target.attachToTarget({targetId:'LI-1', flatten:true}) IS called;
+      //        Page.addScriptToEvaluateOnNewDocument IS called on the sub-session;
+      //        Target.closeTarget NOT called. Regression proof: existing stealth path untouched.
+
+      const closeBefore = p65CloseTargetLog.length;
+      const logBefore = sessionCallLog.length;
+      const sendBefore = sessionSendLog.length;
+
+      const handler = capturedHandlers["Target.targetCreated"];
+      assert.ok(
+        handler,
+        "T-P65.2: Target.targetCreated handler must be captured by before() (builder applied A.2; check mock setup if missing)",
+      );
+      if (!handler) return;
+
+      await handler({
+        targetInfo: {
+          type: "page",
+          targetId: "LI-1",
+          url: "https://www.linkedin.com/in/some-person/",
+        },
+      });
+
+      // closeTarget NOT called (non-CM URL bypasses the P-65 close guard)
+      assert.equal(
+        p65CloseTargetLog.length,
+        closeBefore,
+        `T-P65.2: Target.closeTarget must NOT be called for non-CM LinkedIn URL; calls added during this test: ${JSON.stringify(p65CloseTargetLog.slice(closeBefore))}`,
+      );
+
+      // attachToTarget IS called with {targetId:'LI-1', flatten:true}
+      const newCalls = sessionCallLog.slice(logBefore);
+      assert.ok(
+        newCalls.some((c) => c === "attachToTarget:LI-1:true"),
+        `T-P65.2: Target.attachToTarget({targetId:'LI-1', flatten:true}) must be called for non-CM page target; sessionCallLog delta: ${JSON.stringify(newCalls)}`,
+      );
+
+      // Page.addScriptToEvaluateOnNewDocument IS called on sub-session sess-LI-1
+      const newSends = sessionSendLog.slice(sendBefore).filter((c) => c.sessionId === "sess-LI-1");
+      assert.ok(
+        newSends.some((c) => c.method === "Page.addScriptToEvaluateOnNewDocument"),
+        `T-P65.2: Page.addScriptToEvaluateOnNewDocument must be called on sub-session sess-LI-1 (stealth path runs for non-CM targets); sends: ${JSON.stringify(newSends)}`,
+      );
+    },
+  );
+
+  // ─── T-P65.3 ──────────────────────────────────────────────────────────────────
+  it(
+    "T-P65.3: when Target.targetCreated fires with empty URL (about:blank), Target.closeTarget is NOT called and the stealth injection path runs normally (G-P65.3)",
+    async () => {
+      // Given: captured Target.targetCreated handler (from module-level before()); url=''.
+      // When:  handler invoked with targetInfo {type:'page', targetId:'BLANK-1', url:''}
+      // Then:  Target.closeTarget NOT called;
+      //        Target.attachToTarget IS called (about:blank targets get stealth-injected;
+      //        P-65 Sketch A.2 only closes targets whose URL matches SPURIOUS_LINKEDIN_TAB_RE;
+      //        the secondary targetInfoChanged listener handles a later CM-URL navigation).
+
+      const closeBefore = p65CloseTargetLog.length;
+      const logBefore = sessionCallLog.length;
+      const sendBefore = sessionSendLog.length;
+
+      const handler = capturedHandlers["Target.targetCreated"];
+      assert.ok(
+        handler,
+        "T-P65.3: Target.targetCreated handler must be captured by before() (builder applied A.2; check mock setup if missing)",
+      );
+      if (!handler) return;
+
+      // url='' — `params.targetInfo.url ?? ""` yields '' — SPURIOUS_LINKEDIN_TAB_RE.test('') === false
+      await handler({
+        targetInfo: {
+          type: "page",
+          targetId: "BLANK-1",
+          url: "",
+        },
+      });
+
+      // closeTarget NOT called (empty URL does not match the host-anchored regex)
+      assert.equal(
+        p65CloseTargetLog.length,
+        closeBefore,
+        `T-P65.3: Target.closeTarget must NOT be called for empty URL (about:blank); calls added: ${JSON.stringify(p65CloseTargetLog.slice(closeBefore))}`,
+      );
+
+      // attachToTarget IS called — about:blank targets still get stealth-injected at creation time;
+      // a later targetInfoChanged (Sketch A.3) handles the case if the URL later changes to CM.
+      const newCalls = sessionCallLog.slice(logBefore);
+      assert.ok(
+        newCalls.some((c) => c === "attachToTarget:BLANK-1:true"),
+        `T-P65.3: Target.attachToTarget({targetId:'BLANK-1', flatten:true}) must be called for empty-URL page target (stealth-inject at creation regardless of URL); sessionCallLog delta: ${JSON.stringify(newCalls)}`,
+      );
+
+      // Page.addScriptToEvaluateOnNewDocument IS called on sub-session sess-BLANK-1
+      const newSends = sessionSendLog.slice(sendBefore).filter((c) => c.sessionId === "sess-BLANK-1");
+      assert.ok(
+        newSends.some((c) => c.method === "Page.addScriptToEvaluateOnNewDocument"),
+        `T-P65.3: Page.addScriptToEvaluateOnNewDocument must be called on sub-session sess-BLANK-1; sends: ${JSON.stringify(newSends)}`,
+      );
+    },
+  );
+
+  // ─── T-P65.4 ──────────────────────────────────────────────────────────────────
+  it(
+    "T-P65.4: when Target.targetInfoChanged fires with a Campaign Manager URL, Target.closeTarget is called (about:blank→CM URL race — Sketch A.3) (G-P65.4)",
+    async () => {
+      // Given: captured Target.targetInfoChanged handler (from module-level before() — present only
+      //        post-builder per Sketch A.3); closeTarget spy wired on the fake handle (Step 5).
+      // When:  handler invoked with targetInfo {type:'page', targetId:'CM-2',
+      //        url:'https://www.linkedin.com/campaignmanager/accounts?businessId=personal'}
+      // Then:  Target.closeTarget({targetId:'CM-2'}) called;
+      //        no attachToTarget called (targetInfoChanged handler only closes, no stealth).
+
+      p65CloseTargetLog.length = 0;
+      const logBefore = sessionCallLog.length;
+
+      const handler = capturedHandlers["Target.targetInfoChanged"];
+      assert.ok(
+        handler,
+        "T-P65.4: Target.targetInfoChanged handler must be captured by before() (builder applied Sketch A.3; check mock setup — on() call for this event must exist in session.ts registerTargetCreatedAutoInject)",
+      );
+      if (!handler) return;
+
+      await handler({
+        targetInfo: {
+          type: "page",
+          targetId: "CM-2",
+          url: "https://www.linkedin.com/campaignmanager/accounts?businessId=personal",
+        },
+      });
+
+      // closeTarget IS called with {targetId:'CM-2'} (the Sketch A.3 listener fires on URL change)
+      // NOTE: same fire-and-forget pattern as Sketch A.2; spy body is synchronous → entry present
+      // before handler returns.
+      assert.equal(
+        p65CloseTargetLog.length,
+        1,
+        `T-P65.4: Target.closeTarget must be called exactly once when targetInfoChanged fires with CM URL; got ${p65CloseTargetLog.length} calls (log: ${JSON.stringify(p65CloseTargetLog)})`,
+      );
+      assert.equal(
+        p65CloseTargetLog[0].targetId,
+        "CM-2",
+        `T-P65.4: closeTarget must receive {targetId:'CM-2'}; got ${JSON.stringify(p65CloseTargetLog[0])}`,
+      );
+
+      // attachToTarget NOT called — targetInfoChanged handler only closes; stealth was already
+      // injected at targetCreated time (about:blank), so no second inject here.
+      const newCalls = sessionCallLog.slice(logBefore);
+      assert.ok(
+        !newCalls.some((c) => c.startsWith("attachToTarget:CM-2")),
+        `T-P65.4: Target.attachToTarget must NOT be called by targetInfoChanged handler (close only, no re-stealth); sessionCallLog delta: ${JSON.stringify(newCalls)}`,
+      );
+    },
+  );
+
+  // ─── T-P65.5 (FULLY FILLED AT STEP 4a — pure regex; no production-code dependency) ─
+  it(
+    "T-P65.5: SPURIOUS_LINKEDIN_TAB_RE /^https:\\/\\/(?:www\\.)?linkedin\\.com\\/campaignmanager\\// matches 3 CM positives and rejects 6 non-CM negatives including host and protocol anchors (G-P65.5)",
+    () => {
+      // Given: the P-65 anchored regex constant (Sketch A.1, CM-1 host-anchored revision)
+      // When:  RE.test() applied to 9 sample URLs (3 positives + 6 negatives per plan §4)
+      // Then:  3 positives match; 6 negatives do NOT match
+
+      const RE = /^https:\/\/(?:www\.)?linkedin\.com\/campaignmanager\//;
+
+      // ── 3 POSITIVES ─────────────────────────────────────────────────────────
+      assert.ok(
+        RE.test("https://www.linkedin.com/campaignmanager/accounts?businessId=personal"),
+        "T-P65.5 POS-1: https://www.linkedin.com/campaignmanager/accounts?businessId=personal must match (observed CM URL; plan §4 positive-1)",
+      );
+      assert.ok(
+        RE.test("https://www.linkedin.com/campaignmanager/"),
+        "T-P65.5 POS-2: https://www.linkedin.com/campaignmanager/ (bare path) must match (plan §4 positive-2)",
+      );
+      assert.ok(
+        RE.test("https://linkedin.com/campaignmanager/"),
+        "T-P65.5 POS-3: https://linkedin.com/campaignmanager/ (no www prefix; optional (?:www\\.)? group) must match (plan §4 positive-3)",
+      );
+
+      // ── 6 NEGATIVES ─────────────────────────────────────────────────────────
+      assert.ok(
+        !RE.test("https://www.linkedin.com/in/john/"),
+        "T-P65.5 NEG-1: https://www.linkedin.com/in/john/ must NOT match (different LinkedIn path; plan §4 negative-1)",
+      );
+      assert.ok(
+        !RE.test("https://www.linkedin.com/feed/"),
+        "T-P65.5 NEG-2: https://www.linkedin.com/feed/ must NOT match (different LinkedIn path; plan §4 negative-2)",
+      );
+      assert.ok(
+        !RE.test("https://www.linkedin.com/preload/custom-invite/?vanityName=john"),
+        "T-P65.5 NEG-3: preload URL must NOT match (different LinkedIn path; plan §4 negative-3)",
+      );
+      assert.ok(
+        !RE.test("https://www.linkedin.com/campaign/"),
+        "T-P65.5 NEG-4: /campaign/ (no 'manager' suffix) must NOT match (plan §4 negative-4)",
+      );
+      assert.ok(
+        !RE.test("https://example.com/?ref=linkedin.com/campaignmanager/"),
+        "T-P65.5 NEG-5 (CM-1 HOST-ANCHOR GUARD): example.com with CM substring in query string must NOT match — regex anchored to ^https://(.+)?linkedin.com/ (P-33 general-web automation scope preserved; plan §4 negative-5)",
+      );
+      assert.ok(
+        !RE.test("http://www.linkedin.com/campaignmanager/"),
+        "T-P65.5 NEG-6 (CM-1 PROTOCOL-ANCHOR GUARD): http:// must NOT match — regex requires ^https:; CDP-created targets in production are always HTTPS (plan §4 negative-6)",
+      );
+    },
+  );
+
+  // ─── T-P65.6 ──────────────────────────────────────────────────────────────────
+  it(
+    "T-P65.6: when registerTargetCreatedAutoInject runs, Target.setDiscoverTargets is called BEFORE both the targetCreated listener AND the targetInfoChanged listener are attached (sequencing regression — G-P65.6)",
+    () => {
+      // Given: sessionCallLog populated by the module-level before() session boot path;
+      //        post-builder: both 'on:Target.targetCreated' AND 'on:Target.targetInfoChanged'
+      //        are registered after setDiscoverTargets (Sketch A ordering invariant).
+      // When:  sessionCallLog is inspected for 'setDiscoverTargets:true',
+      //        'on:Target.targetCreated', and 'on:Target.targetInfoChanged' entries.
+      // Then:  discoverIdx < targetCreatedOnIdx (existing T-Target.1 invariant, extended);
+      //        discoverIdx < targetInfoChangedOnIdx (NEW — Sketch A.3 listener also post-discover).
+      //        Both listeners registered after setDiscoverTargets per Chrome DevTools Protocol:
+      //        setDiscoverTargets enables targetCreated + targetInfoChanged + targetDestroyed events.
+
+      assert.ok(
+        sessionCallLog.length > 0,
+        `T-P65.6: before() must have populated sessionCallLog; got empty (check mock setup)`,
+      );
+
+      const discoverIdx = sessionCallLog.findIndex((e) => e.startsWith("setDiscoverTargets:"));
+      const targetCreatedOnIdx = sessionCallLog.findIndex((e) => e === "on:Target.targetCreated");
+      const targetInfoChangedOnIdx = sessionCallLog.findIndex((e) => e === "on:Target.targetInfoChanged");
+
+      // setDiscoverTargets must be in the log
+      assert.ok(
+        discoverIdx !== -1,
+        `T-P65.6: Target.setDiscoverTargets must be called in boot path; sessionCallLog=${JSON.stringify(sessionCallLog)}`,
+      );
+
+      // on:Target.targetCreated must be registered (existing from P-62)
+      assert.ok(
+        targetCreatedOnIdx !== -1,
+        `T-P65.6: on('Target.targetCreated') must be registered in boot path; sessionCallLog=${JSON.stringify(sessionCallLog)}`,
+      );
+
+      // on:Target.targetInfoChanged must be registered (NEW from P-65 Sketch A.3)
+      assert.ok(
+        targetInfoChangedOnIdx !== -1,
+        `T-P65.6: on('Target.targetInfoChanged') must be registered in boot path (Sketch A.3); sessionCallLog=${JSON.stringify(sessionCallLog)}`,
+      );
+
+      // setDiscoverTargets BEFORE targetCreated (extended T-Target.1 invariant)
+      assert.ok(
+        discoverIdx < targetCreatedOnIdx,
+        `T-P65.6: setDiscoverTargets (idx ${discoverIdx}) must precede on:Target.targetCreated (idx ${targetCreatedOnIdx}); callLog=${JSON.stringify(sessionCallLog)}`,
+      );
+
+      // setDiscoverTargets BEFORE targetInfoChanged (NEW — Sketch A.3 listener also post-discover)
+      assert.ok(
+        discoverIdx < targetInfoChangedOnIdx,
+        `T-P65.6: setDiscoverTargets (idx ${discoverIdx}) must precede on:Target.targetInfoChanged (idx ${targetInfoChangedOnIdx}); callLog=${JSON.stringify(sessionCallLog)}`,
+      );
+    },
+  );
 });
