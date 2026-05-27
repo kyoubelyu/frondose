@@ -75,8 +75,8 @@ export interface PersistencePaths {
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 52 tools (post P-SP-E +2; post P-SP-F +1: get_sales_report)
- *   - server  mode: 26 tools
+ *   - worker mode: 53 tools in power tier, 51 in consumer tier (P-Y3)
+ *   - server  mode: 27 tools in power tier, 25 in consumer tier (P-Y3)
  *
  * Layer order applied across BOTH modes (outermost → innermost):
  *   hookWrapper → safeModeWrap → retryWrap → original execute
