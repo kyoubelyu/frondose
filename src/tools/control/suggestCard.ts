@@ -11,6 +11,11 @@ export const suggestCardTool = tool({
     dismissed: z.boolean().optional(),
     reason: z.string().optional(),
     title: z.string().optional(),
+    // P-SP-C: numeric score copied from lead_scores (single source of truth);
+    // the card displays it, score_lead persists it. Both fields are additive
+    // optional → existing callers that omit them remain backward-compatible.
+    totalScore: z.number().int().min(0).max(100).optional(),
+    evidenceSummary: z.string().max(280).optional(),
     icpMatch: z
       .object({
         qualified: z.boolean(),

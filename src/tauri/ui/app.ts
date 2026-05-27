@@ -2,7 +2,7 @@
 // Plain HTML + tsc-compiled TS, no React/Vite. Invokes Rust through window.__TAURI__.
 
 import type { AppMode } from "./mode.js";
-import { modeFromToggles, statusForMode, togglesForMode } from "./mode.js";
+import { modeFromState, statusForMode, togglesForMode } from "./mode.js";
 import {
   buildAutoStage,
   buildIwfCard,
@@ -205,7 +205,7 @@ async function applyMode(mode: AppMode): Promise<void> {
     passiveEnabled = toggles.passiveEnabled;
     surfaceError("Set mode (passive)", e);
   }
-  syncModeUi(modeFromToggles(cronEnabled));
+  syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
 }
 
 async function loadIdentity(): Promise<void> {
@@ -410,7 +410,7 @@ async function handoffWorkflow(): Promise<void> {
 }
 
 function syncExternalMode(): void {
-  syncModeUi(modeFromToggles(cronEnabled));
+  syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
 }
 
 function handleEvent(payload: SseFrame): void {

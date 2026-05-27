@@ -38,7 +38,46 @@ describe("T-SP-C.SoulHabit — soulModeFragment 3-mode extension (P-SP-C)", () =
       // Additionally: soulModeFragment("manual") still contains "MANUAL mode"
       //               soulModeFragment("auto") still contains "AUTO mode"
       //   (regression guards for existing fragments — covers G-SP-C.7)
-      assert.ok(false, "TODO: fill at Step 5 — FAILS pre-builder");
+      // ── Positive: magical fragment must contain all required terms ─────────
+      const magical = soulModeFragment("magical" as any);
+      assert.ok(magical.includes("MAGICAL mode"),
+        `soulModeFragment("magical") must contain "MAGICAL mode". Got: ${magical.slice(0, 120)}`);
+      assert.ok(magical.includes("passive"),
+        `must contain "passive"`);
+      assert.ok(magical.includes("record_raw_candidate"),
+        `must contain "record_raw_candidate"`);
+      assert.ok(magical.includes("search_memory"),
+        `must contain "search_memory"`);
+      assert.ok(magical.includes("score_lead"),
+        `must contain "score_lead"`);
+      assert.ok(magical.includes("suggest_card"),
+        `must contain "suggest_card"`);
+      assert.ok(magical.includes("NEVER initiate outbound"),
+        `must contain "NEVER initiate outbound" prohibition`);
+
+      // ── Negative: outbound verbs must only appear in prohibition lines ────
+      // The "NEVER initiate outbound (connect/message/comment/follow)" prohibition
+      // line mentions them as examples — that is the ONLY allowed occurrence.
+      // No step directive should instruct the agent to connect/message/comment as an action.
+      // Strategy: strip the prohibition line, then check no imperative use remains.
+      const magicalMinusProhibition = magical
+        .split("\n")
+        .filter(line => !line.includes("NEVER") && !line.includes("never call"))
+        .join("\n");
+      assert.ok(
+        !magicalMinusProhibition.includes("initiate connect") &&
+        !magicalMinusProhibition.includes("send message") &&
+        !magicalMinusProhibition.includes("post comment"),
+        `After removing prohibition line, no outbound imperatives should remain. Fragment (stripped): ${magicalMinusProhibition.slice(0, 200)}`
+      );
+
+      // ── Regression: manual and auto fragments unchanged ───────────────────
+      const manual = soulModeFragment("manual");
+      assert.ok(manual.includes("MANUAL mode"),
+        `soulModeFragment("manual") must still contain "MANUAL mode"`);
+      const auto = soulModeFragment("auto");
+      assert.ok(auto.includes("AUTO mode"),
+        `soulModeFragment("auto") must still contain "AUTO mode"`);
     },
   );
 });
