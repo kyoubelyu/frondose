@@ -33,6 +33,10 @@ export const OVERLAY_LAYOUT_OVERRIDES = `
 .mai-pill .brand-logo { width: 15px; height: 15px; color: var(--on-brand); }
 .brand-logo { color: var(--brand-600); display: block; }
 :host(.mode-auto) .brand-logo { color: var(--accent-500); }
+/* P-Y2-MA G7: overlay-only drag-grip visual (no drag behavior — see OQ-6). */
+.drag-grip { display: flex; flex-direction: column; gap: 2px; opacity: 0.35; cursor: grab; padding-right: 4px; }
+.drag-grip-row { display: flex; gap: 2px; }
+.drag-grip-dot { width: 3px; height: 3px; background: var(--ink-muted); border-radius: 50%; }
 `.trim();
 
 // P-Y2.3 — overlay-EXCLUSIVE takeover visuals (the desktop shell has no live page → NOT in the shared

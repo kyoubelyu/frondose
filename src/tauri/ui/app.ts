@@ -104,8 +104,6 @@ const modeManualTabEl = mustGet<ButtonElementLike>("mode-manual-tab");
 const modeAutoTabEl = mustGet<ButtonElementLike>("mode-auto-tab");
 const settingsGearEl = mustGet<ButtonElementLike>("settings-gear");
 const tickerEl = mustGet<TextElementLike>("ticker");
-const outputEl = mustGet<TextElementLike>("output");
-const outputMsgEl = mustGet<ElementLike>("output-msg");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
@@ -117,6 +115,14 @@ const workflowPauseBtnEl = mustGet<ButtonElementLike>("workflow-pause-btn");
 const workflowShowAllBtnEl = mustGet<ButtonElementLike>("workflow-showall-btn");
 const autoStageEl = mustGet<ElementLike>("auto-stage");
 let workflowExpanded = false;
+// P-Y2-MA G1+G2 — conversation list state.
+// activeAgentTextEl is the current turn's agent text sink; null between turns.
+// scroll-area autoscroll only fires when the user is already near the bottom
+// (within AUTOSCROLL_PX) so manual scrollback is not yanked.
+let activeAgentTextEl: ElementLike | null = null;
+const AUTOSCROLL_PX = 100;
+const scrollAreaEl = mustGet<ElementLike>("scroll-area");
+const conversationListEl = mustGet<ElementLike>("conversation-list");
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
@@ -133,9 +139,76 @@ function surfaceError(label: string, e: unknown): void {
   errorBannerEl.classList.remove("hidden");
 }
 
-function refreshOutputVisibility(): void {
-  const hasText = (outputEl.textContent ?? "").trim().length > 0;
-  outputMsgEl.classList.toggle("hidden", !hasText);
+function isNearBottom(): boolean {
+  const sc = scrollAreaEl as unknown as {
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  };
+  const distance = sc.scrollHeight - (sc.scrollTop + sc.clientHeight);
+  return distance <= AUTOSCROLL_PX;
+}
+
+function scrollToBottomIfPinned(): void {
+  if (!isNearBottom()) return;
+  const sc = scrollAreaEl as unknown as { scrollTop: number; scrollHeight: number; clientHeight: number };
+  sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+}
+
+function appendUserBubble(text: string): void {
+  const doc = windowRef.document;
+  const bubble = doc.createElement("div") as unknown as ElementLike;
+  bubble.classList.add("msg-user");
+  bubble.textContent = text;
+  conversationListEl.appendChild(bubble);
+  scrollToBottomIfPinned();
+}
+
+function beginAgentBubble(): void {
+  const doc = windowRef.document;
+  const wrap = doc.createElement("div") as unknown as ElementLike;
+  wrap.classList.add("msg-agent");
+  const avatar = doc.createElement("div") as unknown as ElementLike;
+  avatar.classList.add("avatar");
+  // Sparkles SVG (same path as index.html:313 desktop reference).
+  const svg = doc.createElementNS
+    ? (doc.createElementNS("http://www.w3.org/2000/svg", "svg") as unknown as ElementLike)
+    : (doc.createElement("svg") as unknown as ElementLike);
+  svg.setAttribute?.("viewBox", "0 0 24 24");
+  svg.setAttribute?.("fill", "currentColor");
+  svg.setAttribute?.("aria-hidden", "true");
+  const path = doc.createElementNS
+    ? (doc.createElementNS("http://www.w3.org/2000/svg", "path") as unknown as ElementLike)
+    : (doc.createElement("path") as unknown as ElementLike);
+  path.setAttribute?.("d", "M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z");
+  svg.appendChild(path);
+  avatar.appendChild(svg);
+  wrap.appendChild(avatar);
+  const body = doc.createElement("div") as unknown as ElementLike;
+  body.classList.add("msg-agent-body");
+  const text = doc.createElement("div") as unknown as ElementLike;
+  text.classList.add("msg-agent-text");
+  body.appendChild(text);
+  wrap.appendChild(body);
+  conversationListEl.appendChild(wrap);
+  activeAgentTextEl = text;
+  scrollToBottomIfPinned();
+}
+
+function appendAgentChunk(chunk: string): void {
+  // [BLOCKER-1 fix, 3b round-1] Frame-agnostic: if no active bubble (Manual REPL
+  // path — no turn-started SSE per §5.1.0), AUTO-OPEN one. The explicit
+  // `beginAgentBubble()` call in the `turn-started` handler (5.1.6) covers the
+  // cron/profile-activate/card-action paths; this auto-open is the Manual fallback.
+  if (activeAgentTextEl === null) beginAgentBubble();
+  if (activeAgentTextEl === null) return; // defensive — beginAgentBubble couldn't allocate (DOM missing)
+  const prev = activeAgentTextEl.textContent ?? "";
+  activeAgentTextEl.textContent = `${prev}${chunk}`;
+  scrollToBottomIfPinned();
+}
+
+function endAgentBubble(): void {
+  activeAgentTextEl = null;
 }
 
 function transition(next: AppState): void {
@@ -148,7 +221,6 @@ function transition(next: AppState): void {
   errorBannerEl.classList.toggle("hidden", next !== "error");
   commandEl.disabled = next !== "idle" && next !== "running";
   sendEl.disabled = next !== "idle" && next !== "running";
-  refreshOutputVisibility();
   if (next === "idle") {
     sendEl.setAttribute?.("title", "Send");
     sendEl.classList.remove("is-cancel");
@@ -174,6 +246,13 @@ function syncModeUi(mode: AppMode): void {
   const status = statusForMode(mode);
   statusEl.textContent = status.label;
   statusEl.classList.toggle("working", mode === "auto");
+  // P-Y2-MA G5 desktop: mode-badge text + class flip. Magical defaults to manual styling
+  // until P-Y2-Magical lands proper Magical visual; the .magical class is present as a hook.
+  const modeBadgeEl = windowRef.document.getElementById("mode-badge");
+  if (modeBadgeEl) {
+    modeBadgeEl.textContent = mode === "auto" ? "AUTO" : mode === "magical" ? "MAGICAL" : "MANUAL";
+    modeBadgeEl.setAttribute?.("class", `mode-badge ${mode}`);
+  }
   commandEl.setAttribute?.(
     "placeholder",
     mode === "auto" ? "Inject a rule, ask a question, or interrupt…" : "Reply, or press / for actions",
@@ -263,8 +342,8 @@ async function sendCommand(): Promise<void> {
     }
     currentTurnId = r.turnId;
     lastTurnPrompt = prompt;
-    outputEl.textContent = "";
-    refreshOutputVisibility();
+    // P-Y2-MA G1+G2: append user bubble immediately; agent bubble lands on turn-started.
+    appendUserBubble(prompt);
     tickerEl.textContent = "starting...";
     transition("running");
   } catch (e) {
@@ -307,7 +386,8 @@ async function performSteer(newPrompt: string): Promise<void> {
     }
     currentTurnId = r.turnId;
     lastTurnPrompt = newPrompt;
-    outputEl.textContent = "";
+    // P-Y2-MA: steer sends a NEW user bubble; prior agent bubble stays as history.
+    appendUserBubble(newPrompt);
     tickerEl.textContent = "starting...";
     transition("running");
   } catch (e) {
@@ -330,7 +410,8 @@ async function performRetry(): Promise<void> {
       return;
     }
     currentTurnId = r.turnId;
-    outputEl.textContent = "";
+    // P-Y2-MA: retry does NOT append a new user bubble (prompt already shown);
+    // the new agent bubble lands on turn-started just like first-send.
     tickerEl.textContent = lastTurnPrompt === null ? "starting..." : "retrying last prompt...";
     transition("running");
   } catch (e) {
@@ -416,13 +497,29 @@ function syncExternalMode(): void {
 function handleEvent(payload: SseFrame): void {
   switch (payload.type) {
     case "tool-call":
-      if (payload.turnId === currentTurnId) tickerEl.textContent = `${payload.toolName}...`;
+      if (payload.turnId === currentTurnId) {
+        // P-Y2-MA G4: in Auto mode, the live-action mono format. In Manual, the legacy `${tool}...`.
+        const isAuto =
+          (windowRef.document.body?.classList as unknown as { contains?: (token: string) => boolean })?.contains?.(
+            "mode-auto",
+          ) === true;
+        tickerEl.textContent = isAuto ? `→ ${payload.toolName}` : `${payload.toolName}...`;
+      }
       break;
     case "text":
       if (payload.turnId === currentTurnId) {
-        outputEl.textContent = `${outputEl.textContent ?? ""}${payload.chunk}`;
-        refreshOutputVisibility();
+        // P-Y2-MA G1: stream into the ACTIVE agent bubble (not a global sink).
+        appendAgentChunk(payload.chunk);
       }
+      break;
+    case "turn-started":
+      // [P-59 FIX-2/3b] Server-initiated turns (resume/card/profile-activate/cron) have no
+      // mai_agent_turn invoke to set currentTurnId, so adopt the announced turn here.
+      // P-Y2-MA G1: every turn-started opens a NEW agent bubble; cron/resume turns get one too.
+      currentTurnId = payload.turnId;
+      beginAgentBubble();
+      tickerEl.textContent = payload.source === "cron" ? "cron running..." : "starting...";
+      transition("running");
       break;
     case "step-done":
       break;
@@ -430,6 +527,8 @@ function handleEvent(payload: SseFrame): void {
       if (payload.turnId === currentTurnId) {
         tickerEl.textContent = `done (${payload.finishReason})`;
         currentTurnId = null;
+        // P-Y2-MA G1: close the active agent bubble so the next turn opens a fresh one.
+        endAgentBubble();
         if (payload.aborted !== true) {
           retryBtnEl.classList.add("hidden");
           errorBannerEl.classList.add("hidden");
@@ -441,6 +540,7 @@ function handleEvent(payload: SseFrame): void {
     case "error":
       errorBannerEl.textContent = `agent error: ${payload.message}`;
       currentTurnId = null;
+      endAgentBubble();
       transition("error");
       retryBtnEl.classList.toggle("hidden", payload.retryable !== true);
       break;
@@ -478,17 +578,6 @@ function handleEvent(payload: SseFrame): void {
     case "cron-done":
       cronTickBannerEl.classList.add("hidden");
       cronTickBannerEl.textContent = "";
-      break;
-    case "turn-started":
-      // [P-59 FIX-2/3b] Server-initiated turns (resume/card via triggerCardActionTurn,
-      // profile-activate via triggerAnalyzeProfile, and cron) have NO mai_agent_turn invoke
-      // to set currentTurnId, so their tool-call/text/done frames were dropped by the
-      // `=== currentTurnId` guard. Adopt the announced turn (mirrors sendCommand L263-268).
-      currentTurnId = payload.turnId;
-      outputEl.textContent = "";
-      refreshOutputVisibility();
-      tickerEl.textContent = payload.source === "cron" ? "cron running..." : "resuming...";
-      transition("running");
       break;
     case "workflow-proposed":
       workflowView = {

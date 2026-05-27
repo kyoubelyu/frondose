@@ -108,6 +108,9 @@
     .brand { display: flex; align-items: center; gap: 7px; min-width: 0; }
     .brand-logo { width: 19px; height: 19px; display: block; }
     .brand-word { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: var(--ink-soft); }
+    .mode-badge { font-size: 10px; padding: 1px 6px; border-radius: var(--r-chip); font-weight: 500; color: var(--ink); background: var(--line-soft); display: inline-flex; align-items: center; gap: 3px; }
+    .mode-badge.auto { color: var(--on-accent); background: var(--grad-switcher-auto); font-weight: 700; letter-spacing: 0.4px; }
+    .mode-badge.magical { color: var(--ink); background: var(--line-soft); }
     .switcher { margin-left: auto; display: flex; gap: 2px; padding: 2px; border-radius: var(--r-btn); background: var(--tab-bar-bg); }
     .seg-tab { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border: 0; border-radius: 5px; background: transparent; color: var(--tab-inactive); font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; }
     .seg-tab .seg-icon { width: 12px; height: 12px; }
@@ -130,6 +133,9 @@
     .avatar svg { width: 14px; height: 14px; }
     .msg-agent-body { max-width: 88%; }
     .msg-agent-text { font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+    /* P-Y2-MA G1+G2: append-list container; preserves the existing .conv layout. */
+    .conv-list { list-style: none; margin: 0; padding: 18px 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+    .conv-list .msg-user, .conv-list .msg-agent { /* inherit existing styles */ }
 
     .start-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 0.5px solid var(--line); border-radius: var(--r-card); background: var(--card-bg); box-shadow: 0 1px 2px rgba(58, 90, 44, 0.05); }
     .start-name { font-size: 14px; font-weight: 600; color: var(--ink); }
@@ -139,6 +145,20 @@
     .btn-primary:disabled { background: var(--ink-muted); cursor: not-allowed; box-shadow: none; }
 
     .ticker { align-self: flex-start; font-size: 11.5px; color: var(--ink-muted); background: var(--ticker-bg); border: 0.5px solid var(--line-soft); border-radius: var(--r-btn); padding: 5px 10px; }
+    /* P-Y2-MA G4: live-action ticker style in Auto mode (mono dark accent). */
+    body.mode-auto #ticker {
+      background: var(--ticker-bg);
+      color: var(--accent-500);
+      font-family: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+      border-color: var(--line-soft);
+    }
+    body.mode-auto #ticker::before {
+      content: "LIVE ACTION";
+      display: block;
+      font-size: 9.5px; font-weight: 600; letter-spacing: 0.5px;
+      color: var(--ink-muted); margin-bottom: 3px;
+      font-family: "Inter", -apple-system, sans-serif;
+    }
 
     /* inline workflow card */
     .iwf-card { border: 0.5px solid var(--line); border-radius: var(--r-card); overflow: hidden; background: var(--card-bg); box-shadow: 0 1px 2px rgba(58, 90, 44, 0.05); }
@@ -283,6 +303,7 @@
         <img class="brand-logo" src="./frondose-logo-mark.svg" alt="Frondose" />
         <span class="brand-word">Frondose</span>
       </div>
+      <span id="mode-badge" class="mode-badge manual">MANUAL</span>
       <div class="switcher" role="tablist" aria-label="Mode">
         <button id="mode-manual-tab" class="seg-tab active" type="button" role="tab">
           <svg class="seg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-11.7 7.7L3 21l1.8-6.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
@@ -298,7 +319,7 @@
       </button>
     </header>
 
-    <div class="scroll-area">
+    <div id="scroll-area" class="scroll-area">
       <section id="manual-surface" class="conv">
         <div class="status-line"><span class="status-dot"></span><span id="status">Listening</span></div>
 
@@ -309,10 +330,7 @@
           </div>
         </div>
 
-        <div id="output-msg" class="msg-agent hidden">
-          <div class="avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
-          <div class="msg-agent-body"><div id="output" class="msg-agent-text"></div></div>
-        </div>
+        <div id="conversation-list" class="conv-list" role="log" aria-live="polite" aria-relevant="additions"></div>
 
         <div id="ticker" class="ticker hidden"></div>
 
