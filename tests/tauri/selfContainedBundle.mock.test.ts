@@ -50,6 +50,25 @@ const tauriConf = JSON.parse(readFileSync(join(REPO, "src/tauri/src-tauri/tauri.
 };
 
 const pkgJson = JSON.parse(readFileSync(join(REPO, "package.json"), "utf-8")) as { version: string };
+const packageLock = JSON.parse(readFileSync(join(REPO, "package-lock.json"), "utf-8")) as {
+  version?: string;
+  packages?: Record<string, { version?: string }>;
+};
+const cargoToml = readFileSync(join(REPO, "src/tauri/src-tauri/Cargo.toml"), "utf-8");
+const cargoLock = readFileSync(join(REPO, "src/tauri/src-tauri/Cargo.lock"), "utf-8");
+
+function cargoTomlPackageVersion(): string {
+  const packageSection = cargoToml.match(/\[package\][\s\S]*?(?:\n\[|$)/)?.[0] ?? "";
+  const version = packageSection.match(/\nversion\s*=\s*"([^"]+)"/)?.[1];
+  assert.ok(version, "Cargo.toml [package].version must be present");
+  return version;
+}
+
+function cargoLockMaiTauriVersion(): string {
+  const version = cargoLock.match(/\[\[package\]\]\s*\nname = "mai-tauri"\s*\nversion = "([^"]+)"/)?.[1];
+  assert.ok(version, 'Cargo.lock [[package]] name = "mai-tauri" version must be present');
+  return version;
+}
 
 // ─── P-58d.1 pubkey (key 28D6A7F5 — committed at P-58d.1, must not drift) ──────────────────────
 // Decoded: `minisign public key: 28D6A7F52EFF86C0 / RWTA...`
@@ -124,18 +143,25 @@ describe("tauri.conf.json updater contract — P-58d.1 no-regression (G-P58d3.3)
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 // T-Conf.3 — version drift guard (mirrors build-release.sh CLR-3 gate)
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("version drift guard — package.json === tauri.conf.json (G-P58d3.5)", () => {
-  it("T-Conf.3: package.json.version === tauri.conf.json.version (catches missed Step-7 bump pre-release)", () => {
-    // Given: package.json + tauri.conf.json (current checkout)
-    // When:  versions compared
-    // Then:  equal — a version drift detected here means the Step-7 quad-bump was missed,
-    //        which would cause build-release.sh to exit 1 before producing artifacts.
+describe("version drift guard — package, lockfile, Tauri, and Cargo metadata align (G-P58d3.5)", () => {
+  it("T-Conf.3: package.json, package-lock, tauri.conf.json, Cargo.toml, and Cargo.lock all share one version", () => {
+    // Given: package.json, root package-lock fields, tauri.conf.json, Cargo.toml, and Cargo.lock.
+    // When:  all release identity versions are compared.
+    // Then:  they match package.json.version; same-version build:release output is validation-only until Step 7 bumps.
     //
-    // Currently PASSES (regression guard — both at 0.5.0-alpha.29 after P-58d.2 Step-7).
-    assert.strictEqual(
-      pkgJson.version,
-      tauriConf.version,
-      `package.json.version (${pkgJson.version}) must equal tauri.conf.json.version (${tauriConf.version}) — re-run the Step-7 quad-bump`,
-    );
+    // P-66 expected-red before builder: package.json is 0.5.0-alpha.41 while package-lock is
+    // 0.5.0-alpha.26 and Tauri/Cargo metadata are 0.5.0-alpha.33.
+    const expected = pkgJson.version;
+    const versions = {
+      "package-lock.json.version": packageLock.version,
+      'package-lock.json.packages[""].version': packageLock.packages?.[""]?.version,
+      "tauri.conf.json.version": tauriConf.version,
+      "Cargo.toml [package].version": cargoTomlPackageVersion(),
+      "Cargo.lock mai-tauri version": cargoLockMaiTauriVersion(),
+    };
+
+    for (const [label, version] of Object.entries(versions)) {
+      assert.strictEqual(version, expected, `${label} (${version}) must equal package.json.version (${expected})`);
+    }
   });
 });

@@ -51,9 +51,20 @@ describe("P-Y2-Magical desktop mode state (T-PY2MAG.Mode)", () => {
     // Given: app.ts syncModeUi(mode) and mode.ts statusForMode("magical")
     // When:  the Magical branch is inspected
     // Then:  badge text/class and status text resolve to the accepted Magical contract
-    assert.equal(statusForMode("magical").label, "Observing", 'statusForMode("magical") must label the state Observing');
-    assert.match(APP_TS, /function syncModeUi\(mode: AppMode\): void \{[\s\S]*statusEl\.textContent = status\.label/, "syncModeUi must write the status label into #status");
-    assert.ok(APP_TS.includes('mode === "magical" ? "MAGICAL"'), 'syncModeUi must render MAGICAL badge text for mode === "magical"');
+    assert.equal(
+      statusForMode("magical").label,
+      "Observing",
+      'statusForMode("magical") must label the state Observing',
+    );
+    assert.match(
+      APP_TS,
+      /function syncModeUi\(mode: AppMode\): void \{[\s\S]*statusEl\.textContent = status\.label/,
+      "syncModeUi must write the status label into #status",
+    );
+    assert.ok(
+      APP_TS.includes('mode === "magical" ? "MAGICAL"'),
+      'syncModeUi must render MAGICAL badge text for mode === "magical"',
+    );
     assert.ok(
       APP_TS.includes("`mode-badge ${mode}`") || APP_TS.includes('"mode-badge magical"'),
       'syncModeUi must set class "mode-badge magical" for Magical mode',
@@ -67,7 +78,11 @@ describe("P-Y2-Magical desktop mode state (T-PY2MAG.Mode)", () => {
     assert.ok(INDEX_HTML.includes('id="mode-manual-tab"'), "manual tab must remain present");
     assert.ok(INDEX_HTML.includes('id="mode-auto-tab"'), "auto tab must remain present");
     assert.ok(!INDEX_HTML.includes("mode-magical-tab"), "Magical must stay badge-only; no mode-magical-tab");
-    assert.equal((INDEX_HTML.match(/id="mode-(manual|auto)-tab"/g) ?? []).length, 2, "switcher must remain exactly two mode tabs");
+    assert.equal(
+      (INDEX_HTML.match(/id="mode-(manual|auto)-tab"/g) ?? []).length,
+      2,
+      "switcher must remain exactly two mode tabs",
+    );
   });
 
   it('T-PY2MAG.Mode.3: buildSwitcher(manual, auto, "magical") leaves both two-mode tabs inactive', () => {
@@ -101,7 +116,11 @@ describe("P-Y2-Magical desktop CSS (T-PY2MAG.CSS.1)", () => {
     const rule = cssRule(".mode-badge.magical");
     assert.match(rule, /color:\s*var\(--magical-ink\)/, "Magical badge text must use --magical-ink");
     assert.match(rule, /background:\s*var\(--magical-bg\)/, "Magical badge background must use --magical-bg");
-    assert.match(rule, /border:\s*0\.5px solid var\(--magical-border\)/, "Magical badge border must use --magical-border");
+    assert.match(
+      rule,
+      /border:\s*0\.5px solid var\(--magical-border\)/,
+      "Magical badge border must use --magical-border",
+    );
     assert.match(rule, /font-weight:\s*700/, "Magical badge must use the accepted stronger badge weight");
   });
 });

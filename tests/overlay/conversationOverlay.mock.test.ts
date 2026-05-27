@@ -62,13 +62,19 @@ function makeFakeEl(tag = "div", id = "", cls = ""): FakeEl {
     className: cls,
     classList: {
       _classes: classes,
-      add: (...cs: string[]) => cs.forEach((c) => classes.add(c)),
+      add: (...cs: string[]) => {
+        cs.forEach((c) => {
+          classes.add(c);
+        });
+      },
       toggle: (c: string, f?: boolean) => {
         (f !== undefined ? f : !classes.has(c)) ? classes.add(c) : classes.delete(c);
       },
       contains: (c: string) => classes.has(c),
     },
-    appendChild: (el: FakeEl) => { children.push(el); },
+    appendChild: (el: FakeEl) => {
+      children.push(el);
+    },
     setAttribute: (k: string, v: string) => attrs.set(k, v),
     getAttribute: (k: string) => attrs.get(k) ?? null,
     querySelectorAll: (_sel: string): FakeEl[] => [],
@@ -88,8 +94,8 @@ type OverlayImpl = {
   __maiAppendChunk: (chunk: string) => void;
   __maiEndAgent: () => void;
   __maiSetMode: (mode: string) => void;
-  __maiAppendOutput: (chunk: string) => void;  // C-1 legacy wrapper
-  __maiClearOutput: () => void;               // C-2 legacy wrapper
+  __maiAppendOutput: (chunk: string) => void; // C-1 legacy wrapper
+  __maiClearOutput: () => void; // C-2 legacy wrapper
   getActiveEl: () => FakeEl | null;
 };
 
@@ -154,8 +160,8 @@ function makeOverlayImpl(): OverlayImpl {
     const mb = shadow_getElementById("mode-badge");
     if (!mb) return;
     // Mirrors SHELL_JS __maiSetMode logic (plan §5.3.4)
-    const resolved = mode === "auto" ? "auto" : (mode === "magical" ? "magical" : "manual");
-    mb.textContent = resolved === "auto" ? "AUTO" : (resolved === "magical" ? "MAGICAL" : "MANUAL");
+    const resolved = mode === "auto" ? "auto" : mode === "magical" ? "magical" : "manual";
+    mb.textContent = resolved === "auto" ? "AUTO" : resolved === "magical" ? "MAGICAL" : "MANUAL";
     mb.className = "mode-badge " + resolved;
   }
 
@@ -284,10 +290,7 @@ describe("T-PY2MA.Overlay.4 — overlay mode-badge present in topbar; text === '
     // Behavioral: makeOverlayImpl initial state mirrors buildPanelSkeleton
     const { modeBadge } = makeOverlayImpl();
     assert.equal(modeBadge.textContent, "MANUAL", "initial mode-badge textContent must be 'MANUAL' (G7)");
-    assert.ok(
-      modeBadge.className.includes("manual"),
-      "initial mode-badge className must include 'manual' (G7).",
-    );
+    assert.ok(modeBadge.className.includes("manual"), "initial mode-badge className must include 'manual' (G7).");
     assert.equal(
       modeBadge.className.includes("auto"),
       false,
@@ -344,7 +347,11 @@ describe("T-PY2MA.Overlay.6 — __maiSetMode('magical') sets badge text to 'MAGI
 
     __maiSetMode("magical");
 
-    assert.equal(modeBadge.textContent, "MAGICAL", "modeBadge.textContent must be 'MAGICAL' after setMode('magical') (G7 NG-10 hook)");
+    assert.equal(
+      modeBadge.textContent,
+      "MAGICAL",
+      "modeBadge.textContent must be 'MAGICAL' after setMode('magical') (G7 NG-10 hook)",
+    );
     assert.equal(
       modeBadge.className,
       "mode-badge magical",
@@ -407,7 +414,15 @@ describe("T-PY2MA.Overlay.8 — __maiEndAgent closes active bubble WITHOUT wipin
     // When:  window.__maiEndAgent() fires (or: __maiClearOutput() → routes to __maiEndAgent())
     // Then:  convList STILL contains all 4 child elements (NO DOM wipe)
     //        AND activeAgentTextEl === null (so next chunk auto-opens a NEW bubble)
-    const { convList, __maiAppendUser, __maiBeginAgent, __maiAppendChunk, __maiEndAgent, __maiClearOutput, getActiveEl } = makeOverlayImpl();
+    const {
+      convList,
+      __maiAppendUser,
+      __maiBeginAgent,
+      __maiAppendChunk,
+      __maiEndAgent,
+      __maiClearOutput,
+      getActiveEl,
+    } = makeOverlayImpl();
 
     // Turn 1
     __maiAppendUser("user1");
@@ -434,7 +449,13 @@ describe("T-PY2MA.Overlay.8 — __maiEndAgent closes active bubble WITHOUT wipin
     );
 
     // Also verify via C-2 migration path (__maiClearOutput → __maiEndAgent)
-    const { convList: cl2, __maiBeginAgent: ba2, __maiAppendChunk: ac2, __maiClearOutput: co2, getActiveEl: gae2 } = makeOverlayImpl();
+    const {
+      convList: cl2,
+      __maiBeginAgent: ba2,
+      __maiAppendChunk: ac2,
+      __maiClearOutput: co2,
+      getActiveEl: gae2,
+    } = makeOverlayImpl();
     ba2();
     ac2("some text");
     assert.notEqual(gae2(), null, "pre-condition: activeAgentTextEl set");

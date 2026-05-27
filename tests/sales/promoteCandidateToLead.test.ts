@@ -8,10 +8,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import {
-  closeSalesDatabase,
-  openSalesDatabase,
-} from "../../src/persistence/salesDb.js";
+import { closeSalesDatabase, openSalesDatabase } from "../../src/persistence/salesDb.js";
 import { makePromoteCandidateToLeadTool } from "../../src/tools/sales/promoteCandidateToLead.js";
 import { mkTestSalesDb, seedFreshCandidate } from "./_fixtures/salesDb.js";
 
@@ -39,9 +36,21 @@ describe("T-SP-A.Promote — promote_candidate_to_lead tool", () => {
          next_action, evidence_json, method_used, model, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      scoreId, candidateId, null, 80, "Strong", "Lacks pipeline visibility",
-      "Hiring surge", "VP", null, 0.85, "Connect and intro",
-      JSON.stringify({ source: "profile-inspect" }), "Pain Chain", "deepseek", now,
+      scoreId,
+      candidateId,
+      null,
+      80,
+      "Strong",
+      "Lacks pipeline visibility",
+      "Hiring surge",
+      "VP",
+      null,
+      0.85,
+      "Connect and intro",
+      JSON.stringify({ source: "profile-inspect" }),
+      "Pain Chain",
+      "deepseek",
+      now,
     );
 
     const tool = makePromoteCandidateToLeadTool(":memory:");
@@ -99,11 +108,7 @@ describe("T-SP-A.Promote — promote_candidate_to_lead tool", () => {
 
     assert.strictEqual(result.ok, false, "Must return ok:false for unscored candidate");
     assert.strictEqual(result.error.kind, "invalid_input");
-    assert.match(
-      result.error.message,
-      /status/i,
-      "Error message must mention 'status'",
-    );
+    assert.match(result.error.message, /status/i, "Error message must mention 'status'");
 
     // No leads row created
     const leadCount = db.prepare("SELECT COUNT(*) AS n FROM leads").get() as { n: number };

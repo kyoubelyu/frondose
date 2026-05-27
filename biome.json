@@ -13,6 +13,7 @@
       "!src/tauri",
       "!src/overlay/sharedRenderBundle.generated.ts",
       "!src/overlay/frondoseCss.generated.ts",
+      "!build/runtime",
       "!.zed",
       "!docs",
       "!website",

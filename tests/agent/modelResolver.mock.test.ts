@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +10,7 @@ import {
   resolveModel,
   resolveModelSpec,
 } from "../../src/agent/modelResolver.js";
+import { makeAllTools } from "../../src/tools/index.js";
 
 // T-M1..T-M4: MAI_MODEL precedence chain + parseModelSpec contract
 
@@ -567,12 +567,69 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: tool() count in src/tools/ (P-SP-A rebaseline → 53)", () => {
-    // Given: src/tools/ directory with Vercel tool definitions
-    // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  53 — P-SP-A rebaseline adds 12 sales kernel tool definitions.
-    const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
-    const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
+  it("T-CONTRACT: exposed makeAllTools inventory matches P-Y3 worker/server tier counts", () => {
+    // Given: isolated HOME/config/secrets paths and inert session/control deps.
+    // When:  makeAllTools builds the exposed ToolSet for worker/server consumer+power tiers.
+    // Then:  counts match the P-Y3 contract and only operator-output tools are power-only.
+    const tmpHome = mkdtempSync(join(tmpdir(), "mai-tools-contract-"));
+    const saved = saveEnv("HOME", "MAI_TIER");
+    try {
+      process.env.HOME = tmpHome;
+      delete process.env.MAI_TIER;
+      const persistence = {
+        memoryDbPath: join(tmpHome, "memory.sqlite"),
+        identityPath: join(tmpHome, "identity.json"),
+        configPath: join(tmpHome, "config.json"),
+        secretsPath: join(tmpHome, "secrets.json"),
+        schedulePath: join(tmpHome, "schedule.jsonl"),
+        salesDbPath: join(tmpHome, "sales.sqlite"),
+        personasDir: join(tmpHome, "personas"),
+      };
+      const session = {
+        inputMode: "cdp" as const,
+        getOrInitClient: async () => ({}),
+        getClient: () => undefined,
+        heartbeat: async () => true,
+        setLastContext: () => undefined,
+        getLastContext: () => undefined,
+      } as Parameters<typeof makeAllTools>[0];
+      const control = {
+        requestStop: () => undefined,
+        isStopRequested: () => false,
+        resetStop: () => undefined,
+        setInteractive: () => undefined,
+      } as Parameters<typeof makeAllTools>[2];
+      const names = (mode: "worker" | "server", tier: "consumer" | "power") =>
+        Object.keys(
+          makeAllTools(mode === "worker" ? session : undefined, persistence, control, undefined, {
+            mode,
+            tier,
+            workerId: "p66-contract",
+          }),
+        ).sort();
+
+      const workerConsumer = names("worker", "consumer");
+      const workerPower = names("worker", "power");
+      const serverConsumer = names("server", "consumer");
+      const serverPower = names("server", "power");
+
+      assert.equal(workerConsumer.length, 51, `worker consumer inventory drifted: ${workerConsumer.join(", ")}`);
+      assert.equal(workerPower.length, 53, `worker power inventory drifted: ${workerPower.join(", ")}`);
+      assert.equal(serverConsumer.length, 25, `server consumer inventory drifted: ${serverConsumer.join(", ")}`);
+      assert.equal(serverPower.length, 27, `server power inventory drifted: ${serverPower.join(", ")}`);
+
+      for (const [label, consumer, power] of [
+        ["worker", workerConsumer, workerPower],
+        ["server", serverConsumer, serverPower],
+      ] as const) {
+        const consumerSet = new Set(consumer);
+        const powerOnly = power.filter((name) => !consumerSet.has(name)).sort();
+        assert.deepEqual(powerOnly, ["gh_issue", "telegram_notify"], `${label} tier delta drifted`);
+        assert.ok(consumer.includes("present_summary"), `${label} consumer inventory must expose present_summary`);
+      }
+    } finally {
+      restoreEnv(saved);
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
   });
 });

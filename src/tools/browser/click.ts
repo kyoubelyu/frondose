@@ -70,7 +70,10 @@ export function makeClickTool(session: LinkedinSession) {
         // The P-63 OUTBOUND_LABEL_RE catches Connect/Invite/Send variants; cap-guard checks ONLY
         // the connect_sent count (Send/Message do not count toward connect cap — they have their
         // own implicit cap via the workflow approval pattern in non-Auto modes).
-        if (LINKEDIN_OUTBOUND_SURFACES.has(clickSurface) && /^(Connect\b|Invite\b.*\bto\s+connect\b)/i.test(clickLabel)) {
+        if (
+          LINKEDIN_OUTBOUND_SURFACES.has(clickSurface) &&
+          /^(Connect\b|Invite\b.*\bto\s+connect\b)/i.test(clickLabel)
+        ) {
           const autoRun = session.autoRun?.();
           if (autoRun && autoRun.maxConnects !== null && autoRun.connectSentCount >= autoRun.maxConnects) {
             return fail(

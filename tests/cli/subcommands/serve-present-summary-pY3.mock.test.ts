@@ -41,8 +41,9 @@ const nextActionsPayload = {
   actions: [{ id: "a1", label: "Draft", prompt: "Draft a message" }],
 };
 
-let createTurnRunner: ((state: ServeState, deps: ServeDeps) => { runOneTurn: (args: unknown) => Promise<void> }) | null =
-  null;
+let createTurnRunner:
+  | ((state: ServeState, deps: ServeDeps) => { runOneTurn: (args: unknown) => Promise<void> })
+  | null = null;
 
 before(async () => {
   const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;

@@ -29,7 +29,7 @@ describe("T-F.SoulHabit.1 — soulModeFragment('manual') contains meeting_booked
     const fragment = soulModeFragment("manual");
     assert.ok(
       fragment.includes("update_lead_stage"),
-      "soulModeFragment('manual') must contain 'update_lead_stage' (Sketch F.6.1 outcome-tracking habit)"
+      "soulModeFragment('manual') must contain 'update_lead_stage' (Sketch F.6.1 outcome-tracking habit)",
     );
   });
 
@@ -40,11 +40,11 @@ describe("T-F.SoulHabit.1 — soulModeFragment('manual') contains meeting_booked
     const fragment = soulModeFragment("manual");
     assert.ok(
       fragment.includes("meeting_booked"),
-      "soulModeFragment('manual') must contain 'meeting_booked' (north-star outcome)"
+      "soulModeFragment('manual') must contain 'meeting_booked' (north-star outcome)",
     );
     assert.ok(
       fragment.includes("sales_intent"),
-      "soulModeFragment('manual') must contain 'sales_intent' (interest-without-meeting outcome)"
+      "soulModeFragment('manual') must contain 'sales_intent' (interest-without-meeting outcome)",
     );
   });
 
@@ -57,15 +57,15 @@ describe("T-F.SoulHabit.1 — soulModeFragment('manual') contains meeting_booked
     const fragment = soulModeFragment("manual");
     assert.ok(
       fragment.includes("record_lead_event"),
-      "soulModeFragment('manual') must contain 'record_lead_event' (double-count warning)"
+      "soulModeFragment('manual') must contain 'record_lead_event' (double-count warning)",
     );
     assert.ok(
       fragment.includes("stage:"),
-      "soulModeFragment('manual') must contain 'stage:' (correct Zod param name; not 'newStage')"
+      "soulModeFragment('manual') must contain 'stage:' (correct Zod param name; not 'newStage')",
     );
     assert.ok(
       !fragment.includes("newStage"),
-      "soulModeFragment('manual') must NOT contain 'newStage' (stale wrong param name)"
+      "soulModeFragment('manual') must NOT contain 'newStage' (stale wrong param name)",
     );
   });
 });
@@ -81,11 +81,11 @@ describe("T-F.SoulHabit.2 — soulModeFragment('auto') contains meeting_booked +
     const fragment = soulModeFragment("auto");
     assert.ok(
       fragment.includes("update_lead_stage"),
-      "soulModeFragment('auto') must contain 'update_lead_stage' (outcome tracking habit)"
+      "soulModeFragment('auto') must contain 'update_lead_stage' (outcome tracking habit)",
     );
     assert.ok(
       fragment.includes("meeting_booked"),
-      "soulModeFragment('auto') must contain 'meeting_booked' (north-star Auto outcome)"
+      "soulModeFragment('auto') must contain 'meeting_booked' (north-star Auto outcome)",
     );
   });
 
@@ -97,11 +97,11 @@ describe("T-F.SoulHabit.2 — soulModeFragment('auto') contains meeting_booked +
     const fragment = soulModeFragment("auto");
     assert.ok(
       fragment.includes("sales_intent"),
-      "soulModeFragment('auto') must contain 'sales_intent' (interest detection in Auto mode)"
+      "soulModeFragment('auto') must contain 'sales_intent' (interest detection in Auto mode)",
     );
     assert.ok(
       fragment.includes("record_lead_event"),
-      "soulModeFragment('auto') must contain 'record_lead_event' (double-count warning matches manual)"
+      "soulModeFragment('auto') must contain 'record_lead_event' (double-count warning matches manual)",
     );
   });
 });
@@ -118,7 +118,7 @@ describe("T-F.SoulHabit.3 — soulModeFragment('magical') does NOT contain 'meet
     const fragment = soulModeFragment("magical");
     assert.ok(
       !fragment.includes("meeting_booked"),
-      "soulModeFragment('magical') must NOT contain 'meeting_booked' (OQ-F1: Magical is read-only, no outbound)"
+      "soulModeFragment('magical') must NOT contain 'meeting_booked' (OQ-F1: Magical is read-only, no outbound)",
     );
   });
 });
@@ -137,7 +137,7 @@ describe("T-F.SoulBand.Regression — composeSoulBand(null).length <= 8000 after
     assert.equal(typeof band, "string", "composeSoulBand(null) must return a string");
     assert.ok(
       band.length <= 8000,
-      `composeSoulBand(null).length must be <= 8000 (checkpoint.ts cap); got ${band.length}`
+      `composeSoulBand(null).length must be <= 8000 (checkpoint.ts cap); got ${band.length}`,
     );
   });
 });

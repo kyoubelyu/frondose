@@ -87,8 +87,17 @@ function seedCandidate(db: DB, source = "search"): string {
     INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source,
       observed_at, last_seen_at, status, evidence_summary)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, "Test Person", `https://linkedin.com/in/test-${id.slice(0, 6)}/`, null,
-    source, now, now, "new", "fixture");
+  `).run(
+    id,
+    "Test Person",
+    `https://linkedin.com/in/test-${id.slice(0, 6)}/`,
+    null,
+    source,
+    now,
+    now,
+    "new",
+    "fixture",
+  );
   return id;
 }
 
@@ -101,8 +110,22 @@ function seedLead(db: DB, candidateId: string, stage: string): string {
       stage, total_score, confidence, one_line_pain_chain, next_action,
       next_action_due_at, owner_mode, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, candidateId, null, "Test Lead", `https://linkedin.com/in/lead-${id.slice(0, 6)}/`,
-    stage, 60, 0.7, "test pain", null, null, "manual", now, now);
+  `).run(
+    id,
+    candidateId,
+    null,
+    "Test Lead",
+    `https://linkedin.com/in/lead-${id.slice(0, 6)}/`,
+    stage,
+    60,
+    0.7,
+    "test pain",
+    null,
+    null,
+    "manual",
+    now,
+    now,
+  );
   // Update candidate status to promoted
   db.prepare("UPDATE raw_candidates SET status='promoted' WHERE id=?").run(candidateId);
   return id;
@@ -117,8 +140,23 @@ function seedScore(db: DB, candidateId: string, leadId: string, score: number): 
       pain_hypothesis, buying_trigger, authority_level, suggested_opening_line,
       confidence, next_action, evidence_json, method_used, model, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, candidateId, leadId, score, "Strong", "test pain", "trigger",
-    "VP", "opening line", 0.8, "next", "{}", "Pain Chain", "deepseek", now);
+  `).run(
+    id,
+    candidateId,
+    leadId,
+    score,
+    "Strong",
+    "test pain",
+    "trigger",
+    "VP",
+    "opening line",
+    0.8,
+    "next",
+    "{}",
+    "Pain Chain",
+    "deepseek",
+    now,
+  );
   return id;
 }
 
@@ -131,7 +169,13 @@ function seedTimelineEvent(db: DB, candidateId: string, leadId: string | null, e
 }
 
 /** Insert an auto_runs row; returns runId. */
-function seedAutoRun(db: DB, status: string, startedOffset = 0, endedOffset: number | null = null, countersJson: string | null = null): string {
+function seedAutoRun(
+  db: DB,
+  status: string,
+  startedOffset = 0,
+  endedOffset: number | null = null,
+  countersJson: string | null = null,
+): string {
   const id = randomUUID();
   const now = Date.now();
   const startedAt = now + startedOffset;
@@ -139,9 +183,7 @@ function seedAutoRun(db: DB, status: string, startedOffset = 0, endedOffset: num
   db.prepare(`
     INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, startedAt, endedAt, 15, 5, status,
-    status !== "running" ? "Run complete" : null,
-    countersJson);
+  `).run(id, startedAt, endedAt, 15, 5, status, status !== "running" ? "Run complete" : null, countersJson);
   return id;
 }
 
@@ -156,11 +198,16 @@ describe("T-F.FunnelSummary — getFunnelSummary per-stage counts (G-PSPF.1)", (
     //        meeting_booked=1, and all other stage counts === 0
     const { db, path } = makeDb();
     try {
-      const c1 = seedCandidate(db); seedLead(db, c1, "qualified");
-      const c2 = seedCandidate(db); seedLead(db, c2, "qualified");
-      const c3 = seedCandidate(db); seedLead(db, c3, "connect_sent");
-      const c4 = seedCandidate(db); seedLead(db, c4, "connected");
-      const c5 = seedCandidate(db); seedLead(db, c5, "meeting_booked");
+      const c1 = seedCandidate(db);
+      seedLead(db, c1, "qualified");
+      const c2 = seedCandidate(db);
+      seedLead(db, c2, "qualified");
+      const c3 = seedCandidate(db);
+      seedLead(db, c3, "connect_sent");
+      const c4 = seedCandidate(db);
+      seedLead(db, c4, "connected");
+      const c5 = seedCandidate(db);
+      seedLead(db, c5, "meeting_booked");
 
       const result = getFunnelSummary(db);
 
@@ -199,7 +246,16 @@ describe("T-F.FunnelSummary.2 — getFunnelSummary empty-DB graceful (G-PSPF.2)"
     try {
       const result = getFunnelSummary(db);
 
-      for (const stage of ["scored", "qualified", "connect_sent", "connected", "replied", "sales_intent", "meeting_booked", "disqualified"]) {
+      for (const stage of [
+        "scored",
+        "qualified",
+        "connect_sent",
+        "connected",
+        "replied",
+        "sales_intent",
+        "meeting_booked",
+        "disqualified",
+      ]) {
         assert.ok(stage in result, `result must have '${stage}' key`);
         assert.equal(result[stage], 0, `${stage} must be 0 on empty DB`);
       }
@@ -436,14 +492,14 @@ describe("T-F.QualityBySource — getLeadQualityBySource breakdown + LEFT JOIN (
     try {
       // 2 search candidates (1 promoted to lead at connected, 1 stays as new)
       const cSearch1 = seedCandidate(db, "search");
-      seedLead(db, cSearch1, "connected");  // promoted + engaged
+      seedLead(db, cSearch1, "connected"); // promoted + engaged
 
       const cSearch2 = seedCandidate(db, "search");
       // NOT promoted to lead (stays as new candidate)
 
       // 1 feed candidate promoted to meeting_booked
       const cFeed = seedCandidate(db, "feed");
-      seedLead(db, cFeed, "meeting_booked");  // promoted + engaged + meeting
+      seedLead(db, cFeed, "meeting_booked"); // promoted + engaged + meeting
 
       const result = getLeadQualityBySource(db);
 
@@ -481,7 +537,7 @@ describe("T-F.QualityBySource — getLeadQualityBySource breakdown + LEFT JOIN (
     try {
       const sources = ["search", "profile-nav", "click", "feed", "company", "memory", "auto"];
       for (const src of sources) {
-        seedCandidate(db, src);  // no leads
+        seedCandidate(db, src); // no leads
       }
 
       const result = getLeadQualityBySource(db);
@@ -520,8 +576,8 @@ describe("T-F.ScoreCalibration.1 — getScoreCalibration banding + advanced-stag
       // HIGH band (70-100): 3 leads at scores 75, 82, 90
       // stages: connected (advanced), replied (advanced), connect_sent (NOT advanced)
       const highData = [
-        { score: 75, stage: "connected" },   // advanced ✓
-        { score: 82, stage: "replied" },     // advanced ✓
+        { score: 75, stage: "connected" }, // advanced ✓
+        { score: 82, stage: "replied" }, // advanced ✓
         { score: 90, stage: "connect_sent" }, // NOT advanced (at threshold, not past it)
       ];
       for (const { score, stage } of highData) {
@@ -534,8 +590,8 @@ describe("T-F.ScoreCalibration.1 — getScoreCalibration banding + advanced-stag
       // stages: disqualified (NOT advanced — terminal negative), qualified (pre-connect), scored (pre-connect)
       const lowData = [
         { score: 15, stage: "disqualified" }, // NOT advanced (terminal negative)
-        { score: 22, stage: "qualified" },    // NOT advanced (pre-connect)
-        { score: 30, stage: "scored" },       // NOT advanced (pre-connect)
+        { score: 22, stage: "qualified" }, // NOT advanced (pre-connect)
+        { score: 30, stage: "scored" }, // NOT advanced (pre-connect)
       ];
       for (const { score, stage } of lowData) {
         const cId = seedCandidate(db);
@@ -594,15 +650,31 @@ describe("T-F.AutoRunHistory.1 — getAutoRunHistory ordered DESC + counters JSO
       db.prepare(`
         INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(randomUUID(), now - 120000, now - 60000, 15, 5, "completed", "Run complete",
-        JSON.stringify({ connects: 2, messages: 1 }));
+      `).run(
+        randomUUID(),
+        now - 120000,
+        now - 60000,
+        15,
+        5,
+        "completed",
+        "Run complete",
+        JSON.stringify({ connects: 2, messages: 1 }),
+      );
 
       // Middle: stopped_by_agent with counters (valid enum per salesDb.ts CHECK constraint)
       db.prepare(`
         INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(randomUUID(), now - 60000, now - 30000, 15, 5, "stopped_by_agent", "Stopped by agent",
-        JSON.stringify({ connects: 0 }));
+      `).run(
+        randomUUID(),
+        now - 60000,
+        now - 30000,
+        15,
+        5,
+        "stopped_by_agent",
+        "Stopped by agent",
+        JSON.stringify({ connects: 0 }),
+      );
 
       // Newest: running, no counters
       db.prepare(`

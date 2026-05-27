@@ -39,8 +39,10 @@ describe("T-E.Start — start_auto_run tool (P-SP-E Sketch B)", () => {
     const result = await tool.execute({ maxDurationMinutes: 30, maxConnects: 5 });
 
     assert.ok(result.ok === true, `T-E.Start.1: envelope must be ok=true; got: ${JSON.stringify(result)}`);
-    assert.ok(typeof result.data?.runId === "string" && result.data.runId.length > 0,
-      "T-E.Start.1: runId must be a non-empty UUID string");
+    assert.ok(
+      typeof result.data?.runId === "string" && result.data.runId.length > 0,
+      "T-E.Start.1: runId must be a non-empty UUID string",
+    );
     assert.equal(result.data?.maxDurationMinutes, 30, "T-E.Start.1: maxDurationMinutes must be 30");
     assert.equal(result.data?.maxConnects, 5, "T-E.Start.1: maxConnects must be 5");
     assert.ok(typeof result.data?.startedAt === "number", "T-E.Start.1: startedAt must be a number (unix ms)");
@@ -115,12 +117,16 @@ describe("T-E.Start — start_auto_run tool (P-SP-E Sketch B)", () => {
 
     // Test maxDurationMinutes:0 (min is 1)
     const resultZeroDuration = await tool.execute({ maxDurationMinutes: 0 });
-    assert.ok(resultZeroDuration.ok === false,
-      `T-E.Start.3: maxDurationMinutes:0 must return ok=false (min=1); got: ${JSON.stringify(resultZeroDuration)}`);
+    assert.ok(
+      resultZeroDuration.ok === false,
+      `T-E.Start.3: maxDurationMinutes:0 must return ok=false (min=1); got: ${JSON.stringify(resultZeroDuration)}`,
+    );
 
     // Test maxConnects:-1 (min is 0)
     const resultNegConnects = await tool.execute({ maxDurationMinutes: 30, maxConnects: -1 });
-    assert.ok(resultNegConnects.ok === false,
-      `T-E.Start.3: maxConnects:-1 must return ok=false (min=0); got: ${JSON.stringify(resultNegConnects)}`);
+    assert.ok(
+      resultNegConnects.ok === false,
+      `T-E.Start.3: maxConnects:-1 must return ok=false (min=0); got: ${JSON.stringify(resultNegConnects)}`,
+    );
   });
 });

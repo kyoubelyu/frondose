@@ -46,49 +46,51 @@ describe("T-SP-C.ServeBoot — serve boot-time soul mode derivation (P-SP-C)", (
   });
 
   // ─── T-SP-C.ServeBoot.1 ──────────────────────────────────────────────────────
-  it(
-    "T-SP-C.ServeBoot.1: modeFromState → soulModeFragment composition produces correct soul fragment for all 3 boot flag combinations",
-    () => {
-      // Given: modeFromState (from mode.ts F-1) + soulModeFragment (from soul.ts F-3)
-      // When:  composition chain for 3 flag combinations:
-      //   {cronEnabled:true,  passiveEnabled:false} → bootMode="auto"
-      //     → soulBand contains "AUTO mode"
-      //   {cronEnabled:false, passiveEnabled:true}  → bootMode="magical"
-      //     → soulBand contains "MAGICAL mode"
-      //   {cronEnabled:false, passiveEnabled:false} → bootMode="manual"
-      //     → soulBand contains "MANUAL mode"
-      // Then:  all three assertions hold
-      //   Covers G-SP-C.9 — regression guard for hardcoded-"manual" removal in serve.ts
-      // The seam under test: serve.ts boot logic (lines 72-75):
-      //   const bootMode = modeFromState({ cronEnabled: cronEnabledAtBoot, passiveEnabled: passiveEnabledAtBoot });
-      //   const soulBand = `${resolveSoulBand(...)} \n\n${soulModeFragment(bootMode)}`;
-      // We test the two-function composition directly (modeFromState → soulModeFragment),
-      // mirroring the serve.ts boot chain without importing the runServe() side-effect bundle.
-      assert.ok(typeof modeFromState === "function",
-        "modeFromState must be exported from mode.ts (builder F-1)");
+  it("T-SP-C.ServeBoot.1: modeFromState → soulModeFragment composition produces correct soul fragment for all 3 boot flag combinations", () => {
+    // Given: modeFromState (from mode.ts F-1) + soulModeFragment (from soul.ts F-3)
+    // When:  composition chain for 3 flag combinations:
+    //   {cronEnabled:true,  passiveEnabled:false} → bootMode="auto"
+    //     → soulBand contains "AUTO mode"
+    //   {cronEnabled:false, passiveEnabled:true}  → bootMode="magical"
+    //     → soulBand contains "MAGICAL mode"
+    //   {cronEnabled:false, passiveEnabled:false} → bootMode="manual"
+    //     → soulBand contains "MANUAL mode"
+    // Then:  all three assertions hold
+    //   Covers G-SP-C.9 — regression guard for hardcoded-"manual" removal in serve.ts
+    // The seam under test: serve.ts boot logic (lines 72-75):
+    //   const bootMode = modeFromState({ cronEnabled: cronEnabledAtBoot, passiveEnabled: passiveEnabledAtBoot });
+    //   const soulBand = `${resolveSoulBand(...)} \n\n${soulModeFragment(bootMode)}`;
+    // We test the two-function composition directly (modeFromState → soulModeFragment),
+    // mirroring the serve.ts boot chain without importing the runServe() side-effect bundle.
+    assert.ok(typeof modeFromState === "function", "modeFromState must be exported from mode.ts (builder F-1)");
 
-      // Case 1: cronEnabled=true → bootMode="auto" → soul fragment contains "AUTO mode"
-      const autoMode = modeFromState({ cronEnabled: true, passiveEnabled: false });
-      assert.equal(autoMode, "auto", "cron=true → 'auto'");
-      const autoFragment = soulModeFragment(autoMode);
-      assert.ok(autoFragment.includes("AUTO mode"),
-        `soulModeFragment("auto") must contain "AUTO mode". Got: ${autoFragment.slice(0, 80)}`);
+    // Case 1: cronEnabled=true → bootMode="auto" → soul fragment contains "AUTO mode"
+    const autoMode = modeFromState({ cronEnabled: true, passiveEnabled: false });
+    assert.equal(autoMode, "auto", "cron=true → 'auto'");
+    const autoFragment = soulModeFragment(autoMode);
+    assert.ok(
+      autoFragment.includes("AUTO mode"),
+      `soulModeFragment("auto") must contain "AUTO mode". Got: ${autoFragment.slice(0, 80)}`,
+    );
 
-      // Case 2: passiveEnabled=true, cron=false → bootMode="magical" → soul fragment contains "MAGICAL mode"
-      const magicalMode = modeFromState({ cronEnabled: false, passiveEnabled: true });
-      assert.equal(magicalMode, "magical", "passive=true, cron=false → 'magical'");
-      const magicalFragment = soulModeFragment(magicalMode as any);
-      assert.ok(magicalFragment.includes("MAGICAL mode"),
-        `soulModeFragment("magical") must contain "MAGICAL mode". Got: ${magicalFragment.slice(0, 80)}`);
+    // Case 2: passiveEnabled=true, cron=false → bootMode="magical" → soul fragment contains "MAGICAL mode"
+    const magicalMode = modeFromState({ cronEnabled: false, passiveEnabled: true });
+    assert.equal(magicalMode, "magical", "passive=true, cron=false → 'magical'");
+    const magicalFragment = soulModeFragment(magicalMode as any);
+    assert.ok(
+      magicalFragment.includes("MAGICAL mode"),
+      `soulModeFragment("magical") must contain "MAGICAL mode". Got: ${magicalFragment.slice(0, 80)}`,
+    );
 
-      // Case 3: both false → bootMode="manual" → soul fragment contains "MANUAL mode"
-      const manualMode = modeFromState({ cronEnabled: false, passiveEnabled: false });
-      assert.equal(manualMode, "manual", "cron=false, passive=false → 'manual'");
-      const manualFragment = soulModeFragment(manualMode);
-      assert.ok(manualFragment.includes("MANUAL mode"),
-        `soulModeFragment("manual") must contain "MANUAL mode". Got: ${manualFragment.slice(0, 80)}`);
-    },
-  );
+    // Case 3: both false → bootMode="manual" → soul fragment contains "MANUAL mode"
+    const manualMode = modeFromState({ cronEnabled: false, passiveEnabled: false });
+    assert.equal(manualMode, "manual", "cron=false, passive=false → 'manual'");
+    const manualFragment = soulModeFragment(manualMode);
+    assert.ok(
+      manualFragment.includes("MANUAL mode"),
+      `soulModeFragment("manual") must contain "MANUAL mode". Got: ${manualFragment.slice(0, 80)}`,
+    );
+  });
 });
 
 // Expose soulModeFragment directly — it's used at Step 5 fill time.

@@ -158,7 +158,7 @@ describe("T-Guard — click.ts outbound-send safety guard (P-63)", () => {
       assert.strictEqual(
         result.error?.kind,
         "invalid_input",
-        "blocked click error.kind must be 'invalid_input' (plan §5.3 fail(\"click\",\"invalid_input\",...))",
+        'blocked click error.kind must be \'invalid_input\' (plan §5.3 fail("click","invalid_input",...))',
       );
       assert.ok(
         /Outbound/i.test(result.error?.message ?? ""),
@@ -305,33 +305,29 @@ describe("T-Guard — click.ts outbound-send safety guard (P-63)", () => {
   );
 
   // ─── T-Guard.7 ──────────────────────────────────────────────────────────────
-  it(
-    "T-Guard.7: when 'Follow' on profile surface + deny hook, click is blocked",
-    { timeout: 5000 },
-    async () => {
-      // Given: name:"Follow", surface:"profile", canClickOutbound = () => false
-      // When:  clickTool.execute({ref:"@e1"})
-      // Then:  {ok:false, error:{kind:"invalid_input"}}
-      //   OQ-1: Follow on profile is a social outbound signal → guarded
-      //   Covers G-P63.9 (profile-surface Follow guard)
-      const { session, fakeHandle } = makeFakeSession({
-        surface: "profile",
-        entries: [FOLLOW_ENTRY],
-        canClickOutbound: () => false,
-      });
-      const tool = makeClickTool(session);
-      // biome-ignore lint/suspicious/noExplicitAny: envelope type assertion
-      const result = (await tool.execute({ ref: "@e1" }, CTX)) as any;
+  it("T-Guard.7: when 'Follow' on profile surface + deny hook, click is blocked", { timeout: 5000 }, async () => {
+    // Given: name:"Follow", surface:"profile", canClickOutbound = () => false
+    // When:  clickTool.execute({ref:"@e1"})
+    // Then:  {ok:false, error:{kind:"invalid_input"}}
+    //   OQ-1: Follow on profile is a social outbound signal → guarded
+    //   Covers G-P63.9 (profile-surface Follow guard)
+    const { session, fakeHandle } = makeFakeSession({
+      surface: "profile",
+      entries: [FOLLOW_ENTRY],
+      canClickOutbound: () => false,
+    });
+    const tool = makeClickTool(session);
+    // biome-ignore lint/suspicious/noExplicitAny: envelope type assertion
+    const result = (await tool.execute({ ref: "@e1" }, CTX)) as any;
 
-      assert.strictEqual(
-        result.ok,
-        false,
-        "Follow on profile + deny must return ok:false (OQ-1 surface-conditional guard)",
-      );
-      assert.strictEqual(result.error?.kind, "invalid_input", "blocked Follow error.kind must be 'invalid_input'");
-      assert.strictEqual(fakeHandle.Input.callCount, 0, "CDP must NOT fire for Follow on profile when denied");
-    },
-  );
+    assert.strictEqual(
+      result.ok,
+      false,
+      "Follow on profile + deny must return ok:false (OQ-1 surface-conditional guard)",
+    );
+    assert.strictEqual(result.error?.kind, "invalid_input", "blocked Follow error.kind must be 'invalid_input'");
+    assert.strictEqual(fakeHandle.Input.callCount, 0, "CDP must NOT fire for Follow on profile when denied");
+  });
 
   // ─── T-Guard.8 ──────────────────────────────────────────────────────────────
   it(

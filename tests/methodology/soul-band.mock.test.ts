@@ -151,7 +151,7 @@ test("T-M_p5.6: composeSoulBand includes OQ-3 Option C memory-trigger phrasing v
   const fragments = [
     "Your habit:",
     "remember",
-    "only persisting it with the tool does",
+    "Tool persistence is the remembering act.",
     "qualify + remember",
     "search_memory",
   ];
@@ -185,7 +185,7 @@ test("T-M_p5.7: composeSoulBand(null) returns non-empty fallback with placeholde
 
   // Must include memory trigger (P-Z3: rewritten to English — soul.ts:78)
   assert.ok(
-    out.includes("only persisting it with the tool does"),
+    out.includes("Tool persistence is the remembering act."),
     `T-M_p5.7: null fallback must include memory-trigger`,
   );
 
@@ -251,7 +251,7 @@ test("T-M_p5.8b (NIT-r2-2): CJK typographic quotes U+201C/U+201D around '记住'
   );
 
   // Also verify it's in the memory-trigger section specifically (not elsewhere)
-  const memTriggerIdx = out.indexOf("only persisting it with the tool does");
+  const memTriggerIdx = out.indexOf("Tool persistence is the remembering act.");
   const memTriggerSection = out.slice(Math.max(0, memTriggerIdx - 200), memTriggerIdx + 50);
   assert.ok(
     memTriggerSection.includes(quotedRemember),
@@ -271,15 +271,14 @@ test("T-M_p6.24: composeSoulBand Section 5 includes escalate-habit directive (F-
   };
   const out = composeSoulBand(identity);
 
-  // P-Z3 rebaseline: escalate-habit directive (soul.ts:88) verbatim fragments — rewritten to English
-  // (工具能力之外 → "a tool you need genuinely does not exist").
+  // P-66 rebaseline: escalate-habit directive (soul.ts) preserves the single-call capability-gap behavior.
   const requiredFragments = [
     "telegram_notify",
     "gh_issue",
     "escalate_for_capability",
     "stop",
     "sleep",
-    "a tool you need genuinely does not exist",
+    "genuinely needed tool is missing after a reasonable retry",
   ];
 
   for (const fragment of requiredFragments) {
@@ -290,7 +289,7 @@ test("T-M_p6.24: composeSoulBand Section 5 includes escalate-habit directive (F-
   }
 
   // Also verify the directive follows the memory-trigger in Section 5 (same paragraph block)
-  const memTriggerIdx = out.indexOf("only persisting it with the tool does");
+  const memTriggerIdx = out.indexOf("Tool persistence is the remembering act.");
   const escalateIdx = out.indexOf("escalate_for_capability");
   assert.ok(memTriggerIdx >= 0, "T-M_p6.24: memory-trigger sentence must be present");
   assert.ok(escalateIdx >= 0, "T-M_p6.24: escalate directive must be present");

@@ -109,7 +109,15 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
       prior.steps.every((s, i) => s.title === result.steps[i]?.title);
     const isContinuation =
       prior !== null && prior.title === result.workflowTitle && !terminalWorkflowIds.has(prior.id) && sameStepPrefix;
-    const priorByTitle = isContinuation ? new Map(prior!.steps.map((s) => [s.title, s])) : new Map<string, TodoStep>(); // NEW workflow → fresh step IDs, no title-keyed inheritance
+    const continuationPrior = (() => {
+      if (!isContinuation) return null;
+      if (prior === null) throw new Error("Workflow continuation invariant violated: prior workflow missing");
+      return prior;
+    })();
+    const priorByTitle =
+      continuationPrior === null
+        ? new Map<string, TodoStep>() // NEW workflow → fresh step IDs, no title-keyed inheritance
+        : new Map(continuationPrior.steps.map((s) => [s.title, s]));
     const STEP_RANK = { pending: 0, in_progress: 1, completed: 2 } as const;
     const steps = result.steps.map((s, idx): TodoStep => {
       const priorStep = priorByTitle.get(s.title);
@@ -130,19 +138,19 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
       };
     });
     const wf: Workflow = {
-      id: isContinuation ? prior!.id : `wf_${randomUUID()}`,
+      id: continuationPrior === null ? `wf_${randomUUID()}` : continuationPrior.id,
       title: result.workflowTitle,
       // [P-59 WF-1] a NEW workflow must NOT inherit a prior handoff "auto" mode — that would skip the gate.
-      approvalMode: isContinuation ? prior!.approvalMode : ctx.isCronTurn ? "auto" : "manual",
+      approvalMode: continuationPrior === null ? (ctx.isCronTurn ? "auto" : "manual") : continuationPrior.approvalMode,
       steps,
       state: "active",
-      createdAt: isContinuation ? prior!.createdAt : now,
+      createdAt: continuationPrior === null ? now : continuationPrior.createdAt,
       updatedAt: now,
     };
     state.current = wf;
     // [P-59 WF-1] a NEW workflow invalidates all prior approvals (approvedStepIds is session-global).
-    if (!isContinuation && prior !== null) approvedStepIds.clear();
-    if (!isContinuation) {
+    if (continuationPrior === null && prior !== null) approvedStepIds.clear();
+    if (continuationPrior === null) {
       deps.emitFrame({
         type: "workflow-proposed",
         turnId: ctx.turnId,
@@ -161,7 +169,7 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
       });
     } else {
       for (const step of wf.steps) {
-        const prev = prior!.steps.find((p) => p.id === step.id);
+        const prev = continuationPrior.steps.find((p) => p.id === step.id);
         if (!prev || prev.state === step.state) continue;
         deps.emitFrame({
           type: "workflow-step-advanced",

@@ -29,8 +29,7 @@ describe("T-E.Sse — SseFrame union accepts 3 new auto-run frame types (P-SP-E 
       ts: Date.now(),
     } satisfies SseFrame;
 
-    assert.equal(frame.type, "auto-run-started",
-      "T-E.Sse.1: frame.type must be 'auto-run-started'");
+    assert.equal(frame.type, "auto-run-started", "T-E.Sse.1: frame.type must be 'auto-run-started'");
     // Type-narrowed access
     if (frame.type === "auto-run-started") {
       assert.equal(frame.runId, "test-run-id", "T-E.Sse.1: runId must match");
@@ -57,8 +56,7 @@ describe("T-E.Sse — SseFrame union accepts 3 new auto-run frame types (P-SP-E 
       ts: Date.now(),
     } satisfies SseFrame;
 
-    assert.equal(frame.type, "auto-run-progress",
-      "T-E.Sse.2: frame.type must be 'auto-run-progress'");
+    assert.equal(frame.type, "auto-run-progress", "T-E.Sse.2: frame.type must be 'auto-run-progress'");
     if (frame.type === "auto-run-progress") {
       assert.equal(frame.runId, "test-run-id", "T-E.Sse.2: runId must match");
       assert.equal(frame.elapsedMinutes, 10, "T-E.Sse.2: elapsedMinutes must be 10");
@@ -85,8 +83,7 @@ describe("T-E.Sse — SseFrame union accepts 3 new auto-run frame types (P-SP-E 
       ts: Date.now(),
     } satisfies SseFrame;
 
-    assert.equal(frame.type, "auto-run-completed",
-      "T-E.Sse.3: frame.type must be 'auto-run-completed'");
+    assert.equal(frame.type, "auto-run-completed", "T-E.Sse.3: frame.type must be 'auto-run-completed'");
     if (frame.type === "auto-run-completed") {
       assert.equal(frame.runId, "test-run-id", "T-E.Sse.3: runId must match");
       assert.equal(frame.status, "completed", "T-E.Sse.3: status must be 'completed'");

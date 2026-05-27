@@ -192,13 +192,10 @@ describe("T-SP-D.ApprovalAudit — draft-before-approval invariant + approval_re
       );
 
       // ── Step 7: Assert approval_resolved audit event captured ─────────────────
-      const approvalEvent = auditEvents.find(
-        (e) => (e as { kind?: string }).kind === "approval_resolved",
-      ) as { kind: string; decision: string } | undefined;
-      assert.ok(
-        approvalEvent !== undefined,
-        "audit writer must have received an 'approval_resolved' event (G-PSPD.9)",
-      );
+      const approvalEvent = auditEvents.find((e) => (e as { kind?: string }).kind === "approval_resolved") as
+        | { kind: string; decision: string }
+        | undefined;
+      assert.ok(approvalEvent !== undefined, "audit writer must have received an 'approval_resolved' event (G-PSPD.9)");
       assert.equal(
         approvalEvent?.decision,
         "approved",

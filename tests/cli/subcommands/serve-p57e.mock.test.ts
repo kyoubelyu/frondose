@@ -327,7 +327,7 @@ describe("buildPassivePrompt click branch — memory-first text block referencin
 // ─── T-Memory.2 — profile-nav branch memory-first ───────────────────────────
 
 describe("buildPassivePrompt profile-nav branch — memory-first text (G-P57e.7)", () => {
-  it("T-Memory.2: given profile-nav ctx={handle:'jane', url:'...'}, WHEN buildPassivePrompt('profile-nav', ctx) drives the passive turn, THEN captured prompt contains 'if you have NO memory of this person → call `remember` (interaction kind: at)' + 'If you ALREADY have memory of this person → `stop` directly' + 'Call `suggest_card` ONLY if this person qualifies as a fresh ICP match'", async () => {
+  it("T-Memory.2: given profile-nav ctx={handle:'jane', url:'...'}, WHEN buildPassivePrompt('profile-nav', ctx) drives the passive turn, THEN captured prompt follows the current sales-kernel observe-and-judge flow with no outbound action", async () => {
     const h = await spinHarness("tmem2");
     try {
       dispatchOverlayBindingEvent({
@@ -339,18 +339,20 @@ describe("buildPassivePrompt profile-nav branch — memory-first text (G-P57e.7)
       await new Promise((r) => setTimeout(r, 150));
 
       const prompt = capturedPrompt();
-      assert.ok(
-        prompt.includes("if you have NO memory of this person → call `remember` (interaction kind: at)"),
-        `profile-nav prompt must contain no-memory→remember(at) directive; got: ${prompt.slice(0, 200)}`,
-      );
-      assert.ok(
-        prompt.includes("If you ALREADY have memory of this person → `stop` directly"),
-        "profile-nav prompt must contain already-memory→stop directive",
-      );
-      assert.ok(
-        prompt.includes("Call `suggest_card` ONLY if this person qualifies as a fresh ICP match"),
-        "profile-nav prompt must reserve suggest_card for fresh ICP match",
-      );
+      for (const fragment of [
+        "Step 1: call `record_raw_candidate`",
+        "Step 2: call `search_memory`",
+        "Step 3a: if context is sufficient",
+        "call `score_lead`",
+        "Step 3b: if context is insufficient",
+        'call `remember` (kind: "at"',
+        "then `stop`",
+        "Step 4: if step 3a ran AND the returned totalScore ≥ 40",
+        "call `suggest_card`",
+        "Hard constraint: NEVER call `click`, `navigate_to_url`, `connect`, `message`, or any outbound tool",
+      ]) {
+        assert.ok(prompt.includes(fragment), `profile-nav prompt must contain current P-SP-C fragment: ${fragment}`);
+      }
     } finally {
       h.restoreEnv();
     }

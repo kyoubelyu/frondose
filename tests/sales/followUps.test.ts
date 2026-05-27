@@ -7,12 +7,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  closeSalesDatabase,
-  insertLead,
-  openSalesDatabase,
-  setLeadFollowUp,
-} from "../../src/persistence/salesDb.js";
+import { closeSalesDatabase, insertLead, openSalesDatabase, setLeadFollowUp } from "../../src/persistence/salesDb.js";
 import { makeListDueFollowupsTool } from "../../src/tools/sales/listDueFollowups.js";
 import { makeScheduleFollowUpTool } from "../../src/tools/sales/scheduleFollowUp.js";
 import { mkTestSalesDb, seedFreshCandidate } from "./_fixtures/salesDb.js";
@@ -69,24 +64,30 @@ describe("T-SP-A.FollowUp — schedule_follow_up + list_due_followups tools", ()
     const cC = seedFreshCandidate(db);
 
     const lA = insertLead(db, {
-      candidateId: cA, personName: "Lead A",
+      candidateId: cA,
+      personName: "Lead A",
       profileUrl: "https://www.linkedin.com/in/lead-a/",
-      stage: "connected", ownerMode: "manual",
+      stage: "connected",
+      ownerMode: "manual",
     });
     const lB = insertLead(db, {
-      candidateId: cB, personName: "Lead B",
+      candidateId: cB,
+      personName: "Lead B",
       profileUrl: "https://www.linkedin.com/in/lead-b/",
-      stage: "connected", ownerMode: "manual",
+      stage: "connected",
+      ownerMode: "manual",
     });
     const lC = insertLead(db, {
-      candidateId: cC, personName: "Lead C",
+      candidateId: cC,
+      personName: "Lead C",
       profileUrl: "https://www.linkedin.com/in/lead-c/",
-      stage: "connected", ownerMode: "manual",
+      stage: "connected",
+      ownerMode: "manual",
     });
 
     setLeadFollowUp(db, lA, "Follow up A", now - 3600000); // past
-    setLeadFollowUp(db, lB, "Follow up B", now - 1000);    // recent past
-    setLeadFollowUp(db, lC, "Follow up C", now + 10000);   // future
+    setLeadFollowUp(db, lB, "Follow up B", now - 1000); // recent past
+    setLeadFollowUp(db, lC, "Follow up C", now + 10000); // future
 
     const tool = makeListDueFollowupsTool(":memory:");
     const result = await (tool.execute as Function)({ limit: 10 });
@@ -118,9 +119,11 @@ describe("T-SP-A.FollowUp — schedule_follow_up + list_due_followups tools", ()
     for (let i = 0; i < 5; i++) {
       const cId = seedFreshCandidate(db);
       const lId = insertLead(db, {
-        candidateId: cId, personName: `Lead ${i}`,
+        candidateId: cId,
+        personName: `Lead ${i}`,
         profileUrl: `https://www.linkedin.com/in/lead-limit-${i}/`,
-        stage: "connected", ownerMode: "manual",
+        stage: "connected",
+        ownerMode: "manual",
       });
       setLeadFollowUp(db, lId, `Follow up ${i}`, past - i * 1000);
     }

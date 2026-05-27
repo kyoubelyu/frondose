@@ -46,13 +46,12 @@ function makeMinimalIdentity(): IdentityRecord {
 // ─── T-Soul.1 ────────────────────────────────────────────────────────────────
 
 describe("composeSoulBand triggerHabits rewrite (G-P54.3)", () => {
-  it("T-Soul.1: when composeSoulBand(identity) runs for a non-null identity, the Soul band contains the new single-call escalate habit + task-execution anchoring + negative-conversational guard AND does NOT contain the old triple-call substring", () => {
+  it("T-Soul.1: when composeSoulBand(identity) runs for a non-null identity, the Soul band contains the single-call escalate habit + retry anchoring + conversational guard AND does NOT contain the old triple-call substring", () => {
     // Given: a populated IdentityRecord (non-null) fed into composeSoulBand
     // When:  the returned Soul-band string is inspected
-    // Then:  (a) it CONTAINS the substring "escalate_for_capability" exactly once
+    // Then:  (a) it CONTAINS the substring "escalate_for_capability"
     //            in the trigger-habits section (single-call habit);
-    //        (b) it CONTAINS a phrase signalling task-execution anchoring (one of:
-    //            "mid-task", "executing", "mid-action");
+    //        (b) it CONTAINS a phrase signalling capability-gap retry anchoring;
     //        (c) it CONTAINS a phrase signalling the negative conversational guard
     //            (one of: "conversation, not escalation", "ask about your capabilities",
     //            "discusses features");
@@ -68,12 +67,12 @@ describe("composeSoulBand triggerHabits rewrite (G-P54.3)", () => {
       "Soul band must mention `escalate_for_capability` (single-call habit)",
     );
 
-    // (b) Task-execution anchoring: one of mid-task / executing / mid-action.
-    const hasTaskExecAnchor = soul.includes("mid-task") || soul.includes("executing") || soul.includes("mid-action");
-    assert.ok(
-      hasTaskExecAnchor,
-      "Soul band must contain a task-execution anchor (one of: 'mid-task', 'executing', 'mid-action')",
-    );
+    // (b) Capability-gap anchoring: current P-66 wording is behavior-level, not exact P-54 phrasing.
+    const hasTaskExecAnchor =
+      soul.includes("genuinely needed tool is missing after a reasonable retry") ||
+      soul.includes("genuinely does not exist") ||
+      soul.includes("reasonable retry");
+    assert.ok(hasTaskExecAnchor, "Soul band must contain a capability-gap retry anchor");
 
     // (c) Negative conversational guard: one of the three accepted phrasings.
     const hasNegativeGuard =

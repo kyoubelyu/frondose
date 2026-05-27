@@ -51,7 +51,7 @@ const SKELETON_IDS = [
   "send-btn",
 ];
 // Canonical index.html L315-320 button copy (CONCERN-MR fix — the skeleton sets these, render.ts never does).
-const BUTTON_LABELS = ["Approve", "Decline", "Pause", "Hand off to Auto", "Show all steps"];
+const BUTTON_LABELS = ["Approve", "Decline", "Pause", "Run on Auto", "Show all steps"];
 
 describe("OVERLAY_BOOTSTRAP_JS — single IIFE carrying the frondose skeleton ids (G-PY2.2a.4)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.  Then: one "(function install()" head + every skeleton id.
@@ -72,7 +72,7 @@ describe("OVERLAY_BOOTSTRAP_JS — workflow action buttons render with non-empty
   // When: the workflow-button label assignments are inspected.
   // Then: a non-empty .textContent = '<canonical>' assignment exists for each of the 5 buttons.
   //       (RENDER-ONLY-PENDING-2.2b: these RENDER; we do NOT assert they act.)
-  it("T-Shell.1b: the skeleton sets non-empty .textContent on all 5 workflow buttons with the canonical copy (Approve/Decline/Pause/'Hand off to Auto'/'Show all steps') — guards the empty-shell regression", () => {
+  it("T-Shell.1b: the skeleton sets non-empty .textContent on all 5 workflow buttons with the canonical overlay copy (Approve/Decline/Pause/'Run on Auto'/'Show all steps') — guards the empty-shell regression", () => {
     for (const label of BUTTON_LABELS) {
       assert.ok(
         BOOTSTRAP.includes(`textContent = '${label}'`),

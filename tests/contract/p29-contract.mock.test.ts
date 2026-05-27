@@ -73,10 +73,10 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 49 tools", () => {
+  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 53 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'}) (D-9 — no new tools)
     // When: Object.keys(tools).length
-    // Then: 49 (P-SP-B rebaseline: +score_lead +score_account on top of P-SP-A's 47)
+    // Then: 53 (P-Y3 rebaseline: present_summary + current 17-tool sales kernel)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -87,18 +87,18 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        49,
-        `T-CONTRACT.TOOLS worker: expected 49 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        53,
+        `T-CONTRACT.TOOLS worker: expected 53 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 23 tools", () => {
+  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 27 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) (D-9)
     // When: Object.keys(tools).length
-    // Then: 23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron)
+    // Then: 27 (P-Y3 rebaseline: server power includes present_summary)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -109,8 +109,8 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.TOOLS server: expected 26 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        27,
+        `T-CONTRACT.TOOLS server: expected 27 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

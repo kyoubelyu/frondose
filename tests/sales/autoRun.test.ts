@@ -59,9 +59,7 @@ describe("T-SP-A.AutoRun — get_auto_run_state + record_auto_action tools", () 
     assert.ok(r2.ok, "Second record_auto_action must return ok:true");
 
     // Verify 2 ledger rows exist, each with ts set
-    const ledgerRows = db
-      .prepare("SELECT ts FROM auto_run_ledger WHERE run_id = ?")
-      .all(runId) as { ts: number }[];
+    const ledgerRows = db.prepare("SELECT ts FROM auto_run_ledger WHERE run_id = ?").all(runId) as { ts: number }[];
     assert.strictEqual(ledgerRows.length, 2, "Must have 2 ledger rows");
     for (const row of ledgerRows) {
       assert.ok(row.ts > 0, "Each ledger row must have ts populated");
@@ -100,9 +98,7 @@ describe("T-SP-A.AutoRun — get_auto_run_state + record_auto_action tools", () 
     assert.strictEqual(result.ok, false, "Must return ok:false for unknown runId");
     assert.strictEqual(result.error.kind, "not_found");
 
-    const ledgerCount = db
-      .prepare("SELECT COUNT(*) AS n FROM auto_run_ledger")
-      .get() as { n: number };
+    const ledgerCount = db.prepare("SELECT COUNT(*) AS n FROM auto_run_ledger").get() as { n: number };
     assert.strictEqual(ledgerCount.n, 0, "No ledger row must be inserted for unknown runId");
   });
 });

@@ -54,6 +54,8 @@ interface TmpSetupEnv {
 
 function makeTmpSetupEnv(): TmpSetupEnv {
   const dir = mkdtempSync(join(tmpdir(), "mai-p13-setup-"));
+  const previousHomeBase = process.env.MAI_HOME_BASE;
+  process.env.MAI_HOME_BASE = dir;
   const authPath = join(dir, "auth.json");
   const identityPath = join(dir, "identity.json");
   const tcPath = join(dir, "telegram.json");
@@ -70,7 +72,11 @@ function makeTmpSetupEnv(): TmpSetupEnv {
   };
   return {
     opts,
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => {
+      if (previousHomeBase === undefined) delete process.env.MAI_HOME_BASE;
+      else process.env.MAI_HOME_BASE = previousHomeBase;
+      rmSync(dir, { recursive: true, force: true });
+    },
   };
 }
 

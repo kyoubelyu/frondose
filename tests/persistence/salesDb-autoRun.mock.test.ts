@@ -110,8 +110,10 @@ describe("T-E.DB — auto_runs DB helpers (P-SP-E Sketch A)", () => {
     const ended = getAutoRun(db, row.id);
     assert.ok(ended !== null, "T-E.DB.4: getAutoRun must find the row");
     assert.equal(ended.status, "completed", "T-E.DB.4: status must be 'completed'");
-    assert.ok(ended.endedAt !== null && ended.endedAt >= beforeEnd && ended.endedAt <= afterEnd,
-      "T-E.DB.4: endedAt must be ≈ now");
+    assert.ok(
+      ended.endedAt !== null && ended.endedAt >= beforeEnd && ended.endedAt <= afterEnd,
+      "T-E.DB.4: endedAt must be ≈ now",
+    );
 
     const endedAtT1 = ended.endedAt;
 

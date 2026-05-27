@@ -50,7 +50,12 @@ describe("P-Y2-Magical generated overlay CSS (T-PY2MAG.CSS.2)", () => {
     // Given: src/tauri/ui/index.html feeds frondoseCss.generated.ts through cssTransform.ts
     // When:  the generated shadow CSS is inspected
     // Then:  Magical badge styling is present in shadow form, and status-dot parity is preserved if sourced
-    for (const expected of ["--magical-bg: #E8F0E3", "--magical-ink: #3A5A2C", "--magical-border: #C5D9BD", "--magical-dot: #5A8043"]) {
+    for (const expected of [
+      "--magical-bg: #E8F0E3",
+      "--magical-ink: #3A5A2C",
+      "--magical-border: #C5D9BD",
+      "--magical-dot: #5A8043",
+    ]) {
       assert.ok(FRONDOSE_CSS.includes(expected), `FRONDOSE_CSS must include ${expected}`);
     }
     assert.match(

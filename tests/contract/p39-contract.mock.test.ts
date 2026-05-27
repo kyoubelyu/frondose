@@ -49,11 +49,13 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "click",
   "close",
   "echo",
+  "end_auto_run",
   "escalate_for_capability",
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
   "get_memory_note",
+  "get_sales_report",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -63,6 +65,7 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "list_due_followups",
   "mark_message_sent",
   "navigate_to_url",
+  "present_summary",
   "press",
   "promote_candidate_to_lead",
   "publish_event",
@@ -81,6 +84,7 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "search_memory",
   "set_memory_note",
   "sleep",
+  "start_auto_run",
   "stop",
   // P-Z2 rebaseline: accreted since P-39 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
@@ -109,6 +113,7 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
   "identity",
   "list_personas",
   "list_workers",
+  "present_summary",
   "provision_worker",
   "remember",
   "revoke_worker",
@@ -129,11 +134,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: worker 49 (rebaselined to P-SP-B) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 49 tools, including search_memory / set_memory_note / get_memory_note + score_lead + score_account", () => {
+describe("P-39 tool count: worker 53 (rebaselined to P-Y3) (G-P39.11)", () => {
+  it("T-Count.1: makeAllTools worker mode → exactly 53 tools, including present_summary and current sales tools", () => {
     // Given: makeAllTools called with a fake session + persistence + control in worker mode
     // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools
-    // Then:  49 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-SP-B rebaseline)
+    // Then:  53 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-Y3 rebaseline)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -147,10 +152,10 @@ describe("P-39 tool count: worker 49 (rebaselined to P-SP-B) (G-P39.11)", () => 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        49,
-        `worker tool count must be 49; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        53,
+        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-SP-B snapshot (P-39 + score_lead + score_account)");
+      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-Y3 snapshot");
     } finally {
       cleanup();
     }
@@ -159,11 +164,11 @@ describe("P-39 tool count: worker 49 (rebaselined to P-SP-B) (G-P39.11)", () => 
 
 // ─── T-Count.2 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: server 26 (rebaselined to current post-P-Y1; was P-39-era 23) (G-P39.11)", () => {
-  it("T-Count.2: makeAllTools server mode → exactly 26 tools, including search_memory / set_memory_note / get_memory_note", () => {
+describe("P-39 tool count: server 27 (rebaselined to P-Y3) (G-P39.11)", () => {
+  it("T-Count.2: makeAllTools server mode → exactly 27 tools, including present_summary", () => {
     // Given: makeAllTools called with undefined session + persistence + control in server mode
     // When:  Object.keys(serverTools).length checked; set includes the 3 new P-39 tools
-    // Then:  26 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-Z2 rebaseline)
+    // Then:  27 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-Y3 rebaseline)
     const { dir, cleanup } = makeTmpDir();
     try {
       const serverTools = makeAllTools(
@@ -176,8 +181,8 @@ describe("P-39 tool count: server 26 (rebaselined to current post-P-Y1; was P-39
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        27,
+        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P39, "server tool set must match frozen P-39 snapshot");
     } finally {

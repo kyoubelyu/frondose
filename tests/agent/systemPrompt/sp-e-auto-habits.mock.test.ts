@@ -29,18 +29,18 @@ describe("T-E.Soul — soulModeFragment('auto') expansion (P-SP-E Sketch G)", ()
     // Then:  returned string contains each of the 5 required tool names as substrings
     assert.ok(soulModeFragment !== undefined, "T-E.Soul.1: soulModeFragment must be importable");
     const fragment = soulModeFragment!("auto");
-    assert.ok(typeof fragment === "string" && fragment.length > 0,
-      "T-E.Soul.1: soulModeFragment('auto') must return a non-empty string");
-    assert.ok(fragment.includes("start_auto_run"),
-      `T-E.Soul.1: must contain 'start_auto_run'; fragment starts: ${fragment.slice(0, 100)}`);
-    assert.ok(fragment.includes("list_due_followups"),
-      "T-E.Soul.1: must contain 'list_due_followups'");
-    assert.ok(fragment.includes("get_auto_run_state"),
-      "T-E.Soul.1: must contain 'get_auto_run_state'");
-    assert.ok(fragment.includes("record_auto_action"),
-      "T-E.Soul.1: must contain 'record_auto_action'");
-    assert.ok(fragment.includes("end_auto_run"),
-      "T-E.Soul.1: must contain 'end_auto_run'");
+    assert.ok(
+      typeof fragment === "string" && fragment.length > 0,
+      "T-E.Soul.1: soulModeFragment('auto') must return a non-empty string",
+    );
+    assert.ok(
+      fragment.includes("start_auto_run"),
+      `T-E.Soul.1: must contain 'start_auto_run'; fragment starts: ${fragment.slice(0, 100)}`,
+    );
+    assert.ok(fragment.includes("list_due_followups"), "T-E.Soul.1: must contain 'list_due_followups'");
+    assert.ok(fragment.includes("get_auto_run_state"), "T-E.Soul.1: must contain 'get_auto_run_state'");
+    assert.ok(fragment.includes("record_auto_action"), "T-E.Soul.1: must contain 'record_auto_action'");
+    assert.ok(fragment.includes("end_auto_run"), "T-E.Soul.1: must contain 'end_auto_run'");
   });
 
   // ─── T-E.Soul.2 ──────────────────────────────────────────────────────────────
@@ -58,15 +58,20 @@ describe("T-E.Soul — soulModeFragment('auto') expansion (P-SP-E Sketch G)", ()
     // — recorded as DEFECT D-SP-E-Soul.2 (missing user-stop mention in auto soul).
     assert.ok(soulModeFragment !== undefined, "T-E.Soul.2: soulModeFragment must be importable");
     const fragment = soulModeFragment!("auto");
-    assert.ok(/cap/i.test(fragment),
-      "T-E.Soul.2: /cap/i must match (cap condition present)");
-    assert.ok(/no.*(leads|actionable|next)/i.test(fragment),
-      "T-E.Soul.2: /no.*(leads|actionable|next)/i must match (no-more-leads condition)");
-    assert.ok(/blocked|abnormal/i.test(fragment),
-      "T-E.Soul.2: /blocked|abnormal/i must match (abnormal page condition)");
+    assert.ok(/cap/i.test(fragment), "T-E.Soul.2: /cap/i must match (cap condition present)");
+    assert.ok(
+      /no.*(leads|actionable|next)/i.test(fragment),
+      "T-E.Soul.2: /no.*(leads|actionable|next)/i must match (no-more-leads condition)",
+    );
+    assert.ok(
+      /blocked|abnormal/i.test(fragment),
+      "T-E.Soul.2: /blocked|abnormal/i must match (abnormal page condition)",
+    );
     // 4th pattern: user-stop condition — EXPECTED TO FAIL if implementation uses "no clear next action"
-    assert.ok(/user.*(stop|cancel)|cancel/i.test(fragment),
-      "T-E.Soul.2: /user.*(stop|cancel)|cancel/i must match (user stop condition) [DEFECT D-SP-E-Soul.2: builder implemented 'no clear next action' as 4th condition instead of user-stop]");
+    assert.ok(
+      /user.*(stop|cancel)|cancel/i.test(fragment),
+      "T-E.Soul.2: /user.*(stop|cancel)|cancel/i must match (user stop condition) [DEFECT D-SP-E-Soul.2: builder implemented 'no clear next action' as 4th condition instead of user-stop]",
+    );
   });
 
   // ─── T-E.Soul.3 ──────────────────────────────────────────────────────────────
@@ -77,10 +82,14 @@ describe("T-E.Soul — soulModeFragment('auto') expansion (P-SP-E Sketch G)", ()
     //        P-SP-E Sketch G MUST NOT touch the manual branch
     assert.ok(soulModeFragment !== undefined, "T-E.Soul.3: soulModeFragment must be importable");
     const fragment = soulModeFragment!("manual");
-    assert.ok(typeof fragment === "string" && fragment.length > 0,
-      "T-E.Soul.3: soulModeFragment('manual') must return a non-empty string");
-    assert.ok(fragment.includes("save_message_draft"),
-      "T-E.Soul.3: manual fragment must still contain 'save_message_draft' (P-SP-D regression check)");
+    assert.ok(
+      typeof fragment === "string" && fragment.length > 0,
+      "T-E.Soul.3: soulModeFragment('manual') must return a non-empty string",
+    );
+    assert.ok(
+      fragment.includes("save_message_draft"),
+      "T-E.Soul.3: manual fragment must still contain 'save_message_draft' (P-SP-D regression check)",
+    );
   });
 });
 
@@ -92,10 +101,14 @@ describe("T-E.Checkpoint — CHECKPOINT 4-stop-condition reminder (P-SP-E Sketch
     // Then:  /Auto.*4.*(stop|exit)/i matches somewhere in CHECKPOINT
     //   The expected text is: "**Auto 4-stop**: `end_auto_run` on cap, no leads, blocked page, or no next action."
     assert.ok(CHECKPOINT !== undefined, "T-E.Checkpoint.1: CHECKPOINT must be importable from checkpoint.ts");
-    assert.ok(typeof CHECKPOINT === "string" && CHECKPOINT.length > 0,
-      "T-E.Checkpoint.1: CHECKPOINT must be a non-empty string");
-    assert.ok(/Auto.*4.*(stop|exit)/i.test(CHECKPOINT!),
-      `T-E.Checkpoint.1: CHECKPOINT must match /Auto.*4.*(stop|exit)/i; got first 200 chars: ${CHECKPOINT!.slice(0, 200)}`);
+    assert.ok(
+      typeof CHECKPOINT === "string" && CHECKPOINT.length > 0,
+      "T-E.Checkpoint.1: CHECKPOINT must be a non-empty string",
+    );
+    assert.ok(
+      /Auto.*4.*(stop|exit)/i.test(CHECKPOINT!),
+      `T-E.Checkpoint.1: CHECKPOINT must match /Auto.*4.*(stop|exit)/i; got first 200 chars: ${CHECKPOINT!.slice(0, 200)}`,
+    );
   });
 
   // ─── T-E.Checkpoint.2 ────────────────────────────────────────────────────────
@@ -106,7 +119,6 @@ describe("T-E.Checkpoint — CHECKPOINT 4-stop-condition reminder (P-SP-E Sketch
     //        no lower-bound assertion (round-0 ≥4310 was brittle per NIT-2)
     assert.ok(CHECKPOINT !== undefined, "T-E.Checkpoint.2: CHECKPOINT must be importable");
     const len = CHECKPOINT!.length;
-    assert.ok(len <= 4400,
-      `T-E.Checkpoint.2: CHECKPOINT.length must be <= 4400; got ${len}`);
+    assert.ok(len <= 4400, `T-E.Checkpoint.2: CHECKPOINT.length must be <= 4400; got ${len}`);
   });
 });

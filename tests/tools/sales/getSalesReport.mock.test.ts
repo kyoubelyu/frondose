@@ -70,13 +70,25 @@ function seedPopulatedFixture(db: any): { c1: string; c2: string; l1: string; l2
   const l2 = randomUUID();
 
   // Candidates
-  for (const [id, src] of [[c1, "search"], [c2, "feed"]] as const) {
+  for (const [id, src] of [
+    [c1, "search"],
+    [c2, "feed"],
+  ] as const) {
     db.prepare(`
       INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source,
         observed_at, last_seen_at, status, evidence_summary)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, "Lead Person", `https://linkedin.com/in/lead-${id.slice(0,6)}/`,
-      null, src, now, now, "promoted", "fixture");
+    `).run(
+      id,
+      "Lead Person",
+      `https://linkedin.com/in/lead-${id.slice(0, 6)}/`,
+      null,
+      src,
+      now,
+      now,
+      "promoted",
+      "fixture",
+    );
   }
 
   // Leads: l1 → meeting_booked (score 80), l2 → sales_intent (score 55)
@@ -85,15 +97,43 @@ function seedPopulatedFixture(db: any): { c1: string; c2: string; l1: string; l2
       stage, total_score, confidence, one_line_pain_chain, next_action,
       next_action_due_at, owner_mode, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(l1, c1, null, "Lead 1", "https://linkedin.com/in/l1/",
-    "meeting_booked", 80, 0.8, "pain", null, null, "manual", now, now);
+  `).run(
+    l1,
+    c1,
+    null,
+    "Lead 1",
+    "https://linkedin.com/in/l1/",
+    "meeting_booked",
+    80,
+    0.8,
+    "pain",
+    null,
+    null,
+    "manual",
+    now,
+    now,
+  );
   db.prepare(`
     INSERT INTO leads (id, candidate_id, account_id, person_name, profile_url,
       stage, total_score, confidence, one_line_pain_chain, next_action,
       next_action_due_at, owner_mode, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(l2, c2, null, "Lead 2", "https://linkedin.com/in/l2/",
-    "sales_intent", 55, 0.7, "pain", null, null, "auto", now, now);
+  `).run(
+    l2,
+    c2,
+    null,
+    "Lead 2",
+    "https://linkedin.com/in/l2/",
+    "sales_intent",
+    55,
+    0.7,
+    "pain",
+    null,
+    null,
+    "auto",
+    now,
+    now,
+  );
 
   // Timeline events (9 total)
   const events: Array<readonly [string, string, string]> = [
@@ -121,16 +161,30 @@ function seedPopulatedFixture(db: any): { c1: string; c2: string; l1: string; l2
       pain_hypothesis, buying_trigger, authority_level, suggested_opening_line,
       confidence, next_action, evidence_json, method_used, model, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(sc, c1, l1, 80, "Strong", "pain", "trigger", "VP", "opening",
-    0.8, "next", "{}", "Pain Chain", "deepseek", now);
+  `).run(
+    sc,
+    c1,
+    l1,
+    80,
+    "Strong",
+    "pain",
+    "trigger",
+    "VP",
+    "opening",
+    0.8,
+    "next",
+    "{}",
+    "Pain Chain",
+    "deepseek",
+    now,
+  );
 
   // auto_runs row: started 10 min ago, completed now
   db.prepare(`
     INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes,
       max_connects, status, summary, counters)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), now - 600000, now, 15, 5, "completed",
-    "Done", JSON.stringify({ connects: 2 }));
+  `).run(randomUUID(), now - 600000, now, 15, 5, "completed", "Done", JSON.stringify({ connects: 2 }));
 
   return { c1, c2, l1, l2 };
 }
@@ -162,9 +216,16 @@ describe("T-F.Tool.1 — get_sales_report populated fixture → full envelope + 
       // 10 data keys
       const dataKeys = Object.keys(result.data).sort();
       const expectedDataKeys = [
-        "autoRunHistory", "connectionRate", "funnelSummary",
-        "generatedAt", "leadQualityBySource", "meetingBooked",
-        "replyRate", "salesIntent", "scoreCalibration", "sinceMs",
+        "autoRunHistory",
+        "connectionRate",
+        "funnelSummary",
+        "generatedAt",
+        "leadQualityBySource",
+        "meetingBooked",
+        "replyRate",
+        "salesIntent",
+        "scoreCalibration",
+        "sinceMs",
       ].sort();
       assert.deepEqual(dataKeys, expectedDataKeys, "data must have exactly 10 keys");
 
@@ -192,9 +253,17 @@ describe("T-F.Tool.1 — get_sales_report populated fixture → full envelope + 
       assert.ok("positiveRate" in result.data.replyRate, "replyRate must have .positiveRate");
       assert.equal(result.data.replyRate.sent, 2, "replyRate.sent must === 2");
       assert.equal(result.data.replyRate.replied, 1, "replyRate.replied must === 1");
-      assert.equal(result.data.replyRate.positiveReplied, 2, "replyRate.positiveReplied must === 2 (both leads in positive stages)");
+      assert.equal(
+        result.data.replyRate.positiveReplied,
+        2,
+        "replyRate.positiveReplied must === 2 (both leads in positive stages)",
+      );
       assert.equal(result.data.replyRate.replyRate, 50.0, "replyRate.replyRate must === 50.0 (1/2 × 100)");
-      assert.equal(result.data.replyRate.positiveRate, 200.0, "replyRate.positiveRate must === 200.0 (2 positives / 1 replied × 100)");
+      assert.equal(
+        result.data.replyRate.positiveRate,
+        200.0,
+        "replyRate.positiveRate must === 200.0 (2 positives / 1 replied × 100)",
+      );
 
       // Quality by source: 2 groups (search + feed)
       assert.equal(result.data.leadQualityBySource.length, 2, "leadQualityBySource must have 2 source groups");
@@ -203,8 +272,16 @@ describe("T-F.Tool.1 — get_sales_report populated fixture → full envelope + 
       assert.equal(result.data.scoreCalibration.length, 1, "scoreCalibration must have 1 band (high only)");
       assert.equal(result.data.scoreCalibration[0].scoreBand, "high (70-100)", "high band must be present");
       assert.equal(result.data.scoreCalibration[0].leads, 1, "high band leads must === 1");
-      assert.equal(result.data.scoreCalibration[0].advanced, 1, "high band advanced must === 1 (meeting_booked is advanced)");
-      assert.equal(result.data.scoreCalibration[0].advanceRate, 1.0, "high band advanceRate must === 1.0 (fraction, not %)");
+      assert.equal(
+        result.data.scoreCalibration[0].advanced,
+        1,
+        "high band advanced must === 1 (meeting_booked is advanced)",
+      );
+      assert.equal(
+        result.data.scoreCalibration[0].advanceRate,
+        1.0,
+        "high band advanceRate must === 1.0 (fraction, not %)",
+      );
 
       // Auto run history: 1 completed run (duration=10min)
       assert.equal(result.data.autoRunHistory.length, 1, "autoRunHistory must have 1 entry");
@@ -261,13 +338,30 @@ describe("T-F.Tool.2 — get_sales_report sinceMs filter → post-cutoff metrics
 
       // All 8 funnel stage counts must be 0 (leads.created_at < futureCutoff)
       const funnel = result.data.funnelSummary;
-      for (const key of ["scored", "qualified", "connect_sent", "connected", "replied", "sales_intent", "meeting_booked", "disqualified"]) {
+      for (const key of [
+        "scored",
+        "qualified",
+        "connect_sent",
+        "connected",
+        "replied",
+        "sales_intent",
+        "meeting_booked",
+        "disqualified",
+      ]) {
         // biome-ignore lint/suspicious/noExplicitAny: funnel is typed but we iterate
         assert.equal((funnel as any)[key], 0, `funnelSummary.${key} must === 0 (future sinceMs)`);
       }
 
-      assert.equal(result.data.leadQualityBySource.length, 0, "leadQualityBySource must be empty (rc.observed_at < futureCutoff)");
-      assert.equal(result.data.scoreCalibration.length, 0, "scoreCalibration must be empty (ls.created_at < futureCutoff)");
+      assert.equal(
+        result.data.leadQualityBySource.length,
+        0,
+        "leadQualityBySource must be empty (rc.observed_at < futureCutoff)",
+      );
+      assert.equal(
+        result.data.scoreCalibration.length,
+        0,
+        "scoreCalibration must be empty (ls.created_at < futureCutoff)",
+      );
       assert.equal(result.data.autoRunHistory.length, 0, "autoRunHistory must be empty (started_at < futureCutoff)");
 
       // sinceMs echoed back in the envelope
@@ -317,11 +411,24 @@ describe("T-F.Tool.3 — get_sales_report empty DB → all-zero counts, rates nu
       assert.equal(result.data.replyRate.replied, 0, "replyRate.replied must === 0");
       assert.equal(result.data.replyRate.positiveReplied, 0, "replyRate.positiveReplied must === 0");
       assert.equal(result.data.replyRate.replyRate, null, "replyRate.replyRate must === null (sent=0 → OQ-F6)");
-      assert.equal(result.data.replyRate.positiveRate, null, "replyRate.positiveRate must === null (replied=0 → OQ-F6)");
+      assert.equal(
+        result.data.replyRate.positiveRate,
+        null,
+        "replyRate.positiveRate must === null (replied=0 → OQ-F6)",
+      );
 
       // All 8 funnelSummary stage counts === 0
       const funnel = result.data.funnelSummary;
-      for (const key of ["scored", "qualified", "connect_sent", "connected", "replied", "sales_intent", "meeting_booked", "disqualified"]) {
+      for (const key of [
+        "scored",
+        "qualified",
+        "connect_sent",
+        "connected",
+        "replied",
+        "sales_intent",
+        "meeting_booked",
+        "disqualified",
+      ]) {
         // biome-ignore lint/suspicious/noExplicitAny: funnel is typed but we iterate
         assert.equal((funnel as any)[key], 0, `funnelSummary.${key} must === 0 (empty DB)`);
       }
