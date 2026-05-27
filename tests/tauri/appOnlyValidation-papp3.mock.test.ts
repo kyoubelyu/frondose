@@ -11,7 +11,12 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 type EvidenceClassification =
   | "compiled-app-preflight"
@@ -35,11 +40,7 @@ type PreflightReport = {
 };
 
 type PreflightHelper = {
-  assertCompiledAppFresh(input: {
-    appJsMtimeMs: number;
-    sourceMtimeMs: number;
-    sourcePath: string;
-  }): EvidenceItem;
+  assertCompiledAppFresh(input: { appJsMtimeMs: number; sourceMtimeMs: number; sourcePath: string }): EvidenceItem;
   assertCompiledAppLoad(input: { scriptSrc: string }): EvidenceItem;
   assertGeneratedOverlayFresh(input: {
     artifactPath: string;
@@ -60,19 +61,27 @@ type PreflightHelper = {
     cargoVersion: string;
     updaterVersion: string;
   }): EvidenceItem[];
-  runAppValidationPreflight(input?: {
-    items?: EvidenceItem[];
-    allowDrift?: boolean;
-  }): Promise<PreflightReport>;
+  runAppValidationPreflight(input?: { items?: EvidenceItem[]; allowDrift?: boolean }): Promise<PreflightReport>;
 };
 
 let helper: Partial<PreflightHelper> | null = null;
 
+function readJsonVersion(relPath: string): string {
+  const parsed = JSON.parse(readFileSync(join(REPO, relPath), "utf8")) as { version?: unknown };
+  assert.equal(typeof parsed.version, "string", `${relPath} must contain a string version`);
+  return parsed.version;
+}
+
+function readCargoTomlVersion(): string {
+  const text = readFileSync(join(REPO, "src/tauri/src-tauri/Cargo.toml"), "utf8");
+  const packageSection = text.match(/\[package\][\s\S]*?(?:\n\[|$)/)?.[0] ?? "";
+  const version = packageSection.match(/\nversion\s*=\s*"([^"]+)"/)?.[1];
+  assert.ok(version, "Cargo.toml [package].version must be present");
+  return version;
+}
+
 function requireHelperExport<Name extends keyof PreflightHelper>(name: Name): PreflightHelper[Name] {
-  assert.ok(
-    helper,
-    "scripts/app-validation-preflight.ts must exist and export the P-APP-3 preflight helpers",
-  );
+  assert.ok(helper, "scripts/app-validation-preflight.ts must exist and export the P-APP-3 preflight helpers");
   const value = helper[name];
   assert.equal(typeof value, "function", `${String(name)} must be exported as a function`);
   return value as PreflightHelper[Name];
@@ -199,6 +208,22 @@ describe("P-APP-3 app-only validation preflight scaffold", () => {
     assert.ok(items.every((item) => item.status === "warning"));
     assert.ok(items.every((item) => /P-APP-10/.test(item.message)));
     assert.equal(report.ok, true);
+  });
+
+  it("emits no release-drift warning for the current package/Tauri/Cargo metadata after P-66 sync", () => {
+    // Given: the real checkout metadata after P-66 builder synchronization.
+    // When: detectReleaseDrift checks package.json, tauri.conf.json, and Cargo.toml versions.
+    // Then: no release-drift-warning is emitted; same-version build artifacts remain validation-only until Step 7 bumps.
+    const detectReleaseDrift = requireHelperExport("detectReleaseDrift");
+    const packageVersion = readJsonVersion("package.json");
+    const items = detectReleaseDrift({
+      packageVersion,
+      tauriVersion: readJsonVersion("src/tauri/src-tauri/tauri.conf.json"),
+      cargoVersion: readCargoTomlVersion(),
+      updaterVersion: packageVersion,
+    });
+
+    assert.deepEqual(items, [], `current metadata should not emit release-drift warnings: ${JSON.stringify(items)}`);
   });
 
   it("rejects marker-only dist evidence as sufficient app-only acceptance", async () => {

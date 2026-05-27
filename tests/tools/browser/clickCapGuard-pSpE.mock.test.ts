@@ -80,10 +80,14 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
     }
 
     const result = await makeClickTool(session).execute({ label: "Connect" });
-    assert.ok(result.ok === true,
-      `T-E.CapGuard.1: under-cap click must return ok=true; got: ${JSON.stringify(result)}`);
-    assert.ok(clickAtSpy.called === true,
-      "T-E.CapGuard.1: client.clickAt spy must have been invoked (click was dispatched)");
+    assert.ok(
+      result.ok === true,
+      `T-E.CapGuard.1: under-cap click must return ok=true; got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(
+      clickAtSpy.called === true,
+      "T-E.CapGuard.1: client.clickAt spy must have been invoked (click was dispatched)",
+    );
   });
 
   // ─── T-E.CapGuard.2 ──────────────────────────────────────────────────────────
@@ -110,16 +114,19 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
     }
 
     const result = await makeClickTool(session).execute({ label: "Connect" });
-    assert.ok(result.ok === false,
-      `T-E.CapGuard.2: at-cap click must return ok=false; got: ${JSON.stringify(result)}`);
+    assert.ok(result.ok === false, `T-E.CapGuard.2: at-cap click must return ok=false; got: ${JSON.stringify(result)}`);
     assert.ok(
       result.error?.kind === "invalid_input" || result.error?.kind === "policy_violation",
       `T-E.CapGuard.2: error.kind must be 'invalid_input' or 'policy_violation'; got: ${JSON.stringify(result.error)}`,
     );
-    assert.ok(/Auto cap reached/i.test(result.error?.message ?? ""),
-      `T-E.CapGuard.2: error.message must match /Auto cap reached/i; got: "${result.error?.message}"`);
-    assert.ok(clickAtSpy.called === false,
-      "T-E.CapGuard.2: client.clickAt spy must NOT have been invoked (hard reject before CDP)");
+    assert.ok(
+      /Auto cap reached/i.test(result.error?.message ?? ""),
+      `T-E.CapGuard.2: error.message must match /Auto cap reached/i; got: "${result.error?.message}"`,
+    );
+    assert.ok(
+      clickAtSpy.called === false,
+      "T-E.CapGuard.2: client.clickAt spy must NOT have been invoked (hard reject before CDP)",
+    );
   });
 
   // ─── T-E.CapGuard.3 ──────────────────────────────────────────────────────────
@@ -144,10 +151,14 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
     }
 
     const result = await makeClickTool(session).execute({ label: "Connect" });
-    assert.ok(result.ok === true,
-      `T-E.CapGuard.3: null autoRun → click must proceed (ok=true); got: ${JSON.stringify(result)}`);
-    assert.ok(clickAtSpy.called === true,
-      "T-E.CapGuard.3: client.clickAt spy must have been invoked (no cap guard when autoRun=null)");
+    assert.ok(
+      result.ok === true,
+      `T-E.CapGuard.3: null autoRun → click must proceed (ok=true); got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(
+      clickAtSpy.called === true,
+      "T-E.CapGuard.3: client.clickAt spy must have been invoked (no cap guard when autoRun=null)",
+    );
   });
 
   // ─── T-E.CapGuard.4 ──────────────────────────────────────────────────────────
@@ -173,10 +184,14 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
     }
 
     const result = await makeClickTool(session).execute({ label: "Connect" });
-    assert.ok(result.ok === true,
-      `T-E.CapGuard.4: maxConnects=null → click must proceed (ok=true); got: ${JSON.stringify(result)}`);
-    assert.ok(clickAtSpy.called === true,
-      "T-E.CapGuard.4: clickAt spy must have been invoked (null maxConnects = no cap)");
+    assert.ok(
+      result.ok === true,
+      `T-E.CapGuard.4: maxConnects=null → click must proceed (ok=true); got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(
+      clickAtSpy.called === true,
+      "T-E.CapGuard.4: clickAt spy must have been invoked (null maxConnects = no cap)",
+    );
   });
 
   // ─── T-E.CapGuard.5 ──────────────────────────────────────────────────────────
@@ -203,9 +218,13 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
     }
 
     const result = await makeClickTool(session).execute({ label: "Send" });
-    assert.ok(result.ok === true,
-      `T-E.CapGuard.5: 'Send' label → cap guard must NOT fire; got: ${JSON.stringify(result)}`);
-    assert.ok(clickAtSpy.called === true,
-      "T-E.CapGuard.5: clickAt spy must have been invoked ('Send' is not in connect cap scope)");
+    assert.ok(
+      result.ok === true,
+      `T-E.CapGuard.5: 'Send' label → cap guard must NOT fire; got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(
+      clickAtSpy.called === true,
+      "T-E.CapGuard.5: clickAt spy must have been invoked ('Send' is not in connect cap scope)",
+    );
   });
 });

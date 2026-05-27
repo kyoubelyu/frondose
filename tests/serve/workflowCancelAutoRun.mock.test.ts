@@ -39,7 +39,9 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     // the auto-run extension. Lines 232-238 just call deps.workflow.handleEndpoint()
     // and sendJson the result — no autoRunId check, no endAutoRun, no emitFrame.
     assert.ok(
-      ROUTES_SRC.includes("autoRunId") && ROUTES_SRC.includes("endAutoRun") && ROUTES_SRC.includes("auto-run-completed"),
+      ROUTES_SRC.includes("autoRunId") &&
+        ROUTES_SRC.includes("endAutoRun") &&
+        ROUTES_SRC.includes("auto-run-completed"),
       "T-E.Cancel.1: routes.ts MUST contain autoRunId check + endAutoRun call + auto-run-completed emission for /workflow/cancel [DEFECT D-SP-E-Cancel.1: OQ-E5 extension not implemented]",
     );
   });

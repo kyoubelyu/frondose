@@ -25,7 +25,7 @@ describe("P-Y3 desktop surface guard — overlay-only summary rendering", () => 
     // Given: P-Y3 targets the existing in-page overlay dialog #card-slot only.
     // When: src/tauri/ui/index.html is inspected.
     // Then: no desktop card-slot is added opportunistically.
-    assert.equal(INDEX_HTML.includes("id=\"card-slot\""), false, "desktop index.html must not add #card-slot");
+    assert.equal(INDEX_HTML.includes('id="card-slot"'), false, "desktop index.html must not add #card-slot");
     assert.equal(INDEX_HTML.includes("id='card-slot'"), false, "desktop index.html must not add #card-slot");
   });
 

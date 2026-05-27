@@ -99,28 +99,42 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
     );
   });
 
-  it("T-LINT.3: GIVEN pre-P-45 lint error count (baseline = 33 errors), WHEN post-P-45 lint is run, THEN error count MUST be ≤ 33 (no regression)", () => {
-    // Given: pre-P-45 baseline captured at Step 4a: 33 lint errors (see phase-45-test.md § Lint Baseline)
-    // When:  npm run lint post-P-45
-    // Then:  error count ≤ 33 (P-45 must not regress the baseline)
-    //        Note: P-45 is NOT required to clean up all 33 errors (CONCERN-MR-2 scope)
-    const PRE_P45_LINT_ERRORS = 33; // captured at Step 4a
-    // Run lint, capture output (biome exits non-zero on errors → catch).
-    let lintOutput = "";
-    try {
-      lintOutput = execSync("npm run lint 2>&1", { cwd: ROOT, encoding: "utf-8", stdio: "pipe" });
-    } catch (e: unknown) {
-      // Non-zero exit is expected when errors present; capture stdout from the error.
-      const out = (e as { stdout?: string | Buffer }).stdout;
-      lintOutput = typeof out === "string" ? out : (out?.toString("utf-8") ?? "");
-    }
-    // biome reports a summary line like "Checked N files in Ms. No fixes applied." OR
-    // "Found N errors." Extract the error count.
-    const errorMatch = lintOutput.match(/Found (\d+) errors?\./);
-    const errorCount = errorMatch ? parseInt(errorMatch[1], 10) : 0;
+  it("T-LINT.3: lint gate is top-level only; biome excludes generated runtime and preserves src/tools no-bash rule", () => {
+    // Given: P-66 moves generated-runtime linting out of the maintained-source health gate.
+    // When:  package.json and biome.json are inspected structurally, without running npm run lint inside test:fast.
+    // Then:  top-level lint remains "biome check .", !build/runtime is excluded, and src/tools/** keeps child_process banned.
+    const pkg = JSON.parse(run("cat package.json")) as { scripts?: Record<string, string> };
+    const biome = JSON.parse(run("cat biome.json")) as {
+      files?: { includes?: string[] };
+      overrides?: Array<{
+        includes?: string[];
+        linter?: { rules?: { style?: { noRestrictedImports?: unknown } } };
+      }>;
+    };
+
+    assert.equal(pkg.scripts?.lint, "biome check .", 'T-LINT.3: package.json scripts.lint must stay "biome check ."');
     assert.ok(
-      errorCount <= PRE_P45_LINT_ERRORS,
-      `T-LINT.3: post-P-45 lint errors (${errorCount}) must be ≤ pre-P-45 baseline (${PRE_P45_LINT_ERRORS}); regression detected`,
+      biome.files?.includes?.includes("!build/runtime"),
+      "T-LINT.3: biome.json files.includes must exclude generated build/runtime output",
+    );
+
+    const toolsOverride = biome.overrides?.find((override) => override.includes?.includes("**/src/tools/**"));
+    assert.ok(toolsOverride, "T-LINT.3: biome.json must keep an override scoped to **/src/tools/**");
+    const noRestrictedImports = toolsOverride.linter?.rules?.style?.noRestrictedImports as
+      | { level?: string; options?: { paths?: Record<string, string> } }
+      | undefined;
+    assert.equal(
+      noRestrictedImports?.level,
+      "error",
+      "T-LINT.3: src/tools noRestrictedImports must remain error-level",
+    );
+    assert.ok(
+      noRestrictedImports?.options?.paths?.child_process,
+      "T-LINT.3: src/tools noRestrictedImports must still ban child_process",
+    );
+    assert.ok(
+      noRestrictedImports?.options?.paths?.["node:child_process"],
+      "T-LINT.3: src/tools noRestrictedImports must still ban node:child_process",
     );
   });
 });

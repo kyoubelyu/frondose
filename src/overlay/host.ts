@@ -10,8 +10,7 @@ export async function installOverlay(client: CdpHandle): Promise<string> {
   await client.Page.enable();
   await client.Runtime.addBinding({ name: "__maiPost" });
   const passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !== "off";
-  const overlayOwner =
-    process.env.MAI_SIDECAR_OWNER === APP_SIDECAR_OWNER ? APP_SIDECAR_OWNER : DEFAULT_OVERLAY_OWNER;
+  const overlayOwner = process.env.MAI_SIDECAR_OWNER === APP_SIDECAR_OWNER ? APP_SIDECAR_OWNER : DEFAULT_OVERLAY_OWNER;
   const substituted = OVERLAY_BOOTSTRAP_JS.replace(/__MAI_PASSIVE_ENABLED__/g, JSON.stringify(passiveEnabled))
     .replace(/__MAI_OVERLAY_OWNER__/g, JSON.stringify(overlayOwner))
     .replace(/__MAI_OVERLAY_VERSION__/g, JSON.stringify(OVERLAY_VERSION));

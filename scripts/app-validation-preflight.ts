@@ -332,7 +332,8 @@ export function assertSidecarProvenance(input: SidecarProvenanceInput): Evidence
   }
 
   const routeArtifactEvidence = collectRouteArtifactEvidence(input);
-  const hasHealthRoute = contents.includes("/health") || routeArtifactEvidence.some((evidence) => evidence.hasHealthRoute);
+  const hasHealthRoute =
+    contents.includes("/health") || routeArtifactEvidence.some((evidence) => evidence.hasHealthRoute);
 
   if (entrypointMissing.length > 0 || !hasHealthRoute) {
     return item(
@@ -356,7 +357,9 @@ export function assertSidecarProvenance(input: SidecarProvenanceInput): Evidence
   );
 }
 
-function collectRouteArtifactEvidence(input: SidecarProvenanceInput): Array<{ artifactPath: string; hasHealthRoute: boolean }> {
+function collectRouteArtifactEvidence(
+  input: SidecarProvenanceInput,
+): Array<{ artifactPath: string; hasHealthRoute: boolean }> {
   return (input.routeArtifactPaths ?? []).map((artifactPath) => {
     const contents =
       input.routeContents?.[artifactPath] ?? (existsSync(artifactPath) ? readFileSync(artifactPath, "utf8") : "");
@@ -458,10 +461,7 @@ async function collectDefaultEvidence(input: RunPreflightOptions): Promise<Evide
     }),
     assertSidecarProvenance({
       artifactPath: fromRoot("dist/cli/main.js"),
-      routeArtifactPaths: [
-        fromRoot("dist/cli/subcommands/serve.js"),
-        fromRoot("dist/cli/subcommands/serve/routes.js"),
-      ],
+      routeArtifactPaths: [fromRoot("dist/cli/subcommands/serve.js"), fromRoot("dist/cli/subcommands/serve/routes.js")],
     }),
     ...detectReleaseDrift({
       packageJsonPath: fromRoot("package.json"),

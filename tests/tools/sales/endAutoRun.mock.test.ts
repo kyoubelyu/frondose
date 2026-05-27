@@ -9,8 +9,8 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
@@ -68,10 +68,14 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
     const row = (db as any).prepare("SELECT * FROM auto_runs WHERE id = ?").get(runId);
     assert.ok(row !== undefined, "T-E.End.1: row must exist");
     assert.equal(row.status, "completed", "T-E.End.1: DB row status must be 'completed'");
-    assert.ok(row.ended_at !== null && row.ended_at >= beforeEnd && row.ended_at <= afterEnd,
-      "T-E.End.1: ended_at must be ≈ Date.now()");
-    assert.ok(row.summary !== null && row.summary.includes("3 connects sent"),
-      "T-E.End.1: summary must be set and include the provided text");
+    assert.ok(
+      row.ended_at !== null && row.ended_at >= beforeEnd && row.ended_at <= afterEnd,
+      "T-E.End.1: ended_at must be ≈ Date.now()",
+    );
+    assert.ok(
+      row.summary !== null && row.summary.includes("3 connects sent"),
+      "T-E.End.1: summary must be set and include the provided text",
+    );
     assert.ok(row.counters !== null, "T-E.End.1: counters must be non-null (auto-populated from ledger)");
   });
 
@@ -98,8 +102,10 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
         status,
         summary: "Run completed successfully here",
       });
-      assert.ok(result.ok === true,
-        `T-E.End.2: status '${status}' must produce ok=true; got: ${JSON.stringify(result)}`);
+      assert.ok(
+        result.ok === true,
+        `T-E.End.2: status '${status}' must produce ok=true; got: ${JSON.stringify(result)}`,
+      );
     }
 
     // Test stopped_by_user — must be rejected by Zod
@@ -111,8 +117,10 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
       status: "stopped_by_user",
       summary: "User cancelled the run forcefully here",
     });
-    assert.ok(resultUser.ok === false,
-      `T-E.End.2: stopped_by_user must return ok=false (Zod-rejected per OQ-E5); got: ${JSON.stringify(resultUser)}`);
+    assert.ok(
+      resultUser.ok === false,
+      `T-E.End.2: stopped_by_user must return ok=false (Zod-rejected per OQ-E5); got: ${JSON.stringify(resultUser)}`,
+    );
   });
 
   // ─── T-E.End.3 ───────────────────────────────────────────────────────────────
@@ -145,7 +153,7 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
     const endedAtT1 = rowAfterFirst.ended_at;
 
     // Wait 10ms to ensure clock would produce a different timestamp
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Second call — different status + summary
     const result2 = await tool.execute({
@@ -182,8 +190,10 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
     const tool = makeEndAutoRunTool(tmpPath);
     const result = await tool.execute({ runId, status: "completed", summary: "short" });
 
-    assert.ok(result.ok === false,
-      `T-E.End.4: summary 'short' (5 chars) must return ok=false (min=10 per OQ-E10); got: ${JSON.stringify(result)}`);
+    assert.ok(
+      result.ok === false,
+      `T-E.End.4: summary 'short' (5 chars) must return ok=false (min=10 per OQ-E10); got: ${JSON.stringify(result)}`,
+    );
 
     // Verify row still running (no DB mutation on Zod rejection)
     const dbMod = await import("../../../src/persistence/salesDb.js");
@@ -216,9 +226,11 @@ describe("T-E.End — end_auto_run tool (P-SP-E Sketch C)", () => {
       summary: "test summary here for length",
     });
 
-    assert.ok(result.ok === false,
-      `T-E.End.5: nonexistent runId must return ok=false; got: ${JSON.stringify(result)}`);
-    assert.equal(result.error?.kind, "not_found",
-      `T-E.End.5: error.kind must be 'not_found'; got: ${JSON.stringify(result.error)}`);
+    assert.ok(result.ok === false, `T-E.End.5: nonexistent runId must return ok=false; got: ${JSON.stringify(result)}`);
+    assert.equal(
+      result.error?.kind,
+      "not_found",
+      `T-E.End.5: error.kind must be 'not_found'; got: ${JSON.stringify(result.error)}`,
+    );
   });
 });

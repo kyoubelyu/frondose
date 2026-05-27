@@ -83,10 +83,10 @@ describe("no-bash boundary — P-32 new/edited files (G-P32.21)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("tool count freeze — G-P32.21 / D-6", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools worker mode returns 28 tools; server mode returns 19 tools (unchanged from pre-P-32)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools worker mode returns 53 tools; server mode returns 27 tools (P-Y3 rebaseline)", () => {
     // Given: makeAllTools called with worker mode and server mode
     // When:  tool counts are measured
-    // Then:  worker=28, server=19 (P-32 adds no new LLM-callable tools — D-6)
+    // Then:  worker=53, server=27 (current P-Y3 power-tier contract)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -97,8 +97,8 @@ describe("tool count freeze — G-P32.21 / D-6", () => {
       const serverTools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const workerCount = Object.keys(workerTools).length;
       const serverCount = Object.keys(serverTools).length;
-      assert.equal(workerCount, 49, `T-CONTRACT.TOOLS: worker tool count must be 49, got ${workerCount}`);
-      assert.equal(serverCount, 26, `T-CONTRACT.TOOLS: server tool count must be 26, got ${serverCount}`);
+      assert.equal(workerCount, 53, `T-CONTRACT.TOOLS: worker tool count must be 53, got ${workerCount}`);
+      assert.equal(serverCount, 27, `T-CONTRACT.TOOLS: server tool count must be 27, got ${serverCount}`);
     } finally {
       cleanup();
     }

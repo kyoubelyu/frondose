@@ -4,13 +4,13 @@
  * Tests for the P-9 changes to makeAllTools() in src/tools/index.ts.
  *
  * T-MakeAllTools.1 — 3-arg call still compiles and works (backward compat; G-P9.12)
- * T-MakeAllTools.2 — no-args call returns 19 tools (base + sales kernel)
- * T-MakeAllTools.3 — full 4-arg call → exactly 47 tools
- * T-MakeAllTools.4 — all 47 expected tool names present
+ * T-MakeAllTools.2 — no-args call returns 24 tools (base + current sales kernel)
+ * T-MakeAllTools.3 — full 4-arg call → exactly 53 tools
+ * T-MakeAllTools.4 — all 53 expected tool names present
  * T-MakeAllTools.5 — IDEMPOTENT tools get retry wrapper (execute replaced); analyze_screenshot does NOT
  * T-MakeAllTools.6 — hook wrapping: with hookRunner, all tools get hook wrapper (outermost)
  * T-MakeAllTools.7 — without hookRunner, tools are NOT hook-wrapped
- * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 47 tools
+ * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 53 tools
  * T-MakeAllTools.9 — HookRunner with ENOENT hooks.json → makeAllTools still works (no-op hooks)
  *
  * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-SP-A rebaseline)
@@ -53,9 +53,11 @@ const FAKE_PERSISTENCE = {
 const FAKE_CONTROL = { requestStop: () => {} };
 
 const SALES_TOOL_NAMES = [
+  "end_auto_run",
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
+  "get_sales_report",
   "list_due_followups",
   "mark_message_sent",
   "promote_candidate_to_lead",
@@ -64,11 +66,14 @@ const SALES_TOOL_NAMES = [
   "record_raw_candidate",
   "save_message_draft",
   "schedule_follow_up",
+  "score_account",
+  "score_lead",
+  "start_auto_run",
   "update_lead_stage",
 ] as const;
 
-// Complete enumeration — 47 tools (P-SP-A: +12 sales kernel tools).
-const EXPECTED_47_TOOLS = [
+// Complete enumeration — 53 tools (P-Y3: +present_summary and 17 sales-kernel tools).
+const EXPECTED_53_TOOLS = [
   // P-1 (1)
   "echo",
   // P-4 memory (2)
@@ -106,6 +111,8 @@ const EXPECTED_47_TOOLS = [
   "stop",
   "sleep",
   "escalate_for_capability",
+  // P-Y3 presentation tool (1)
+  "present_summary",
   // P-57a suggestion tools (2)
   "suggest_card",
   "suggest_next_actions",
@@ -132,9 +139,9 @@ test("T-MakeAllTools.1: 3-arg makeAllTools call (no hookRunner) still compiles a
   assert.ok("web_fetch" in t, "web_fetch must be present even without 4th arg (always registered)");
 });
 
-// ─── T-MakeAllTools.2: no-args → 19 tools ───────────────────────────────────
+// ─── T-MakeAllTools.2: no-args → 24 tools ───────────────────────────────────
 
-test("T-MakeAllTools.2: makeAllTools() with no args → 19 tools (base + sales kernel)", () => {
+test("T-MakeAllTools.2: makeAllTools() with no args → 24 tools (base + sales kernel)", () => {
   // P-9: web tools are ALWAYS registered (no deps required)
   // P-26 + P-31: publish_event, query_lead_globally, schedule_task are base tools (no session/persistence needed)
   const t = makeAllTools();
@@ -150,12 +157,12 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 19 tools (base + sales k
     ...SALES_TOOL_NAMES,
   ].sort();
 
-  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 19 tools with no args; got: ${keys.join(", ")}`);
+  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 24 tools with no args; got: ${keys.join(", ")}`);
 });
 
-// ─── T-MakeAllTools.3: full 4-arg → exactly 47 tools ─────────────────────────
+// ─── T-MakeAllTools.3: full 4-arg → exactly 53 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 47 tools (G-P9.14; P-SP-A rebaseline)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P-Y3 rebaseline)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -163,29 +170,31 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 47 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      47,
-      `must have exactly 47 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      53,
+      `must have exactly 53 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-// ─── T-MakeAllTools.4: all 47 expected tool names present ────────────────────
+// ─── T-MakeAllTools.4: all 53 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 47 expected tool names present (enumeration; P-SP-A rebaseline)", () => {
+test("T-MakeAllTools.4: all 53 expected tool names present (enumeration; P-Y3 rebaseline)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
     const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL, runner);
     const keys = Object.keys(t).sort();
 
-    assert.deepEqual(keys, EXPECTED_47_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
+    assert.deepEqual(keys, EXPECTED_53_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
 
     // Spot-check P-9 web tools
     assert.ok("web_fetch" in t, "web_fetch must be in tool set (P-9)");
     assert.ok("web_search" in t, "web_search must be in tool set (P-9)");
     assert.ok("analyze_screenshot" in t, "analyze_screenshot must be in tool set (P-9)");
+    // Spot-check P-Y3 presentation tool
+    assert.ok("present_summary" in t, "present_summary must be in tool set (P-Y3)");
     // Spot-check P-39 memory tools
     assert.ok("search_memory" in t, "search_memory must be in tool set (P-39)");
     assert.ok("set_memory_note" in t, "set_memory_note must be in tool set (P-39)");
@@ -260,7 +269,7 @@ test("T-MakeAllTools.6: with hookRunner present → ALL tools have hook wrapper 
       hooksPath,
       JSON.stringify({
         hooks: {
-          PreToolUse: [{ matcher: "^echo$", hooks: [{ type: "command", command: "exit 2" }] }],
+          PreToolUse: [{ matcher: "^echo$", hooks: [{ type: "command", command: "cat >/dev/null; exit 2" }] }],
         },
       }),
     );
@@ -297,16 +306,12 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
   assert.equal(result.echoed, "hello", "echo must return { echoed: message }");
 });
 
-// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 47 tools ─
+// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 53 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 47 tools (P-SP-A rebaseline)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 53 tools (P-Y3 rebaseline)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
-  assert.equal(
-    count,
-    47,
-    `3-arg makeAllTools must return 47 tools (P-SP-A rebaseline); got ${count}`,
-  );
+  assert.equal(count, 53, `3-arg makeAllTools must return 53 tools (P-Y3 rebaseline); got ${count}`);
 });
 
 // ─── T-MakeAllTools.9: HookRunner with ENOENT hooks.json → no-op, tools work ─

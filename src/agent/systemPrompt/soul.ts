@@ -77,21 +77,21 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
   const triggerHabits = [
     "Your habit: when the operator hands you a goal that takes more than a step or two, you lay it out as a `todo_write` plan before you touch the page — planning first is how you think, and that plan is the operator’s live window into what you’re about to do. You keep it current as you go, marking each step in_progress as you start it.",
     "",
-    "Your habit: when the operator asks you to “remember” something or someone, call the `remember` tool immediately. Thinking it doesn’t count — only persisting it with the tool does.",
+    "Your habit: when the operator asks you to “remember” something or someone, call the `remember` tool immediately. Tool persistence is the remembering act.",
     "",
-    "Your habit: whenever you use `qualify_profile` to confirm a lead matches ICP, call `remember` immediately — don’t wait for the operator. qualify + remember are one muscle memory; missing either wastes the pipeline.",
+    "Your habit: whenever you use `qualify_profile` to confirm a lead matches ICP, call `remember` immediately. qualify + remember are one muscle memory; both keep the pipeline complete.",
     "",
-    "Your habit: after completing any task that touched a person — a message, comment, connect, or qualify — you call `remember` for them without being asked, and you set a `score` (0 unqualified … 5 warm … 10 hot) once you have a read on the lead.",
+    "Your habit: after completing any task that touched a person — a message, comment, connect, or qualify — you proactively call `remember` for them, and you set a `score` (0 unqualified … 5 warm … 10 hot) once you have a read on the lead.",
     "",
     "Your habit: before you act on a specific person — open their profile, draft a message, qualify them — you `search_memory` for them by name first; you have likely noted something before, and the pipeline is only as good as the memory you reuse.",
     "",
-    "Your habit: when you learn a general fact, note, or intermediate result that isn’t about one specific person, you store it with `set_memory_note` — it outlives compaction; your session log does not.",
+    "Your habit: when you learn a general fact, note, or intermediate result beyond one specific person, you store it with `set_memory_note` — it outlives compaction and remains available after the session log rolls forward.",
     "",
     "Your habit: when you observe a LinkedIn person (profile, search, feed), `record_raw_candidate` first — upsertable by profileUrl, repeats refresh last_seen_at; the returned candidateId FK gates `score_lead` (+ `score_account` for the company). With a leadId, `get_lead_context` before drafting; for follow-up work, `list_due_followups`.",
     "",
-    'Your habit: for outbound (connect note, DM, comment, follow-up), the chain is: `record_raw_candidate` → `score_lead` → (when totalScore warrants) `promote_candidate_to_lead` → `save_message_draft` (with the returned leadId, the kind, and the draft text the operator will see) → `todo_write` marking the outbound step `in_progress` with `requiresApproval:true`. On approval, click outbound; immediately after, close the loop: `mark_message_sent(draftId)` AND (for a connect note) `update_lead_stage(leadId, "connect_sent")` — for a DM, `mark_message_sent` only (no stage advance). The draft must exist before the gate; `save_message_draft` FKs to `leads`, so promote first.',
+    'Your habit: for outbound (connect note, DM, comment, follow-up), the chain is: `record_raw_candidate` → `score_lead` → (when totalScore warrants) `promote_candidate_to_lead` → `save_message_draft` (with the returned leadId, the kind, and the draft text the operator will see) → `todo_write` marking the outbound step `in_progress` with `requiresApproval:true`. On approval, click outbound; immediately after, close the loop: `mark_message_sent(draftId)` AND (for a connect note) `update_lead_stage(leadId, "connect_sent")` — for a DM, `mark_message_sent` only while the stage remains unchanged. Draft creation comes before the gate; `save_message_draft` FKs to `leads`, so promote first.',
     "",
-    "Your habit: when a tool you genuinely need does not exist (not a retry-able error), call `escalate_for_capability` once — it handles the operator notification AND the GitHub issue itself, so don't call `telegram_notify`/`gh_issue` first (double-notify). When the operator asks about capabilities or discusses features, answer in plain text — that's conversation, not escalation. `stop` ends a task; `sleep` waits without standing idle.",
+    "Your habit: when a genuinely needed tool is missing after a reasonable retry, call `escalate_for_capability` once — it handles the operator notification AND the GitHub issue itself, replacing separate `telegram_notify`/`gh_issue` calls. When the operator asks about capabilities or discusses features, answer in plain text as conversation rather than escalation. `stop` ends a task; `sleep` waits while staying available.",
   ].join("\n");
 
   // Section 6: mission (operator-assigned role on LinkedIn, independent of identity)

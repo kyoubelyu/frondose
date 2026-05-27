@@ -86,14 +86,17 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// P-SP-B rebaseline: current worker tool snapshot (49 keys after 12 sales kernel + 2 scoring tools).
+// P-Y3 rebaseline: current worker tool snapshot (53 keys with present_summary + 17 sales tools).
 const POST_P31_WORKER_KEYS = [
   ...PRE_P31_WORKER_KEYS,
+  "end_auto_run",
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
+  "get_sales_report",
   "list_due_followups",
   "mark_message_sent",
+  "present_summary",
   "promote_candidate_to_lead",
   "record_auto_action",
   "record_lead_event",
@@ -105,9 +108,9 @@ const POST_P31_WORKER_KEYS = [
   "suggest_next_actions",
   "todo_write",
   "update_lead_stage",
-  // P-SP-B: +2 sales-value scoring tools
   "score_account",
   "score_lead",
+  "start_auto_run",
 ].sort();
 
 // Pre-P-31 server tool snapshot (22 keys).
@@ -137,10 +140,11 @@ const PRE_P31_SERVER_KEYS = [
   "web_search",
 ].sort();
 
-// P-Z2 rebaseline: current server tool snapshot (26 keys = pre-P-31 22 + schedule_task [P-31]
-// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1]). CLAUDE.md:70 server=26.
+// P-Y3 rebaseline: current server tool snapshot (27 keys = pre-P-31 22 + schedule_task [P-31]
+// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1] + present_summary [P-Y3]).
 const POST_P31_SERVER_KEYS = [
   ...PRE_P31_SERVER_KEYS,
+  "present_summary",
   "schedule_task",
   "suggest_card",
   "suggest_next_actions",
@@ -149,11 +153,11 @@ const POST_P31_SERVER_KEYS = [
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 49 tool keys (rebaselined to P-SP-B) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 49 keys; set includes 12 sales kernel + 2 scoring tools", () => {
+describe("makeAllTools worker mode → 53 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 53 keys; set includes present_summary + 17 sales tools", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
-    // Then:   49 keys; deepEqual to POST_P31_WORKER_KEYS; diff from PRE is {schedule_task + sales + scoring}
+    // Then:   53 keys; deepEqual to POST_P31_WORKER_KEYS.
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -174,13 +178,13 @@ describe("makeAllTools worker mode → 49 tool keys (rebaselined to P-SP-B) (G-P
 
       assert.equal(
         keys.length,
-        49,
-        `worker mode must return exactly 49 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        53,
+        `worker mode must return exactly 53 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_WORKER_KEYS,
-        "worker tool names must match POST_P31_WORKER_KEYS (P-SP-B rebaseline: +score_lead +score_account)",
+        "worker tool names must match POST_P31_WORKER_KEYS (P-Y3 rebaseline)",
       );
     } finally {
       cleanup();
@@ -190,8 +194,8 @@ describe("makeAllTools worker mode → 49 tool keys (rebaselined to P-SP-B) (G-P
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
-describe("makeAllTools server mode → 26 tool keys (rebaselined to current post-P-Y1; was P-31-era 23) (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 26 keys; set = pre-P-31 22 + schedule_task + suggest_card/suggest_next_actions + todo_write", () => {
+describe("makeAllTools server mode → 27 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
+  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 27 keys; set includes present_summary", () => {
     // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
     // When:   server mode tool set is built post-P-31
     // Then:   20 keys; deepEqual to POST_P31_SERVER_KEYS; diff from PRE is exactly {schedule_task}
@@ -214,13 +218,13 @@ describe("makeAllTools server mode → 26 tool keys (rebaselined to current post
 
       assert.equal(
         keys.length,
-        26,
-        `server mode must return exactly 26 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        27,
+        `server mode must return exactly 27 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_SERVER_KEYS,
-        "server tool names must match POST_P31_SERVER_KEYS (current post-P-Y1 inventory)",
+        "server tool names must match POST_P31_SERVER_KEYS (P-Y3 inventory)",
       );
     } finally {
       cleanup();

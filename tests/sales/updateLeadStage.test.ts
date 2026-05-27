@@ -42,10 +42,7 @@ describe("T-SP-A.Stage — update_lead_stage + record_lead_event tools", () => {
       updated_at: number;
     };
     assert.strictEqual(leadAfter.stage, "connect_sent", "leads.stage must be updated to 'connect_sent'");
-    assert.ok(
-      leadAfter.updated_at >= leadBefore.updated_at,
-      "leads.updatedAt must be bumped after stage update",
-    );
+    assert.ok(leadAfter.updated_at >= leadBefore.updated_at, "leads.updatedAt must be bumped after stage update");
 
     // Verify timeline event
     const timeline = db
@@ -96,9 +93,9 @@ describe("T-SP-A.Stage — update_lead_stage + record_lead_event tools", () => {
     assert.strictEqual(result.data.eventType, "replied");
     assert.strictEqual(result.data.leadId, leadId);
 
-    const row = db
-      .prepare("SELECT event_type, metadata FROM lead_timeline WHERE id = ?")
-      .get(result.data.eventId) as { event_type: string; metadata: string } | undefined;
+    const row = db.prepare("SELECT event_type, metadata FROM lead_timeline WHERE id = ?").get(result.data.eventId) as
+      | { event_type: string; metadata: string }
+      | undefined;
     assert.ok(row, "Timeline row must exist");
     assert.strictEqual(row.event_type, "replied");
     assert.strictEqual(

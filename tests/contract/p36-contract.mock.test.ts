@@ -45,7 +45,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Current worker tool name snapshot (49 tools after P-SP-B adds score_lead + score_account).
+// Current worker tool name snapshot (53 tools after P-Y3 adds present_summary).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 // Identical to FROZEN_WORKER_TOOL_KEYS in p33-contract.mock.test.ts (P-36 contract freeze).
 // P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
@@ -55,11 +55,13 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "click",
   "close",
   "echo",
+  "end_auto_run",
   "escalate_for_capability",
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
   "get_memory_note",
+  "get_sales_report",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -69,6 +71,7 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "list_due_followups",
   "mark_message_sent",
   "navigate_to_url",
+  "present_summary",
   "press",
   "promote_candidate_to_lead",
   "publish_event",
@@ -87,6 +90,7 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "search_memory",
   "set_memory_note",
   "sleep",
+  "start_auto_run",
   "stop",
   // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
@@ -103,7 +107,7 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "score_lead",
 ].sort();
 
-// Post-P-31 server tool name snapshot (23 tools — P-36 adds NO new tools).
+// Post-P-Y3 server tool name snapshot (27 tools).
 // P-44: updated from 20 to 23 to include P-39's search_memory/set_memory_note/get_memory_note.
 const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "analyze_screenshot",
@@ -117,6 +121,7 @@ const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "identity",
   "list_personas",
   "list_workers",
+  "present_summary",
   "provision_worker",
   "remember",
   "revoke_worker",
@@ -165,11 +170,11 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 49 / server 26 rebaselined at P-SP-B (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 49 / server 26)", () => {
+describe("tool counts: worker 53 / server 27 rebaselined at P-Y3 (G-P36.14)", () => {
+  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 53 / server 27)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 49; server count === 26 (P-SP-B adds score_lead + score_account to worker mode)
+    // Then:  worker count === 53; server count === 27 (P-Y3 counts)
     const { dir, cleanup } = makeTmpDir();
     try {
       // Worker mode — 29 tools
@@ -184,13 +189,13 @@ describe("tool counts: worker 49 / server 26 rebaselined at P-SP-B (G-P36.14)", 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        49,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 49 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        53,
+        `T-CONTRACT.TOOLS: worker mode must have exactly 53 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
       );
       assert.deepEqual(
         workerKeys,
         FROZEN_WORKER_TOOL_KEYS_P36,
-        "T-CONTRACT.TOOLS: worker tool names must match P-36 snapshot (49 tools, P-SP-B rebaseline)",
+        "T-CONTRACT.TOOLS: worker tool names must match P-36 P-Y3 snapshot",
       );
 
       // Server mode — 20 tools
@@ -204,13 +209,13 @@ describe("tool counts: worker 49 / server 26 rebaselined at P-SP-B (G-P36.14)", 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `T-CONTRACT.TOOLS: server mode must have exactly 26 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
+        27,
+        `T-CONTRACT.TOOLS: server mode must have exactly 27 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
       );
       assert.deepEqual(
         serverKeys,
         FROZEN_SERVER_TOOL_KEYS_P36,
-        "T-CONTRACT.TOOLS: server tool names must match P-36 snapshot (23 tools, unchanged from P-31+)",
+        "T-CONTRACT.TOOLS: server tool names must match P-36 P-Y3 snapshot",
       );
     } finally {
       cleanup();

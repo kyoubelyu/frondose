@@ -161,7 +161,10 @@ describe("P-APP-4 bootstrap owner markers", () => {
       "stale root must clear or neutralize old shadow content so HOST_STYLE self-heal cannot make it visible again",
     );
 
-    assert.ok(/__mai_collapsed_card[\s\S]{0,160}\.remove\(/.test(BOOTSTRAP_TS), "detached collapsed cards must be removed");
+    assert.ok(
+      /__mai_collapsed_card[\s\S]{0,160}\.remove\(/.test(BOOTSTRAP_TS),
+      "detached collapsed cards must be removed",
+    );
     assert.ok(/__mai_cron_banner[\s\S]{0,160}\.remove\(/.test(BOOTSTRAP_TS), "detached cron banners must be removed");
     assert.ok(/host\.id\s*=\s*["']__mai_root["']/.test(BOOTSTRAP_TS), "new host must remain the active app-owned root");
     assert.ok(/maiReadDialogState|MAI_DIALOG_KEY/.test(BOOTSTRAP_TS), "sessionStorage dialog replay must be preserved");

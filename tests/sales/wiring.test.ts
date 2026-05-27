@@ -15,9 +15,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { LinkedinSession } from "../../src/linkedin/types.js";
 import { closeSalesDatabase } from "../../src/persistence/salesDb.js";
 import { makeAllTools } from "../../src/tools/index.js";
-import type { LinkedinSession } from "../../src/linkedin/types.js";
 
 /** Truthy mock session — browser/linkedin tools capture it in closures;
  *  methods are NOT called at construction time. */
@@ -32,27 +32,31 @@ const PERSISTENCE = {
 const CONTROL = { abort: new AbortController() };
 
 const SALES_TOOL_NAMES = [
+  "end_auto_run",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
+  "get_sales_report",
+  "list_due_followups",
+  "mark_message_sent",
   "record_raw_candidate",
   "promote_candidate_to_lead",
   "update_lead_stage",
   "record_lead_event",
   "save_message_draft",
-  "mark_message_sent",
   "schedule_follow_up",
-  "list_due_followups",
-  "get_lead_context",
-  "get_account_context",
-  "get_auto_run_state",
   "record_auto_action",
+  "score_account",
+  "score_lead",
+  "start_auto_run",
 ] as const;
 
 describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier gating", () => {
   // ─── T-SP-A.Wiring.1 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.1: worker power tier returns 47 tools including all 12 kernel tools", async () => {
+  it("T-SP-A.Wiring.1: worker power tier returns 53 tools including all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with a minimal mock session + :memory: salesDbPath + control + tier='power'
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 47; the 12 sales kernel tool names all present;
-    //        pre-existing 35 tool names unchanged
+    // Then:  length === 53; the 17 sales-kernel tool names all present;
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
@@ -63,32 +67,34 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      47,
-      `worker+power must have 47 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      53,
+      `worker+power must have 53 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
-      assert.ok(
-        keys.includes(name),
-        `Sales kernel tool '${name}' must be present in worker+power makeAllTools`,
-      );
+      assert.ok(keys.includes(name), `Sales kernel tool '${name}' must be present in worker+power makeAllTools`);
     }
 
     // Spot-check some pre-existing worker tools are still present
-    for (const existing of ["echo", "remember", "inspect", "launch", "qualify_profile", "web_fetch", "telegram_notify", "gh_issue"]) {
-      assert.ok(
-        keys.includes(existing),
-        `Pre-existing worker tool '${existing}' must still be present`,
-      );
+    for (const existing of [
+      "echo",
+      "remember",
+      "inspect",
+      "launch",
+      "qualify_profile",
+      "web_fetch",
+      "telegram_notify",
+      "gh_issue",
+    ]) {
+      assert.ok(keys.includes(existing), `Pre-existing worker tool '${existing}' must still be present`);
     }
   });
 
   // ─── T-SP-A.Wiring.2 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.2: server power tier does NOT register any kernel tools", async () => {
+  it("T-SP-A.Wiring.2: server power tier does NOT register any sales-kernel tools", async () => {
     // Given: makeAllTools called with mode:'server', tier:'power', no session (server ignores session)
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 26 (unchanged from pre-Phase-SP-A server count);
-    //        none of the 12 kernel tool names appear in the set
+    // Then:  length === 27; none of the 17 sales-kernel tool names appear in the set
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(undefined, PERSISTENCE, CONTROL, undefined, {
@@ -99,40 +105,45 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      26,
-      `server+power must have 26 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      27,
+      `server+power must have 27 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
-      assert.ok(
-        !keys.includes(name),
-        `Sales kernel tool '${name}' must NOT appear in server mode tool set`,
-      );
+      assert.ok(!keys.includes(name), `Sales kernel tool '${name}' must NOT appear in server mode tool set`);
     }
 
     // Verify server-only tools are present
-    for (const serverTool of ["list_workers", "send_worker_message", "provision_worker", "revoke_worker", "list_personas", "dispatch_google_login"]) {
-      assert.ok(
-        keys.includes(serverTool),
-        `Server-mode tool '${serverTool}' must be present in server+power mode`,
-      );
+    for (const serverTool of [
+      "list_workers",
+      "send_worker_message",
+      "provision_worker",
+      "revoke_worker",
+      "list_personas",
+      "dispatch_google_login",
+    ]) {
+      assert.ok(keys.includes(serverTool), `Server-mode tool '${serverTool}' must be present in server+power mode`);
     }
 
     // Verify worker-only tools are absent
-    for (const workerOnly of ["inspect", "click", "launch", "qualify_profile", "query_lead_globally", "publish_event"]) {
-      assert.ok(
-        !keys.includes(workerOnly),
-        `Worker-only tool '${workerOnly}' must NOT appear in server mode tool set`,
-      );
+    for (const workerOnly of [
+      "inspect",
+      "click",
+      "launch",
+      "qualify_profile",
+      "query_lead_globally",
+      "publish_event",
+    ]) {
+      assert.ok(!keys.includes(workerOnly), `Worker-only tool '${workerOnly}' must NOT appear in server mode tool set`);
     }
   });
 
   // ─── T-SP-A.Wiring.3 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue, still includes all 12 kernel tools", async () => {
+  it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue, still includes all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with worker mode + tier:'consumer' + :memory: salesDbPath + mock session
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 45 (47 power − 2 operator-output);
-    //        12 kernel tool names all present; 'telegram_notify'/'gh_issue' absent
+    // Then:  length === 51 (53 power − 2 operator-output);
+    //        17 sales-kernel tool names all present; 'telegram_notify'/'gh_issue' absent
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
@@ -143,26 +154,17 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      45,
-      `worker+consumer must have 45 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      51,
+      `worker+consumer must have 51 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
-    // All 12 sales kernel tools must still be present in consumer tier
+    // All 17 sales-kernel tools must still be present in consumer tier
     for (const name of SALES_TOOL_NAMES) {
-      assert.ok(
-        keys.includes(name),
-        `Sales kernel tool '${name}' must be present in worker+consumer mode`,
-      );
+      assert.ok(keys.includes(name), `Sales kernel tool '${name}' must be present in worker+consumer mode`);
     }
 
     // telegram_notify + gh_issue must be absent in consumer tier
-    assert.ok(
-      !keys.includes("telegram_notify"),
-      "telegram_notify must be absent in consumer tier",
-    );
-    assert.ok(
-      !keys.includes("gh_issue"),
-      "gh_issue must be absent in consumer tier",
-    );
+    assert.ok(!keys.includes("telegram_notify"), "telegram_notify must be absent in consumer tier");
+    assert.ok(!keys.includes("gh_issue"), "gh_issue must be absent in consumer tier");
   });
 });

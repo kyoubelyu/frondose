@@ -110,7 +110,16 @@ describe("readMode — malformed/unknown → default (G-P58a.6)", () => {
 describe("serve boot reads the persisted mode (structural) (G-P58a.6, .7)", () => {
   // Given: serve.ts. When: inspected. Then: cronEnabled is initialized from readMode()==="auto" (NOT hardcoded true).
   it("T-Mode.4: serve.ts initializes cronEnabled from readMode()==='auto' (not hardcoded true)", () => {
-    assert.match(SERVE_TS, /cronEnabled:\s*readMode\(\)\s*===\s*"auto"/, "cronEnabled initialized from readMode()");
+    assert.match(
+      SERVE_TS,
+      /const\s+cronEnabledAtBoot\s*=\s*readMode\(\)\s*===\s*"auto"/,
+      "cronEnabledAtBoot initialized from readMode()",
+    );
+    assert.match(
+      SERVE_TS,
+      /cronEnabled:\s*cronEnabledAtBoot/,
+      "cronEnabledAtBoot threaded into ServeState.cronEnabled",
+    );
     assert.ok(!/cronEnabled:\s*true\b/.test(SERVE_TS), "no hardcoded cronEnabled: true remains");
   });
 });

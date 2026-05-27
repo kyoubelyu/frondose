@@ -8,6 +8,7 @@
  * P-31 UPDATE: schedule_task added to base (always registered).
  * P-39 UPDATE: search_memory + set_memory_note + get_memory_note added to persistence block (+3).
  * P-SP-A: 12 sales kernel tools added to worker mode (including no-args base).
+ * P-Y3: present_summary added to control-backed worker/server inventories.
  *
  * Measured sub-combo counts (post-P-SP-A, no mode arg):
  *   no-args:           19  (base 7 + 12 sales kernel tools)
@@ -22,23 +23,30 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
 
 process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+const TEST_HOME_BASE = mkdtempSync(join(tmpdir(), "mai-tools-index-"));
+process.env.MAI_HOME_BASE = TEST_HOME_BASE;
+
+after(() => {
+  rmSync(TEST_HOME_BASE, { recursive: true, force: true });
+});
 
 // P-SP-F update: 17 sales tools total (14 P-SP-A+B + 2 P-SP-E auto-run lifecycle + 1 P-SP-F analytics)
 const SALES_TOOL_NAMES = [
-  "end_auto_run",             // P-SP-E: auto-run lifecycle
+  "end_auto_run", // P-SP-E: auto-run lifecycle
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
-  "get_sales_report",         // P-SP-F: outcome analytics
+  "get_sales_report", // P-SP-F: outcome analytics
   "list_due_followups",
   "mark_message_sent",
   "promote_candidate_to_lead",
@@ -47,9 +55,9 @@ const SALES_TOOL_NAMES = [
   "record_raw_candidate",
   "save_message_draft",
   "schedule_follow_up",
-  "score_account",            // P-SP-B: +2 sales-value scoring tools
-  "score_lead",               // P-SP-B
-  "start_auto_run",           // P-SP-E: auto-run lifecycle
+  "score_account", // P-SP-B: +2 sales-value scoring tools
+  "score_lead", // P-SP-B
+  "start_auto_run", // P-SP-E: auto-run lifecycle
   "update_lead_stage",
 ] as const;
 
@@ -145,8 +153,16 @@ test("T-M120: makeAllTools() with no args returns exactly 24 keys — P-SP-F upd
     "web_search",
     ...SALES_TOOL_NAMES,
   ];
-  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 24 base tools in P-SP-F; got: ${keys.join(", ")}`);
-  assert.equal(keys.length, 24, "makeAllTools() must have exactly 24 tools (P-SP-F: +3 over P-SP-B's 21; was 21 in P-SP-B)");
+  assert.deepEqual(
+    keys,
+    expected.sort(),
+    `makeAllTools() must return 24 base tools in P-SP-F; got: ${keys.join(", ")}`,
+  );
+  assert.equal(
+    keys.length,
+    24,
+    "makeAllTools() must have exactly 24 tools (P-SP-F: +3 over P-SP-B's 21; was 21 in P-SP-B)",
+  );
 });
 
 // ─── T-M121 ─────────────────────────────────────────────────────────────────
@@ -185,7 +201,11 @@ test("T-M121: makeAllTools(undefined, persistence) returns 32 keys (base 24 + 8 
     expected,
     `persistence-only must yield 32 tools in P-SP-F (base 24 + 8 memory/identity); got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 32, "must have exactly 32 tools with persistence-only (P-SP-F: base 24 + 8; was 29 in P-SP-B)");
+  assert.equal(
+    keys.length,
+    32,
+    "must have exactly 32 tools with persistence-only (P-SP-F: base 24 + 8; was 29 in P-SP-B)",
+  );
 });
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
@@ -249,7 +269,11 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-SP-F upda
     expected,
     `makeAllTools(session, persistence) must yield 44 keys in P-SP-F; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 44, "must have exactly 44 tools with session + persistence (P-SP-F: base 24 + 12 browser + 8 persist)");
+  assert.equal(
+    keys.length,
+    44,
+    "must have exactly 44 tools with session + persistence (P-SP-F: base 24 + 12 browser + 8 persist)",
+  );
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
@@ -294,8 +318,8 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'q
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (P-SP-F: base 24 + 12 browser + 8 persist + 8 control)", () => {
-  // P-SP-F update: 24 base + 12 browser + 8 persistence + 8 control = 52 (full worker power count).
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (P-Y3: base 24 + 12 browser + 8 persist + 9 control)", () => {
+  // P-Y3 update: 24 base + 12 browser + 8 persistence + 9 control = 53 (full worker power count).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -347,9 +371,10 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (P-
     "remember",
     "search_memory",
     "set_memory_note",
-    // control (8: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write)
+    // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
     "escalate_for_capability",
     "gh_issue",
+    "present_summary",
     "sleep",
     "stop",
     "telegram_notify",
@@ -361,9 +386,13 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (P-
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 52 keys in P-SP-F; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 53 keys in P-Y3; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 52, `T-M_p6.21: must have exactly 52 tools in P-SP-F (full worker power = 52); got ${keys.length}`);
+  assert.equal(
+    keys.length,
+    53,
+    `T-M_p6.21: must have exactly 53 tools in P-Y3 (full worker power = 53); got ${keys.length}`,
+  );
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -385,8 +414,10 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (P-
   assert.ok("suggest_next_actions" in t, "T-M_p6.21: suggest_next_actions must be registered (P-57a)");
   // Spot-check P-Y1 workflow tool
   assert.ok("todo_write" in t, "T-M_p6.21: todo_write must be registered (P-Y1)");
+  // Spot-check P-Y3 presentation tool
+  assert.ok("present_summary" in t, "T-M_p6.21: present_summary must be registered (P-Y3)");
 
-  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 52 keys (P-SP-F: full worker power)");
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 53 keys (P-Y3: full worker power)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
@@ -463,8 +494,8 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
 
 // ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys — P-SP-F update (base 24 + browser 12 + control 8)", () => {
-  // P-SP-F update: 24 base + 12 browser + 8 control = 44.
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys — P-Y3 update (base 24 + browser 12 + control 9)", () => {
+  // P-Y3 update: 24 base + 12 browser + 9 control = 45.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -503,9 +534,10 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys — P
     "scroll",
     "type",
     "upload",
-    // control (8: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write)
+    // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
     "escalate_for_capability",
     "gh_issue",
+    "present_summary",
     "sleep",
     "stop",
     "telegram_notify",
@@ -517,9 +549,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys — P
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 44 keys in P-SP-F; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 45 keys in P-Y3; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 44, `T-M_p6.23: must have exactly 44 tools in P-SP-F; got ${keys.length}`);
+  assert.equal(keys.length, 45, `T-M_p6.23: must have exactly 45 tools in P-Y3; got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -534,10 +566,10 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys — P
   // P-9 web tools always present
   assert.ok("web_fetch" in t, "T-M_p6.23: web_fetch must be present (P-9 always-registered)");
   assert.ok("web_search" in t, "T-M_p6.23: web_search must be present (P-9 always-registered)");
+  // P-Y3 presentation tool is control-backed and tier-neutral.
+  assert.ok("present_summary" in t, "T-M_p6.23: present_summary must be present when control given (P-Y3)");
 
-  console.log(
-    "T-M_p6.23: makeAllTools(session, undefined, control) -> 44 keys (P-SP-F updated; CONCERN-MR-1 preserved)",
-  );
+  console.log("T-M_p6.23: makeAllTools(session, undefined, control) -> 45 keys (P-Y3 updated; CONCERN-MR-1 preserved)");
 });
 
 // ─── T-F.Wire.1 — get_sales_report registered (P-SP-F) ─────────────────────────
@@ -571,27 +603,22 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
     "function",
     "T-F.Wire.1: get_sales_report must have an .execute function",
   );
-  console.log(
-    `T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`,
-  );
+  console.log(`T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`);
 });
 
-// ─── T-F.Wire.2 — worker=52 / consumer=50 count contract (P-SP-F) ───────────────
-// NOTE: This scaffold INTENTIONALLY FAILS pre-builder (Step 4a). After P-SP-F code
-// ships (+1 get_sales_report to worker/consumer), CLAUDE.md must reflect the post-P-SP-F
-// counts: worker power = 52, consumer = 50.
+// ─── T-F.Wire.2 — worker=53/51, server=27/25 count contract (P-Y3) ─────────────
+// NOTE: P-66 rebaselines stale P-SP-F doc assertions to the post-P-Y3 exposed counts.
 
-test("T-F.Wire.2: post-P-SP-F tool count — makeAllTools full worker = 52 keys, consumer = 50 keys; CLAUDE.md contains 'worker = 52' and 'worker = 50' (P-SP-F Sketch C §5.3.2)", () => {
+test("T-F.Wire.2: post-P-Y3 tool count docs — CLAUDE.md contains worker 53/51 and server 27/25 plus present_summary", () => {
   // Given: P-SP-E has shipped (start_auto_run + end_auto_run added, base=23: 7 core +
   //        12 P-SP-A sales + 2 P-SP-B scoring + 2 P-SP-E auto-run lifecycle);
-  //        P-SP-F builder has added get_sales_report (+1) → base = 24,
-  //        FULL worker power = 52, consumer = 50 (power − 2 for telegram_notify + gh_issue)
-  //        AND CLAUDE.md updated per Sketch C §5.3.2
+  //        P-Y3 builder has added present_summary to control-backed inventories,
+  //        FULL worker power/consumer = 53/51 and server power/consumer = 27/25
+  //        AND CLAUDE.md documents present_summary in the breakdown
   // When:  makeAllTools() key count checked (base set = no session / persist / control)
   //        AND CLAUDE.md source scanned for count strings
   // Then:  makeAllTools() returns 24 keys (23 pre-P-SP-F + 1 get_sales_report);
-  //        CLAUDE.md contains 'worker = 52' in the power tier paragraph;
-  //        CLAUDE.md contains 'worker = 50' in the consumer tier paragraph
+  //        CLAUDE.md contains the P-Y3 worker/server tier counts and present_summary
   //
   // Pre-builder: makeAllTools() returns 23 keys (no get_sales_report yet) → fails
 
@@ -610,12 +637,15 @@ test("T-F.Wire.2: post-P-SP-F tool count — makeAllTools full worker = 52 keys,
   const repoRoot = join(fileURLToPath(import.meta.url), "../../..");
   const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf-8");
   assert.ok(
-    claudeMd.includes("worker = 52"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 52' in the power-tier paragraph (P-SP-F Sketch C §5.3.2)",
+    claudeMd.includes("worker = 53"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 53' in the power-tier paragraph (P-Y3)",
   );
   assert.ok(
-    claudeMd.includes("worker = 50"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 50' in the consumer-tier paragraph (P-SP-F Sketch C §5.3.2)",
+    claudeMd.includes("worker = 51"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 51' in the consumer-tier paragraph (P-Y3)",
   );
-  console.log(`T-F.Wire.2 PASS: post-P-SP-F base count = ${baseCount}; CLAUDE.md count strings verified.`);
+  assert.ok(claudeMd.includes("server = 27"), "T-F.Wire.2: CLAUDE.md must contain 'server = 27' (P-Y3)");
+  assert.ok(claudeMd.includes("server = 25"), "T-F.Wire.2: CLAUDE.md must contain 'server = 25' (P-Y3)");
+  assert.ok(claudeMd.includes("present_summary"), "T-F.Wire.2: CLAUDE.md must document present_summary (P-Y3)");
+  console.log(`T-F.Wire.2 PASS: post-P-Y3 base count = ${baseCount}; CLAUDE.md count strings verified.`);
 });

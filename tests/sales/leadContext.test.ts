@@ -39,7 +39,23 @@ describe("T-SP-A.Context — get_lead_context + get_account_context tools", () =
          buying_trigger, authority_level, suggested_opening_line, confidence,
          next_action, evidence_json, method_used, model, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(oldScoreId, candidateId, leadId, 65, "Medium", null, null, "Manager", null, 0.60, null, null, "Pain Chain", "deepseek", Date.now() - 10000);
+    `).run(
+      oldScoreId,
+      candidateId,
+      leadId,
+      65,
+      "Medium",
+      null,
+      null,
+      "Manager",
+      null,
+      0.6,
+      null,
+      null,
+      "Pain Chain",
+      "deepseek",
+      Date.now() - 10000,
+    );
 
     // Add 5 timeline events
     for (let i = 0; i < 5; i++) {
@@ -50,10 +66,12 @@ describe("T-SP-A.Context — get_lead_context + get_account_context tools", () =
     const now = Date.now();
     const d1 = randomUUID();
     const d2 = randomUUID();
-    db.prepare("INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(d1, leadId, "connect_note", "Draft 1", "draft", "llm", null, now);
-    db.prepare("INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(d2, leadId, "dm", "Draft 2", "draft", "user", null, now + 1);
+    db.prepare(
+      "INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(d1, leadId, "connect_note", "Draft 1", "draft", "llm", null, now);
+    db.prepare(
+      "INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(d2, leadId, "dm", "Draft 2", "draft", "user", null, now + 1);
 
     const tool = makeGetLeadContextTool(":memory:");
     const result = await (tool.execute as Function)({ leadId, timelineLimit: 50 });
@@ -109,16 +127,20 @@ describe("T-SP-A.Context — get_lead_context + get_account_context tools", () =
     // Seed 2 more candidates + leads linked to same accountId
     const c2 = seedFreshCandidate(db);
     const l2 = insertLead(db, {
-      candidateId: c2, personName: "Bob Context",
+      candidateId: c2,
+      personName: "Bob Context",
       profileUrl: "https://www.linkedin.com/in/bob-context/",
-      stage: "qualified", ownerMode: "manual",
+      stage: "qualified",
+      ownerMode: "manual",
       accountId,
     });
     const c3 = seedFreshCandidate(db);
     const l3 = insertLead(db, {
-      candidateId: c3, personName: "Carol Context",
+      candidateId: c3,
+      personName: "Carol Context",
       profileUrl: "https://www.linkedin.com/in/carol-context/",
-      stage: "connect_sent", ownerMode: "magical",
+      stage: "connect_sent",
+      ownerMode: "magical",
       accountId,
     });
 

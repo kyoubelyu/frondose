@@ -58,10 +58,10 @@ function makeMockSession() {
 // ─── T-Inv.1 — 47 worker tools; key scope-relevant tools present ────────────
 
 describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 + P-58a MAI_TIER tiering)", () => {
-  // P-58a RECONCILED: the worker tool count is now TIER-DEPENDENT. The canonical inventory test asserts BOTH
-  // the power count (full = 47, incl. telegram_notify + gh_issue) AND the consumer count (= power − 2 = 45,
-  // the 2 operator-output tools gated out). The scope-graceful + todo_write tools are present in BOTH tiers.
-  it("T-Inv.1: worker tier:'power' → 49 tools (incl. telegram_notify + gh_issue + P-SP-B score tools); tier:'consumer' → 47 (those 2 gated out); web_search/analyze_screenshot/todo_write present in BOTH", () => {
+  // P-Y3 RECONCILED: the worker tool count is tier-dependent. Assert BOTH the
+  // power count (full = 53, incl. telegram_notify + gh_issue) AND the consumer
+  // count (= power - 2 = 51). present_summary remains tier-neutral.
+  it("T-Inv.1: worker tier:'power' → 53 tools; tier:'consumer' → 51; only telegram_notify + gh_issue are gated out", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -87,15 +87,14 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
     const powerNames = Object.keys(power);
     const consumerNames = Object.keys(consumer);
 
-    // POWER = the full inventory (today's count) including P-SP-A+B sales tools.
-    // P-SP-B adds score_lead + score_account → power = 47 + 2 = 49.
+    // POWER = the full P-Y3 inventory, including present_summary and 17 sales-kernel tools.
     assert.equal(
       powerNames.length,
-      49,
+      53,
       `power worker tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`,
     );
     // CONSUMER = power − 2 (telegram_notify + gh_issue gated out — P-58a tier gate unchanged).
-    assert.equal(consumerNames.length, 47, `consumer = power−2; got ${consumerNames.length}`);
+    assert.equal(consumerNames.length, 51, `consumer = power−2; got ${consumerNames.length}`);
 
     // the 2 operator-output tools: power-only
     assert.ok("telegram_notify" in power && "gh_issue" in power, "power includes the operator-output tools");
@@ -105,7 +104,7 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
     );
 
     // scope-graceful + workflow tools present in BOTH tiers (registered, not removed)
-    for (const t of ["web_search", "analyze_screenshot", "todo_write"] as const) {
+    for (const t of ["web_search", "analyze_screenshot", "todo_write", "present_summary"] as const) {
       assert.ok(t in power && t in consumer, `${t} present in both tiers`);
     }
   });

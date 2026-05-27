@@ -248,8 +248,12 @@ describe("serve.ts passiveEnabled — defaults OFF; only MAI_PASSIVE_SUGGEST='on
       // P-Z1 OQ-Z1.4: passiveEnabled moved from a module `let` to a ServeState object
       // literal in the serve.ts shell (serve.ts:84). The env-read line stays in serve.ts
       // (SERVE_TS_PATH unchanged); only the `let X =` prefix becomes the `X:` property form.
-      /passiveEnabled:\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"off"\)/.test(src),
-      "serve.ts must default MAI_PASSIVE_SUGGEST to 'off' (default-off)",
+      /const\s+passiveEnabledAtBoot\s*=\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"off"\)/.test(src),
+      "serve.ts must compute passiveEnabledAtBoot from MAI_PASSIVE_SUGGEST default 'off'",
+    );
+    assert.ok(
+      /passiveEnabled:\s*passiveEnabledAtBoot/.test(src),
+      "serve.ts must thread passiveEnabledAtBoot into ServeState.passiveEnabled",
     );
     assert.ok(
       src.includes('.toLowerCase() === "on"'),

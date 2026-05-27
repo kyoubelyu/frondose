@@ -66,7 +66,7 @@ test("T-HookWrapper.1: PreToolUse BLOCK → fail envelope returned; inner execut
   try {
     const p = writeHooksJson(dir, {
       hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "exit 2" }] }],
+        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 2" }] }],
       },
     });
 
@@ -103,8 +103,10 @@ test("T-HookWrapper.2: PreToolUse ALLOW → execute called; PostToolUse called o
     const postOutput = join(dir, "post-fired.txt");
     const p = writeHooksJson(dir, {
       hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "exit 0" }] }],
-        PostToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: `echo "fired" > "${postOutput}"` }] }],
+        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 0" }] }],
+        PostToolUse: [
+          { matcher: ".*", hooks: [{ type: "command", command: `cat >/dev/null; echo "fired" > "${postOutput}"` }] },
+        ],
       },
     });
 
@@ -137,8 +139,10 @@ test("T-HookWrapper.3: execute throws → PostToolUse SKIPPED; error re-thrown t
     const postOutput = join(dir, "post-fired.txt");
     const p = writeHooksJson(dir, {
       hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "exit 0" }] }],
-        PostToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: `echo "fired" > "${postOutput}"` }] }],
+        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 0" }] }],
+        PostToolUse: [
+          { matcher: ".*", hooks: [{ type: "command", command: `cat >/dev/null; echo "fired" > "${postOutput}"` }] },
+        ],
       },
     });
 

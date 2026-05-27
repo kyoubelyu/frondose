@@ -92,10 +92,10 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       assert.ok(scoreResult.ok, `score_lead must succeed (got: ${JSON.stringify(scoreResult)})`);
 
       // ── Step 3: promote_candidate_to_lead ────────────────────────────────────
-      const promoteResult = (await makePromoteCandidateToLeadTool(path).execute(
-        { candidateId },
-        toolOpts,
-      )) as { ok: boolean; data: { leadId: string } };
+      const promoteResult = (await makePromoteCandidateToLeadTool(path).execute({ candidateId }, toolOpts)) as {
+        ok: boolean;
+        data: { leadId: string };
+      };
       assert.ok(promoteResult.ok, `promote_candidate_to_lead must succeed (got: ${JSON.stringify(promoteResult)})`);
       const { leadId } = promoteResult.data;
 
@@ -118,7 +118,10 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       assert.ok(sentResult.ok, `mark_message_sent must succeed (got: ${JSON.stringify(sentResult)})`);
 
       // ── Step 6: update_lead_stage ────────────────────────────────────────────
-      const stageResult = (await makeUpdateLeadStageTool(path).execute({ leadId, stage: "connect_sent" }, toolOpts)) as {
+      const stageResult = (await makeUpdateLeadStageTool(path).execute(
+        { leadId, stage: "connect_sent" },
+        toolOpts,
+      )) as {
         ok: boolean;
       };
       assert.ok(stageResult.ok, `update_lead_stage must succeed (got: ${JSON.stringify(stageResult)})`);
@@ -142,9 +145,7 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       assert.equal(draftRow?.status, "sent", "message_drafts.status must be 'sent' after mark_message_sent (G-PSPD.6)");
 
       // ── Lead stage assertion ─────────────────────────────────────────────────
-      const leadRow = db.prepare("SELECT stage FROM leads WHERE id = ?").get(leadId) as
-        | { stage: string }
-        | undefined;
+      const leadRow = db.prepare("SELECT stage FROM leads WHERE id = ?").get(leadId) as { stage: string } | undefined;
       assert.equal(
         leadRow?.stage,
         "connect_sent",
@@ -189,7 +190,11 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       )) as { ok: boolean; error?: { kind: string; message: string } };
 
       // Must fail with not_found — candidateId is not a leadId
-      assert.equal(draftResult.ok, false, "save_message_draft must fail when leadId does not exist in leads table (G-PSPD.7)");
+      assert.equal(
+        draftResult.ok,
+        false,
+        "save_message_draft must fail when leadId does not exist in leads table (G-PSPD.7)",
+      );
       assert.equal(draftResult.error?.kind, "not_found", "error.kind must be 'not_found' (G-PSPD.7 FK pre-condition)");
       assert.match(
         draftResult.error?.message ?? "",

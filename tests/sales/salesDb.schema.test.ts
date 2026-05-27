@@ -11,10 +11,10 @@ import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import {
   closeSalesDatabase,
+  insertLead,
   openSalesDatabase,
   upsertRawCandidate,
 } from "../../src/persistence/salesDb.js";
-import { insertLead } from "../../src/persistence/salesDb.js";
 import { seedFreshCandidate } from "./_fixtures/salesDb.js";
 
 describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
@@ -26,9 +26,9 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
     closeSalesDatabase(":memory:");
     const db = openSalesDatabase(":memory:");
 
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as { name: string }[];
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as {
+      name: string;
+    }[];
     const tableNames = tables.map((t) => t.name);
 
     const expectedTables = [
@@ -69,9 +69,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
     closeSalesDatabase(":memory:");
     openSalesDatabase(":memory:"); // first open — runs migration
     const db2 = openSalesDatabase(":memory:"); // second call — returns from cache
-    const versions = db2
-      .prepare("SELECT version FROM schema_version")
-      .all() as { version: number }[];
+    const versions = db2.prepare("SELECT version FROM schema_version").all() as { version: number }[];
     assert.strictEqual(versions.length, 1, "schema_version must have exactly 1 row after idempotent re-open");
     assert.strictEqual(versions[0]!.version, 1, "version must be 1");
   });
@@ -151,9 +149,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
     const now = Date.now();
     const insertAccount = (id: string, url: string | null) =>
       db
-        .prepare(
-          "INSERT INTO accounts (id, name, linkedin_url, updated_at) VALUES (?, ?, ?, ?)",
-        )
+        .prepare("INSERT INTO accounts (id, name, linkedin_url, updated_at) VALUES (?, ?, ?, ?)")
         .run(id, "Test Co", url, now);
 
     insertAccount(randomUUID(), null); // first NULL
@@ -181,22 +177,16 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
     const salesDb = openSalesDatabase(":memory:");
 
     // Verify: sales DB does NOT have memory-module tables (no cross-contamination)
-    const salesTables = salesDb
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as { name: string }[];
+    const salesTables = salesDb.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as {
+      name: string;
+    }[];
     const salesTableNames = salesTables.map((t) => t.name);
     assert.ok(
       !salesTableNames.includes("person_memory_events"),
       "Sales DB must NOT contain memory module tables (cross-DB contamination guard)",
     );
-    assert.ok(
-      salesTableNames.includes("raw_candidates"),
-      "Sales DB must contain raw_candidates table",
-    );
-    assert.ok(
-      salesTableNames.includes("lead_timeline"),
-      "Sales DB must contain lead_timeline table",
-    );
+    assert.ok(salesTableNames.includes("raw_candidates"), "Sales DB must contain raw_candidates table");
+    assert.ok(salesTableNames.includes("lead_timeline"), "Sales DB must contain lead_timeline table");
     // Verify the 8 sales-specific tables are present and no extra ones leaked in
     assert.strictEqual(
       salesTableNames.length,

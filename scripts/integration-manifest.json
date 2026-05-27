@@ -8,5 +8,6 @@
   "tests/tauri/button-click-pY2.1.test.ts",
   "tests/tauri/button-integ-pY2.1.test.ts",
   "tests/tauri/lifecycle-drun1-pY5.test.ts",
-  "tests/tauri/entry-flow-pY4.mock.test.ts"
+  "tests/tauri/entry-flow-pY4.mock.test.ts",
+  "tests/health/healthGates-p60.1.mock.test.ts"
 ]

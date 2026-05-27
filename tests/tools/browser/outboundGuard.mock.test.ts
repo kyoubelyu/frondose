@@ -70,19 +70,9 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
     // When:  OUTBOUND_LABEL_RE.test(label) for each label
     // Then:  every test returns true
     //   Covers G-P63.1 (OQ-3 multi-language)
-    assert.ok(
-      OUTBOUND_LABEL_RE instanceof RegExp,
-      "OUTBOUND_LABEL_RE must be a RegExp",
-    );
+    assert.ok(OUTBOUND_LABEL_RE instanceof RegExp, "OUTBOUND_LABEL_RE must be a RegExp");
 
-    const chineseOutboundLabels = [
-      "邀请杨哲加入领英",
-      "添加好友",
-      "发送邀请",
-      "直接发送",
-      "连接",
-      "立即连接",
-    ];
+    const chineseOutboundLabels = ["邀请杨哲加入领英", "添加好友", "发送邀请", "直接发送", "连接", "立即连接"];
     const failures: string[] = [];
     for (const label of chineseOutboundLabels) {
       if (!OUTBOUND_LABEL_RE.test(label)) {
@@ -104,22 +94,19 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
     // When:  OUTBOUND_LABEL_RE.test(label) for each label
     // Then:  every test returns false
     //   Covers G-P63.2 (false-positive guard; verifies \b anchoring + 连接$ anchor)
-    assert.ok(
-      OUTBOUND_LABEL_RE instanceof RegExp,
-      "OUTBOUND_LABEL_RE must be a RegExp",
-    );
+    assert.ok(OUTBOUND_LABEL_RE instanceof RegExp, "OUTBOUND_LABEL_RE must be a RegExp");
 
     const benignLabels = [
-      "Connected",    // Connect + \b suffix → Connected must NOT match
-      "Connecting…",  // Connecting must NOT match
+      "Connected", // Connect + \b suffix → Connected must NOT match
+      "Connecting…", // Connecting must NOT match
       "Read more",
       "Show more",
       "Like",
       "Comment",
-      "Message",      // plan §2: NOT outbound; sends always require a guarded Send-variant click
+      "Message", // plan §2: NOT outbound; sends always require a guarded Send-variant click
       "Save",
       "Unfollow",
-      "已连接",        // 连接$ means this must NOT match (已 prefix breaks $ anchor)
+      "已连接", // 连接$ means this must NOT match (已 prefix breaks $ anchor)
       "评论",
     ];
     const falsePositives: string[] = [];
@@ -142,10 +129,7 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
     // When:  FOLLOW_LABEL_RE.test(label)
     // Then:  matchers → true; non-matchers → false
     //   Covers G-P63.3 (FOLLOW_LABEL_RE precision; verifies (?!ing) negative lookahead + 关注$ anchor)
-    assert.ok(
-      FOLLOW_LABEL_RE instanceof RegExp,
-      "FOLLOW_LABEL_RE must be a RegExp",
-    );
+    assert.ok(FOLLOW_LABEL_RE instanceof RegExp, "FOLLOW_LABEL_RE must be a RegExp");
 
     const matchers = ["Follow", "Follow back", "关注"];
     const nonMatchers = ["Following", "Followed", "关注者", "正在关注"];
@@ -161,7 +145,9 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
     const nonMatcherFalsePositives: string[] = [];
     for (const label of nonMatchers) {
       if (FOLLOW_LABEL_RE.test(label)) {
-        nonMatcherFalsePositives.push(`"${label}" should NOT match FOLLOW_LABEL_RE but DOES (false positive; missing (?!ing) or $ anchor)`);
+        nonMatcherFalsePositives.push(
+          `"${label}" should NOT match FOLLOW_LABEL_RE but DOES (false positive; missing (?!ing) or $ anchor)`,
+        );
       }
     }
     assert.deepStrictEqual(
