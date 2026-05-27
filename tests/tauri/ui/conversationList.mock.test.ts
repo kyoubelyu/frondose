@@ -64,8 +64,16 @@ function makeFakeEl(tag = "div", id = "", cls = ""): FakeEl {
     className: cls,
     get classList(): ClassListLike {
       return {
-        add: (...cs: string[]) => cs.forEach((c) => classes.add(c)),
-        remove: (...cs: string[]) => cs.forEach((c) => classes.delete(c)),
+        add: (...cs: string[]) => {
+          cs.forEach((c) => {
+            classes.add(c);
+          });
+        },
+        remove: (...cs: string[]) => {
+          cs.forEach((c) => {
+            classes.delete(c);
+          });
+        },
         toggle: (c: string, force?: boolean) => {
           const on = force !== undefined ? force : !classes.has(c);
           if (on) classes.add(c);
@@ -77,7 +85,9 @@ function makeFakeEl(tag = "div", id = "", cls = ""): FakeEl {
     textContent: "",
     children,
     attributes: attrs,
-    appendChild: (child: FakeEl) => { children.push(child); },
+    appendChild: (child: FakeEl) => {
+      children.push(child);
+    },
     querySelector: (_sel: string) => null,
     querySelectorAll: (_sel: string) => [],
     setAttribute: (k: string, v: string) => attrs.set(k, v),
@@ -276,7 +286,11 @@ describe("T-PY2MA.Conv.2 — Manual REPL path: first text SSE chunk auto-opens .
     h.appendUserBubble("what should I focus on today?");
 
     // Pre-condition: no agent bubble yet
-    assert.equal(h.getActiveEl(), null, "pre-condition: activeAgentTextEl must be null (no turn-started SSE in Manual REPL)");
+    assert.equal(
+      h.getActiveEl(),
+      null,
+      "pre-condition: activeAgentTextEl must be null (no turn-started SSE in Manual REPL)",
+    );
 
     // Simulate: case "text" fires appendAgentChunk (no beginAgentBubble before it — Manual REPL)
     h.appendAgentChunk("Happy to help.");
@@ -288,11 +302,7 @@ describe("T-PY2MA.Conv.2 — Manual REPL path: first text SSE chunk auto-opens .
       "a .msg-agent bubble must be auto-created by appendAgentChunk when activeAgentTextEl===null (BLOCKER-1 fix, G1).",
     );
     const textEl = getAgentTextEl(msgAgent!);
-    assert.equal(
-      textEl?.textContent,
-      "Happy to help.",
-      ".msg-agent-text.textContent must equal the first chunk (G1).",
-    );
+    assert.equal(textEl?.textContent, "Happy to help.", ".msg-agent-text.textContent must equal the first chunk (G1).");
     assert.notEqual(h.getActiveEl(), null, "activeAgentTextEl must be non-null after auto-open (G1)");
   });
 });
@@ -374,14 +384,22 @@ describe("T-PY2MA.Conv.4 — second sendCommand() appends new pair; prior pair p
     h.appendAgentChunk("second reply");
     h.endAgentBubble();
 
-    assert.equal(dom.convList.children.length, 4, "convList must have 4 children after 2 turns (msg-user + msg-agent × 2)");
+    assert.equal(
+      dom.convList.children.length,
+      4,
+      "convList must have 4 children after 2 turns (msg-user + msg-agent × 2)",
+    );
     assert.ok(dom.convList.children[0].classList.contains("msg-user"), "children[0] must be msg-user (turn 1 user)");
     assert.ok(dom.convList.children[1].classList.contains("msg-agent"), "children[1] must be msg-agent (turn 1 agent)");
     assert.ok(dom.convList.children[2].classList.contains("msg-user"), "children[2] must be msg-user (turn 2 user)");
     assert.ok(dom.convList.children[3].classList.contains("msg-agent"), "children[3] must be msg-agent (turn 2 agent)");
 
     const agent1Text = getAgentTextEl(dom.convList.children[1]);
-    assert.equal(agent1Text?.textContent, "first reply", "turn 1 agent text must be 'first reply' (G1 history preserved)");
+    assert.equal(
+      agent1Text?.textContent,
+      "first reply",
+      "turn 1 agent text must be 'first reply' (G1 history preserved)",
+    );
     const agent2Text = getAgentTextEl(dom.convList.children[3]);
     assert.equal(agent2Text?.textContent, "second reply", "turn 2 agent text must be 'second reply' (G1)");
   });
@@ -495,13 +513,25 @@ describe("T-PY2MA.Conv.7 — steer mid-turn opens NEW user bubble; prior agent b
     h.beginAgentBubble();
     h.appendAgentChunk("adjusted plan");
 
-    assert.equal(dom.convList.children.length, 4, "DOM must have 4 children after steer (user1, agent1, user2, agent2)");
+    assert.equal(
+      dom.convList.children.length,
+      4,
+      "DOM must have 4 children after steer (user1, agent1, user2, agent2)",
+    );
     assert.ok(dom.convList.children[0].classList.contains("msg-user"), "[0] must be msg-user-1");
     assert.ok(dom.convList.children[1].classList.contains("msg-agent"), "[1] must be msg-agent-1");
     const agent1Text = getAgentTextEl(dom.convList.children[1]);
-    assert.equal(agent1Text?.textContent, "thinking…", "prior agent bubble text must be preserved (G4 — steer keeps history)");
+    assert.equal(
+      agent1Text?.textContent,
+      "thinking…",
+      "prior agent bubble text must be preserved (G4 — steer keeps history)",
+    );
     assert.ok(dom.convList.children[2].classList.contains("msg-user"), "[2] must be msg-user-2 (steer prompt)");
-    assert.equal(dom.convList.children[2].textContent, "change the filter", "steer user bubble must contain the steer prompt (G4)");
+    assert.equal(
+      dom.convList.children[2].textContent,
+      "change the filter",
+      "steer user bubble must contain the steer prompt (G4)",
+    );
     assert.ok(dom.convList.children[3].classList.contains("msg-agent"), "[3] must be msg-agent-2 (new turn)");
     const agent2Text = getAgentTextEl(dom.convList.children[3]);
     assert.equal(agent2Text?.textContent, "adjusted plan", "turn 2 agent text must be the post-steer reply (G4)");
@@ -539,10 +569,18 @@ describe("T-PY2MA.Conv.8 — retry appends NEW agent bubble; NO duplicate user b
       "retry must NOT create a second user bubble — only 1 msg-user in DOM (G5 retry semantics).",
     );
     assert.equal(agentBubbles.length, 2, "retry must create a second agent bubble — 2 msg-agent in DOM (G5)");
-    assert.equal(dom.convList.children.length, 3, "DOM must have 3 children total: [msg-user-1, msg-agent-1, msg-agent-2]");
+    assert.equal(
+      dom.convList.children.length,
+      3,
+      "DOM must have 3 children total: [msg-user-1, msg-agent-1, msg-agent-2]",
+    );
 
     const agent1Text = getAgentTextEl(agentBubbles[0]);
-    assert.equal(agent1Text?.textContent, "partial reply", "first agent bubble must retain 'partial reply' (G5 history preserved)");
+    assert.equal(
+      agent1Text?.textContent,
+      "partial reply",
+      "first agent bubble must retain 'partial reply' (G5 history preserved)",
+    );
     const agent2Text = getAgentTextEl(agentBubbles[1]);
     assert.equal(agent2Text?.textContent, "better reply", "second agent bubble (retry) must have 'better reply' (G5)");
   });

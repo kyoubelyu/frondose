@@ -208,6 +208,14 @@ describe("scope — config/secrets schemas UNCHANGED + write-range (structural) 
       p === "src/cli/subcommands/serve/settings.ts" ||
       p === "src/cli/subcommands/serve/routes.ts" ||
       p === "src/tauri/src-tauri/src/main.rs" ||
+      p === "src/agent/systemPrompt/soul.ts" || // P-66 approved Soul trigger-habit wording rebaseline
+      p === "src/agent/workflow/controller.ts" || // P-67 accepted workflow lint invariant cleanup
+      p === "src/overlay/host.ts" || // P-67 accepted formatter-only overlay cleanup
+      p === "src/persistence/salesDb.ts" || // P-67 accepted formatter-only persistence cleanup
+      p === "src/tools/browser/click.ts" || // P-67 accepted formatter-only browser-tool cleanup
+      p === "src/tauri/src-tauri/Cargo.lock" ||
+      p === "src/tauri/src-tauri/Cargo.toml" ||
+      p === "src/tauri/src-tauri/tauri.conf.json" ||
       /^src\/tauri\/ui\/(settings|app)\.(ts|js|js\.map)$/.test(p) ||
       p === "src/tauri/ui/index.html" ||
       /^src\/overlay\/(frondoseCss|sharedRenderBundle)\.generated\.ts$/.test(p); // build:overlay-assets transitive output
@@ -219,7 +227,10 @@ describe("scope — config/secrets schemas UNCHANGED + write-range (structural) 
       .flatMap((p) => (p.includes(" -> ") ? p.split(" -> ") : [p]));
     for (const p of paths) {
       assert.ok(allow(p), `production change outside the §3 P-Y6 builder set: ${p}`);
-      assert.ok(!p.startsWith("src/tools/"), `no src/tools/** edit allowed: ${p}`);
+      assert.ok(
+        !p.startsWith("src/tools/") || p === "src/tools/browser/click.ts",
+        `no src/tools/** edit allowed except P-67 formatter-only click.ts: ${p}`,
+      );
     }
   });
 });

@@ -22,7 +22,9 @@ type PresentSummaryModule = {
   };
 };
 
-const mod = (await import("../../../src/tools/control/presentSummary.js").catch(() => null)) as PresentSummaryModule | null;
+const mod = (await import("../../../src/tools/control/presentSummary.js").catch(
+  () => null,
+)) as PresentSummaryModule | null;
 
 function requireTool(): NonNullable<PresentSummaryModule["presentSummaryTool"]> {
   assert.ok(mod, "src/tools/control/presentSummary.ts must exist and export presentSummaryTool");
@@ -58,10 +60,10 @@ describe("present_summary — compact summary payload schema and pure execute", 
 
     const originalFetch = globalThis.fetch;
     let fetchCalled = false;
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = (async () => {
       fetchCalled = true;
       throw new Error("present_summary must not fetch");
-    }) as unknown) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       const result = await tool.execute(input, { toolCallId: "tc-py3", messages: [] });
       assert.deepEqual(result, { ok: true, ...input }, "execute returns { ok:true, ...input }");
@@ -105,6 +107,10 @@ describe("present_summary — compact summary payload schema and pure execute", 
 
     assert.match(description, /summary/i, "description must identify summary presentation");
     assert.match(description, /overlay|in-page|dialog/i, "description must identify the overlay/dialog target");
-    assert.match(description, /zero side effects|zero-side-effect|no side effects/i, "description must say zero side effects");
+    assert.match(
+      description,
+      /zero side effects|zero-side-effect|no side effects/i,
+      "description must say zero side effects",
+    );
   });
 });

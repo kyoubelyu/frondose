@@ -39,14 +39,23 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
     const band = composeSoulBand(null);
 
     // All 5 tool names must appear in the trigger habit (F-1)
-    assert.ok(band.includes("save_message_draft"), "soul band must include save_message_draft (F-1 trigger habit, G-PSPD.1)");
+    assert.ok(
+      band.includes("save_message_draft"),
+      "soul band must include save_message_draft (F-1 trigger habit, G-PSPD.1)",
+    );
     assert.ok(
       band.includes("promote_candidate_to_lead"),
       "soul band must include promote_candidate_to_lead (F-1 trigger habit, G-PSPD.1)",
     );
     assert.ok(band.includes("todo_write"), "soul band must include todo_write (F-1 trigger habit, G-PSPD.1)");
-    assert.ok(band.includes("requiresApproval"), "soul band must include requiresApproval (F-1 trigger habit, G-PSPD.1)");
-    assert.ok(band.includes("mark_message_sent"), "soul band must include mark_message_sent (F-1 trigger habit, G-PSPD.1)");
+    assert.ok(
+      band.includes("requiresApproval"),
+      "soul band must include requiresApproval (F-1 trigger habit, G-PSPD.1)",
+    );
+    assert.ok(
+      band.includes("mark_message_sent"),
+      "soul band must include mark_message_sent (F-1 trigger habit, G-PSPD.1)",
+    );
 
     // Ordered chain phrase: promote_candidate_to_lead → save_message_draft → todo_write
     assert.match(
@@ -68,8 +77,14 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
     const band = composeSoulBand(null);
 
     // Post-outbound close pair: both calls named
-    assert.ok(band.includes("mark_message_sent"), "soul band must include mark_message_sent for post-outbound close (G-PSPD.1)");
-    assert.ok(band.includes("update_lead_stage"), "soul band must include update_lead_stage for connect-note close (G-PSPD.1)");
+    assert.ok(
+      band.includes("mark_message_sent"),
+      "soul band must include mark_message_sent for post-outbound close (G-PSPD.1)",
+    );
+    assert.ok(
+      band.includes("update_lead_stage"),
+      "soul band must include update_lead_stage for connect-note close (G-PSPD.1)",
+    );
     assert.ok(band.includes("connect_sent"), "soul band must include connect_sent stage (G-PSPD.1)");
 
     // DM-asymmetry: "for a DM, mark_message_sent only (no stage advance)"

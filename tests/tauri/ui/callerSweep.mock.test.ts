@@ -43,8 +43,8 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
 import { resolve } from "node:path";
+import { describe, it } from "node:test";
 
 // ─── Source file paths (relative to repo root) ───────────────────────────────
 
@@ -57,77 +57,69 @@ const SRC_BUNDLE = resolve(ROOT, "src/overlay/sharedRenderBundle.generated.ts");
 
 describe("T-SP-C.CallerSweep — modeFromToggles absent from all active call sites post F-1/F-2 (P-SP-C)", () => {
   // ─── T-SP-C.CallerSweep.1 ────────────────────────────────────────────────────
-  it(
-    "T-SP-C.CallerSweep.1: modeFromToggles does NOT appear in any active src/ call site; modeFromState IS present in mode.ts + app.ts",
-    () => {
-      // Given: builder F-1 rewrites src/tauri/ui/mode.ts — removes modeFromToggles
-      //        export, adds modeFromState({cronEnabled, passiveEnabled}) export
-      //        builder F-2 rewrites src/tauri/ui/app.ts — replaces every
-      //        modeFromToggles(cronEnabled) call with modeFromState({cronEnabled, ...})
-      //        builder regenerates sharedRenderBundle.generated.ts from the updated
-      //        sharedEntry.ts (which re-exports * from mode.ts) — bundle drops the
-      //        old function definition
-      //
-      // When:  fs.readFileSync each active production source file; search for the
-      //        literal string "modeFromToggles" (both as export and as call site);
-      //        search for "modeFromState" in files that must add it
-      //
-      // Then:
-      //   (A) mode.ts: "modeFromToggles" absent; "modeFromState" present
-      //   (B) app.ts: "modeFromToggles" absent; "modeFromState" present
-      //   (C) sharedEntry.ts: "modeFromToggles" absent (secondary — it re-exports *
-      //       from mode.ts; once mode.ts drops the function the re-export set shrinks
-      //       automatically; no literal "modeFromToggles" string should remain in the
-      //       sharedEntry.ts source)
-      //   (D) sharedRenderBundle.generated.ts: "modeFromToggles" absent from the
-      //       committed bundle string (builder must regenerate after F-1/F-2)
-      //   Covers G-SP-C.3 (modeFromState replaces modeFromToggles across callers)
-      const modeTs = readSrc(SRC_MODE);
-      const appTs = readSrc(SRC_APP);
-      const sharedEntry = readSrc(SRC_SHARED_ENTRY);
-      const bundle = readSrc(SRC_BUNDLE);
+  it("T-SP-C.CallerSweep.1: modeFromToggles does NOT appear in any active src/ call site; modeFromState IS present in mode.ts + app.ts", () => {
+    // Given: builder F-1 rewrites src/tauri/ui/mode.ts — removes modeFromToggles
+    //        export, adds modeFromState({cronEnabled, passiveEnabled}) export
+    //        builder F-2 rewrites src/tauri/ui/app.ts — replaces every
+    //        modeFromToggles(cronEnabled) call with modeFromState({cronEnabled, ...})
+    //        builder regenerates sharedRenderBundle.generated.ts from the updated
+    //        sharedEntry.ts (which re-exports * from mode.ts) — bundle drops the
+    //        old function definition
+    //
+    // When:  fs.readFileSync each active production source file; search for the
+    //        literal string "modeFromToggles" (both as export and as call site);
+    //        search for "modeFromState" in files that must add it
+    //
+    // Then:
+    //   (A) mode.ts: "modeFromToggles" absent; "modeFromState" present
+    //   (B) app.ts: "modeFromToggles" absent; "modeFromState" present
+    //   (C) sharedEntry.ts: "modeFromToggles" absent (secondary — it re-exports *
+    //       from mode.ts; once mode.ts drops the function the re-export set shrinks
+    //       automatically; no literal "modeFromToggles" string should remain in the
+    //       sharedEntry.ts source)
+    //   (D) sharedRenderBundle.generated.ts: "modeFromToggles" absent from the
+    //       committed bundle string (builder must regenerate after F-1/F-2)
+    //   Covers G-SP-C.3 (modeFromState replaces modeFromToggles across callers)
+    const modeTs = readSrc(SRC_MODE);
+    const appTs = readSrc(SRC_APP);
+    const sharedEntry = readSrc(SRC_SHARED_ENTRY);
+    const bundle = readSrc(SRC_BUNDLE);
 
-      // (A) mode.ts: modeFromToggles must NOT be declared/exported; modeFromState must exist
-      // Note: "modeFromToggles" may appear in a JSDoc comment describing what was replaced —
-      // only function declaration / export matters. Check function keyword absence.
-      assert.ok(
-        !modeTs.includes("function modeFromToggles") && !modeTs.includes("export { modeFromToggles"),
-        `mode.ts must NOT declare/export modeFromToggles. Found in: ${modeTs.slice(0, 200)}`
-      );
-      assert.ok(
-        modeTs.includes("modeFromState"),
-        `mode.ts must contain modeFromState export`
-      );
+    // (A) mode.ts: modeFromToggles must NOT be declared/exported; modeFromState must exist
+    // Note: "modeFromToggles" may appear in a JSDoc comment describing what was replaced —
+    // only function declaration / export matters. Check function keyword absence.
+    assert.ok(
+      !modeTs.includes("function modeFromToggles") && !modeTs.includes("export { modeFromToggles"),
+      `mode.ts must NOT declare/export modeFromToggles. Found in: ${modeTs.slice(0, 200)}`,
+    );
+    assert.ok(modeTs.includes("modeFromState"), `mode.ts must contain modeFromState export`);
 
-      // (B) app.ts: modeFromToggles must NOT appear as import or call site
-      assert.ok(
-        !appTs.includes("modeFromToggles"),
-        `app.ts must NOT reference modeFromToggles (import or call). Found at: ${
-          (() => { const i = appTs.indexOf("modeFromToggles"); return i >= 0 ? appTs.slice(Math.max(0,i-20), i+40) : "not found"; })()
-        }`
-      );
-      assert.ok(
-        appTs.includes("modeFromState"),
-        `app.ts must import/use modeFromState`
-      );
+    // (B) app.ts: modeFromToggles must NOT appear as import or call site
+    assert.ok(
+      !appTs.includes("modeFromToggles"),
+      `app.ts must NOT reference modeFromToggles (import or call). Found at: ${(() => {
+        const i = appTs.indexOf("modeFromToggles");
+        return i >= 0 ? appTs.slice(Math.max(0, i - 20), i + 40) : "not found";
+      })()}`,
+    );
+    assert.ok(appTs.includes("modeFromState"), `app.ts must import/use modeFromState`);
 
-      // (C) sharedEntry.ts: no literal "modeFromToggles" string
-      assert.ok(
-        !sharedEntry.includes("modeFromToggles"),
-        `sharedEntry.ts must NOT contain literal "modeFromToggles" (it re-exports * from mode.ts which no longer has it)`
-      );
+    // (C) sharedEntry.ts: no literal "modeFromToggles" string
+    assert.ok(
+      !sharedEntry.includes("modeFromToggles"),
+      `sharedEntry.ts must NOT contain literal "modeFromToggles" (it re-exports * from mode.ts which no longer has it)`,
+    );
 
-      // (D) sharedRenderBundle.generated.ts: bundle must NOT contain modeFromToggles
-      // KNOWN DEFECT D-SP-C-B: builder did not regenerate the bundle after F-1 mode.ts rewrite.
-      // The bundle is a committed artifact generated by `npm run build:overlay-assets`.
-      // This assertion WILL FAIL until builder runs that script. Filed as D-SP-C-B (builder step 5a).
-      assert.ok(
-        !bundle.includes("modeFromToggles"),
-        `D-SP-C-B: sharedRenderBundle.generated.ts is STALE — still contains "modeFromToggles". ` +
-        `Builder must run \`npm run build:overlay-assets\` to regenerate the bundle after mode.ts F-1 rewrite.`
-      );
-    },
-  );
+    // (D) sharedRenderBundle.generated.ts: bundle must NOT contain modeFromToggles
+    // KNOWN DEFECT D-SP-C-B: builder did not regenerate the bundle after F-1 mode.ts rewrite.
+    // The bundle is a committed artifact generated by `npm run build:overlay-assets`.
+    // This assertion WILL FAIL until builder runs that script. Filed as D-SP-C-B (builder step 5a).
+    assert.ok(
+      !bundle.includes("modeFromToggles"),
+      `D-SP-C-B: sharedRenderBundle.generated.ts is STALE — still contains "modeFromToggles". ` +
+        `Builder must run \`npm run build:overlay-assets\` to regenerate the bundle after mode.ts F-1 rewrite.`,
+    );
+  });
 });
 
 // ─── Helper read function exposed for Step 5 fill ────────────────────────────

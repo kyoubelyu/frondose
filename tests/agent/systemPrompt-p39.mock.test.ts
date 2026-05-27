@@ -18,6 +18,14 @@ import { describe, it } from "node:test";
 import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
 import { composeSoulBand } from "../../src/agent/systemPrompt/soul.js";
 
+function extractTriggerHabits(soul: string): string {
+  const triggerStart = soul.indexOf("Your habit:");
+  const missionStart = soul.indexOf("Your mission on LinkedIn");
+  assert.ok(triggerStart > -1, '"Your habit:" must exist in soul band');
+  assert.ok(missionStart > -1, '"Your mission on LinkedIn" must exist in soul band');
+  return soul.slice(triggerStart, missionStart);
+}
+
 // ─── T-Checkpoint ─────────────────────────────────────────────────────────────
 
 describe("CHECKPOINT band — P-39 rewrite (G-P39.9)", () => {
@@ -99,32 +107,50 @@ describe("Soul band — P-39 trigger habits + Night slot (G-P39.10)", () => {
     );
   });
 
-  it("T-Soul.3: composeSoulBand(null) trigger-habits section contains no 'must' / 'MUST' / 'do not' / 'forbidden' (Soul wording rule)", () => {
+  it("T-Soul.3: composeSoulBand(null) trigger-habits section contains no modal or negative command wording", () => {
     // Given: composeSoulBand(null)
-    // When:  the trigger-habits section is scanned for forbidden modal/negative tokens
-    // Then:  none of: /\bmust\b/i, /\bMUST\b/, /\bdo not\b/i, /\bforbidden\b/i
-    //        match within the habits lines (soul-band wording rule)
+    // When:  only the trigger-habits section is scanned for modal/negative command tokens
+    // Then:  none of must/MUST/do not/don't/don’t/never/forbidden appears in the habits lines
     const soul = composeSoulBand(null);
+    const habitsSection = extractTriggerHabits(soul);
 
-    // Extract: from first "Your habit:" line to "Your mission on LinkedIn" (exclusive)
-    const triggerStart = soul.indexOf("Your habit:");
-    const missionStart = soul.indexOf("Your mission on LinkedIn");
-    assert.ok(triggerStart > -1, '"Your habit:" must exist in soul band');
-    assert.ok(missionStart > -1, '"Your mission on LinkedIn" must exist in soul band');
-    const habitsSection = soul.slice(triggerStart, missionStart);
+    const forbidden = [
+      ["must", /\bmust\b/],
+      ["MUST", /\bMUST\b/],
+      ["do not", /\bdo not\b/i],
+      ["don't", /\bdon't\b/i],
+      ["don’t", /\bdon’t\b/i],
+      ["never", /\bnever\b/i],
+      ["forbidden", /\bforbidden\b/i],
+    ] as const;
 
-    assert.ok(
-      !/\bmust\b/.test(habitsSection),
-      `Trigger-habits section must not contain "must" (Soul wording rule); section: "${habitsSection.slice(0, 100)}"`,
-    );
-    assert.ok(!/\bMUST\b/.test(habitsSection), 'Trigger-habits section must not contain "MUST" (Soul wording rule)');
-    assert.ok(
-      !/\bdo not\b/i.test(habitsSection),
-      'Trigger-habits section must not contain "do not" (Soul wording rule)',
-    );
-    assert.ok(
-      !/\bforbidden\b/i.test(habitsSection),
-      'Trigger-habits section must not contain "forbidden" (Soul wording rule)',
-    );
+    for (const [label, pattern] of forbidden) {
+      assert.ok(
+        !pattern.test(habitsSection),
+        `Trigger-habits section must not contain "${label}" (Soul wording rule); section: "${habitsSection.slice(0, 180)}"`,
+      );
+    }
+  });
+
+  it("T-Soul.4: composeSoulBand(null) trigger-habits section preserves the sales workflow tool semantics", () => {
+    // Given: composeSoulBand(null)
+    // When:  the trigger-habits section is scanned for sales workflow tool names
+    // Then:  candidate scoring, promotion, draft-before-gate, close-loop, and todo tools remain named
+    const soul = composeSoulBand(null);
+    const habitsSection = extractTriggerHabits(soul);
+    const requiredTools = [
+      "record_raw_candidate",
+      "score_lead",
+      "score_account",
+      "promote_candidate_to_lead",
+      "save_message_draft",
+      "todo_write",
+      "mark_message_sent",
+      "update_lead_stage",
+    ];
+
+    for (const toolName of requiredTools) {
+      assert.ok(habitsSection.includes(toolName), `trigger habits must preserve ${toolName} sales semantics`);
+    }
   });
 });

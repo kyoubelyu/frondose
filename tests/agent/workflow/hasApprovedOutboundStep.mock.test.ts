@@ -22,8 +22,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createWorkflowController } from "../../../src/agent/workflow/controller.js";
 import type { WorkflowController } from "../../../src/agent/workflow/controller.js";
+import { createWorkflowController } from "../../../src/agent/workflow/controller.js";
 
 /** Minimal no-op deps for createWorkflowController. */
 function makeDeps() {
@@ -97,9 +97,7 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
     // Then:  returns true — every step is pre-approved in auto mode
     //   Covers G-P63.10 (auto-mode arm, plan §5.4 step 3: approvalMode === "auto" → true)
     const ctrl = createWorkflowController(makeDeps());
-    proposeAutoWorkflow(ctrl, [
-      { id: "step_auto_1", title: "Visit profiles", requiresApproval: false },
-    ]);
+    proposeAutoWorkflow(ctrl, [{ id: "step_auto_1", title: "Visit profiles", requiresApproval: false }]);
 
     assert.strictEqual(
       ctrl.hasApprovedOutboundStep(),
@@ -116,9 +114,7 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
     // Then:  returns false — a non-approval step does not count as outbound-approved
     //   Covers G-P63.10 (manual + no-requiresApproval arm)
     const ctrl = createWorkflowController(makeDeps());
-    proposeManualWorkflow(ctrl, [
-      { id: "step_1", title: "Research the profile", requiresApproval: false },
-    ]);
+    proposeManualWorkflow(ctrl, [{ id: "step_1", title: "Research the profile", requiresApproval: false }]);
 
     assert.strictEqual(
       ctrl.hasApprovedOutboundStep(),
@@ -140,9 +136,7 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
     //    the approved step remains in_progress until agent calls todo_write to mark it completed)
     //   Covers G-P63.10 (manual + requiresApproval + approval transition)
     const ctrl = createWorkflowController(makeDeps());
-    proposeManualWorkflow(ctrl, [
-      { id: "step_out", title: "Send invite to Alice", requiresApproval: true },
-    ]);
+    proposeManualWorkflow(ctrl, [{ id: "step_out", title: "Send invite to Alice", requiresApproval: true }]);
 
     // Pre-approval: awaitingApprovalStepId = "step_out"; wf.state = "awaiting_approval"
     assert.strictEqual(
@@ -153,11 +147,7 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
 
     // Approve the step
     const approveResult = ctrl.handleEndpoint("/workflow/approve", { stepId: "step_out" });
-    assert.strictEqual(
-      (approveResult.response as { ok: boolean }).ok,
-      true,
-      "approve endpoint must succeed",
-    );
+    assert.strictEqual((approveResult.response as { ok: boolean }).ok, true, "approve endpoint must succeed");
 
     // Post-approval: approvedStepIds.has("step_out") = true; step state still in_progress
     assert.strictEqual(
@@ -177,9 +167,7 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
     //   BLOCKER-2: without this fix, a completed auto workflow would keep the guard permanently open
     //   Covers G-P63.10 (completed auto arm)
     const ctrl = createWorkflowController(makeDeps());
-    proposeAutoWorkflow(ctrl, [
-      { id: "auto_step_1", title: "Profile visit", requiresApproval: false },
-    ]);
+    proposeAutoWorkflow(ctrl, [{ id: "auto_step_1", title: "Profile visit", requiresApproval: false }]);
 
     // Drive to completion: same title + same step + state:"completed"
     ctrl.onToolResults(
@@ -213,19 +201,13 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
     // Then:  returns false via the state.current === null arm
     //   Covers G-P63.10 (BLOCKER-2 — cancellation closes the guard; defence-in-depth)
     const ctrl = createWorkflowController(makeDeps());
-    proposeManualWorkflow(ctrl, [
-      { id: "step_out", title: "Send invite to Bob", requiresApproval: true },
-    ]);
+    proposeManualWorkflow(ctrl, [{ id: "step_out", title: "Send invite to Bob", requiresApproval: true }]);
     // Approve (so the guard would be open if not cancelled)
     ctrl.handleEndpoint("/workflow/approve", { stepId: "step_out" });
 
     // Cancel
     const cancelResult = ctrl.handleEndpoint("/workflow/cancel", null);
-    assert.strictEqual(
-      (cancelResult.response as { ok: boolean }).ok,
-      true,
-      "cancel endpoint must succeed",
-    );
+    assert.strictEqual((cancelResult.response as { ok: boolean }).ok, true, "cancel endpoint must succeed");
 
     assert.strictEqual(
       ctrl.hasApprovedOutboundStep(),

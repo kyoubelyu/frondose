@@ -55,10 +55,7 @@ describe("T-PY2MA.LiveAct.1 — In Auto mode, tool-call SSE → tickerEl.textCon
       hasModeCheck,
       "app.ts must check for 'mode-auto' class to conditionally apply Auto ticker format (G4 mode-conditional).",
     );
-    assert.ok(
-      hasAutoFormat,
-      "app.ts case 'tool-call' must contain '→ ' for the Auto-mode ticker format (G4).",
-    );
+    assert.ok(hasAutoFormat, "app.ts case 'tool-call' must contain '→ ' for the Auto-mode ticker format (G4).");
     assert.ok(
       hasManualFormat,
       "app.ts case 'tool-call' must contain '${payload.toolName}...' for Manual-mode fallback (G4). " +
@@ -95,15 +92,10 @@ describe("T-PY2MA.LiveAct.2 — In Manual mode, tool-call SSE → tickerEl.textC
     // Locate the case "tool-call" block and check both branches are present
     const toolCallIdx = APP_TS.indexOf('case "tool-call":');
     const nextCaseIdx = APP_TS.indexOf("case ", toolCallIdx + 1);
-    const toolCallBlock = toolCallIdx >= 0 && nextCaseIdx >= 0
-      ? APP_TS.slice(toolCallIdx, nextCaseIdx)
-      : "";
+    const toolCallBlock = toolCallIdx >= 0 && nextCaseIdx >= 0 ? APP_TS.slice(toolCallIdx, nextCaseIdx) : "";
     const hasAutoInBlock = toolCallBlock.includes("→ ");
     const hasManualInBlock = toolCallBlock.includes("...");
-    assert.ok(
-      toolCallIdx >= 0,
-      "app.ts handleEvent must contain case 'tool-call': (G4 mode-conditional ticker).",
-    );
+    assert.ok(toolCallIdx >= 0, "app.ts handleEvent must contain case 'tool-call': (G4 mode-conditional ticker).");
     assert.ok(
       hasAutoInBlock,
       "app.ts case 'tool-call' block must contain '→ ' (Auto-mode branch) within the case body (G4).",

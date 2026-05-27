@@ -12,10 +12,10 @@
  *   Part A (handler existence): `handleEvent` switch in `app.ts` contains a
  *     `case "turn-started"` arm (currently absent → FAILS).
  *   Part B (state adoption): the handler sets `currentTurnId = payload.turnId` AND
- *     clears `outputEl.textContent` AND calls `transition("running")`
+ *     opens a new agent bubble with `beginAgentBubble()` AND calls `transition("running")`
  *     (currently absent → FAILS).
  *   Part C (source-aware ticker): when `payload.source === "cron"` the handler sets
- *     `tickerEl.textContent = "cron running..."`, otherwise `"resuming..."`
+ *     `tickerEl.textContent = "cron running..."`, otherwise `"starting..."`
  *     (currently absent → FAILS).
  *   Part D (UI SseFrame union): the UI's local `SseFrame` type in `app.ts` includes
  *     `{ type: "turn-started"; turnId: string; source?: "server" | "cron" }`
@@ -66,14 +66,13 @@ describe('app.ts handleEvent — case "turn-started" handler exists (FIX-2 UI §
   });
 });
 
-// ─── T-Turn.3-B — handler adopts currentTurnId + clears output + transitions to running ──────────
+// ─── T-Turn.3-B — handler adopts currentTurnId + opens bubble + transitions to running ──────────
 
-describe('app.ts handleEvent("turn-started") — adopts currentTurnId + clears output + transition("running") (FIX-2 UI §6.4(E))', () => {
-  it('T-Turn.3-B: the case "turn-started" handler sets currentTurnId = payload.turnId, clears outputEl.textContent, and calls transition("running") (F5 required — FAILS pre-builder)', () => {
+describe('app.ts handleEvent("turn-started") — adopts currentTurnId + opens agent bubble + transition("running") (FIX-2 UI §6.4(E))', () => {
+  it('T-Turn.3-B: the case "turn-started" handler sets currentTurnId = payload.turnId, calls beginAgentBubble(), and calls transition("running")', () => {
     // Given: src/tauri/ui/app.ts source as a string (post-F5 required state)
     // When:  scanned for the three state-adoption assignments within the turn-started case
-    // Then:  all three assignments are present: currentTurnId=, outputEl.textContent="", transition("running")
-    //        — currently FAILS: no case "turn-started" arm → none of the assignments exist
+    // Then:  all three actions are present: currentTurnId=, beginAgentBubble(), transition("running")
 
     // currentTurnId adoption (mirrors sendCommand L263-268 for user-initiated turns)
     assert.ok(
@@ -82,11 +81,9 @@ describe('app.ts handleEvent("turn-started") — adopts currentTurnId + clears o
         `currently absent. F5 required. FAILS pre-builder.`,
     );
 
-    // Output panel cleared (per R-1 decision: prior turn was aborted/done, output is stale)
     assert.ok(
-      APP_TS.includes('outputEl.textContent = ""'),
-      `app.ts "turn-started" handler must clear outputEl.textContent = "" — ` +
-        `currently absent in the turn-started arm. F5 required. FAILS pre-builder.`,
+      APP_TS.includes("beginAgentBubble()"),
+      `app.ts "turn-started" handler must call beginAgentBubble() to create a fresh agent message bubble.`,
     );
 
     // Transition to running (so the UI leaves idle state and the ticker/output become live)
@@ -98,27 +95,25 @@ describe('app.ts handleEvent("turn-started") — adopts currentTurnId + clears o
   });
 });
 
-// ─── T-Turn.3-C — source-aware ticker: cron → "cron running..." / server → "resuming..." ─────────
+// ─── T-Turn.3-C — source-aware ticker: cron → "cron running..." / non-cron → "starting..." ──────
 
 describe('app.ts handleEvent("turn-started") — source-aware ticker text (FIX-2 UI [3b] cron UX §6.4(E))', () => {
-  it('T-Turn.3-C: the case "turn-started" handler sets tickerEl.textContent to "cron running..." when payload.source==="cron" and "resuming..." otherwise (F5 required — FAILS pre-builder)', () => {
+  it('T-Turn.3-C: the case "turn-started" handler sets tickerEl.textContent to "cron running..." when payload.source==="cron" and "starting..." otherwise', () => {
     // Given: src/tauri/ui/app.ts source as a string
     // When:  scanned for the source-aware ticker assignment in the turn-started case
-    // Then:  the assignment distinguishes cron vs server: `payload.source === "cron" ? "cron running..." : "resuming..."`
-    //        — currently FAILS: no case "turn-started" arm, so neither string appears in context
+    // Then:  the assignment distinguishes cron vs non-cron: `payload.source === "cron" ? "cron running..." : "starting..."`
 
     // "cron running..." must appear as the cron-turn ticker text (per §6.4(E) sketch)
     assert.ok(
       APP_TS.includes('"cron running..."'),
       `app.ts must contain the string "cron running..." for the cron-turn ticker text. ` +
-        `F5 required per §6.4(E): tickerEl.textContent = payload.source === "cron" ? "cron running..." : "resuming..." FAILS pre-builder.`,
+        `tickerEl.textContent must include the cron-specific "cron running..." branch.`,
     );
 
-    // "resuming..." must appear as the non-cron (server resume) ticker text
+    // "starting..." is the current non-cron ticker text accepted by P-67.
     assert.ok(
-      APP_TS.includes('"resuming..."'),
-      `app.ts must contain the string "resuming..." for the server-resume ticker text. ` +
-        `F5 required per §6.4(E). FAILS pre-builder.`,
+      APP_TS.includes('"starting..."'),
+      `app.ts must contain the string "starting..." for non-cron turn-started ticker text.`,
     );
 
     // The source-conditional must be in the same expression (check for the conditional form)

@@ -649,10 +649,7 @@ export function countAutoLedgerByAction(db: DB, runId: string): Record<string, n
   return out;
 }
 
-export function insertAutoRun(
-  db: DB,
-  input: { maxDurationMinutes?: number; maxConnects?: number | null },
-): AutoRunRow {
+export function insertAutoRun(db: DB, input: { maxDurationMinutes?: number; maxConnects?: number | null }): AutoRunRow {
   const id = randomUUID();
   const startedAt = Date.now();
   const maxDurationMinutes = input.maxDurationMinutes ?? 480;

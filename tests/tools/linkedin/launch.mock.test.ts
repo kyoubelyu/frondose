@@ -41,6 +41,7 @@ function makeFakeSession(overrides: { currentUrl?: string }) {
     },
   };
   const client = CdpClient.fromHandle(fakeHandle);
+  client.markStealthInjected();
   return {
     inputMode: "cdp" as const,
     getOrInitClient: () => Promise.resolve({ ok: true as const, client }),

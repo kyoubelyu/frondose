@@ -39,9 +39,7 @@ describe("T-SP-A.Candidate — record_raw_candidate tool", () => {
     assert.strictEqual(result.data.inserted, true, "inserted must be true on first insert");
 
     // Verify DB state
-    const rows = db
-      .prepare("SELECT * FROM raw_candidates WHERE id = ?")
-      .all(result.data.candidateId) as Array<{
+    const rows = db.prepare("SELECT * FROM raw_candidates WHERE id = ?").all(result.data.candidateId) as Array<{
       id: string;
       status: string;
       source: string;
@@ -87,14 +85,10 @@ describe("T-SP-A.Candidate — record_raw_candidate tool", () => {
     assert.strictEqual(result.error.kind, "invalid_input", "error.kind must be 'invalid_input'");
 
     // DB must be empty
-    const candidateCount = db
-      .prepare("SELECT COUNT(*) AS n FROM raw_candidates")
-      .get() as { n: number };
+    const candidateCount = db.prepare("SELECT COUNT(*) AS n FROM raw_candidates").get() as { n: number };
     assert.strictEqual(candidateCount.n, 0, "No row must be inserted for invalid input");
 
-    const timelineCount = db
-      .prepare("SELECT COUNT(*) AS n FROM lead_timeline")
-      .get() as { n: number };
+    const timelineCount = db.prepare("SELECT COUNT(*) AS n FROM lead_timeline").get() as { n: number };
     assert.strictEqual(timelineCount.n, 0, "No timeline event must be appended for invalid input");
   });
 
@@ -117,11 +111,7 @@ describe("T-SP-A.Candidate — record_raw_candidate tool", () => {
     assert.strictEqual(result.ok, false, "Tool must return ok:false for empty profileUrl");
     assert.strictEqual(result.error.kind, "invalid_input");
     // Zod URL error message contains 'url'
-    assert.match(
-      result.error.message.toLowerCase(),
-      /url|invalid/,
-      "Error message must indicate URL/invalid input",
-    );
+    assert.match(result.error.message.toLowerCase(), /url|invalid/, "Error message must indicate URL/invalid input");
   });
 
   // ─── T-SP-A.Candidate.4 ──────────────────────────────────────────────────────
@@ -133,7 +123,9 @@ describe("T-SP-A.Candidate — record_raw_candidate tool", () => {
     closeSalesDatabase(":memory:");
     const { db, candidateId } = await mkTestSalesDb();
     // Fixture seeds Alice at status='promoted'
-    const row = db.prepare("SELECT profile_url, status, last_seen_at FROM raw_candidates WHERE id = ?").get(candidateId) as {
+    const row = db
+      .prepare("SELECT profile_url, status, last_seen_at FROM raw_candidates WHERE id = ?")
+      .get(candidateId) as {
       profile_url: string;
       status: string;
       last_seen_at: number;

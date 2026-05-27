@@ -42,10 +42,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 49 tools", () => {
+  it("T-CONTRACT.P28.WORKER: worker mode → exactly 53 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length
-    // Then:  49 (P-SP-B rebaseline: +score_lead +score_account on top of P-SP-A's 47)
+    // Then:  53 (P-Y3 rebaseline: present_summary + current 17-tool sales kernel)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -59,8 +59,8 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        49,
-        `T-CONTRACT.P28.WORKER: expected 49 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        53,
+        `T-CONTRACT.P28.WORKER: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -71,10 +71,10 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
 // ─── T-CONTRACT.P28.SERVER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.SERVER: server mode → exactly 23 tools", () => {
+  it("T-CONTRACT.P28.SERVER: server mode → exactly 27 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
     // When:  Object.keys(tools).length
-    // Then:  23 (P-44: updated from 19 — P-39 +3 memory; P-31 +1 cron)
+    // Then:  27 (P-Y3 rebaseline: server power includes present_summary)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -87,8 +87,8 @@ describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.P28.SERVER: expected 26 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        27,
+        `T-CONTRACT.P28.SERVER: expected 27 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

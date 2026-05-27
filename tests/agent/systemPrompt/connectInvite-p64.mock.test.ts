@@ -70,14 +70,8 @@ describe("T-P64 — P-64 checkpoint F1 directive: preload-URL connect-invite wor
     // When:  CHECKPOINT.length measured
     // Then:  4350 <= CHECKPOINT.length <= 4400
     const len = CHECKPOINT.length;
-    assert.ok(
-      len >= 4350,
-      `T-P64.4: CHECKPOINT.length must be >= 4350 (lower regression bracket); got ${len}`,
-    );
-    assert.ok(
-      len <= 4400,
-      `T-P64.4: CHECKPOINT.length must be <= 4400 (upper budget cap); got ${len}`,
-    );
+    assert.ok(len >= 4350, `T-P64.4: CHECKPOINT.length must be >= 4350 (lower regression bracket); got ${len}`);
+    assert.ok(len <= 4400, `T-P64.4: CHECKPOINT.length must be <= 4400 (upper budget cap); got ${len}`);
   });
 
   // ─── T-P64.5 ─────────────────────────────────────────────────────────────────

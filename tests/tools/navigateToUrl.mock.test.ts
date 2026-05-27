@@ -72,6 +72,7 @@ function makeFakeHandle(opts: { navigateShouldThrow?: boolean } = {}) {
 function makeSuccessSession() {
   const { handle, navigateCalls } = makeFakeHandle();
   const client = CdpClient.fromHandle(handle);
+  client.markStealthInjected();
   const session = {
     inputMode: "cdp" as const,
     getOrInitClient: async () => ({ ok: true as const, client }),
@@ -235,6 +236,7 @@ describe("T-Nav.2 (G-P47.1): navigate_to_url does NOT call applyPacing when clie
     //         (b) pacing spy was NOT called (no dwell on the failure path).
     const { handle: failHandle } = makeFakeHandle({ navigateShouldThrow: true });
     const failClient = CdpClient.fromHandle(failHandle);
+    failClient.markStealthInjected();
     const failSession = {
       inputMode: "cdp" as const,
       getOrInitClient: async () => ({ ok: true as const, client: failClient }),

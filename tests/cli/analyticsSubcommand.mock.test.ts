@@ -82,8 +82,22 @@ function seedPopulated(db: any): void {
       stage, total_score, confidence, one_line_pain_chain, next_action,
       next_action_due_at, owner_mode, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(l1, c1, null, "Person A", "https://linkedin.com/in/a/",
-    "meeting_booked", 80, 0.8, "pain", null, null, "manual", now, now);
+  `).run(
+    l1,
+    c1,
+    null,
+    "Person A",
+    "https://linkedin.com/in/a/",
+    "meeting_booked",
+    80,
+    0.8,
+    "pain",
+    null,
+    null,
+    "manual",
+    now,
+    now,
+  );
 
   // 5 timeline events: connect_sent + connected + message_sent + replied + meeting_booked
   for (const et of ["connect_sent", "connected", "message_sent", "replied", "meeting_booked"] as const) {
@@ -100,16 +114,30 @@ function seedPopulated(db: any): void {
       pain_hypothesis, buying_trigger, authority_level, suggested_opening_line,
       confidence, next_action, evidence_json, method_used, model, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(sc, c1, l1, 80, "Strong", "pain", "trigger", "VP",
-    "opening", 0.8, "next", "{}", "Pain Chain", "deepseek", now);
+  `).run(
+    sc,
+    c1,
+    l1,
+    80,
+    "Strong",
+    "pain",
+    "trigger",
+    "VP",
+    "opening",
+    0.8,
+    "next",
+    "{}",
+    "Pain Chain",
+    "deepseek",
+    now,
+  );
 
   // auto_runs (completed, 10min ago → durationMinutes=10)
   db.prepare(`
     INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes,
       max_connects, status, summary, counters)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), now - 600000, now, 15, 5, "completed",
-    "Done", JSON.stringify({ connects: 1 }));
+  `).run(randomUUID(), now - 600000, now, 15, 5, "completed", "Done", JSON.stringify({ connects: 1 }));
 }
 
 // ─── T-F.CLI.1 ──────────────────────────────────────────────────────────────────
@@ -188,10 +216,11 @@ describe("T-F.CLI.2 — runAnalyticsSubcommand empty DB → zeros + n/a, no cras
     assert.ok(out.includes("booked=0"), `stdout must show booked=0 (empty DB); got:\n${out}`);
 
     // score-calibration: and auto-runs: must NOT appear (Sketch D skips empty arrays)
-    assert.ok(!out.includes("score-calibration:"),
-      `stdout must NOT contain 'score-calibration:' for empty DB; got:\n${out}`);
-    assert.ok(!out.includes("auto-runs:"),
-      `stdout must NOT contain 'auto-runs:' for empty DB; got:\n${out}`);
+    assert.ok(
+      !out.includes("score-calibration:"),
+      `stdout must NOT contain 'score-calibration:' for empty DB; got:\n${out}`,
+    );
+    assert.ok(!out.includes("auto-runs:"), `stdout must NOT contain 'auto-runs:' for empty DB; got:\n${out}`);
   });
 });
 
@@ -206,11 +235,11 @@ describe("T-F.CLI.3 — analytics subcommand wiring: main.ts registration (G-PSP
     const mainSrc = readFileSync(MAIN_TS, "utf-8");
     assert.ok(
       mainSrc.includes('.command("analytics")'),
-      `main.ts must register .command("analytics") (Sketch E wiring); found: ${mainSrc.slice(0, 200)}`
+      `main.ts must register .command("analytics") (Sketch E wiring); found: ${mainSrc.slice(0, 200)}`,
     );
     assert.ok(
       mainSrc.includes("runAnalyticsSubcommand"),
-      "main.ts must import and reference runAnalyticsSubcommand (Sketch E wiring)"
+      "main.ts must import and reference runAnalyticsSubcommand (Sketch E wiring)",
     );
   });
 
@@ -221,7 +250,7 @@ describe("T-F.CLI.3 — analytics subcommand wiring: main.ts registration (G-PSP
     assert.equal(
       typeof runAnalyticsSubcommand,
       "function",
-      "runAnalyticsSubcommand must be exported as a function from analytics.ts (Sketch D)"
+      "runAnalyticsSubcommand must be exported as a function from analytics.ts (Sketch D)",
     );
   });
 });

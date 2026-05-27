@@ -14,23 +14,28 @@ import { closeSalesDatabase } from "../../src/persistence/salesDb.js";
 import { makeSalesTools } from "../../src/tools/sales/index.js";
 
 const EXPECTED_TOOL_NAMES = [
+  "end_auto_run",
+  "get_account_context",
+  "get_auto_run_state",
+  "get_lead_context",
+  "get_sales_report",
+  "list_due_followups",
+  "mark_message_sent",
   "record_raw_candidate",
   "promote_candidate_to_lead",
   "update_lead_stage",
   "record_lead_event",
   "save_message_draft",
-  "mark_message_sent",
   "schedule_follow_up",
-  "list_due_followups",
-  "get_lead_context",
-  "get_account_context",
-  "get_auto_run_state",
   "record_auto_action",
+  "score_account",
+  "score_lead",
+  "start_auto_run",
 ] as const;
 
 describe("T-SP-A.Registry — makeSalesTools factory wiring", () => {
   // ─── T-SP-A.Registry.1 ───────────────────────────────────────────────────────
-  it("T-SP-A.Registry.1: makeSalesTools returns exactly 12 tools with correct names", async () => {
+  it("T-SP-A.Registry.1: makeSalesTools returns exactly 17 tools with correct names", async () => {
     // Given: makeSalesTools(':memory:') called
     // When:  Object.keys(toolSet) enumerated
     // Then:  length === 12; all 12 tool names present verbatim:
@@ -42,13 +47,10 @@ describe("T-SP-A.Registry — makeSalesTools factory wiring", () => {
     const toolSet = makeSalesTools(":memory:");
     const keys = Object.keys(toolSet);
 
-    assert.strictEqual(keys.length, 12, "makeSalesTools must return exactly 12 tools");
+    assert.strictEqual(keys.length, 17, "makeSalesTools must return exactly 17 tools");
 
     for (const name of EXPECTED_TOOL_NAMES) {
-      assert.ok(
-        keys.includes(name),
-        `Tool '${name}' must be present in makeSalesTools output`,
-      );
+      assert.ok(keys.includes(name), `Tool '${name}' must be present in makeSalesTools output`);
     }
   });
 
@@ -62,8 +64,8 @@ describe("T-SP-A.Registry — makeSalesTools factory wiring", () => {
     const set1 = makeSalesTools(":memory:");
     const set2 = makeSalesTools(":memory:");
 
-    assert.strictEqual(Object.keys(set1).length, 12, "set1 must have 12 keys");
-    assert.strictEqual(Object.keys(set2).length, 12, "set2 must have 12 keys");
+    assert.strictEqual(Object.keys(set1).length, 17, "set1 must have 17 keys");
+    assert.strictEqual(Object.keys(set2).length, 17, "set2 must have 17 keys");
     assert.ok(!Object.is(set1, set2), "Two makeSalesTools() calls must return distinct objects");
 
     // Verify keys match between both sets (same inventory)
@@ -83,15 +85,8 @@ describe("T-SP-A.Registry — makeSalesTools factory wiring", () => {
 
     for (const [name, tool] of Object.entries(toolSet)) {
       const t = tool as { description?: unknown; parameters?: unknown };
-      assert.strictEqual(
-        typeof t.description,
-        "string",
-        `Tool '${name}' must have a string description`,
-      );
-      assert.ok(
-        (t.description as string).length > 0,
-        `Tool '${name}' description must be non-empty`,
-      );
+      assert.strictEqual(typeof t.description, "string", `Tool '${name}' must have a string description`);
+      assert.ok((t.description as string).length > 0, `Tool '${name}' description must be non-empty`);
       assert.ok(
         t.parameters !== undefined && t.parameters !== null,
         `Tool '${name}' must have a parameters property (Zod schema)`,

@@ -29,7 +29,7 @@ import { OVERLAY_BOOTSTRAP_JS } from "../../src/overlay/inject.js";
 // ─── T-SS.1 — sessionStorage round-trip + JSON.parse normalization ──────────
 
 describe("OVERLAY_BOOTSTRAP_JS — sessionStorage round-trip helpers + bootstrap-time replay (G-P57d.5)", () => {
-  it("T-SS.1: given OVERLAY_BOOTSTRAP_JS exported post-P-57d, WHEN substring greps applied, THEN string contains MAI_DIALOG_KEY constant + verbatim '__mai_dialog_state' key + maiReadDialogState + maiWriteDialogState helpers + sessionStorage.getItem + sessionStorage.setItem calls + maiDialogState.output write + maiDialogState.frames.push write + rev-1 MR-1 'content: text' normalized form (NOT 'content: chunk') + bootstrap-time replay restoring dialogElements.output.textContent", () => {
+  it("T-SS.1: given OVERLAY_BOOTSTRAP_JS exported post-P-57d/P-Y2-MA, WHEN substring greps applied, THEN session state persists and bootstrap replay restores through the agent-bubble helpers", () => {
     assert.ok(
       typeof OVERLAY_BOOTSTRAP_JS === "string" && OVERLAY_BOOTSTRAP_JS.length > 0,
       "OVERLAY_BOOTSTRAP_JS must be non-empty exported string",
@@ -80,14 +80,22 @@ describe("OVERLAY_BOOTSTRAP_JS — sessionStorage round-trip helpers + bootstrap
       "must contain 'content: text' (frame.content uses NORMALIZED text post-JSON.parse per rev-1 MR-1)",
     );
 
-    // (f) Bootstrap-time replay — restore output.textContent from sessionStorage state
+    // (f) Bootstrap-time replay — restore through bubble helpers, not the old single output sink.
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("maiReadDialogState()"),
       "must contain bootstrap-time 'maiReadDialogState()' call",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("dialogElements.output.textContent = maiDialogState.output"),
-      "must contain bootstrap-time replay line restoring dialogElements.output.textContent from sessionStorage",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__maiBeginAgent()"),
+      "must begin an agent bubble during bootstrap replay",
+    );
+    assert.ok(
+      OVERLAY_BOOTSTRAP_JS.includes("window.__maiAppendChunk(maiDialogState.output)"),
+      "must append saved output through __maiAppendChunk during bootstrap replay",
+    );
+    assert.ok(
+      !OVERLAY_BOOTSTRAP_JS.includes("dialogElements.output.textContent = maiDialogState.output"),
+      "must not restore by directly writing dialogElements.output.textContent after the bubble migration",
     );
   });
 });

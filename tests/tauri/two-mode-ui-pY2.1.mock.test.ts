@@ -197,6 +197,17 @@ describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
       "src/persistence/mode.ts",
       "src/cli/main.ts",
       "src/cli/subcommands/serve/dispatch.ts",
+      // P-66 approved Soul trigger-habit wording rebaseline; not a P-Y2.1 UI regression.
+      "src/agent/systemPrompt/soul.ts",
+      // P-66 approved app metadata/version rebaseline; not a P-Y2.1 UI regression.
+      "src/tauri/src-tauri/Cargo.lock",
+      "src/tauri/src-tauri/Cargo.toml",
+      "src/tauri/src-tauri/tauri.conf.json",
+      // P-67 accepted health-gate cleanup; not a P-Y2.1 UI regression.
+      "src/agent/workflow/controller.ts",
+      "src/overlay/host.ts",
+      "src/persistence/salesDb.ts",
+      "src/tools/browser/click.ts",
       //  - P-Y6 (in-app settings panel): the serve settings module (the routes.ts GET/POST + tauri/ui/settings.*
       //    + index.html + frondoseCss.generated.ts transitive are already covered above / under src/tauri/ui/).
       "src/cli/subcommands/serve/settings.ts",

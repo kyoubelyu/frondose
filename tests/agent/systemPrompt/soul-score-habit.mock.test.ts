@@ -37,10 +37,7 @@ describe("T-SP-B.SoulHabit — soul.ts score_lead trigger habit (§6.4(G))", () 
 
     const soulBand = composeSoulBand(FIXTURE_IDENTITY);
 
-    assert.ok(
-      typeof soulBand === "string" && soulBand.length > 0,
-      "composeSoulBand must return a non-empty string",
-    );
+    assert.ok(typeof soulBand === "string" && soulBand.length > 0, "composeSoulBand must return a non-empty string");
 
     assert.ok(
       soulBand.includes("score_lead"),

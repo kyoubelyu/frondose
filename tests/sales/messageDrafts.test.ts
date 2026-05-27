@@ -40,9 +40,7 @@ describe("T-SP-A.Draft — save_message_draft + mark_message_sent tools", () => 
     assert.strictEqual(result.data.leadId, leadId);
     assert.strictEqual(result.data.status, "draft");
 
-    const row = db
-      .prepare("SELECT * FROM message_drafts WHERE id = ?")
-      .get(result.data.draftId) as {
+    const row = db.prepare("SELECT * FROM message_drafts WHERE id = ?").get(result.data.draftId) as {
       status: string;
       kind: string;
       lead_id: string;
@@ -76,9 +74,7 @@ describe("T-SP-A.Draft — save_message_draft + mark_message_sent tools", () => 
     assert.strictEqual(result.data.leadId, leadId);
 
     // Draft status flipped to 'sent'
-    const draft = db
-      .prepare("SELECT status FROM message_drafts WHERE id = ?")
-      .get(draftId) as { status: string };
+    const draft = db.prepare("SELECT status FROM message_drafts WHERE id = ?").get(draftId) as { status: string };
     assert.strictEqual(draft.status, "sent", "Draft status must be 'sent'");
 
     // Timeline event appended
@@ -116,24 +112,16 @@ describe("T-SP-A.Draft — save_message_draft + mark_message_sent tools", () => 
     const firstResult = await (tool.execute as Function)({ draftId });
     assert.ok(firstResult.ok, "First mark_message_sent must succeed");
 
-    const timelineCountBefore = db
-      .prepare("SELECT COUNT(*) AS n FROM lead_timeline")
-      .get() as { n: number };
+    const timelineCountBefore = db.prepare("SELECT COUNT(*) AS n FROM lead_timeline").get() as { n: number };
 
     // Mark as sent second time — must fail
     const secondResult = await (tool.execute as Function)({ draftId });
     assert.strictEqual(secondResult.ok, false, "Second mark_message_sent must return ok:false");
     assert.strictEqual(secondResult.error.kind, "invalid_input");
-    assert.match(
-      secondResult.error.message,
-      /already sent/i,
-      "Error message must include 'already sent'",
-    );
+    assert.match(secondResult.error.message, /already sent/i, "Error message must include 'already sent'");
 
     // No new timeline event
-    const timelineCountAfter = db
-      .prepare("SELECT COUNT(*) AS n FROM lead_timeline")
-      .get() as { n: number };
+    const timelineCountAfter = db.prepare("SELECT COUNT(*) AS n FROM lead_timeline").get() as { n: number };
     assert.strictEqual(
       timelineCountAfter.n,
       timelineCountBefore.n,

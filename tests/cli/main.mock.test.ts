@@ -4,7 +4,7 @@
  *
  * T-M82: MAI_CDP_PORT defaults to 9222 when unset; custom value is parsed as integer.
  * T-M83 (D-12 refresh): makeAllTools(undefined, undefined, undefined, undefined) returns
- *        4-tool set: ["analyze_screenshot","echo","web_fetch","web_search"] (post-P-9).
+ *        the current P-Y3 no-session power set.
  * T-M127: MAI_MEMORY_DB_PATH defaults to ~/.mai/agent/memory.sqlite when unset; custom value used verbatim.
  * T-M128: MAI_IDENTITY_PATH defaults to ~/.mai/agent/identity.json when unset; custom value used verbatim.
  *
@@ -52,10 +52,10 @@ test("T-M82: MAI_CDP_PORT env var: default is 9222; custom value parses to integ
 
 // ─── T-M83 (D-12 refresh — P-11 Step 4a) ──────────────────────────────────────
 
-test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 19-tool no-session set (P-SP-A rebaseline)", () => {
+test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 24-tool no-session set (P-Y3 rebaseline)", () => {
   // Given: no CDP session (no LinkedIn tools), no memory, no identity, no control tools
   // When: makeAllTools(undefined, undefined, undefined, undefined) called
-  // Then: sorted keys === the 19 session-independent tools (base + 12 worker-only sales kernel tools)
+  // Then: sorted keys === the 24 session-independent tools (base + 17 sales-kernel tools)
 
   const toolsNoSession = makeAllTools(undefined);
   const keys = Object.keys(toolsNoSession).sort();
@@ -65,9 +65,11 @@ test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns th
     [
       "analyze_screenshot",
       "echo",
+      "end_auto_run",
       "get_account_context",
       "get_auto_run_state",
       "get_lead_context",
+      "get_sales_report",
       "list_due_followups",
       "mark_message_sent",
       "promote_candidate_to_lead",
@@ -79,13 +81,16 @@ test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns th
       "save_message_draft",
       "schedule_follow_up",
       "schedule_task",
+      "score_account",
+      "score_lead",
+      "start_auto_run",
       "update_lead_stage",
       "web_fetch",
       "web_search",
     ],
-    `T-M83: makeAllTools(undefined) must return the 19-tool no-session set; got: [${keys.join(", ")}]`,
+    `T-M83: makeAllTools(undefined) must return the 24-tool no-session set; got: [${keys.join(", ")}]`,
   );
-  assert.equal(keys.length, 19, "exactly 19 tools when no session (P-SP-A rebaseline)");
+  assert.equal(keys.length, 24, "exactly 24 tools when no session (P-Y3 rebaseline)");
 
   // Spot-check that echo tool is still functional
   assert.ok(typeof toolsNoSession.echo?.execute === "function", "echo tool execute must be a function");

@@ -43,19 +43,10 @@ describe("T-SP-A.Soul — composeSoulBand system-prompt fragment", () => {
       soulBand.includes("record_raw_candidate"),
       "Soul band must contain 'record_raw_candidate' kernel-tool nudge (§6.4-O soul paragraph)",
     );
-    assert.ok(
-      soulBand.includes("get_lead_context"),
-      "Soul band must contain 'get_lead_context' kernel-tool nudge",
-    );
-    assert.ok(
-      soulBand.includes("list_due_followups"),
-      "Soul band must contain 'list_due_followups' kernel-tool nudge",
-    );
+    assert.ok(soulBand.includes("get_lead_context"), "Soul band must contain 'get_lead_context' kernel-tool nudge");
+    assert.ok(soulBand.includes("list_due_followups"), "Soul band must contain 'list_due_followups' kernel-tool nudge");
 
     // Also verify identity sentence is present (basic composition smoke)
-    assert.ok(
-      soulBand.includes("Test Operator"),
-      "Soul band must include operator name from identity",
-    );
+    assert.ok(soulBand.includes("Test Operator"), "Soul band must include operator name from identity");
   });
 });

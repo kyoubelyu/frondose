@@ -139,7 +139,7 @@ test("T-Hooks.4: PreToolUse hook exit 2 → blocked: true with message (D-3)", a
         PreToolUse: [
           {
             matcher: "^echo$",
-            hooks: [{ type: "command", command: "echo 'blocked!' >&2; exit 2" }],
+            hooks: [{ type: "command", command: "cat >/dev/null; echo 'blocked!' >&2; exit 2" }],
           },
         ],
       },

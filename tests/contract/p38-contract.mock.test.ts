@@ -53,11 +53,13 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "click",
   "close",
   "echo",
+  "end_auto_run",
   "escalate_for_capability",
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
   "get_memory_note",
+  "get_sales_report",
   "getIdentity",
   "getMemory",
   "gh_issue",
@@ -67,6 +69,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "list_due_followups",
   "mark_message_sent",
   "navigate_to_url",
+  "present_summary",
   "press",
   "promote_candidate_to_lead",
   "publish_event",
@@ -85,6 +88,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "search_memory",
   "set_memory_note",
   "sleep",
+  "start_auto_run",
   "stop",
   // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
@@ -113,6 +117,7 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "identity",
   "list_personas",
   "list_workers",
+  "present_summary",
   "provision_worker",
   "remember",
   "revoke_worker",
@@ -224,11 +229,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 49 / server 26 (G-P38.8/.11, rebaselined at P-SP-B)", () => {
-  it("T-CONTRACT.TOOLS: tool set after P-SP-B is worker 49 / server 26 (P-SP-B adds score_lead + score_account)", () => {
+describe("tool counts: worker 53 / server 27 (G-P38.8/.11, rebaselined at P-Y3)", () => {
+  it("T-CONTRACT.TOOLS: tool set after P-Y3 is worker 53 / server 27", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 49 / server 26 (P-SP-B adds 2 scoring tools only to worker mode)
+    // Then:  worker 53 / server 27 (P-Y3 counts)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -243,10 +248,10 @@ describe("tool counts: worker 49 / server 26 (G-P38.8/.11, rebaselined at P-SP-B
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        49,
-        `worker tool count must be 49; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        53,
+        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen snapshot (P-SP-B rebaseline)");
+      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen P-Y3 snapshot");
 
       const serverTools = makeAllTools(
         undefined,
@@ -258,8 +263,8 @@ describe("tool counts: worker 49 / server 26 (G-P38.8/.11, rebaselined at P-SP-B
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        27,
+        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
     } finally {

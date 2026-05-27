@@ -122,9 +122,11 @@ function makeNoopTurn(): { runOneTurn: AnyFn } {
 /** Helper: seed a running auto_run with specific started_at (using raw SQL). */
 function seedRunningRow(db: AnyFn, startedAt: number, maxDurationMinutes: number, maxConnects: number | null): string {
   const id = randomUUID();
-  (db as any).prepare(
-    "INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, ?, ?, 'running', NULL, NULL)"
-  ).run(id, startedAt, maxDurationMinutes, maxConnects);
+  (db as any)
+    .prepare(
+      "INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, ?, ?, 'running', NULL, NULL)",
+    )
+    .run(id, startedAt, maxDurationMinutes, maxConnects);
   return id;
 }
 
@@ -165,24 +167,24 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
 
     // (2) cronPrompt injected into state.messages
     const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
-    assert.ok(typeof cronPrompt === "string" && cronPrompt.length > 0,
-      "T-E.Cron.1: cronPrompt must be a non-empty string in state.messages");
-    assert.ok(cronPrompt.includes("[AUTO_RUN_ID="),
-      "T-E.Cron.1: cronPrompt must contain [AUTO_RUN_ID=");
-    assert.ok(/\[ELAPSED=0\/30min\]/.test(cronPrompt),
-      "T-E.Cron.1: cronPrompt must contain [ELAPSED=0/30min]");
-    assert.ok(/\[CONNECTS_USED=0\/5\]/.test(cronPrompt),
-      "T-E.Cron.1: cronPrompt must contain [CONNECTS_USED=0/5]");
+    assert.ok(
+      typeof cronPrompt === "string" && cronPrompt.length > 0,
+      "T-E.Cron.1: cronPrompt must be a non-empty string in state.messages",
+    );
+    assert.ok(cronPrompt.includes("[AUTO_RUN_ID="), "T-E.Cron.1: cronPrompt must contain [AUTO_RUN_ID=");
+    assert.ok(/\[ELAPSED=0\/30min\]/.test(cronPrompt), "T-E.Cron.1: cronPrompt must contain [ELAPSED=0/30min]");
+    assert.ok(/\[CONNECTS_USED=0\/5\]/.test(cronPrompt), "T-E.Cron.1: cronPrompt must contain [CONNECTS_USED=0/5]");
 
     // (3) state.autoRunId set
-    assert.ok(state.autoRunId !== null && typeof state.autoRunId === "string",
-      "T-E.Cron.1: state.autoRunId must be set to a non-null string after tick");
+    assert.ok(
+      state.autoRunId !== null && typeof state.autoRunId === "string",
+      "T-E.Cron.1: state.autoRunId must be set to a non-null string after tick",
+    );
 
     // (4) exactly 1 auto-run-started frame
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const startedFrames = emittedFrames.filter((f: any) => f.type === "auto-run-started");
-    assert.equal(startedFrames.length, 1,
-      "T-E.Cron.1: must have exactly 1 'auto-run-started' frame");
+    assert.equal(startedFrames.length, 1, "T-E.Cron.1: must have exactly 1 'auto-run-started' frame");
   });
 
   // ─── T-E.Cron.2 ──────────────────────────────────────────────────────────────
@@ -219,26 +221,25 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     assert.equal(rows.length, 1, "T-E.Cron.2: auto_runs must still have exactly 1 row (resume, no new row)");
 
     // state.autoRunId = original run ID
-    assert.equal(state.autoRunId, originalRunId,
-      "T-E.Cron.2: state.autoRunId must be the ORIGINAL run ID (not a new one)");
+    assert.equal(
+      state.autoRunId,
+      originalRunId,
+      "T-E.Cron.2: state.autoRunId must be the ORIGINAL run ID (not a new one)",
+    );
 
     // cronPrompt contains original runId + ELAPSED ≈ 10
     const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
-    assert.ok(cronPrompt.includes(originalRunId),
-      "T-E.Cron.2: cronPrompt must contain the original runId");
+    assert.ok(cronPrompt.includes(originalRunId), "T-E.Cron.2: cronPrompt must contain the original runId");
     const elapsedMatch = cronPrompt.match(/\[ELAPSED=(\d+)\/30min\]/);
     assert.ok(elapsedMatch !== null, "T-E.Cron.2: cronPrompt must contain [ELAPSED=N/30min]");
     const elapsed = Number.parseInt(elapsedMatch![1] ?? "0", 10);
-    assert.ok(elapsed >= 9 && elapsed <= 11,
-      `T-E.Cron.2: ELAPSED must be ≈10 (got ${elapsed}); row started 10min ago`);
-    assert.ok(/\[CONNECTS_USED=0\/5\]/.test(cronPrompt),
-      "T-E.Cron.2: cronPrompt must contain [CONNECTS_USED=0/5]");
+    assert.ok(elapsed >= 9 && elapsed <= 11, `T-E.Cron.2: ELAPSED must be ≈10 (got ${elapsed}); row started 10min ago`);
+    assert.ok(/\[CONNECTS_USED=0\/5\]/.test(cronPrompt), "T-E.Cron.2: cronPrompt must contain [CONNECTS_USED=0/5]");
 
     // No auto-run-started frame (we resumed existing run)
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const startedFrames = emittedFrames.filter((f: any) => f.type === "auto-run-started");
-    assert.equal(startedFrames.length, 0,
-      "T-E.Cron.2: must NOT emit auto-run-started on resume (existing row)");
+    assert.equal(startedFrames.length, 0, "T-E.Cron.2: must NOT emit auto-run-started on resume (existing row)");
   });
 
   // ─── T-E.Cron.3 ──────────────────────────────────────────────────────────────
@@ -272,12 +273,15 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     // Old row force-closed
     // biome-ignore lint/suspicious/noExplicitAny: test assertion
     const overdueRow = (db as any).prepare("SELECT * FROM auto_runs WHERE id = ?").get(overdueRunId) as any;
-    assert.equal(overdueRow.status, "stopped_by_agent",
-      "T-E.Cron.3: over-duration row must be force-closed with status='stopped_by_agent'");
+    assert.equal(
+      overdueRow.status,
+      "stopped_by_agent",
+      "T-E.Cron.3: over-duration row must be force-closed with status='stopped_by_agent'",
+    );
     assert.ok(overdueRow.ended_at !== null, "T-E.Cron.3: over-duration row must have ended_at set");
     assert.ok(
       typeof overdueRow.summary === "string" &&
-      (/safety net/i.test(overdueRow.summary) || /Duration cap/i.test(overdueRow.summary)),
+        (/safety net/i.test(overdueRow.summary) || /Duration cap/i.test(overdueRow.summary)),
       `T-E.Cron.3: summary must mention safety net or Duration cap; got: "${overdueRow.summary}"`,
     );
 
@@ -295,12 +299,12 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     const completedIdx = emittedFrames.findIndex((f: any) => f.type === "auto-run-completed");
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const turnStartedIdx = emittedFrames.findIndex((f: any) => f.type === "turn-started");
-    assert.ok(completedIdx !== -1,
-      "T-E.Cron.3: emittedFrames must contain 'auto-run-completed'");
-    assert.ok(turnStartedIdx !== -1,
-      "T-E.Cron.3: emittedFrames must contain 'turn-started' (new run starts)");
-    assert.ok(completedIdx < turnStartedIdx,
-      `T-E.Cron.3: auto-run-completed (idx=${completedIdx}) must come BEFORE turn-started (idx=${turnStartedIdx})`);
+    assert.ok(completedIdx !== -1, "T-E.Cron.3: emittedFrames must contain 'auto-run-completed'");
+    assert.ok(turnStartedIdx !== -1, "T-E.Cron.3: emittedFrames must contain 'turn-started' (new run starts)");
+    assert.ok(
+      completedIdx < turnStartedIdx,
+      `T-E.Cron.3: auto-run-completed (idx=${completedIdx}) must come BEFORE turn-started (idx=${turnStartedIdx})`,
+    );
   });
 
   // ─── T-E.Cron.4 ──────────────────────────────────────────────────────────────
@@ -332,17 +336,27 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     // biome-ignore lint/suspicious/noExplicitAny: test assertion
     const rows = (db as any).prepare("SELECT * FROM auto_runs").all() as any[];
     assert.equal(rows.length, 1, "T-E.Cron.4: must have exactly 1 auto_runs row");
-    assert.equal(rows[0].max_duration_minutes, 480,
-      "T-E.Cron.4: default maxDurationMinutes must be 480 (no [AUTO_DURATION] directive)");
-    assert.equal(rows[0].max_connects, null,
-      "T-E.Cron.4: default maxConnects must be null (no [AUTO_CONNECTS] directive)");
+    assert.equal(
+      rows[0].max_duration_minutes,
+      480,
+      "T-E.Cron.4: default maxDurationMinutes must be 480 (no [AUTO_DURATION] directive)",
+    );
+    assert.equal(
+      rows[0].max_connects,
+      null,
+      "T-E.Cron.4: default maxConnects must be null (no [AUTO_CONNECTS] directive)",
+    );
 
     // cronPrompt has AUTO_RUN_ID + CONNECTS_USED=0/none
     const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
-    assert.ok(cronPrompt.includes("[AUTO_RUN_ID="),
-      "T-E.Cron.4: cronPrompt must contain [AUTO_RUN_ID= even without AUTO directives");
-    assert.ok(/\[CONNECTS_USED=0\/none\]/.test(cronPrompt),
-      "T-E.Cron.4: cronPrompt must contain [CONNECTS_USED=0/none] when maxConnects=null");
+    assert.ok(
+      cronPrompt.includes("[AUTO_RUN_ID="),
+      "T-E.Cron.4: cronPrompt must contain [AUTO_RUN_ID= even without AUTO directives",
+    );
+    assert.ok(
+      /\[CONNECTS_USED=0\/none\]/.test(cronPrompt),
+      "T-E.Cron.4: cronPrompt must contain [CONNECTS_USED=0/none] when maxConnects=null",
+    );
   });
 
   // ─── T-E.Cron.5 ──────────────────────────────────────────────────────────────
@@ -371,16 +385,15 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     // Should have exactly 1 auto-run-progress frame
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const progressFrames = emittedFrames.filter((f: any) => f.type === "auto-run-progress");
-    assert.equal(progressFrames.length, 1,
-      "T-E.Cron.5: must have exactly 1 'auto-run-progress' frame after turn");
+    assert.equal(progressFrames.length, 1, "T-E.Cron.5: must have exactly 1 'auto-run-progress' frame after turn");
 
     const pf = progressFrames[0] as any;
-    assert.ok(typeof pf.runId === "string" && pf.runId.length > 0,
-      "T-E.Cron.5: progress frame must have runId");
-    assert.ok(typeof pf.elapsedMinutes === "number",
-      "T-E.Cron.5: progress frame must have elapsedMinutes");
-    assert.ok(pf.counters !== null && typeof pf.counters === "object",
-      "T-E.Cron.5: progress frame must have counters object");
+    assert.ok(typeof pf.runId === "string" && pf.runId.length > 0, "T-E.Cron.5: progress frame must have runId");
+    assert.ok(typeof pf.elapsedMinutes === "number", "T-E.Cron.5: progress frame must have elapsedMinutes");
+    assert.ok(
+      pf.counters !== null && typeof pf.counters === "object",
+      "T-E.Cron.5: progress frame must have counters object",
+    );
     assert.ok(typeof pf.ts === "number", "T-E.Cron.5: progress frame must have ts");
 
     // Frame ordering: cron-tick BEFORE progress BEFORE cron-done
@@ -390,10 +403,14 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     const progressIdx = emittedFrames.findIndex((f: any) => f.type === "auto-run-progress");
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const cronDoneIdx = emittedFrames.findIndex((f: any) => f.type === "cron-done");
-    assert.ok(cronTickIdx < progressIdx,
-      `T-E.Cron.5: cron-tick (${cronTickIdx}) must come BEFORE auto-run-progress (${progressIdx})`);
-    assert.ok(progressIdx < cronDoneIdx,
-      `T-E.Cron.5: auto-run-progress (${progressIdx}) must come BEFORE cron-done (${cronDoneIdx})`);
+    assert.ok(
+      cronTickIdx < progressIdx,
+      `T-E.Cron.5: cron-tick (${cronTickIdx}) must come BEFORE auto-run-progress (${progressIdx})`,
+    );
+    assert.ok(
+      progressIdx < cronDoneIdx,
+      `T-E.Cron.5: auto-run-progress (${progressIdx}) must come BEFORE cron-done (${cronDoneIdx})`,
+    );
   });
 
   // ─── T-E.Cron.6 ──────────────────────────────────────────────────────────────
@@ -437,34 +454,30 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     await driver.tick();
 
     // state.autoRunId must be null after tick (cleared by post-turn handler)
-    assert.equal(state.autoRunId, null,
-      "T-E.Cron.6: state.autoRunId must be null after agent-ended run detection");
+    assert.equal(state.autoRunId, null, "T-E.Cron.6: state.autoRunId must be null after agent-ended run detection");
 
     // emittedFrames must have 'auto-run-completed' with correct payload
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = emittedFrames.filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      "T-E.Cron.6: must have exactly 1 'auto-run-completed' frame");
+    assert.equal(completedFrames.length, 1, "T-E.Cron.6: must have exactly 1 'auto-run-completed' frame");
 
     const cf = completedFrames[0] as any;
-    assert.equal(cf.runId, existingRunId,
-      "T-E.Cron.6: auto-run-completed frame must have the agent-ended runId");
-    assert.equal(cf.status, "completed",
-      "T-E.Cron.6: auto-run-completed frame status must be 'completed'");
+    assert.equal(cf.runId, existingRunId, "T-E.Cron.6: auto-run-completed frame must have the agent-ended runId");
+    assert.equal(cf.status, "completed", "T-E.Cron.6: auto-run-completed frame status must be 'completed'");
     assert.ok(
       typeof cf.summary === "string" && cf.summary.length > 0,
       "T-E.Cron.6: auto-run-completed frame must have a summary",
     );
-    assert.ok(cf.finalCounters !== null && typeof cf.finalCounters === "object",
-      "T-E.Cron.6: auto-run-completed frame must have finalCounters");
-    assert.ok(typeof cf.endedAt === "number",
-      "T-E.Cron.6: auto-run-completed frame must have endedAt timestamp");
+    assert.ok(
+      cf.finalCounters !== null && typeof cf.finalCounters === "object",
+      "T-E.Cron.6: auto-run-completed frame must have finalCounters",
+    );
+    assert.ok(typeof cf.endedAt === "number", "T-E.Cron.6: auto-run-completed frame must have endedAt timestamp");
 
     // Must NOT have an auto-run-progress frame (run ended during turn; no postRun)
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const progressFrames = emittedFrames.filter((f: any) => f.type === "auto-run-progress");
-    assert.equal(progressFrames.length, 0,
-      "T-E.Cron.6: must NOT have auto-run-progress when run ended mid-turn");
+    assert.equal(progressFrames.length, 0, "T-E.Cron.6: must NOT have auto-run-progress when run ended mid-turn");
   });
 
   // ─── T-E.Cron.7 ──────────────────────────────────────────────────────────────
@@ -509,8 +522,11 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
 
     // EXPECTED BY SPEC: 1 total (de-dup: no new progress when counters unchanged)
     // ACTUAL (no de-dup implemented): 2 total → TEST FAILS [DEFECT D-SP-E-Cron.7]
-    assert.equal(totalProgressFrames, 1,
-      `T-E.Cron.7: total auto-run-progress frames must be 1 (de-dup); got ${totalProgressFrames} [DEFECT D-SP-E-Cron.7: CONCERN-MR-5 de-duplication not implemented in cron.ts]`);
+    assert.equal(
+      totalProgressFrames,
+      1,
+      `T-E.Cron.7: total auto-run-progress frames must be 1 (de-dup); got ${totalProgressFrames} [DEFECT D-SP-E-Cron.7: CONCERN-MR-5 de-duplication not implemented in cron.ts]`,
+    );
   });
 
   // ─── T-E.Cron.8 ──────────────────────────────────────────────────────────────
@@ -556,12 +572,18 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     await driver.tick();
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const allProgressFrames = emittedFrames.filter((f: any) => f.type === "auto-run-progress");
-    assert.equal(allProgressFrames.length, 2,
-      `T-E.Cron.8: total progress frames must be 2 across both ticks; got ${allProgressFrames.length}`);
+    assert.equal(
+      allProgressFrames.length,
+      2,
+      `T-E.Cron.8: total progress frames must be 2 across both ticks; got ${allProgressFrames.length}`,
+    );
 
     // tick #2 frame shows connect_sent=3 (aggregated, not 3 separate frames)
     const tick2Frame = allProgressFrames[1] as any;
-    assert.equal(tick2Frame?.counters?.connect_sent, 3,
-      `T-E.Cron.8: tick #2 progress frame must have counters.connect_sent=3; got: ${JSON.stringify(tick2Frame?.counters)}`);
+    assert.equal(
+      tick2Frame?.counters?.connect_sent,
+      3,
+      `T-E.Cron.8: tick #2 progress frame must have counters.connect_sent=3; got: ${JSON.stringify(tick2Frame?.counters)}`,
+    );
   });
 });
