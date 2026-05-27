@@ -22,7 +22,10 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
@@ -531,4 +534,84 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P
   console.log(
     "T-M_p6.23: makeAllTools(session, undefined, control) -> 39 keys (P-SP-A updated; CONCERN-MR-1 preserved)",
   );
+});
+
+// ─── T-F.Wire.1 — get_sales_report registered (P-SP-F) ─────────────────────────
+// NOTE: This scaffold INTENTIONALLY FAILS pre-builder (Step 4a). After P-SP-F code
+// ships (Sketch C F-4 wire edit in src/tools/sales/index.ts), makeAllTools must include
+// get_sales_report in every non-empty configuration.
+
+test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry contains 'get_sales_report' with a valid Vercel tool shape (P-SP-F Sketch C)", () => {
+  // Given: makeAllTools() called with no args (base set — includes all sales tools)
+  //        after P-SP-F §5.3.1 wiring edit (get_sales_report added to makeSalesTools)
+  // When:  Object.keys(toolSet) inspected for 'get_sales_report'
+  // Then:  'get_sales_report' is present AND has .description (string) + .parameters + .execute (fn)
+  //
+  // Pre-builder state: makeSalesTools does NOT yet register get_sales_report → fails
+  process.env.MAI_TIER = "power";
+  // biome-ignore lint/suspicious/noExplicitAny: test assertion on dynamic registry
+  const t = makeAllTools() as any;
+  assert.ok(
+    "get_sales_report" in t,
+    `T-F.Wire.1: 'get_sales_report' must be in makeAllTools() base set (P-SP-F Sketch C §5.3.1). ` +
+      `Got keys: ${Object.keys(t).sort().join(", ")}`,
+  );
+  assert.equal(
+    typeof t.get_sales_report.description,
+    "string",
+    "T-F.Wire.1: get_sales_report must have a string description",
+  );
+  assert.ok(t.get_sales_report.parameters, "T-F.Wire.1: get_sales_report must have .parameters (Zod schema)");
+  assert.equal(
+    typeof t.get_sales_report.execute,
+    "function",
+    "T-F.Wire.1: get_sales_report must have an .execute function",
+  );
+  console.log(
+    `T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`,
+  );
+});
+
+// ─── T-F.Wire.2 — worker=52 / consumer=50 count contract (P-SP-F) ───────────────
+// NOTE: This scaffold INTENTIONALLY FAILS pre-builder (Step 4a). After P-SP-F code
+// ships (+1 get_sales_report to worker/consumer), CLAUDE.md must reflect the post-P-SP-F
+// counts: worker power = 52, consumer = 50.
+
+test("T-F.Wire.2: post-P-SP-F tool count — makeAllTools full worker = 52 keys, consumer = 50 keys; CLAUDE.md contains 'worker = 52' and 'worker = 50' (P-SP-F Sketch C §5.3.2)", () => {
+  // Given: P-SP-E has shipped (start_auto_run + end_auto_run added, base=23: 7 core +
+  //        12 P-SP-A sales + 2 P-SP-B scoring + 2 P-SP-E auto-run lifecycle);
+  //        P-SP-F builder has added get_sales_report (+1) → base = 24,
+  //        FULL worker power = 52, consumer = 50 (power − 2 for telegram_notify + gh_issue)
+  //        AND CLAUDE.md updated per Sketch C §5.3.2
+  // When:  makeAllTools() key count checked (base set = no session / persist / control)
+  //        AND CLAUDE.md source scanned for count strings
+  // Then:  makeAllTools() returns 24 keys (23 pre-P-SP-F + 1 get_sales_report);
+  //        CLAUDE.md contains 'worker = 52' in the power tier paragraph;
+  //        CLAUDE.md contains 'worker = 50' in the consumer tier paragraph
+  //
+  // Pre-builder: makeAllTools() returns 23 keys (no get_sales_report yet) → fails
+
+  process.env.MAI_TIER = "power";
+  // biome-ignore lint/suspicious/noExplicitAny: test assertion
+  const t = makeAllTools() as any;
+  const baseCount = Object.keys(t).length;
+  assert.equal(
+    baseCount,
+    24,
+    `T-F.Wire.2: makeAllTools() base (power, no session/persist/control) must have 24 keys post-P-SP-F ` +
+      `(P-SP-E base 23 + 1 get_sales_report). Got ${baseCount}: ${Object.keys(t).sort().join(", ")}`,
+  );
+
+  // CLAUDE.md count contract check
+  const repoRoot = join(fileURLToPath(import.meta.url), "../../..");
+  const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf-8");
+  assert.ok(
+    claudeMd.includes("worker = 52"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 52' in the power-tier paragraph (P-SP-F Sketch C §5.3.2)",
+  );
+  assert.ok(
+    claudeMd.includes("worker = 50"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 50' in the consumer-tier paragraph (P-SP-F Sketch C §5.3.2)",
+  );
+  console.log(`T-F.Wire.2 PASS: post-P-SP-F base count = ${baseCount}; CLAUDE.md count strings verified.`);
 });

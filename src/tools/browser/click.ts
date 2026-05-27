@@ -64,6 +64,22 @@ export function makeClickTool(session: LinkedinSession) {
             );
           }
         }
+        // P-SP-E: Auto-mode cap guard. Hard reject before CDP dispatch when running auto-run
+        // would exceed its connect cap. Only fires for LinkedIn outbound surfaces (Connect family
+        // per OUTBOUND_LABEL_RE) AND when session.autoRun returns a row with maxConnects != null.
+        // The P-63 OUTBOUND_LABEL_RE catches Connect/Invite/Send variants; cap-guard checks ONLY
+        // the connect_sent count (Send/Message do not count toward connect cap — they have their
+        // own implicit cap via the workflow approval pattern in non-Auto modes).
+        if (LINKEDIN_OUTBOUND_SURFACES.has(clickSurface) && /^(Connect\b|Invite\b.*\bto\s+connect\b)/i.test(clickLabel)) {
+          const autoRun = session.autoRun?.();
+          if (autoRun && autoRun.maxConnects !== null && autoRun.connectSentCount >= autoRun.maxConnects) {
+            return fail(
+              "click",
+              "invalid_input",
+              `Auto cap reached: connect_sent=${autoRun.connectSentCount}/${autoRun.maxConnects}. Call end_auto_run to close the run cleanly.`,
+            );
+          }
+        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
         else await client.clickAt(target);
