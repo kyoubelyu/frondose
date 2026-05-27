@@ -12,10 +12,46 @@ import { SHARED_RENDER_JS } from "./sharedRenderBundle.generated.js";
 export const OVERLAY_BOOTSTRAP_JS = `
 (function install() {
   if (window.top !== window.self) return;
-  if (window.__maiBootstrapped) return;
   if (!document.documentElement) {
     document.addEventListener("DOMContentLoaded", install, {once: true});
     return;
+  }
+  var MAI_OVERLAY_OWNER = __MAI_OVERLAY_OWNER__;
+  var MAI_OVERLAY_VERSION = __MAI_OVERLAY_VERSION__;
+  var existingRoot = document.getElementById('__mai_root');
+  var existingRootOwner = existingRoot && existingRoot.dataset ? existingRoot.dataset.maiOverlayOwner : undefined;
+  var existingRootVersion = existingRoot && existingRoot.dataset ? existingRoot.dataset.maiOverlayVersion : undefined;
+  var existingOwner = existingRootOwner || window.__maiOverlayOwner;
+  var existingVersion = existingRootVersion || window.__maiOverlayVersion;
+  var existingMarkersMatch =
+    existingRoot &&
+    existingOwner === MAI_OVERLAY_OWNER &&
+    existingVersion === MAI_OVERLAY_VERSION &&
+    window.__maiOverlayOwner === MAI_OVERLAY_OWNER &&
+    window.__maiOverlayVersion === MAI_OVERLAY_VERSION;
+  if (existingMarkersMatch) {
+    window.__maiBootstrapped = true;
+    return;
+  }
+  if (window.__maiBootstrapped || existingRoot) {
+    if (existingRoot) {
+      existingRoot.id = '__mai_root_stale_' + Date.now();
+      existingRoot.dataset.maiOverlayStale = 'true';
+      existingRoot.setAttribute('aria-hidden', 'true');
+      existingRoot.setAttribute('hidden', 'true');
+      existingRoot.setAttribute('inert', '');
+      existingRoot.style.setProperty('display', 'none', 'important');
+      existingRoot.style.setProperty('visibility', 'hidden', 'important');
+      existingRoot.style.setProperty('pointer-events', 'none', 'important');
+      if (existingRoot.shadowRoot) existingRoot.shadowRoot.replaceChildren();
+    }
+    var staleCollapsedCard = document.getElementById('__mai_collapsed_card');
+    if (staleCollapsedCard) staleCollapsedCard.remove();
+    var staleCronBanner = document.getElementById('__mai_cron_banner');
+    if (staleCronBanner) staleCronBanner.remove();
+    window.__maiBootstrapped = false;
+    window.__maiOverlayOwner = undefined;
+    window.__maiOverlayVersion = undefined;
   }
 
   // --- shared builders (esbuild IIFE: defines var __maiShared = (()=>{...})()) ---
@@ -25,6 +61,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
   var HOST_STYLE = 'all:initial; position:fixed; bottom:72px; right:16px; z-index:2147483647;';
   const host = document.createElement('div');
   host.id = '__mai_root';
+  host.dataset.maiOverlayOwner = MAI_OVERLAY_OWNER;
+  host.dataset.maiOverlayVersion = MAI_OVERLAY_VERSION;
   host.style.cssText = HOST_STYLE;
   const shadow = host.attachShadow({ mode: 'open' });
 
@@ -38,6 +76,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
   applyFrondoseStyle(shadow);
 
   document.documentElement.appendChild(host);
+  window.__maiOverlayOwner = MAI_OVERLAY_OWNER;
+  window.__maiOverlayVersion = MAI_OVERLAY_VERSION;
   window.__maiBootstrapped = true;
   var MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__;
   var passiveEnabled = MAI_PASSIVE_ENABLED;
