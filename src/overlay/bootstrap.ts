@@ -89,7 +89,11 @@ export const OVERLAY_BOOTSTRAP_JS = `
   if (saved) {
     maiDialogState = saved;
     maiDialogState.frames = maiDialogState.frames || [];
-    if (maiDialogState.output && dialogElements) dialogElements.output.textContent = maiDialogState.output;
+    if (maiDialogState.output && typeof window.__maiBeginAgent === 'function') {
+      window.__maiBeginAgent();
+      window.__maiAppendChunk(maiDialogState.output);
+      window.__maiEndAgent();
+    }
     if (maiDialogState.ticker && dialogElements) dialogElements.ticker.textContent = maiDialogState.ticker;
     if (saved.card) { try { window.__maiShowCard(saved.card); } catch (e) {} }
   }

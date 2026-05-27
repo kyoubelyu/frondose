@@ -41,12 +41,23 @@ export const SHELL_JS = `
     if (panelRoot) return;
     panelRoot = el('div', 'app');
 
-    // topbar: brand (inline leaf + wordmark) + Manual/Auto switcher
+    // topbar: drag-grip (G7 visual only) + brand + status + mode-badge (G5) + switcher
     var topbar = el('header', 'topbar');
+    var grip = el('div', 'drag-grip');
+    for (var gi = 0; gi < 3; gi++) {
+      var row = el('div', 'drag-grip-row');
+      row.appendChild(el('div', 'drag-grip-dot'));
+      row.appendChild(el('div', 'drag-grip-dot'));
+      grip.appendChild(row);
+    }
+    topbar.appendChild(grip);
     var brand = el('div', 'brand');
     brand.appendChild(__maiShared.buildLeafMark(shadowDoc));
     var word = el('span', 'brand-word'); word.textContent = 'Frondose'; brand.appendChild(word);
     topbar.appendChild(brand);
+    // P-Y2-MA G5: mode-badge pill; text + class flip via __maiSetMode below.
+    var modeBadge = el('span', 'mode-badge manual', 'mode-badge'); modeBadge.textContent = 'MANUAL';
+    topbar.appendChild(modeBadge);
     var switcher = el('div', 'switcher');
     var manualTab = el('button', 'seg-tab active', 'mode-manual-tab'); manualTab.textContent = 'Manual';
     var autoTab = el('button', 'seg-tab', 'mode-auto-tab'); autoTab.textContent = 'Auto';
@@ -61,12 +72,15 @@ export const SHELL_JS = `
     statusLine.appendChild(el('span', 'status-dot'));
     var statusEl = el('span', '', 'status'); statusEl.textContent = 'Listening'; statusLine.appendChild(statusEl);
     manual.appendChild(statusLine);
-    var outputMsg = el('div', 'msg-agent hidden', 'output-msg');
-    outputMsg.appendChild(el('div', 'avatar'));
-    var outputBody = el('div', 'msg-agent-body');
-    var output = el('div', 'msg-agent-text', 'output');
-    outputBody.appendChild(output);
-    outputMsg.appendChild(outputBody); manual.appendChild(outputMsg);
+    // P-Y2-MA G1+G2 overlay parity: replace static output-msg with append-list.
+    // [CONCERN-MR-1 fix, 3b round-1] <div> not <ul> — matches mockup '.conv > .msg-*' selectors.
+    var convList = document.createElement('div');
+    convList.id = 'conversation-list';
+    convList.className = 'conv-list';
+    convList.setAttribute('role', 'log');
+    convList.setAttribute('aria-live', 'polite');
+    convList.setAttribute('aria-relevant', 'additions');
+    manual.appendChild(convList);
     var ticker = el('div', 'ticker hidden', 'ticker');
     manual.appendChild(ticker);
     // overlay-specific legacy slots (preserved features render into these)
@@ -98,7 +112,7 @@ export const SHELL_JS = `
     panelRoot.appendChild(el('button', 'btn-retry hidden', 'retry-btn'));
     panelRoot.appendChild(el('div', 'cron-banner hidden', 'cron-tick-banner'));
 
-    dialogElements = { ticker: ticker, output: output, input: input, cardSlot: cardSlot,
+    dialogElements = { ticker: ticker, convList: convList, input: input, cardSlot: cardSlot,
       nextActionsSlot: nextActionsSlot, retrySlot: retrySlot, cronSlot: cronSlot };
 
     manualTab.addEventListener('click', function(){ window.__maiSetMode('manual'); post({ type:'mode', mode:'manual', t0:Date.now() }); });
@@ -137,7 +151,8 @@ export const SHELL_JS = `
     var pauseBtn = el('button', 'iwf-btn', 'workflow-pause-btn');
     pauseBtn.textContent = 'Pause';
     var handoffBtn = el('button', 'iwf-btn iwf-btn-primary', 'workflow-handoff-btn');
-    handoffBtn.textContent = 'Hand off to Auto';
+    // P-Y2-MA G9: overlay-only label — "Run on Auto" per hover mockup; desktop keeps "Hand off to Auto".
+    handoffBtn.textContent = 'Run on Auto';
     right.appendChild(approveBtn); right.appendChild(declineBtn);
     right.appendChild(pauseBtn); right.appendChild(handoffBtn);
     actions.appendChild(right); card.appendChild(actions);
@@ -185,13 +200,80 @@ export const SHELL_JS = `
   };
 
   window.__maiSetMode = function(mode) {
-    appMode = (mode === 'auto') ? 'auto' : 'manual';
+    appMode = (mode === 'auto') ? 'auto' : (mode === 'magical' ? 'magical' : 'manual');
     __maiShared.buildSwitcher(shadow.getElementById('mode-manual-tab'), shadow.getElementById('mode-auto-tab'), appMode);
     host.classList.toggle('mode-auto', appMode === 'auto');
+    host.classList.toggle('mode-magical', appMode === 'magical');
     var st = shadow.getElementById('status');
-    if (st) st.textContent = __maiShared.statusForMode(appMode).label;   // 'Listening' / 'Working'
+    if (st) st.textContent = __maiShared.statusForMode(appMode).label;   // 'Listening' / 'Observing' / 'Working'
+    // P-Y2-MA G5: mode-badge text + class hook (styling: P-Y2-Magical owns Magical visual).
+    var mb = shadow.getElementById('mode-badge');
+    if (mb) {
+      mb.textContent = (appMode === 'auto') ? 'AUTO' : (appMode === 'magical' ? 'MAGICAL' : 'MANUAL');
+      mb.className = 'mode-badge ' + appMode;
+    }
     rerenderWorkflow();
   };
+
+  // P-Y2-MA G1 overlay parity: conversation-list helpers, mirror Sketch A.
+  var activeAgentTextEl = null;
+  function isOverlayNearBottom() {
+    var sc = shadow.getElementById('scroll-area') || (panelRoot && panelRoot.querySelector ? panelRoot.querySelector('.scroll-area') : null);
+    if (!sc) return true;
+    var distance = sc.scrollHeight - (sc.scrollTop + sc.clientHeight);
+    return distance <= 100;
+  }
+  function overlayScrollIfPinned() {
+    var sc = shadow.getElementById('scroll-area') || (panelRoot && panelRoot.querySelector ? panelRoot.querySelector('.scroll-area') : null);
+    if (!sc || !isOverlayNearBottom()) return;
+    sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+  }
+  window.__maiAppendUser = function(text) {
+    var list = shadow.getElementById('conversation-list');
+    if (!list) return;
+    var b = document.createElement('div');
+    b.className = 'msg-user';
+    b.textContent = String(text);
+    list.appendChild(b);
+    overlayScrollIfPinned();
+  };
+  window.__maiBeginAgent = function() {
+    var list = shadow.getElementById('conversation-list');
+    if (!list) return;
+    var wrap = el('div', 'msg-agent');
+    var avatar = el('div', 'avatar');
+    // G3 sparkles SVG (same path as index.html L313).
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', 'M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z');
+    svg.appendChild(p); avatar.appendChild(svg); wrap.appendChild(avatar);
+    var body = el('div', 'msg-agent-body');
+    var text = el('div', 'msg-agent-text');
+    body.appendChild(text); wrap.appendChild(body);
+    list.appendChild(wrap);
+    activeAgentTextEl = text;
+    overlayScrollIfPinned();
+  };
+  window.__maiAppendChunk = function(chunk) {
+    // [NEW-BLOCKER-1 fix, 3b round-2] Frame-agnostic on the overlay side, symmetric
+    // with Sketch A's appendAgentChunk auto-open (§5.1.2). The legacy serve→overlay
+    // wire is: serve/turn.ts:35 calls __maiClearOutput (now __maiEndAgent, nulls
+    // activeAgentTextEl); serve/turn.ts:100 calls __maiAppendOutput per text-delta
+    // (now routed to __maiAppendChunk per C-1 migration). Without the auto-open,
+    // the FIRST chunk of every turn would silently drop because activeAgentTextEl
+    // is null right after the per-turn clear. Auto-open here mirrors B1's contract:
+    // first text chunk creates a bubble; subsequent chunks accumulate into it.
+    if (!activeAgentTextEl && typeof window.__maiBeginAgent === 'function') {
+      window.__maiBeginAgent();
+    }
+    if (!activeAgentTextEl) return; // defensive — bootstrap not complete / no conv-list yet
+    activeAgentTextEl.textContent = (activeAgentTextEl.textContent || '') + String(chunk);
+    overlayScrollIfPinned();
+  };
+  window.__maiEndAgent = function() { activeAgentTextEl = null; };
 
   window.__maiExpandDialog = function() {
     buildPanelSkeleton();
