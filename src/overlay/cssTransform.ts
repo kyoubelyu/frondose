@@ -8,6 +8,8 @@ export function transformCssForShadow(raw: string): string {
     .replaceAll("html, body {", ":host {")
     .replaceAll("body.mode-auto {", ":host(.mode-auto) {")
     .replaceAll("body.mode-auto ", ":host(.mode-auto) ")
+    .replaceAll("body.mode-magical {", ":host(.mode-magical) {")
+    .replaceAll("body.mode-magical ", ":host(.mode-magical) ")
     .replaceAll("body:not(.mode-auto) ", ":host(:not(.mode-auto)) ")
     .replaceAll("body {", ":host {");
 }
