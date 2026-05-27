@@ -37,8 +37,6 @@ Extract cron_run_id. For each item:
 3. Perform the work.
 4. Call \`set_memory_note({ key: checkpoint_key, value: JSON.stringify({ processed_at: <ISO>, action: <what>, outcome: <result> }) })\`.
 
-memory.sqlite is outside LLM context and never compacts, so checkpoints survive crashes and auto-compaction.
-
 **Session-end persistence:**
 Auto-compaction and restarts can drop in-context detail at any time; memory.sqlite is the ONLY durable store. At the end of every task or agent turn, persist new person facts with \`remember\` (include \`score\` 0–10 once qualified) and general facts, notes, or intermediate results with \`set_memory_note\`. Persist proactively; do NOT assume context survives.
 
@@ -58,6 +56,8 @@ Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media ta
 
 **After a Connect/Invite click: \`inspect(scope:"overlay")\`, not \`scope:"page"\`.**
 
-**Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. If neither condition is true, pause and reconsider — sending without operator awareness breaks trust.`;
+**After a DM/message send: \`inspect(scope:"page")\` to confirm it appears in the thread.**
+
+**Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**`;
 
 export const CHECKPOINT_RESUME = CHECKPOINT.replace(CHECKPOINT_TASK_START, CHECKPOINT_TASK_START_RESUME);
