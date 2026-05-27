@@ -32,10 +32,13 @@ import { makeAllTools, tools } from "../../src/tools/index.js";
 
 process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
+// P-SP-F update: 17 sales tools total (14 P-SP-A+B + 2 P-SP-E auto-run lifecycle + 1 P-SP-F analytics)
 const SALES_TOOL_NAMES = [
+  "end_auto_run",             // P-SP-E: auto-run lifecycle
   "get_account_context",
   "get_auto_run_state",
   "get_lead_context",
+  "get_sales_report",         // P-SP-F: outcome analytics
   "list_due_followups",
   "mark_message_sent",
   "promote_candidate_to_lead",
@@ -44,15 +47,16 @@ const SALES_TOOL_NAMES = [
   "record_raw_candidate",
   "save_message_draft",
   "schedule_follow_up",
-  "score_account",   // P-SP-B: +2 sales-value scoring tools
-  "score_lead",      // P-SP-B
+  "score_account",            // P-SP-B: +2 sales-value scoring tools
+  "score_lead",               // P-SP-B
+  "start_auto_run",           // P-SP-E: auto-run lifecycle
   "update_lead_stage",
 ] as const;
 
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
-test("T-M81: makeAllTools with no session returns 21 keys; with session returns 33 keys [P-SP-A+B updated]", () => {
-  // No session → 21 base tools (P-SP-B adds score_lead + score_account to the 19 P-SP-A base)
+test("T-M81: makeAllTools with no session returns 24 keys; with session returns 36 keys [P-SP-F updated]", () => {
+  // No session → 24 base tools (P-SP-F adds get_sales_report; P-SP-E adds start/end_auto_run)
   const echoOnly = makeAllTools();
   const echoKeys = Object.keys(echoOnly).sort();
   assert.deepEqual(
@@ -114,8 +118,8 @@ test("T-M81: makeAllTools with no session returns 21 keys; with session returns 
     "upload",
   ].sort();
 
-  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 33 keys in P-SP-A+B");
-  assert.equal(allKeys.length, 33, "must have exactly 33 tools with session (P-SP-A+B: +2 score tools)");
+  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 36 keys in P-SP-F");
+  assert.equal(allKeys.length, 36, "must have exactly 36 tools with session (P-SP-F: +3 auto-run+analytics)");
 
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in minimal set");
@@ -127,8 +131,8 @@ test("T-M81: makeAllTools with no session returns 21 keys; with session returns 
 
 // ─── T-M120 ─────────────────────────────────────────────────────────────────
 
-test("T-M120: makeAllTools() with no args returns exactly 19 keys — P-SP-A updated", () => {
-  // P-SP-A: no-args now returns 19 tools (previous 7 base + 12 sales kernel tools)
+test("T-M120: makeAllTools() with no args returns exactly 24 keys — P-SP-F updated", () => {
+  // P-SP-F: no-args returns 24 tools (7 core + 17 sales: +2 P-SP-E auto-run + 1 P-SP-F analytics)
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
@@ -141,14 +145,14 @@ test("T-M120: makeAllTools() with no args returns exactly 19 keys — P-SP-A upd
     "web_search",
     ...SALES_TOOL_NAMES,
   ];
-  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 21 base tools in P-SP-A+B; got: ${keys.join(", ")}`);
-  assert.equal(keys.length, 21, "makeAllTools() must have exactly 21 tools (P-SP-B: +2 score_lead/score_account; was 19 in P-SP-A)");
+  assert.deepEqual(keys, expected.sort(), `makeAllTools() must return 24 base tools in P-SP-F; got: ${keys.join(", ")}`);
+  assert.equal(keys.length, 24, "makeAllTools() must have exactly 24 tools (P-SP-F: +3 over P-SP-B's 21; was 21 in P-SP-B)");
 });
 
 // ─── T-M121 ─────────────────────────────────────────────────────────────────
 
-test("T-M121: makeAllTools(undefined, persistence) returns 27 keys (base 19 + 8 memory/identity) [P-SP-A updated]", () => {
-  // P-SP-A update: previous 15 keys + 12 sales kernel tools = 27.
+test("T-M121: makeAllTools(undefined, persistence) returns 32 keys (base 24 + 8 memory/identity) [P-SP-F updated]", () => {
+  // P-SP-F update: base 24 + 8 persistence = 32.
   const persistence = {
     memoryDbPath: "/tmp/p4-t121-memory.sqlite",
     identityPath: "/tmp/p4-t121-identity.json",
@@ -179,15 +183,15 @@ test("T-M121: makeAllTools(undefined, persistence) returns 27 keys (base 19 + 8 
   assert.deepEqual(
     keys,
     expected,
-    `persistence-only must yield 29 tools in P-SP-A+B (base 21 + 8 memory/identity); got: ${keys.join(", ")}`,
+    `persistence-only must yield 32 tools in P-SP-F (base 24 + 8 memory/identity); got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 29, "must have exactly 29 tools with persistence-only (P-SP-B: +2 score tools; was 27 in P-SP-A)");
+  assert.equal(keys.length, 32, "must have exactly 32 tools with persistence-only (P-SP-F: base 24 + 8; was 29 in P-SP-B)");
 });
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
 
-test("T-M122: makeAllTools(session, persistence) returns 39 keys — P-SP-A updated", () => {
-  // P-SP-A update: 19 base + 12 browser + 8 persistence = 39.
+test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-SP-F updated", () => {
+  // P-SP-F update: 24 base + 12 browser + 8 persistence = 44.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -243,15 +247,15 @@ test("T-M122: makeAllTools(session, persistence) returns 39 keys — P-SP-A upda
   assert.deepEqual(
     keys,
     expected,
-    `makeAllTools(session, persistence) must yield 41 keys in P-SP-A+B; got: ${keys.join(", ")}`,
+    `makeAllTools(session, persistence) must yield 44 keys in P-SP-F; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 41, "must have exactly 41 tools with session + persistence (P-SP-B: +2 score tools; was 39 in P-SP-A)");
+  assert.equal(keys.length, 44, "must have exactly 44 tools with session + persistence (P-SP-F: base 24 + 12 browser + 8 persist)");
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
 
-test("T-M_p5.18: makeAllTools(session, persistence) returns 39 keys including 'qualify_profile' (P-SP-A updated)", () => {
-  // P-SP-A update: now 39 (base 19 + 12 browser + 8 persistence).
+test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'qualify_profile' (P-SP-F updated)", () => {
+  // P-SP-F update: now 44 (base 24 + 12 browser + 8 persistence).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -282,16 +286,16 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 39 keys including 'q
   assert.ok("get_memory_note" in t, "T-M_p5.18: makeAllTools must include 'get_memory_note' tool (P-39)");
   assert.equal(
     keys.length,
-    41,
-    `T-M_p5.18: must have exactly 41 tools in P-SP-A+B; got ${keys.length}: ${keys.sort().join(", ")}`,
+    44,
+    `T-M_p5.18: must have exactly 44 tools in P-SP-F; got ${keys.length}: ${keys.sort().join(", ")}`,
   );
-  console.log("T-M_p5.18: makeAllTools returns 39 tools including qualify_profile + sales kernel tools");
+  console.log("T-M_p5.18: makeAllTools returns 44 tools including qualify_profile + sales kernel tools");
 });
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 47 keys (P-SP-A: +12 sales kernel tools)", () => {
-  // P-SP-A update: 19 base + 12 browser + 8 persistence + 8 control = 47.
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (P-SP-F: base 24 + 12 browser + 8 persist + 8 control)", () => {
+  // P-SP-F update: 24 base + 12 browser + 8 persistence + 8 control = 52 (full worker power count).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -357,9 +361,9 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 47 keys (P-
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 49 keys in P-SP-A+B; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 52 keys in P-SP-F; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 49, `T-M_p6.21: must have exactly 49 tools in P-SP-A+B; got ${keys.length}`);
+  assert.equal(keys.length, 52, `T-M_p6.21: must have exactly 52 tools in P-SP-F (full worker power = 52); got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -382,13 +386,13 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 47 keys (P-
   // Spot-check P-Y1 workflow tool
   assert.ok("todo_write" in t, "T-M_p6.21: todo_write must be registered (P-Y1)");
 
-  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 47 keys (P-SP-A updated)");
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 52 keys (P-SP-F: full worker power)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
 
-test("T-M_p6.22: makeAllTools() returns 19 keys — P-SP-A update; base includes sales kernel tools", () => {
-  // P-SP-A: no-args returns 19 tools (previous 7 base + 12 sales kernel tools).
+test("T-M_p6.22: makeAllTools() returns 24 keys — P-SP-F update; base includes all 17 sales tools", () => {
+  // P-SP-F: no-args returns 24 tools (7 core + 17 sales: +2 P-SP-E + 1 P-SP-F).
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
@@ -404,10 +408,10 @@ test("T-M_p6.22: makeAllTools() returns 19 keys — P-SP-A update; base includes
   assert.deepEqual(
     keys,
     expected.sort(),
-    `T-M_p6.22: makeAllTools() must return 21 base tools in P-SP-A+B; got: ${keys.join(", ")}`,
+    `T-M_p6.22: makeAllTools() must return 24 base tools in P-SP-F; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 21, "T-M_p6.22: must have exactly 21 tools with no args (P-SP-B: +2 score tools; was 19 in P-SP-A)");
-  console.log("T-M_p6.22: makeAllTools() -> 19 keys (base set)");
+  assert.equal(keys.length, 24, "T-M_p6.22: must have exactly 24 tools with no args (P-SP-F: +3 over P-SP-B's 21)");
+  console.log("T-M_p6.22: makeAllTools() -> 24 keys (base set, P-SP-F)");
 });
 
 // ─── T-M_p6.23 — session + control (no persistence) ──────────────────────────
@@ -459,8 +463,8 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
 
 // ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P-SP-A update (base 19 + browser 12 + control 8)", () => {
-  // P-SP-A update: 19 base + 12 browser + 8 control = 39.
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys — P-SP-F update (base 24 + browser 12 + control 8)", () => {
+  // P-SP-F update: 24 base + 12 browser + 8 control = 44.
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -513,9 +517,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 41 keys in P-SP-A+B; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 44 keys in P-SP-F; got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 41, `T-M_p6.23: must have exactly 41 tools in P-SP-A+B; got ${keys.length}`);
+  assert.equal(keys.length, 44, `T-M_p6.23: must have exactly 44 tools in P-SP-F; got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -532,7 +536,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 39 keys — P
   assert.ok("web_search" in t, "T-M_p6.23: web_search must be present (P-9 always-registered)");
 
   console.log(
-    "T-M_p6.23: makeAllTools(session, undefined, control) -> 39 keys (P-SP-A updated; CONCERN-MR-1 preserved)",
+    "T-M_p6.23: makeAllTools(session, undefined, control) -> 44 keys (P-SP-F updated; CONCERN-MR-1 preserved)",
   );
 });
 
