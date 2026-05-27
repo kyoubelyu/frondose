@@ -87,10 +87,10 @@ export const LEGACY_JS = `
       if (typeof parsed === 'string') text = parsed;
     } catch (e) {
     }
-    var prev = dialogElements.output.textContent || '';
-    dialogElements.output.textContent = prev + text;
-    dialogElements.output.scrollTop = dialogElements.output.scrollHeight;
-    maiDialogState.output = dialogElements.output.textContent || '';
+    if (typeof window.__maiAppendChunk === 'function') {
+      window.__maiAppendChunk(text);
+    }
+    maiDialogState.output = (maiDialogState.output || '') + text;
     maiDialogState.frames = maiDialogState.frames || [];
     maiDialogState.frames.push({ type: 'text', content: text, ts: Date.now() });
     maiWriteDialogState(maiDialogState);
@@ -98,7 +98,10 @@ export const LEGACY_JS = `
 
   window.__maiClearOutput = function() {
     if (!dialogElements) return;
-    dialogElements.output.textContent = '';
+    // [P-Y2-MA] semantics changed: no DOM wipe; just end the active bubble.
+    if (typeof window.__maiEndAgent === 'function') {
+      window.__maiEndAgent();
+    }
     maiDialogState.output = '';
     maiDialogState.frames = [];
     maiWriteDialogState(maiDialogState);
