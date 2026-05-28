@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "ROADMAP.md"
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - "bootstrap.md"
+      - "docs/**"
+      - "website/**"
+      - ".zed/**"
+      - ".codegraph/**"
+      - ".claude/**"
+      - ".omx/**"
+  pull_request:
+    paths-ignore:
+      - "ROADMAP.md"
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - "bootstrap.md"
+      - "docs/**"
+      - "website/**"
+      - ".zed/**"
+      - ".codegraph/**"
+      - ".claude/**"
+      - ".omx/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm run lint
+      - run: npm run test:fast
