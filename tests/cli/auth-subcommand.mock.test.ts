@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 import { type AuthSubcommandOpts, runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
 import { readAuth } from "../../src/persistence/auth.js";
+import { stubProcessExit } from "./interactive/_mockPrompter.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,24 +60,24 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
   it("T-Nonint.1a: 'set' with full positional args (no prompter) writes auth.json correctly", async () => {
     // Given: runAuthSubcommand called with 2 args only (pre-P-13 call pattern)
     // When:  runAuthSubcommand("set", { url, key, model, name, authPath }) — P-21 URL-based API
-    // Then:  auth.json written with anthropic key; function returns normally (no prompter invoked)
-    // NOTE: P-21 replaced spec: + key: with url: + key: + model: + name: for the "set" action.
+    // Then:  auth.json written with deepseek key; function returns normally (no prompter invoked)
+    // P-71: use DeepSeek URL (official Anthropic/OpenAI URLs are now scope-disabled)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     try {
       await captureStdout(() =>
         runAuthSubcommand("set", {
-          url: "https://api.anthropic.com/v1",
+          url: "https://api.deepseek.com/v1",
           key: "sk-nonint-test",
-          model: "claude-sonnet-4-5",
-          name: "anthropic",
+          model: "deepseek-v4-flash",
+          name: "deepseek",
           authPath,
         }),
       );
       // P-24 path-shift: writeAuth now routes to secrets.json; use readAuth to read back
       const written = readAuth(authPath);
       assert.equal(
-        written?.providers?.anthropic?.key,
+        written?.providers?.deepseek?.key,
         "sk-nonint-test",
         "T-Nonint.1a: key must be written correctly with URL-based call",
       );
@@ -136,20 +137,21 @@ describe("runAuthSubcommand — backward-compat regression (prompter arg omitted
   });
 
   it("T-Nonint.1d: 'default' with spec arg present (no prompter) writes default field to auth.json", async () => {
-    // Given: auth.json has anthropic; runAuthSubcommand called with 2 args + spec
-    // When:  runAuthSubcommand("default", { spec: "anthropic:claude-sonnet-4-5", authPath })
-    // Then:  auth.json.default === "anthropic:claude-sonnet-4-5"
+    // Given: auth.json has deepseek; runAuthSubcommand called with 2 args + spec
+    // When:  runAuthSubcommand("default", { spec: "deepseek:deepseek-v4-flash", authPath })
+    // Then:  auth.json.default === "deepseek:deepseek-v4-flash"
+    // P-71: use non-reserved spec (anthropic/openai direct specs are scope-disabled)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     try {
-      writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-a" } } }), "utf-8");
+      writeFileSync(authPath, JSON.stringify({ providers: { deepseek: { key: "sk-d" } } }), "utf-8");
 
-      await captureStdout(() => runAuthSubcommand("default", { spec: "anthropic:claude-sonnet-4-5", authPath }));
+      await captureStdout(() => runAuthSubcommand("default", { spec: "deepseek:deepseek-v4-flash", authPath }));
       // P-24 path-shift: writeAuth routes to secrets.json; use readAuth to verify
       const written = readAuth(authPath);
       assert.equal(
         written?.default,
-        "anthropic:claude-sonnet-4-5",
+        "deepseek:deepseek-v4-flash",
         "T-Nonint.1d: default field must be written correctly",
       );
     } finally {
@@ -313,34 +315,35 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
   });
 
   it("T-AUTH.6: when provider name collides, set auto-increments to name-1 without prompt", async () => {
-    // Given: existing auth.json has providers.openai; opts.name = "openai" (collision)
+    // Given: existing auth.json has providers.together; opts.name = "together" (collision)
     // When:  runAuthSubcommand("set", opts) is called
-    // Then:  collision detected; entry stored as "openai-1" (auto-increment, no interactive prompt)
+    // Then:  collision detected; entry stored as "together-1" (auto-increment, no interactive prompt)
+    // P-71: use non-reserved name (openai/anthropic are blocked; use 'together' for collision test)
     writeFileSync(
       authPath,
       JSON.stringify({
-        providers: { openai: { key: "sk-existing", baseUrl: "https://api.openai.com/v1", type: "openai" } },
+        providers: { together: { key: "sk-existing", baseUrl: "https://api.together.xyz/v1", type: "openai" } },
       }),
       "utf-8",
     );
     const opts: AuthSubcommandOpts = {
-      url: "https://api.openai.com/v1",
+      url: "https://api.together.xyz/v1",
       key: "sk-new",
-      model: "gpt-4o",
-      name: "openai",
+      model: "meta-llama/Llama-4",
+      name: "together",
       authPath,
     };
     await captureStdout(() => runAuthSubcommand("set", opts));
     const auth = readAuth(authPath);
-    // Original "openai" entry preserved
-    assert.ok(auth?.providers?.openai, `T-AUTH.6: original "openai" entry must be preserved`);
-    assert.equal(auth?.providers?.openai?.key, "sk-existing", "T-AUTH.6: original key must be unchanged");
-    // New entry stored as "openai-1" (auto-incremented)
+    // Original "together" entry preserved
+    assert.ok(auth?.providers?.together, `T-AUTH.6: original "together" entry must be preserved`);
+    assert.equal(auth?.providers?.together?.key, "sk-existing", "T-AUTH.6: original key must be unchanged");
+    // New entry stored as "together-1" (auto-incremented)
     assert.ok(
-      auth?.providers?.["openai-1"],
-      `T-AUTH.6: new entry must be stored as "openai-1" (collision auto-increment)`,
+      auth?.providers?.["together-1"],
+      `T-AUTH.6: new entry must be stored as "together-1" (collision auto-increment)`,
     );
-    assert.equal(auth?.providers?.["openai-1"]?.key, "sk-new", "T-AUTH.6: new key must be stored under openai-1");
+    assert.equal(auth?.providers?.["together-1"]?.key, "sk-new", "T-AUTH.6: new key must be stored under together-1");
   });
 
   it("T-AUTH.7: when asDefault=true, set writes the new provider:model as auth.json default field", async () => {
@@ -428,8 +431,9 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     // Then:  stderr contains "Could not fetch model list:"; prompter.input("Model ID (e.g...):") called as fallback;
     //        auth.json written with the provider entry (model is not stored per-entry; stored in default spec if asDefault)
     const errorFetch = makeErrorFetch(new Error("connect ECONNREFUSED"));
+    // P-71 prompt order change: URL → name (moved before apiKey) → apiKey → model ID fallback
     const mockPrompter = makeMockPrompter({
-      inputs: ["https://api.deepseek.com/v1", "manually-entered-model", "deepseek"],
+      inputs: ["https://api.deepseek.com/v1", "deepseek", "manually-entered-model"],
       apiKey: "sk-deepseek-test",
       confirmResult: false,
     });
@@ -456,14 +460,15 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
   });
 
   it("T-AUTH.5: when interactive, name prompt default is derived from URL hostname", async () => {
-    // Given: isInteractive() returns true; URL entered is "https://api.openai.com/v1"; operator presses enter (accepts default)
+    // Given: isInteractive() returns true; URL entered is "https://api.together.xyz/v1"; operator presses enter (accepts default)
     // When:  name prompt shows with default derived from hostname
-    // Then:  default shown/used is "openai" (stripped "api." prefix); stored provider name is "openai"
-    const mockFetch = makeMockFetch(200, { data: [{ id: "gpt-4o" }] });
+    // Then:  default shown/used is "together" (stripped "api." prefix); stored provider name is "together"
+    // P-71: use a non-official URL (official OpenAI/Anthropic are scope-disabled)
+    const mockFetch = makeMockFetch(200, { data: [{ id: "meta-llama/Llama-4" }] });
     const mockPrompter = makeMockPrompter({
-      inputs: ["https://api.openai.com/v1", ""], // empty string = accept default name
-      apiKey: "sk-openai-test",
-      modelSelectResult: "gpt-4o",
+      inputs: ["https://api.together.xyz/v1", ""], // empty string = accept default name "together"
+      apiKey: "sk-together-test",
+      modelSelectResult: "meta-llama/Llama-4",
       confirmResult: false,
     });
     const savedTTY = (process.stdin as unknown as { isTTY?: boolean }).isTTY;
@@ -475,11 +480,11 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     }
     const auth = readAuth(authPath);
     assert.ok(
-      auth?.providers?.openai,
-      `T-AUTH.5: providers.openai must exist (default name derived from "api.openai.com" → "openai"; empty input uses default)`,
+      auth?.providers?.together,
+      `T-AUTH.5: providers.together must exist (default name derived from "api.together.xyz" → "together"; empty input uses default)`,
     );
-    assert.equal(auth?.providers?.openai?.key, "sk-openai-test", "T-AUTH.5: key from apiKeyInput must be stored");
-    assert.equal(auth?.providers?.openai?.type, "openai", "T-AUTH.5: type must be 'openai'");
+    assert.equal(auth?.providers?.together?.key, "sk-together-test", "T-AUTH.5: key from apiKeyInput must be stored");
+    assert.equal(auth?.providers?.together?.type, "openai", "T-AUTH.5: type must be 'openai'");
   });
 
   it("T-AUTH.9: when URL lacks /v1 path segment and is non-Anthropic, set emits /v1 warning to stderr", async () => {
@@ -511,10 +516,13 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
     );
   });
 
-  it("T-AUTH.10: when URL has Anthropic hostname (*.anthropic.com), /v1 warning is NOT emitted", async () => {
-    // Given: non-TTY; opts.url = "https://api.anthropic.com" (Anthropic host, no /v1)
+  it("T-AUTH.10: P-71 — official Anthropic hostname is scope-disabled; auth set rejects it before write", async () => {
+    // Given: non-TTY; opts.url = "https://api.anthropic.com" (official Anthropic host, now scope-disabled)
     // When:  runAuthSubcommand("set", opts) is called
-    // Then:  stderr does NOT contain /v1 warning; entry.type === "anthropic"
+    // Then:  stderr contains scope-disabled message; no provider written to auth.json
+    // P-71: official Anthropic URLs are blocked; test now verifies the scope-disabled guard fires.
+    // stubProcessExit converts process.exit to throw so the test can assert without crashing.
+    const stubExit = stubProcessExit();
     const opts: AuthSubcommandOpts = {
       url: "https://api.anthropic.com",
       key: "sk-ant-xxx",
@@ -522,17 +530,25 @@ describe("runAuthSubcommand set — URL-based flow, model fetch, name derivation
       name: "anthropic",
       authPath,
     };
-    const stderrOutput = await captureStderr(() => captureStdout(() => runAuthSubcommand("set", opts)));
-    assert.ok(
-      !stderrOutput.includes("[mai] warning:"),
-      `T-AUTH.10: NO /v1 warning expected for Anthropic hostname; got: "${stderrOutput}"`,
-    );
-    const auth = readAuth(authPath);
-    assert.equal(
-      auth?.providers?.anthropic?.type,
-      "anthropic",
-      "T-AUTH.10: type must be 'anthropic' for Anthropic hostname",
-    );
+    try {
+      const stderrOutput = await captureStderr(() =>
+        captureStdout(() => runAuthSubcommand("set", opts)).catch(() => {}),
+      );
+      assert.ok(
+        stderrOutput.toLowerCase().includes("scope-disabled") ||
+          stderrOutput.toLowerCase().includes("direct-vendor") ||
+          stderrOutput.toLowerCase().includes("anthropic"),
+        `T-AUTH.10: stderr must reference scope-disabled or Anthropic block; got: "${stderrOutput}"`,
+      );
+      // No entry must be written to auth.json
+      const auth = readAuth(authPath);
+      assert.ok(
+        !auth?.providers?.anthropic,
+        "T-AUTH.10: auth.json must NOT have anthropic entry after scope-disabled rejection",
+      );
+    } finally {
+      stubExit.restore();
+    }
   });
 });
 

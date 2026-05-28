@@ -58,9 +58,10 @@ after(() => {
 
 describe("runAuthSubcommand — args-present (non-interactive path)", () => {
   it("T-AuthI.1: when full positional args present (P-21 URL API), writes auth.json AND prompter is NOT called", async () => {
-    // Given: url+key+model+name all present in opts (P-21 URL-based API, replacing the old spec:)
-    // When:  runAuthSubcommand("set", { url, key, model, name, authPath }, mockPrompter) is called non-interactively
-    // Then:  auth.json (secrets.json) written with the anthropic key; no prompter method invoked
+    // Given: url+key+model+name all present in opts (P-21 URL-based API, non-official DeepSeek URL per P-71)
+    // When:  runAuthSubcommand("set", { url, key, model, name, authPath }, mockPrompter) called non-interactively
+    // Then:  auth.json (secrets.json) written with deepseek key; no prompter method invoked
+    // P-71: use DeepSeek URL (not official Anthropic/OpenAI which are now blocked)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const mp = makeMockPrompter();
@@ -69,17 +70,17 @@ describe("runAuthSubcommand — args-present (non-interactive path)", () => {
         runAuthSubcommand(
           "set",
           {
-            url: "https://api.anthropic.com/v1",
+            url: "https://api.deepseek.com/v1",
             key: "sk-test",
-            model: "claude-sonnet-4-5",
-            name: "anthropic",
+            model: "deepseek-v4-flash",
+            name: "deepseek",
             authPath,
           },
           mp,
         ),
       );
       const written = readAuthJson(authPath);
-      assert.equal(written.providers?.anthropic?.key, "sk-test", "T-AuthI.1: key must be written");
+      assert.equal(written.providers?.deepseek?.key, "sk-test", "T-AuthI.1: key must be written");
       assert.equal(mp.calls.providerSelect.length, 0, "T-AuthI.1: providerSelect MUST NOT be called");
       assert.equal(mp.calls.apiKeyInput.length, 0, "T-AuthI.1: apiKeyInput MUST NOT be called");
       assert.equal(mp.calls.input.length, 0, "T-AuthI.1: input MUST NOT be called when all args present");
@@ -195,25 +196,30 @@ describe("runAuthSubcommand('remove') — interactive path", () => {
 
 describe("runAuthSubcommand('default') — interactive path", () => {
   it("T-AuthI.5: when no spec AND isInteractive()=true AND auth has 2 providers, calls providerSelect and writes default field", async () => {
-    // Given: no spec in opts; stdin.isTTY=true; auth.json has anthropic+openai; mock returns "openai:gpt-4o"
+    // Given: no spec in opts; stdin.isTTY=true; auth.json has deepseek+together; mock returns "deepseek:deepseek-v4-flash"
     // When:  runAuthSubcommand("default", {}, mockPrompter)
-    // Then:  auth.json.default === "openai:gpt-4o"
+    // Then:  auth.json.default === "deepseek:deepseek-v4-flash"
+    // P-71: use non-reserved provider names (anthropic/openai are blocked)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const restore = stubInteractive(true);
     const mp = makeMockPrompter({
-      providerSelect: async () => "openai:gpt-4o",
+      providerSelect: async () => "deepseek:deepseek-v4-flash",
     });
     try {
       writeFileSync(
         authPath,
-        JSON.stringify({ providers: { anthropic: { key: "sk-a" }, openai: { key: "sk-o" } } }),
+        JSON.stringify({ providers: { deepseek: { key: "sk-d" }, together: { key: "sk-t" } } }),
         "utf-8",
       );
 
       await captureStdout(() => runAuthSubcommand("default", { authPath }, mp));
       const written = readAuthJson(authPath);
-      assert.equal(written.default, "openai:gpt-4o", "T-AuthI.5: default must match providerSelect return value");
+      assert.equal(
+        written.default,
+        "deepseek:deepseek-v4-flash",
+        "T-AuthI.5: default must match providerSelect return value",
+      );
     } finally {
       restore();
       cleanup();
@@ -221,32 +227,30 @@ describe("runAuthSubcommand('default') — interactive path", () => {
   });
 
   it("T-AuthI.5b (C-3): auth.json.default is set to the exact value returned by providerSelect (surfaces full-spec vs family-key write behavior)", async () => {
-    // Given: no spec in opts; isInteractive()=true; auth.json has providers ["anthropic", "openai"]
-    // When:  runAuthSubcommand("default", {}, mockPrompter) with providerSelect→"anthropic" (family key, not full spec)
-    // Then:  auth.json.default === "anthropic" (write-path correctly stores whatever providerSelect returned)
-    //        NOTE: This test surfaces C-3 — if the implementation stores "anthropic:claude-sonnet-4-5" instead
-    //        of "anthropic", the assertion will fail, revealing the full-spec vs family-key mismatch.
+    // Given: no spec in opts; isInteractive()=true; auth.json has providers ["deepseek", "together"]
+    // When:  runAuthSubcommand("default", {}, mockPrompter) with providerSelect→"together:llama-4" (non-standard spec)
+    // Then:  auth.json.default === "together:llama-4" (write-path correctly stores whatever providerSelect returned)
+    //        NOTE: This test surfaces C-3 — if the implementation expands the spec, the assertion fails.
+    // P-71: use non-reserved provider names (anthropic/openai bare keys are blocked by parseModelSpec guard)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const restore = stubInteractive(true);
     const mp = makeMockPrompter({
-      providerSelect: async () => "anthropic", // family key — what realPrompter would return based on Object.keys
+      providerSelect: async () => "together:llama-4", // full spec — non-reserved provider
     });
     try {
       writeFileSync(
         authPath,
-        JSON.stringify({ providers: { anthropic: { key: "sk-a" }, openai: { key: "sk-o" } } }),
+        JSON.stringify({ providers: { deepseek: { key: "sk-d" }, together: { key: "sk-t" } } }),
         "utf-8",
       );
 
       await captureStdout(() => runAuthSubcommand("default", { authPath }, mp));
       const written = readAuthJson(authPath);
-      // C-3 concern: the write-path must store providerSelect's EXACT return value.
-      // If impl stores "anthropic" (family key returned by providerSelect), this passes.
-      // If impl expands to "anthropic:claude-sonnet-4-5", this fails → surfaces C-3 bug.
+      // C-3 concern: the write-path must store providerSelect's EXACT return value verbatim.
       assert.equal(
         written.default,
-        "anthropic",
+        "together:llama-4",
         "T-AuthI.5b: default must be exactly what providerSelect returned (C-3 write-path verification)",
       );
     } finally {
@@ -260,10 +264,11 @@ describe("runAuthSubcommand('default') — interactive path", () => {
 
 describe("runAuthSubcommand('set') — interactive add preserves existing providers", () => {
   it("T-AuthI.6: when interactive set adds a new provider, it preserves existing entries", async () => {
-    // Given: stdin.isTTY=true; auth.json already has anthropic; interactive URL flow for a new openai provider
+    // Given: stdin.isTTY=true; auth.json already has deepseek; interactive URL flow for a new 'together' provider
     //        (P-21 removed the __NEW__ providerSelect sentinel from set — it now prompts URL/key/model/name directly)
-    // When:  runAuthSubcommand("set", { authPath, fetchImpl }, mockPrompter) with url=openai, key=sk-new-test
-    // Then:  auth.json has BOTH anthropic AND openai; new openai key stored; stdout mentions the new provider
+    // When:  runAuthSubcommand("set", { authPath, fetchImpl }, mockPrompter) with url=together, key=sk-new-test
+    // Then:  auth.json has BOTH deepseek AND together; new together key stored; stdout mentions the new provider
+    // P-71: use non-official URLs (official Anthropic/OpenAI URLs are blocked)
 
     const { authPath, cleanup } = makeTmpAuthDir();
     const restore = stubInteractive(true);
@@ -271,29 +276,29 @@ describe("runAuthSubcommand('set') — interactive add preserves existing provid
       ({ ok: true, status: 200, json: async () => ({ data: [] }) }) as Response;
     const mp = makeMockPrompter({
       input: async (msg) => {
-        if (msg.includes("URL")) return "https://api.openai.com/v1";
-        if (msg.includes("Model")) return "gpt-4o";
-        return ""; // name prompt → derived default "openai"
+        if (msg.includes("URL")) return "https://api.together.xyz/v1";
+        if (msg.includes("Model")) return "meta-llama/Llama-4";
+        return ""; // name prompt → derived default "together"
       },
       apiKeyInput: async () => "sk-new-test",
     });
     try {
-      writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-existing" } } }), "utf-8");
+      writeFileSync(authPath, JSON.stringify({ providers: { deepseek: { key: "sk-existing" } } }), "utf-8");
 
       const stdout = await captureStdout(async () => {
         await runAuthSubcommand("set", { authPath, fetchImpl: emptyModelsFetch }, mp);
       });
 
       const written = readAuthJson(authPath);
-      assert.ok(written.providers?.anthropic, "T-AuthI.6: existing anthropic must be preserved");
-      assert.ok(written.providers?.openai, "T-AuthI.6: new openai entry must be added");
+      assert.ok(written.providers?.deepseek, "T-AuthI.6: existing deepseek must be preserved");
+      assert.ok(written.providers?.together, "T-AuthI.6: new together entry must be added");
       assert.equal(
-        (written.providers as Record<string, { key: string }>)?.openai?.key,
+        (written.providers as Record<string, { key: string }>)?.together?.key,
         "sk-new-test",
         "T-AuthI.6: new key must be stored",
       );
       assert.ok(
-        stdout.includes("openai") || stdout.includes("provider"),
+        stdout.includes("together") || stdout.includes("provider"),
         `T-AuthI.6: stdout mentions provider; got: "${stdout}"`,
       );
     } finally {

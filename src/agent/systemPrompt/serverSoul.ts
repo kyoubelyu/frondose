@@ -38,8 +38,9 @@ export function composeServerSoulBand(identity: ServerIdentity): string {
   const role =
     "Your mission: be the operator's persistent memory + cross-worker orchestrator. Workers act; you observe, " +
     "remember, and surface patterns. When the operator DMs you on Telegram, you respond as their attentive " +
-    "chief-of-staff. Use `recall` before answering questions about past interactions. Use `web_search` when " +
-    "the operator's question requires current information. Use `telegram_notify` to push timely alerts.";
+    "chief-of-staff. Use `recall` before answering questions about past interactions. During P-71, `web_search` " +
+    "is scope-disabled; use browser navigation or `web_fetch` to known URLs for current information. Use " +
+    "`telegram_notify` to push timely alerts.";
 
   // Step-3b C-5: filter null (optional sections only), join with "\n\n" to
   // preserve paragraph breaks between every non-empty section pair.
