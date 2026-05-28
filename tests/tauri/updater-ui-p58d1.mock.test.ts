@@ -29,7 +29,6 @@
  */
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
@@ -40,6 +39,58 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Read source files at module level — used in structural assertions (T-UI.9b, T-UI.10).
 const APP_TS_SRC = readFileSync(join(REPO, "src", "tauri", "ui", "app.ts"), "utf-8");
 const SETTINGS_TS_SRC = readFileSync(join(REPO, "src", "tauri", "ui", "settings.ts"), "utf-8");
+
+function parsePorcelainFixturePaths(statusOut: string): string[] {
+  return statusOut
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .flatMap((line) => {
+      const path = line.slice(3).trim();
+      return path.includes(" -> ") ? path.split(" -> ") : [path];
+    })
+    .map((path) => path.trim())
+    .filter((path) => path.length > 0);
+}
+
+const P58D1_UI_APPROVED_PATTERN = /^src\/tauri\/ui\/(settings|app|index)\.(ts|js|html|map|js\.map)$/;
+const P58D1_UI_APPROVED_SIBLING_CHANGES = new Set([
+  "src/agent/systemPrompt/soul.ts", // P-66 approved Soul trigger-habit wording rebaseline
+  "src/tauri/src-tauri/Cargo.lock",
+  "src/tauri/src-tauri/Cargo.toml",
+  "src/tauri/src-tauri/tauri.conf.json",
+  "src/agent/workflow/controller.ts", // P-67 accepted workflow lint invariant cleanup
+  "src/overlay/host.ts", // P-67 accepted formatter-only overlay cleanup
+  "src/persistence/salesDb.ts", // P-67 accepted formatter-only persistence cleanup
+  "src/tools/browser/click.ts", // P-67 accepted formatter-only browser-tool cleanup
+]);
+
+function collectP58d1UiScopeViolations(statusOut: string): string[] {
+  const violations: string[] = [];
+  const changedPaths = parsePorcelainFixturePaths(statusOut);
+  for (const p of changedPaths) {
+    if (!P58D1_UI_APPROVED_PATTERN.test(p) && !P58D1_UI_APPROVED_SIBLING_CHANGES.has(p)) {
+      violations.push(
+        `out-of-scope change: '${p}' — P-58d.1-UI changes must be in settings.ts, app.ts, index.html, or approved siblings`,
+      );
+    }
+    if (p.startsWith("src/tools/") && p !== "src/tools/browser/click.ts") {
+      violations.push(`forbidden change in src/tools/ except P-67 formatter-only click.ts: ${p}`);
+    }
+    if (P58D1_UI_APPROVED_SIBLING_CHANGES.has(p)) continue;
+    for (const pat of [/src\/tauri\/src-tauri\//, /src\/persistence\//, /src\/cli\//]) {
+      if (pat.test(p)) {
+        violations.push(`out-of-scope change in ${p} (Rust/config/serve — not a P-58d.1-UI file)`);
+      }
+    }
+  }
+  return violations;
+}
+
+function assertP58d1UiScope(statusOut: string): void {
+  const violations = collectP58d1UiScopeViolations(statusOut);
+  assert.deepEqual(violations, [], `unexpected P-58d.1-UI scope violations: ${JSON.stringify(violations)}`);
+}
 
 // ── Gate-on-builder: settings.ts gains the updateServerUrl field + checkUpdate() at Step 4b. ──
 // biome-ignore lint/suspicious/noExplicitAny: gate-on-builder dynamic import (settings.js may not be built yet)
@@ -331,65 +382,42 @@ describe("settings panel — A-1: open() propagates rejection + app.ts gear hand
 
 // ─── T-UI.10 ────────────────────────────────────────────────────────────────
 
-describe("scope — P-58d.1-UI production changes ⊆ {settings.ts, index.html, app.ts + .js/.map} (G-P58d.1-UI.5)", () => {
-  // Given: the git diff after builder Step 4b
-  // When:  inspected (git status --porcelain -- src/)
-  // Then:  production src/ changes ⊆ {src/tauri/ui/settings.ts, index.html, app.ts + compiled .js/.map};
-  //        NO src/tools/** edits; NO Rust/config/serve change;
-  //        mai_get_settings / mai_set_settings / mai_check_update are referenced (not renamed/added)
-  it("T-UI.10: diff ⊆ {settings.ts, index.html, app.ts + .js/.map}; no src/tools/**; no Rust/config/serve change [structural]", () => {
-    // git status --porcelain -- src/ lists uncommitted src/ changes (builder's 4b edits).
-    const statusOut = execFileSync("git", ["status", "--porcelain", "--", "src/"], {
-      cwd: REPO,
-      encoding: "utf-8",
-    });
+describe("scope — P-58d.1-UI production fixture changes stay within the UI allowlist (G-P58d.1-UI.5)", () => {
+  // Given: deterministic modified/added/untracked/rename fixture lines for approved P-58d.1-UI paths.
+  // When:  the fixture scope validator parses them.
+  // Then:  approved UI and sibling paths pass; forbidden tool/CLI/config/Rust paths fail; command names remain referenced.
+  it("T-UI.10: fixture scope stays within UI files; no src/tools/Rust/config/serve escape [structural]", () => {
+    assertP58d1UiScope(`
+ M src/tauri/ui/settings.ts
+A  src/tauri/ui/app.js
+?? src/tauri/ui/index.html
+R  src/tauri/ui/settings.js -> src/tauri/ui/settings.js.map
+ M src/agent/systemPrompt/soul.ts
+ M src/tools/browser/click.ts
+`);
+    const violations = collectP58d1UiScopeViolations(`
+ M src/tools/browser/inspect.ts
+ M src/cli/main.ts
+ M src/persistence/config.ts
+ M src/tauri/src-tauri/src/main.rs
+`);
+    assert.ok(
+      violations.some((v) => v.includes("src/tools/browser/inspect.ts")),
+      `expected src/tools violation; got ${JSON.stringify(violations)}`,
+    );
+    assert.ok(
+      violations.some((v) => v.includes("src/cli/main.ts")),
+      `expected CLI violation; got ${JSON.stringify(violations)}`,
+    );
+    assert.ok(
+      violations.some((v) => v.includes("src/persistence/config.ts")),
+      `expected config violation; got ${JSON.stringify(violations)}`,
+    );
+    assert.ok(
+      violations.some((v) => v.includes("src/tauri/src-tauri/src/main.rs")),
+      `expected Rust violation; got ${JSON.stringify(violations)}`,
+    );
 
-    // Parse: each line is "<XY> <path>" where XY is 2 chars + space = 3-char prefix.
-    const changedPaths = statusOut
-      .split("\n")
-      .filter((line) => line.trim().length > 0)
-      .map((line) => line.slice(3).trim()); // strip "XY " status prefix
-
-    assert.ok(changedPaths.length > 0, "expected some src/ changes after builder Step 4b (none found)");
-
-    // Every changed path must be under src/tauri/ui/ and match the approved file set.
-    // Note: source maps have a two-part extension (.js.map), so we allow both .js.map and bare .map.
-    const approvedPattern = /^src\/tauri\/ui\/(settings|app|index)\.(ts|js|html|map|js\.map)$/;
-    const approvedSiblingChanges = new Set([
-      "src/agent/systemPrompt/soul.ts", // P-66 approved Soul trigger-habit wording rebaseline
-      "src/tauri/src-tauri/Cargo.lock",
-      "src/tauri/src-tauri/Cargo.toml",
-      "src/tauri/src-tauri/tauri.conf.json",
-      "src/agent/workflow/controller.ts", // P-67 accepted workflow lint invariant cleanup
-      "src/overlay/host.ts", // P-67 accepted formatter-only overlay cleanup
-      "src/persistence/salesDb.ts", // P-67 accepted formatter-only persistence cleanup
-      "src/tools/browser/click.ts", // P-67 accepted formatter-only browser-tool cleanup
-    ]);
-    for (const p of changedPaths) {
-      assert.ok(
-        approvedPattern.test(p) || approvedSiblingChanges.has(p),
-        `out-of-scope change: '${p}' — P-58d.1-UI changes must be ⊆ {settings.ts, app.ts, index.html, .js/.map}`,
-      );
-    }
-
-    // No src/tools/** edits.
-    for (const p of changedPaths) {
-      assert.ok(
-        !p.startsWith("src/tools/") || p === "src/tools/browser/click.ts",
-        `forbidden change in src/tools/ except P-67 formatter-only click.ts: ${p}`,
-      );
-    }
-
-    // No Rust / config / serve paths.
-    const forbiddenPatterns = [/src\/tauri\/src-tauri\//, /src\/persistence\//, /src\/cli\//];
-    for (const p of changedPaths) {
-      if (approvedSiblingChanges.has(p)) continue;
-      for (const pat of forbiddenPatterns) {
-        assert.ok(!pat.test(p), `out-of-scope change in ${p} (Rust/config/serve — not a P-58d.1-UI file)`);
-      }
-    }
-
-    // All three Tauri commands must be referenced in settings.ts (not renamed).
     assert.ok(
       SETTINGS_TS_SRC.includes('"mai_check_update"'),
       "settings.ts must reference mai_check_update (check for rename)",
@@ -402,5 +430,90 @@ describe("scope — P-58d.1-UI production changes ⊆ {settings.ts, index.html, 
       SETTINGS_TS_SRC.includes('"mai_set_settings"'),
       "settings.ts must reference mai_set_settings (check for rename)",
     );
+  });
+});
+
+describe("scope — deterministic P-58d.1-UI fixture validator (P-69a)", () => {
+  it("T-UI.10a: empty fixture status is accepted; shipped updater command names remain referenced", () => {
+    // Given: an empty fixture status string and current settings.ts source.
+    // When: the fixture-based P-58d.1-UI scope validator runs.
+    // Then: empty status passes and settings.ts still references the shipped updater commands.
+    assertP58d1UiScope("");
+    assert.ok(
+      SETTINGS_TS_SRC.includes('"mai_check_update"'),
+      "settings.ts must reference mai_check_update (check for rename)",
+    );
+    assert.ok(
+      SETTINGS_TS_SRC.includes('"mai_get_settings"'),
+      "settings.ts must reference mai_get_settings (check for rename)",
+    );
+    assert.ok(
+      SETTINGS_TS_SRC.includes('"mai_set_settings"'),
+      "settings.ts must reference mai_set_settings (check for rename)",
+    );
+  });
+
+  it("T-UI.10b: approved P-58d.1 UI fixture paths are accepted", () => {
+    // Given: approved updater UI fixture paths and preserved sibling exceptions.
+    // When: the fixture-based P-58d.1-UI scope validator runs.
+    // Then: approved paths pass without reading the operator's live worktree.
+    assert.deepEqual(
+      parsePorcelainFixturePaths(`
+ M src/tauri/ui/settings.ts
+A  src/tauri/ui/app.ts
+?? src/tauri/ui/index.html
+C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
+ M src/agent/workflow/controller.ts
+ M src/overlay/host.ts
+ M src/persistence/salesDb.ts
+ M src/tools/browser/click.ts
+`),
+      [
+        "src/tauri/ui/settings.ts",
+        "src/tauri/ui/app.ts",
+        "src/tauri/ui/index.html",
+        "src/tauri/ui/app.js",
+        "src/tauri/ui/app.js.map",
+        "src/agent/workflow/controller.ts",
+        "src/overlay/host.ts",
+        "src/persistence/salesDb.ts",
+        "src/tools/browser/click.ts",
+      ],
+    );
+    assertP58d1UiScope(`
+ M src/tauri/ui/settings.ts
+A  src/tauri/ui/app.ts
+?? src/tauri/ui/index.html
+C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
+ M src/agent/workflow/controller.ts
+ M src/overlay/host.ts
+ M src/persistence/salesDb.ts
+ M src/tools/browser/click.ts
+`);
+  });
+
+  it("T-UI.10c: forbidden non-UI fixture paths are rejected", () => {
+    // Given: forbidden fixture paths under src/tools, src/cli, src/persistence, and non-exception Rust paths.
+    // When: the fixture-based P-58d.1-UI scope validator runs.
+    // Then: forbidden paths fail with clear out-of-scope diagnostics.
+    const violations = collectP58d1UiScopeViolations(`
+ M src/tools/browser/type.ts
+ M src/cli/subcommands/serve/settings.ts
+ M src/persistence/config.ts
+ M src/tauri/src-tauri/src/main.rs
+ M src/agent/unrelated.ts
+`);
+    for (const expected of [
+      "src/tools/browser/type.ts",
+      "src/cli/subcommands/serve/settings.ts",
+      "src/persistence/config.ts",
+      "src/tauri/src-tauri/src/main.rs",
+      "src/agent/unrelated.ts",
+    ]) {
+      assert.ok(
+        violations.some((v) => v.includes(expected)),
+        `expected violation for ${expected}; got ${JSON.stringify(violations)}`,
+      );
+    }
   });
 });

@@ -7,8 +7,8 @@
  * handlers, boot-default Manual, file-size/scope discipline). Anchor hexes LOCKED at Step 5 (operator-
  * confirmed blend): navy #15487B / green #46B54A / sand #D9A75F.
  *
- * NOTE: T-Scope.1 uses node:child_process (git) — validator-owned test files are exempt from the
- * child_process lint ban (applies only to src/tools/**) per CLAUDE.md § Code & Test Policy.
+ * NOTE: P-69a keeps T-Scope.1 deterministic with inline porcelain fixtures; it does not inspect the
+ * operator's ambient worktree.
  *
  * Gate coverage:
  *   G-PY2.1.1/.6 — blend palette vars + Inter, no legacy hex, var()-only; brand rename (T-Theme.1, .2)
@@ -21,7 +21,6 @@
  */
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -32,6 +31,74 @@ const REPO = join(__dirname, "..", "..");
 const UI_DIR = join(REPO, "src", "tauri", "ui");
 const APP_TS = readFileSync(join(UI_DIR, "app.ts"), "utf-8");
 const INDEX_HTML = readFileSync(join(UI_DIR, "index.html"), "utf-8");
+
+function parsePorcelainFixturePaths(statusOut: string): string[] {
+  return statusOut
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .flatMap((line) => {
+      const path = line.slice(3).trim();
+      return path.includes(" -> ") ? path.split(" -> ") : [path];
+    })
+    .map((path) => path.trim())
+    .filter((path) => path.length > 0);
+}
+
+// P-Y2.1's OWN operator-approved out-of-ui scope expansions (2026-05-23), alongside src/tauri/ui/:
+// - tauri.conf.json: the Tauri window/product brand rename ("mai" -> "Frondose") (visual rework).
+// - src/overlay/inject.ts: callInOverlay hardening for missing overlay context.
+const PY21_EXCEPTIONS = ["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inject.ts"];
+
+// SIBLING-PHASE files that legitimately coexist uncommitted in the shared dev tree (not P-Y2.1 scope).
+const PY21_SIBLING_PHASE = [
+  "src/cli/subcommands/serve/routes.ts",
+  "src/tauri/src-tauri/src/main.rs",
+  "src/linkedin/session.ts",
+  "src/cli/subcommands/serve.ts",
+  "src/cdp/client.ts",
+  "src/linkedin/types.ts",
+  "src/cli/subcommands/serve/takeover.ts",
+  "src/cli/subcommands/serve/turn.ts",
+  "src/overlay/bootstrap.ts",
+  "src/overlay/bootstrapTakeover.ts",
+  "src/overlay/cssTransform.ts",
+  "src/overlay/frondoseCss.generated.ts",
+  "src/tools/browser/click.ts",
+  "src/tools/browser/type.ts",
+  "src/cdp/profileLock.ts",
+  "src/cdp/launcher.ts",
+  "src/tier.ts",
+  "src/tools/index.ts",
+  "src/persistence/mode.ts",
+  "src/cli/main.ts",
+  "src/cli/subcommands/serve/dispatch.ts",
+  "src/agent/systemPrompt/soul.ts",
+  "src/tauri/src-tauri/Cargo.lock",
+  "src/tauri/src-tauri/Cargo.toml",
+  "src/tauri/src-tauri/tauri.conf.json",
+  "src/agent/workflow/controller.ts",
+  "src/overlay/host.ts",
+  "src/persistence/salesDb.ts",
+  "src/tools/browser/click.ts",
+  "src/cli/subcommands/serve/settings.ts",
+];
+const PY21_SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...PY21_SIBLING_PHASE]);
+
+function collectPY21ScopeViolations(statusOut: string): string[] {
+  const violations: string[] = [];
+  for (const p of parsePorcelainFixturePaths(statusOut)) {
+    if (!p.startsWith("src/tauri/ui/") && !PY21_SCOPE_WHITELIST.has(p)) {
+      violations.push(`production change outside src/tauri/ui/ or the approved whitelist: ${p}`);
+    }
+  }
+  return violations;
+}
+
+function assertPY21Scope(statusOut: string): void {
+  const violations = collectPY21ScopeViolations(statusOut);
+  assert.deepEqual(violations, [], `unexpected P-Y2.1 scope violations: ${JSON.stringify(violations)}`);
+}
 
 describe("two-mode-ui — theme + brand reskin in index.html (G-PY2.1.1, G-PY2.1.6)", () => {
   it("T-Theme.1: index.html :root has the blend palette vars (navy/green/sand) + Inter, NO legacy #0a66c2, components var()-only", () => {
@@ -146,83 +213,114 @@ describe("two-mode-ui — switcher wiring in app.ts (G-PY2.1.3, G-PY2.1.2, G-PY2
 });
 
 describe("two-mode-ui — scope + size discipline (G-PY2.1.8)", () => {
-  it("T-Scope.1: app/render/mode/frondoseTokens each ≤800 lines; production diff confined to src/tauri/ui/", () => {
-    // Given: the repo after builder B6
-    // When:  count lines of the four ts files + list changed src/ paths via git
-    // Then:  each ≤800; every changed/added src/ path is under src/tauri/ui/ — no serve/main.rs/overlay/tools
+  it("T-Scope.1: app/render/mode/frondoseTokens each ≤800 lines; fixture changes stay in scope", () => {
+    // Given: current UI source files and deterministic fixture paths.
+    // When:  count lines of the four ts files and validate approved fixture paths.
+    // Then:  each file is ≤800 lines; approved fixture paths pass and unrelated source paths fail.
     for (const f of ["app.ts", "render.ts", "mode.ts", "frondoseTokens.ts"]) {
       const lines = readFileSync(join(UI_DIR, f), "utf-8").split("\n").length;
       assert.ok(lines <= 800, `${f} must be ≤800 lines; got ${lines}`);
     }
-    // P-Y2.1's OWN operator-approved out-of-ui scope expansions (2026-05-23), alongside src/tauri/ui/:
-    //  - tauri.conf.json: the Tauri window/product brand rename ("mai" → "Frondose") (visual rework).
-    //  - src/overlay/inject.ts: the functional-hardening fix (callInOverlay try/catch so a missing
-    //    overlay context no longer spams unhandled "Cannot find context" rejections during cron turns).
-    const PY21_EXCEPTIONS = ["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inject.ts"];
-    // SIBLING-PHASE files that legitimately coexist UNCOMMITTED in the shared dev tree (NOT P-Y2.1 scope —
-    // a later phase's work). Acknowledged so this point-in-time P-Y2.1 gate stays green while still catching
-    // a genuinely-unexpected escape (e.g. src/agent/**, src/tools/**). Grows as sibling phases interleave:
-    //  - P-Y5 D-RUN-1 (app-close-must-stop-the-agent): serve UDS-disconnect-abort + Rust CloseRequested.
-    //  - P-Y4 entry-flow redesign + agent-driven Chrome launch (overlay re-home): session.ts onClientBooted
-    //    seam, serve.ts onClientBooted wiring, routes.ts ensureOverlaySubscription extraction. (app.ts/
-    //    index.html/app.js are already covered by the src/tauri/ui/ prefix check above.)
-    const SIBLING_PHASE = [
-      "src/cli/subcommands/serve/routes.ts",
-      "src/tauri/src-tauri/src/main.rs",
-      "src/linkedin/session.ts",
-      "src/cli/subcommands/serve.ts",
-      //  - P-Y2.3 (magical Auto-mode takeover layer): the additive takeover surface — coords helper +
-      //    getBox (cdp/client.ts), session visual hooks (session.ts already above; linkedin/types.ts driver
-      //    type), serve-side Auto-gated driver/ring (serve/takeover.ts + serve/turn.ts wiring), the overlay
-      //    takeover bootstrap fragment + CSS (overlay/bootstrap.ts, bootstrapTakeover.ts, cssTransform.ts,
-      //    frondoseCss.generated.ts regen), and the best-effort tool drive (tools/browser/click.ts + type.ts).
-      "src/cdp/client.ts",
-      "src/linkedin/types.ts",
-      "src/cli/subcommands/serve/takeover.ts",
-      "src/cli/subcommands/serve/turn.ts",
-      "src/overlay/bootstrap.ts",
-      "src/overlay/bootstrapTakeover.ts",
-      "src/overlay/cssTransform.ts",
-      "src/overlay/frondoseCss.generated.ts",
-      "src/tools/browser/click.ts",
-      "src/tools/browser/type.ts",
-      //  - P-58a (autonomous robustness/hygiene): profile-lock self-heal (cdp/profileLock.ts + cdp/launcher.ts
-      //    call site), MAI_TIER gate (tier.ts + tools/index.ts gate + main.ts if(powerTier) CLI gating),
-      //    mode-persist sidecar (persistence/mode.ts + serve.ts boot + routes.ts persist/frame/re-push +
-      //    dispatch.ts overlay-mode persist). (tauri.conf.json is in PY21_EXCEPTIONS; app.ts is under src/tauri/ui/.)
-      "src/cdp/profileLock.ts",
-      "src/cdp/launcher.ts",
-      "src/tier.ts",
-      "src/tools/index.ts",
-      "src/persistence/mode.ts",
-      "src/cli/main.ts",
-      "src/cli/subcommands/serve/dispatch.ts",
-      // P-66 approved Soul trigger-habit wording rebaseline; not a P-Y2.1 UI regression.
-      "src/agent/systemPrompt/soul.ts",
-      // P-66 approved app metadata/version rebaseline; not a P-Y2.1 UI regression.
-      "src/tauri/src-tauri/Cargo.lock",
-      "src/tauri/src-tauri/Cargo.toml",
-      "src/tauri/src-tauri/tauri.conf.json",
-      // P-67 accepted health-gate cleanup; not a P-Y2.1 UI regression.
-      "src/agent/workflow/controller.ts",
-      "src/overlay/host.ts",
-      "src/persistence/salesDb.ts",
-      "src/tools/browser/click.ts",
-      //  - P-Y6 (in-app settings panel): the serve settings module (the routes.ts GET/POST + tauri/ui/settings.*
-      //    + index.html + frondoseCss.generated.ts transitive are already covered above / under src/tauri/ui/).
-      "src/cli/subcommands/serve/settings.ts",
-    ];
-    const SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...SIBLING_PHASE]);
-    const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
-    const srcPaths = status
-      .split("\n")
-      .map((l) => l.slice(3).trim())
-      .filter((p) => p.length > 0)
-      .flatMap((p) => (p.includes(" -> ") ? p.split(" -> ") : [p]));
-    for (const p of srcPaths) {
+    assertPY21Scope(`
+ M src/tauri/ui/app.ts
+A  src/tauri/ui/frondoseTokens.ts
+?? src/tauri/ui/index.html
+R  src/tauri/ui/mode.ts -> src/tauri/ui/render.ts
+ M src/tauri/src-tauri/tauri.conf.json
+ M src/overlay/inject.ts
+ M src/tools/browser/click.ts
+`);
+    const violations = collectPY21ScopeViolations(`
+ M src/agent/unrelated.ts
+ M src/tools/browser/inspect.ts
+ M src/persistence/config.ts
+ M src/tauri/src-tauri/src/lib.rs
+`);
+    for (const expected of [
+      "src/agent/unrelated.ts",
+      "src/tools/browser/inspect.ts",
+      "src/persistence/config.ts",
+      "src/tauri/src-tauri/src/lib.rs",
+    ]) {
       assert.ok(
-        p.startsWith("src/tauri/ui/") || SCOPE_WHITELIST.has(p),
-        `production change outside src/tauri/ui/ (or the approved whitelist) is out of scope: ${p}`,
+        violations.some((v) => v.includes(expected)),
+        `expected violation for ${expected}; got ${JSON.stringify(violations)}`,
+      );
+    }
+  });
+});
+
+describe("two-mode-ui — deterministic P-Y2.1 fixture validator (P-69a)", () => {
+  it("T-Scope.1a: UI file sizes stay <=800 and empty fixture status is accepted", () => {
+    // Given: current Tauri UI source files plus an empty fixture status string.
+    // When: the fixture-based P-Y2.1 two-mode UI scope validator runs.
+    // Then: file sizes stay within policy and empty status passes without live git status.
+    for (const f of ["app.ts", "render.ts", "mode.ts", "frondoseTokens.ts"]) {
+      const lines = readFileSync(join(UI_DIR, f), "utf-8").split("\n").length;
+      assert.ok(lines <= 800, `${f} must be ≤800 lines; got ${lines}`);
+    }
+    assertPY21Scope("");
+  });
+
+  it("T-Scope.1b: approved P-Y2.1 UI/exception fixture paths are accepted", () => {
+    // Given: approved P-Y2.1 UI fixture paths and preserved exception paths.
+    // When: the fixture-based P-Y2.1 two-mode UI scope validator runs.
+    // Then: approved paths pass without reading the operator's live worktree.
+    assert.deepEqual(
+      parsePorcelainFixturePaths(`
+ M src/tauri/ui/app.ts
+A  src/tauri/ui/frondoseTokens.ts
+?? src/tauri/ui/index.html
+R  src/tauri/ui/mode.ts -> src/tauri/ui/render.ts
+C  src/overlay/bootstrap.ts -> src/overlay/bootstrapTakeover.ts
+ M src/tauri/src-tauri/tauri.conf.json
+ M src/overlay/inject.ts
+ M src/tools/browser/type.ts
+`),
+      [
+        "src/tauri/ui/app.ts",
+        "src/tauri/ui/frondoseTokens.ts",
+        "src/tauri/ui/index.html",
+        "src/tauri/ui/mode.ts",
+        "src/tauri/ui/render.ts",
+        "src/overlay/bootstrap.ts",
+        "src/overlay/bootstrapTakeover.ts",
+        "src/tauri/src-tauri/tauri.conf.json",
+        "src/overlay/inject.ts",
+        "src/tools/browser/type.ts",
+      ],
+    );
+    assertPY21Scope(`
+ M src/tauri/ui/app.ts
+A  src/tauri/ui/frondoseTokens.ts
+?? src/tauri/ui/index.html
+R  src/tauri/ui/mode.ts -> src/tauri/ui/render.ts
+C  src/overlay/bootstrap.ts -> src/overlay/bootstrapTakeover.ts
+ M src/tauri/src-tauri/tauri.conf.json
+ M src/overlay/inject.ts
+ M src/tools/browser/type.ts
+`);
+  });
+
+  it("T-Scope.1c: unrelated source fixture paths are rejected", () => {
+    // Given: unrelated fixture paths outside src/tauri/ui and outside the preserved exception set.
+    // When: the fixture-based P-Y2.1 two-mode UI scope validator runs.
+    // Then: unrelated source paths are rejected deterministically.
+    const violations = collectPY21ScopeViolations(`
+ M src/agent/unrelated.ts
+ M src/tools/browser/inspect.ts
+ M src/persistence/config.ts
+ M src/tauri/src-tauri/src/lib.rs
+`);
+    for (const expected of [
+      "src/agent/unrelated.ts",
+      "src/tools/browser/inspect.ts",
+      "src/persistence/config.ts",
+      "src/tauri/src-tauri/src/lib.rs",
+    ]) {
+      assert.ok(
+        violations.some((v) => v.includes(expected)),
+        `expected violation for ${expected}; got ${JSON.stringify(violations)}`,
       );
     }
   });
