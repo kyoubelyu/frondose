@@ -1,19 +1,20 @@
-# mai-agent
+# Frondose
 
-Single-binary LinkedIn autonomous agent. Vercel AI SDK + embedded CDP + Chrome stealth + SQLite memory. One CLI: `mai`.
+App-only LinkedIn-primary autonomous agent. Frondose uses the Vercel AI SDK, embedded CDP, Chrome stealth, and SQLite memory, delivered through the compiled Tauri app bundle (`Frondose.app`).
+
+> Migration note (2026-05-27): the product contract is now the app. Historical `mai` CLI entrypoints, `dist/cli/main.js`, and package exports are transitional internal/dev/sidecar surfaces scheduled for staged retirement; new product behavior should land in the app.
 
 ## Install
 
-Frondose installs from GitHub Releases via `install.sh` (the package is private —
-**not** on npm). Requirements: **macOS · Homebrew · the `gh` CLI (authenticated:
-`gh auth login`) · Google Chrome**. `install.sh` provisions Node 20 + Chrome via
-Homebrew, downloads the latest Release, builds it, and links `mai` onto your PATH.
+Frondose currently installs from GitHub Releases via `install.sh` while the app-native installer/update path is being completed. The package is private and **not** on npm. Requirements: **macOS · Homebrew · the `gh` CLI authenticated with `gh auth login` · Google Chrome**.
+
+`install.sh` is transitional release infrastructure: it provisions the runtime needed by the current app sidecar, downloads the selected Release, builds it, and installs the app assets. The operator-facing product runtime is `Frondose.app`, not the CLI it may still install internally.
 
 ```bash
 # Latest stable
-bash <(gh release download --repo kyoubelyu/mai-agent --pattern install.sh --output - )
+bash <(gh release download --repo kyoubelyu/frondose --pattern install.sh --output - )
 # ...or clone + run:
-gh repo clone kyoubelyu/mai-agent && bash mai-agent/install.sh
+gh repo clone kyoubelyu/frondose && bash frondose/install.sh
 
 # Latest Frondose alpha (v0.5 prerelease line):
 bash install.sh --prerelease
@@ -34,83 +35,31 @@ download the `.app` or `.dmg` with a **browser**, macOS quarantines it; on Sequo
 
 ## Quick start
 
-```bash
-# Set your LLM provider
-mai auth set
+1. Install the selected release with `install.sh`.
+2. Open `Frondose.app`.
+3. Configure the model, API key, identity, and soul context in the app settings.
+4. Use the app's Manual, Magical, and Auto modes as the daily runtime.
 
-# Initialize agent identity (interactive)
-mai identity init
-
-# Launch the agent REPL
-mai
-```
-
-In the REPL, type a goal and the agent operates LinkedIn through Chrome to achieve it.
-
-## Configuration
-
-```bash
-mai auth set              # LLM provider credentials (Anthropic / OpenAI / DeepSeek)
-mai identity init         # Agent name, role, company, ICP
-mai soul show             # View the agent's system prompt
-mai telegram on           # Enable Telegram notifications
-mai telegram bind         # Link your Telegram account
-mai cron schedule "..." --cron "0 9 * * *"  # Schedule recurring tasks
-mai gh set                # GitHub credentials for issue reporting
-mai search set            # Web search API keys
-```
-
-## Subcommands
-
-```
-mai auth          LLM provider credentials
-mai identity      Agent identity management
-mai soul          System prompt view/edit
-mai sessions      Agent session management
-mai telegram      Telegram notification channel
-mai cron          Scheduled task management
-mai gh            GitHub integration
-mai search        Web search integration
-mai status        Agent runtime status
-mai version       Print version
-```
-
-## REPL slash commands
-
-```
-/help             Show available commands
-/compact          Compact conversation context
-/new              Start a new session
-/cron schedule    Schedule a recurring task
-/cron list        List scheduled tasks
-/cron remove      Remove a scheduled task
-/telegram on      Enable Telegram channel
-/telegram off     Disable Telegram channel
-/telegram status  Show Telegram channel state
-```
+Do not treat `mai`, `dist/cli/main.js`, or `./dist/index.js` as user-facing product entrypoints. They remain only as temporary implementation and build surfaces while P-APP migration removes or internalizes them.
 
 ## Architecture
 
 ```
-mai (CLI/REPL)
-  └── Vercel AI SDK agent loop (streamText)
-        └── 24 in-process tools
-              ├── 10 LinkedIn primitives (launch, inspect, click, type, ...)
-              ├── 4 memory/identity (remember, getMemory, identity, getIdentity)
-              ├── 1 methodology (qualify_profile)
-              ├── 2 operator output (telegram_notify, gh_issue)
-              ├── 4 web (webSearch, webFetch, analyze_screenshot, upload)
-              └── 3 control (stop, sleep, escalate_for_capability)
-        └── Embedded CDP + Chrome Stealth
-        └── SQLite memory + JSONL audit + JSON identity
+Frondose.app (Tauri)
+  ├── app UI: chat, settings, diagnostics, Manual/Magical/Auto controls
+  ├── app-owned sidecar protocol (temporary Node/CLI-backed implementation)
+  │     └── Vercel AI SDK agent loop (streamText)
+  │           └── tiered in-process tools
+  │           └── Embedded CDP + Chrome Stealth
+  │           └── SQLite memory + JSONL audit + JSON config/secrets
+  └── in-page Frondose overlay on LinkedIn via CDP injection
 ```
 
-## Server deployment (`mai server`)
+## Internal Transitional Surfaces
 
-`mai server` serves its management web UI (fleet dashboard, provision form, per-worker
-SSH terminal + VNC viewer) as plain HTTP on `bind_address` (default port 8090). It ships
-**zero TLS code**. For public exposure, front it with a reverse proxy that terminates TLS
-and forwards both HTTP and WebSocket upgrades to `localhost:8090`:
+Some internal/admin commands still exist during the migration, including the app sidecar path, update-server tooling, and historical server/fleet commands. They are not app product UX and should not receive new user-facing features. P-APP-11 removes or internalizes the remaining public CLI/package promises after app-owned replacements are validated.
+
+The historical `mai server` web UI, when used internally, serves plain HTTP on `bind_address` and ships **zero TLS code**. For any exposed internal deployment, front it with a reverse proxy that terminates TLS and forwards both HTTP and WebSocket upgrades to `localhost:8090`:
 
 - **Caddy** — `reverse_proxy localhost:8090` (handles WebSocket upgrades automatically).
 - **nginx** — `proxy_pass http://localhost:8090;` plus `proxy_set_header Upgrade $http_upgrade;`
