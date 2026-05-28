@@ -69,7 +69,8 @@ export async function runStatusSubcommand(opts: StatusOpts): Promise<void> {
   // search
   const sCfg = readSearchConfig(opts.searchPath);
   process.stdout.write(
-    `search: brave=${sCfg.braveApiKey ? "***" : "(unset)"}, tavily=${sCfg.tavilyApiKey ? "***" : "(unset)"}\n`,
+    `search: brave=${sCfg.braveApiKey ? "***" : "(unset)"}, tavily=${sCfg.tavilyApiKey ? "***" : "(unset)"} ` +
+      "(legacy ignored/unsupported by web_search)\n",
   );
 
   // cron

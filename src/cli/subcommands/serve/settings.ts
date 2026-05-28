@@ -7,7 +7,17 @@ import { BOUNDARY, BOUNDARY_RESUME } from "../../../agent/systemPrompt/boundary.
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../agent/systemPrompt/soul.js";
-import { maskKey, readAuth, writeAuth } from "../../../persistence/auth.js";
+import {
+  DEFAULT_DEEPSEEK_BASE_URL,
+  getOfficialDirectProviderBaseUrlVendor,
+  isAllowedRuntimeProviderEntry,
+  isDeepSeekBaseUrl,
+  isReservedDirectProviderName,
+  maskKey,
+  normalizeDeepSeekBaseUrl,
+  readAuth,
+  writeAuth,
+} from "../../../persistence/auth.js";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../persistence/config.js";
 import { applyIdentityPatch, readIdentity } from "../../../persistence/identity.js";
 import { type IdentityPatch, identityPatchSchema } from "../../../persistence/identitySchema.js";
@@ -36,8 +46,18 @@ export interface SettingsView {
 const settingsPatchSchema = z.object({
   llm: z
     .object({
-      provider: z.string().trim().min(1).optional(),
-      baseUrl: z.string().url().optional(), // matches providerEntrySchema.baseUrl (auth.ts:21)
+      provider: z
+        .string()
+        .trim()
+        .min(1)
+        .refine((name) => !isReservedDirectProviderName(name), "Reserved direct providers are scope-disabled")
+        .optional(),
+      baseUrl: z
+        .string()
+        .trim()
+        .url()
+        .refine((url) => getOfficialDirectProviderBaseUrlVendor(url) === null, "Direct vendor URLs are scope-disabled")
+        .optional(), // matches providerEntrySchema.baseUrl (auth.ts:21)
       model: z.string().trim().min(1).optional(),
       key: z.string().optional(), // write-only; isFreshKey gates it
     })
@@ -58,6 +78,16 @@ function splitSpec(spec: string | undefined): { provider: string | null; model: 
   if (!spec) return { provider: null, model: null };
   const i = spec.indexOf(":");
   return i > 0 ? { provider: spec.slice(0, i), model: spec.slice(i + 1) } : { provider: null, model: null };
+}
+
+function chooseSettingsProvider(patch: SettingsPatch["llm"], currentProvider: string | null): string {
+  const explicit = patch?.provider?.trim();
+  if (explicit) return explicit;
+  const baseUrl = patch?.baseUrl?.trim();
+  if (isDeepSeekBaseUrl(baseUrl)) return "deepseek";
+  if (patch?.model?.trim().toLowerCase().startsWith("deepseek")) return "deepseek";
+  if (currentProvider && !isReservedDirectProviderName(currentProvider)) return currentProvider;
+  return "custom";
 }
 
 export function readSettings(): SettingsView {
@@ -96,12 +126,18 @@ export function applySettings(patch: SettingsPatch): void {
   if (patch.llm) {
     const auth = readAuth() ?? {};
     const cur = splitSpec(auth.default);
-    const provider = patch.llm.provider?.trim() || cur.provider || "custom";
+    const provider = chooseSettingsProvider(patch.llm, cur.provider);
     const existing = auth.providers?.[provider];
     const key = isFreshKey(patch.llm.key, existing?.key) ? (patch.llm.key as string) : existing?.key;
     if (key) {
       // only write when we have a key (fresh or existing) — providerEntrySchema requires key.min(1)
-      const baseUrl = patch.llm.baseUrl?.trim() || existing?.baseUrl;
+      const submittedBaseUrl = patch.llm.baseUrl?.trim();
+      const baseUrl =
+        provider === "deepseek"
+          ? normalizeDeepSeekBaseUrl(submittedBaseUrl ?? existing?.baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL)
+          : submittedBaseUrl ||
+            (existing && isAllowedRuntimeProviderEntry(provider, existing) ? existing.baseUrl : undefined);
+      if (provider !== "deepseek" && !baseUrl) return;
       const model = patch.llm.model?.trim() || (cur.provider === provider ? cur.model : null);
       writeAuth({
         default: model ? `${provider}:${model}` : auth.default,

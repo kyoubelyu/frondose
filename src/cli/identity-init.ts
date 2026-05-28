@@ -17,10 +17,10 @@ const NO_KEY_ERROR = `[mai] No LLM API key found. The identity bootstrap require
 
 To set up a key, run ONE of the following first:
 
-  mai auth set anthropic:claude-sonnet-4-5 --key YOUR_ANTHROPIC_KEY
-  mai auth set openai:gpt-4o --key YOUR_OPENAI_KEY
-  mai auth set openai:deepseek-chat --key YOUR_DEEPSEEK_KEY \\
-      --base-url https://api.deepseek.com
+  mai auth set https://api.deepseek.com/v1 --key YOUR_DEEPSEEK_KEY \\
+      --model-id deepseek-v4-flash --name deepseek --default
+  mai auth set https://llm.example/v1 --key YOUR_CUSTOM_KEY \\
+      --model-id your-model --name custom --default
 
 Then re-run \`mai identity init\` (or just \`mai\` for the first-time flow).
 `;
@@ -32,7 +32,7 @@ Then re-run \`mai identity init\` (or just \`mai\` for the first-time flow).
  * Internally:
  *   1. Chicken-and-egg guard via detectAnyModelKey — fails loudly + exit 1 if no key.
  *      SKIPPED when opts.modelFactory provided (P-11 D-10 test-injection seam).
- *   2. Resolves a LanguageModel via the precedence chain (factory > CLI > env > auth.json default > anthropic:claude-sonnet-4-5).
+ *   2. Resolves a LanguageModel via the precedence chain (factory > CLI > env > auth.json default > deepseek:deepseek-v4-flash).
  *      SKIPPED when opts.modelFactory provided — its return value is used directly.
  *   3. Calls runBootstrapAgent with the resolved model + identity/wip paths.
  *   4. Re-reads identity.json to return the fresh IdentityRecord (or throws if bootstrap aborted without finalize).

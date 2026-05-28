@@ -41,6 +41,70 @@ export const KNOWN_PROVIDER_DEFAULTS: Record<string, string> = {
   deepseek: DEFAULT_DEEPSEEK_BASE_URL,
 };
 
+export type ReservedDirectProviderName = "anthropic" | "openai";
+
+const RESERVED_DIRECT_PROVIDER_NAMES = new Set<string>(["anthropic", "openai"]);
+
+const OFFICIAL_DIRECT_PROVIDER_HOSTS: Record<ReservedDirectProviderName, string> = {
+  anthropic: "api.anthropic.com",
+  openai: "api.openai.com",
+};
+
+export function normalizeProviderName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export function isReservedDirectProviderName(name: string | undefined | null): name is ReservedDirectProviderName {
+  return typeof name === "string" && RESERVED_DIRECT_PROVIDER_NAMES.has(normalizeProviderName(name));
+}
+
+export function getOfficialDirectProviderBaseUrlVendor(
+  baseUrl: string | undefined | null,
+): ReservedDirectProviderName | null {
+  const raw = baseUrl?.trim();
+  if (!raw) return null;
+  try {
+    const hostname = new URL(raw).hostname.toLowerCase();
+    for (const [vendor, host] of Object.entries(OFFICIAL_DIRECT_PROVIDER_HOSTS) as Array<
+      [ReservedDirectProviderName, string]
+    >) {
+      if (hostname === host) return vendor;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function isOfficialDirectProviderBaseUrl(baseUrl: string | undefined | null): boolean {
+  return getOfficialDirectProviderBaseUrlVendor(baseUrl) !== null;
+}
+
+export function isDeepSeekBaseUrl(baseUrl: string | undefined | null): boolean {
+  const raw = baseUrl?.trim();
+  if (!raw) return false;
+  try {
+    return new URL(raw).hostname.toLowerCase() === "api.deepseek.com";
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeDeepSeekBaseUrl(baseUrl: string | undefined | null = DEFAULT_DEEPSEEK_BASE_URL): string {
+  const raw = baseUrl?.trim() || DEFAULT_DEEPSEEK_BASE_URL;
+  return `${raw.replace(/\/v1\/?$/, "")}/v1`;
+}
+
+export function isAllowedRuntimeProviderEntry(name: string, entry: ProviderEntry | undefined): boolean {
+  if (!entry?.key) return false;
+  if (isReservedDirectProviderName(name)) return false;
+  if ((entry.type ?? "openai") === "anthropic") return false;
+  const baseUrl =
+    normalizeProviderName(name) === "deepseek" ? (entry.baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL) : entry.baseUrl;
+  if (!baseUrl?.trim()) return false;
+  return !isOfficialDirectProviderBaseUrl(baseUrl);
+}
+
 /** P-21: auto-upgrade old-format provider entries that lack `type` and `baseUrl`. */
 export function migrateProviderEntry(name: string, entry: ProviderEntry): ProviderEntry {
   if (entry.type !== undefined) return entry;

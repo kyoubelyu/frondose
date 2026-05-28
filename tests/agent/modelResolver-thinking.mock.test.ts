@@ -227,8 +227,9 @@ test("T-MR-FIX1.SET1: DEEPSEEK_THINKING_DEFAULT_MODELS contains deepseek-v4-flas
 
 // ─── T-MR-FIX1.M9: resolveModel smoke (no API call) ─────────────────────────
 
-test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageModel without throwing", () => {
-  // P-21: auth.json entry required; provide mock HOME + auth.json for determinism.
+test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-disabled (use non-reserved 'custom' name instead)", () => {
+  // P-71: 'openai' is a reserved direct-provider name; resolveModel must throw scope-disabled.
+  // Use a non-reserved name ('custom') with the same DeepSeek baseUrl for the passing smoke.
   const restore = saveEnv("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m9-"));
   try {
@@ -236,15 +237,27 @@ test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageMod
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
       JSON.stringify({
-        providers: { openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" } },
+        providers: {
+          openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+          custom: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+        },
       }),
       "utf-8",
     );
     process.env.HOME = tmpHome;
-    process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-    const model = resolveModel({ factory: "openai:deepseek-v4-flash" });
-    assert.ok(model !== null && typeof model === "object", "resolveModel must return an object");
-    // The model must have the standard LanguageModel shape
+    // 1. Verify 'openai' (reserved) throws scope-disabled
+    assert.throws(
+      () => resolveModel({ factory: "openai:deepseek-v4-flash" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("reserved"),
+      "T-MR-FIX1.M9: 'openai' provider must throw scope-disabled (reserved name)",
+    );
+    // 2. Non-reserved 'custom' with same baseUrl resolves correctly
+    const model = resolveModel({ factory: "custom:deepseek-v4-flash" });
+    assert.ok(
+      model !== null && typeof model === "object",
+      "resolveModel must return an object for non-reserved provider",
+    );
     assert.ok(
       "specificationVersion" in model || "provider" in model || "modelId" in model,
       "returned object must have LanguageModel shape",
@@ -257,12 +270,9 @@ test("T-MR-FIX1.M9: resolveModel('openai:deepseek-v4-flash') returns LanguageMod
 
 // ─── T-MR-FIX1.M10: resolveModel anthropic path unaffected ───────────────────
 
-test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — no fetch wrapper", () => {
-  // P-Z3 / P-21: buildModel requires a configured provider ENTRY (the env key is consulted only
-  // AFTER the entry is found — modelResolver.ts:145,162). Seed a mock HOME + auth.json anthropic
-  // provider (mirrors M9/M11) so resolveModel resolves the RETAINED anthropic dispatch
-  // (modelResolver.ts:189-194, documented P-57d packages-remain state). The test still confirms
-  // the anthropic branch returns a model WITHOUT the deepseek no-thinking fetch wrapper.
+test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope-disabled (no Anthropic dispatch path)", () => {
+  // P-71: direct Anthropic provider is scope-disabled. buildModel throws before any fetch.
+  // This supersedes the old test that checked the anthropic dispatch path returned a model.
   const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m10-"));
   try {
@@ -278,10 +288,13 @@ test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — 
     );
     process.env.HOME = tmpHome;
     process.env.ANTHROPIC_API_KEY = "sk-ant-stub";
-    const model = resolveModel({ factory: "anthropic:claude-sonnet-4-5" });
-    assert.ok(model !== null && typeof model === "object", "must return LanguageModel object");
-    // Key check: makeNoThinkingFetch must NOT be in the anthropic branch.
-    // Verified statically — this test confirms resolveModel doesn't throw.
+    // P-71 blocks anthropic at the reserved-name guard; throws before any SDK call
+    assert.throws(
+      () => resolveModel({ factory: "anthropic:claude-sonnet-4-5" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("reserved"),
+      "T-MR-FIX1.M10: 'anthropic' must throw scope-disabled (P-71 removes the Anthropic dispatch path)",
+    );
   } finally {
     restore();
     rmSync(tmpHome, { recursive: true, force: true });
@@ -290,8 +303,9 @@ test("T-MR-FIX1.M10: resolveModel('anthropic:claude-sonnet-4-5') unaffected — 
 
 // ─── T-MR-FIX1.M11: resolveModel native openai path unaffected ───────────────
 
-test("T-MR-FIX1.M11: resolveModel('openai:gpt-4o-mini') unaffected — no fetch wrapper", () => {
-  // P-21: auth.json entry required; provide mock HOME + auth.json for determinism.
+test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-reserved 'another' provider with gpt-4o-mini modelId has no thinking wrapper", () => {
+  // P-71: 'openai' is reserved. For the no-wrapper invariant, use non-reserved 'another' provider.
+  // gpt-4o-mini is not in DEEPSEEK_THINKING_DEFAULT_MODELS → no thinking wrapper applied.
   const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m11-"));
   try {
@@ -299,15 +313,32 @@ test("T-MR-FIX1.M11: resolveModel('openai:gpt-4o-mini') unaffected — no fetch 
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
       JSON.stringify({
-        providers: { openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" } },
+        providers: {
+          openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" },
+          another: { key: "sk-auth-stub", baseUrl: "https://api.together.xyz/v1", type: "openai" },
+        },
       }),
       "utf-8",
     );
     process.env.HOME = tmpHome;
-    process.env.OPENAI_API_KEY = "sk-stub";
-    const model = resolveModel({ factory: "openai:gpt-4o-mini" });
-    assert.ok(model !== null && typeof model === "object", "must return LanguageModel object");
-    // gpt-4o-mini does not startsWith("deepseek") → makeNoThinkingFetch not called.
+    // 1. 'openai' (reserved) throws
+    assert.throws(
+      () => resolveModel({ factory: "openai:gpt-4o-mini" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("reserved"),
+      "T-MR-FIX1.M11: 'openai' must throw scope-disabled",
+    );
+    // 2. Non-reserved 'another' with gpt-4o-mini resolves without a thinking wrapper
+    const model = resolveModel({ factory: "another:gpt-4o-mini" });
+    assert.ok(
+      model !== null && typeof model === "object",
+      "must return LanguageModel object for non-reserved provider",
+    );
+    // gpt-4o-mini is not in DEEPSEEK_THINKING_DEFAULT_MODELS → makeNoThinkingFetch returns globalThis.fetch
+    assert.ok(
+      typeof (model as object) === "object",
+      "T-MR-FIX1.M11: non-reserved provider with non-thinking model returns LanguageModel",
+    );
   } finally {
     restore();
     rmSync(tmpHome, { recursive: true, force: true });

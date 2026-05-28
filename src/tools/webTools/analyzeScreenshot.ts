@@ -77,7 +77,7 @@ export function makeAnalyzeScreenshotTool() {
             "analyze_screenshot",
             "runtime_error",
             `Vision model resolution failed for '${visionSpec}': ${e instanceof Error ? e.message : String(e)}. ` +
-              `Set ANTHROPIC_API_KEY or change MAI_VISION_MODEL.`,
+              "Use MAI_VISION_MODEL=<provider>:<modelId> with a configured DeepSeek/custom OpenAI-compatible provider; direct Anthropic/OpenAI vision providers are scope-disabled.",
           );
         }
         const runVision = (m: LanguageModel) =>

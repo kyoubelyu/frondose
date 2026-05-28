@@ -112,12 +112,13 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     });
 
     // (e) hardcoded fallback when all sources absent
-    await t.test("(e) hardcoded fallback anthropic:claude-sonnet-4-5 when all unset", () => {
+    // P-71: default changed from anthropic:claude-sonnet-4-5 to deepseek:deepseek-v4-flash
+    await t.test("(e) hardcoded fallback deepseek:deepseek-v4-flash when all unset", () => {
       process.env.HOME = tmpHome; // no auth.json (removed in (d))
       delete process.env.MAI_MODEL;
       const result = resolveModelSpec({});
       assert.equal(result, DEFAULT_MODEL_SPEC);
-      assert.equal(DEFAULT_MODEL_SPEC, "anthropic:claude-sonnet-4-5");
+      assert.equal(DEFAULT_MODEL_SPEC, "deepseek:deepseek-v4-flash");
     });
   } finally {
     restoreEnv(saved);
@@ -236,10 +237,10 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  it("T-BUILD.1: when auth.json has type=anthropic, resolveModel → anthropic dispatch path", () => {
+  it("T-BUILD.1: P-71 — direct Anthropic provider is scope-disabled; resolveModel throws scope-disabled error", () => {
     // Given: auth.json has providers.anthropic = { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" }
     // When:  resolveModel({ factory: "anthropic:claude-sonnet-4-5" }) is called
-    // Then:  returned model.provider contains "anthropic" (not "openai.chat"); createAnthropic path taken
+    // Then:  throws with "scope-disabled" in message (P-71 blocks direct Anthropic runtime)
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
       JSON.stringify({
@@ -249,15 +250,11 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
       }),
       "utf-8",
     );
-    const model = resolveModel({ factory: "anthropic:claude-sonnet-4-5" });
-    // createAnthropic yields a model whose .provider is "anthropic.messages"
-    assert.ok(
-      model.provider.startsWith("anthropic"),
-      `T-BUILD.1: model.provider must start with "anthropic"; got "${model.provider}"`,
-    );
-    assert.ok(
-      !model.provider.includes("chat"),
-      `T-BUILD.1: model.provider must NOT contain "chat" (openai path); got "${model.provider}"`,
+    assert.throws(
+      () => resolveModel({ factory: "anthropic:claude-sonnet-4-5" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("direct"),
+      "T-BUILD.1: must throw scope-disabled error for reserved direct Anthropic provider",
     );
   });
 
@@ -301,10 +298,10 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     );
   });
 
-  it("T-BUILD.4: when ANTHROPIC_API_KEY env var is set, resolveModel uses env key over auth.json key for anthropic provider", async () => {
-    // Given: process.env.ANTHROPIC_API_KEY = "sk-ant-env"; auth.json has providers.anthropic = { key: "sk-ant-file", type: "anthropic" }
+  it("T-BUILD.4: P-71 — ANTHROPIC_API_KEY env var is ignored; direct Anthropic provider throws scope-disabled", async () => {
+    // Given: ANTHROPIC_API_KEY set; auth.json has providers.anthropic = { key: "sk-ant-file", type: "anthropic" }
     // When:  resolveModel({ factory: "anthropic:claude-sonnet-4-5" }) is called
-    // Then:  x-api-key request header is "sk-ant-env-test" (env key wins over auth.json "sk-ant-file")
+    // Then:  throws scope-disabled (P-71 blocks direct Anthropic — env key is irrelevant)
     process.env.ANTHROPIC_API_KEY = "sk-ant-env-test";
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
@@ -315,37 +312,18 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
       }),
       "utf-8",
     );
-    const model = resolveModel({ factory: "anthropic:claude-sonnet-4-5" });
-    // Intercept the outbound request to verify which key was forwarded to createAnthropic
-    let capturedKey: string | undefined;
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async (_url, init) => {
-      const headers = new Headers(init?.headers as HeadersInit | undefined);
-      capturedKey = headers.get("x-api-key") ?? undefined;
-      throw new Error("TEST_ABORT");
-    };
-    try {
-      await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
-        prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
-      });
-    } catch (e) {
-      if ((e as Error).message !== "TEST_ABORT") throw e;
-    } finally {
-      globalThis.fetch = origFetch;
-    }
-    assert.equal(
-      capturedKey,
-      "sk-ant-env-test",
-      `T-BUILD.4: x-api-key must be env var value "sk-ant-env-test", not auth.json "sk-ant-file"`,
+    assert.throws(
+      () => resolveModel({ factory: "anthropic:claude-sonnet-4-5" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("direct"),
+      "T-BUILD.4: must throw scope-disabled; ANTHROPIC_API_KEY env does not bypass P-71 guard",
     );
   });
 
-  it("T-BUILD.5: when OPENAI_API_KEY env var is set, resolveModel uses env key over auth.json key for openai provider", async () => {
-    // Given: process.env.OPENAI_API_KEY = "sk-env"; auth.json has providers.openai = { key: "sk-file", type: "openai" }
+  it("T-BUILD.5: P-71 — OPENAI_API_KEY env var is ignored; reserved 'openai' provider name throws scope-disabled", async () => {
+    // Given: OPENAI_API_KEY set; auth.json has providers.openai = { key: "sk-file", type: "openai" }
     // When:  resolveModel({ factory: "openai:gpt-4o" }) is called
-    // Then:  Authorization header is "Bearer sk-env-test" (env key wins over auth.json "sk-file")
+    // Then:  throws scope-disabled (P-71 — 'openai' is a reserved direct-provider name)
     process.env.OPENAI_API_KEY = "sk-env-test";
     writeFileSync(
       join(tmpHome, ".mai", "auth.json"),
@@ -356,30 +334,11 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
       }),
       "utf-8",
     );
-    const model = resolveModel({ factory: "openai:gpt-4o" });
-    // Intercept request to verify Authorization header key
-    let capturedAuthHeader: string | undefined;
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async (_url, init) => {
-      const headers = new Headers(init?.headers as HeadersInit | undefined);
-      capturedAuthHeader = headers.get("authorization") ?? undefined;
-      throw new Error("TEST_ABORT");
-    };
-    try {
-      await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
-        prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
-      });
-    } catch (e) {
-      if ((e as Error).message !== "TEST_ABORT") throw e;
-    } finally {
-      globalThis.fetch = origFetch;
-    }
-    assert.equal(
-      capturedAuthHeader,
-      "Bearer sk-env-test",
-      `T-BUILD.5: Authorization must use env var key "sk-env-test", not auth.json "sk-file"`,
+    assert.throws(
+      () => resolveModel({ factory: "openai:gpt-4o" }),
+      (err: Error) =>
+        err.message.includes("scope-disabled") || err.message.includes("P-71") || err.message.includes("reserved"),
+      "T-BUILD.5: must throw scope-disabled; 'openai' is a reserved name blocked by P-71",
     );
   });
 

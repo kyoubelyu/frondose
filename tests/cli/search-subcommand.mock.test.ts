@@ -82,21 +82,29 @@ function captureStdout(fn: () => Promise<void>): Promise<string> {
 // ─── T-ClisubSearch — mai search subcommand ───────────────────────────────────
 
 describe("runSearchSubcommand (G-P15.6)", () => {
-  it("T-ClisubSearch.1: 'set' with both keys writes search.json; mode 0o600", async () => {
+  it("T-ClisubSearch.1: P-71 — 'set' prints unsupported message; does NOT write Brave/Tavily keys", async () => {
     // Given: temp cfgPath; runSearchSubcommand("set", { braveApiKey: "bsa-test", tavilyApiKey: "tvly-test", cfgPath }, mockPrompter)
     // When:  function executes with cfgPath injection
-    // Then:  search.json exists with both fields; file mode === 0o600
+    // Then:  P-71 — set is unsupported; stdout contains unsupported/P-71 message; keys NOT written to search.json
+    // P-71: direct Brave/Tavily key setup is removed; search set prints a message and does nothing.
 
     const { dir, cleanup } = makeTmpDir("searchcli");
     const cfgPath = join(dir, "search.json");
     try {
-      await captureStdout(() =>
+      const stdout = await captureStdout(() =>
         runSearchSubcommand("set", { braveApiKey: "bsa-test", tavilyApiKey: "tvly-test", cfgPath }, makeMockPrompter()),
       );
-      // P-24 path-shift: writeSearchConfig routes to secrets.json; use readSearchConfig to verify
+      // P-71: keys must NOT be written
       const content = readSearchConfig(cfgPath);
-      assert.equal(content.braveApiKey, "bsa-test", "braveApiKey must be written");
-      assert.equal(content.tavilyApiKey, "tvly-test", "tavilyApiKey must be written");
+      assert.ok(
+        !content.braveApiKey || content.braveApiKey !== "bsa-test",
+        "T-ClisubSearch.1: P-71 — braveApiKey must NOT be written by search set",
+      );
+      // Stdout must contain an unsupported/P-71 message
+      assert.ok(
+        stdout.includes("unsupported") || stdout.includes("P-71") || stdout.includes("ignored"),
+        `T-ClisubSearch.1: stdout must indicate unsupported status; got: "${stdout}"`,
+      );
     } finally {
       cleanup();
     }
@@ -120,20 +128,30 @@ describe("runSearchSubcommand (G-P15.6)", () => {
     }
   });
 
-  it("T-ClisubSearch.3: 'set' with --brave only merges — preserves existing tavily", async () => {
+  it("T-ClisubSearch.3: P-71 — 'set' with --brave only does NOT merge; prints unsupported message", async () => {
     // Given: existing search.json with { tavilyApiKey: "tvly-old" }
     // When:  runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, mockPrompter)
-    // Then:  file contains BOTH braveApiKey: "bsa-new" AND tavilyApiKey: "tvly-old" (merge, not overwrite)
+    // Then:  P-71 — no merge; braveApiKey NOT written; stdout indicates unsupported
+    // P-71: direct Brave/Tavily key setup is removed; existing legacy keys are preserved but new ones not written.
 
     const { dir, cleanup } = makeTmpDir("searchcli");
     const cfgPath = join(dir, "search.json");
     try {
       writeFileSync(cfgPath, JSON.stringify({ tavilyApiKey: "tvly-old" }), "utf-8");
-      await captureStdout(() => runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, makeMockPrompter()));
-      // P-24 path-shift: writeSearchConfig routes to secrets.json; use readSearchConfig to verify merge
+      const stdout = await captureStdout(() =>
+        runSearchSubcommand("set", { braveApiKey: "bsa-new", cfgPath }, makeMockPrompter()),
+      );
+      // P-71: braveApiKey must NOT be written (set is unsupported)
       const content = readSearchConfig(cfgPath);
-      assert.equal(content.braveApiKey, "bsa-new", "braveApiKey must be bsa-new");
-      assert.equal(content.tavilyApiKey, "tvly-old", "tavilyApiKey must be preserved (merged, not overwritten)");
+      assert.ok(
+        !content.braveApiKey || content.braveApiKey !== "bsa-new",
+        "T-ClisubSearch.3: P-71 — braveApiKey must NOT be merged by unsupported search set",
+      );
+      // Stdout must contain an unsupported/P-71 message
+      assert.ok(
+        stdout.includes("unsupported") || stdout.includes("P-71") || stdout.includes("ignored"),
+        `T-ClisubSearch.3: stdout must indicate unsupported status; got: "${stdout}"`,
+      );
     } finally {
       cleanup();
     }

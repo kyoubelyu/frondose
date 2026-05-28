@@ -51,19 +51,17 @@ describe("web_search tool — graceful scope_disabled envelope when MCP_SEARCH_U
     try {
       const tool = makeWebSearchTool();
 
-      // Tool description substring assertions (per plan §5.2.2 rewrite)
+      // Tool description substring assertions (P-71: description updated — MCP_SEARCH_URL removed)
       assert.ok(typeof tool.description === "string" && tool.description.length > 0, "tool.description must be set");
       assert.ok(
-        tool.description.includes("MCP_SEARCH_URL"),
-        `tool.description must contain 'MCP_SEARCH_URL'; got: ${tool.description}`,
-      );
-      assert.ok(
-        tool.description.includes("scope_disabled"),
+        tool.description.includes("scope_disabled") || tool.description.includes("scope-disabled"),
         `tool.description must contain 'scope_disabled'; got: ${tool.description}`,
       );
       assert.ok(
-        tool.description.includes("web_fetch") || tool.description.includes("LinkedIn"),
-        `tool.description must reference fallback ('web_fetch' OR 'LinkedIn'); got: ${tool.description}`,
+        tool.description.includes("web_fetch") ||
+          tool.description.includes("LinkedIn") ||
+          tool.description.includes("P-71"),
+        `tool.description must reference fallback or P-71 scope; got: ${tool.description}`,
       );
 
       // Behavioral envelope assertion
@@ -79,10 +77,17 @@ describe("web_search tool — graceful scope_disabled envelope when MCP_SEARCH_U
         "scope_disabled",
         `result.error.kind must be 'scope_disabled'; got: ${result?.error?.kind}`,
       );
+      // P-71: error message no longer mentions MCP_SEARCH_URL; check for scope context instead
       const message = String(result?.error?.message ?? "");
-      assert.ok(message.includes("MCP_SEARCH_URL"), `error message must reference 'MCP_SEARCH_URL'; got: ${message}`);
       assert.ok(
-        message.includes("Brave") || message.includes("Tavily") || message.includes("search"),
+        message.includes("scope-disabled") || message.includes("scope_disabled") || message.includes("P-71"),
+        `error message must reference scope-disabled or P-71; got: ${message}`,
+      );
+      assert.ok(
+        message.includes("Brave") ||
+          message.includes("Tavily") ||
+          message.includes("search") ||
+          message.includes("MCP"),
         `error message must reference scope context; got: ${message}`,
       );
 
@@ -106,11 +111,20 @@ describe("web_search tool — graceful scope_disabled envelope when MCP_SEARCH_U
 
 // ─── T-Search.2 — BOUNDARY band has web_search tool-preference hint ─────────
 
+// P-71 update: MCP_SEARCH_URL removed from BOUNDARY; paragraph header changed to P-71.
 describe("BOUNDARY constant — contains web_search tool-preference hint (G-P57d.4)", () => {
-  it("T-Search.2: given BOUNDARY import from src/agent/systemPrompt/boundary.ts, WHEN substring searches applied for the P-57d search directive, THEN string contains 'web_search' + 'scope_disabled' + 'MCP_SEARCH_URL' + LinkedIn-search-alternative substring — all from the P-57d-appended Tool-preference paragraph per plan §5.3", () => {
+  it("T-Search.2: given BOUNDARY import from src/agent/systemPrompt/boundary.ts, WHEN substring searches applied for the P-71 search directive, THEN string contains 'web_search' + 'scope_disabled' + LinkedIn-search-alternative substring; MCP_SEARCH_URL is absent (P-71 removed it)", () => {
     assert.ok(BOUNDARY.includes("web_search"), "BOUNDARY must contain 'web_search' (tool name)");
     assert.ok(BOUNDARY.includes("scope_disabled"), "BOUNDARY must contain 'scope_disabled' (envelope kind)");
-    assert.ok(BOUNDARY.includes("MCP_SEARCH_URL"), "BOUNDARY must contain 'MCP_SEARCH_URL' (required env-var)");
+    // P-71: MCP_SEARCH_URL removed from Boundary text; web_search is unconditionally scope-disabled
+    assert.ok(
+      !BOUNDARY.includes("MCP_SEARCH_URL"),
+      "P-71 BOUNDARY must NOT contain 'MCP_SEARCH_URL' (removed in P-71)",
+    );
+    assert.ok(
+      BOUNDARY.includes("P-71") || BOUNDARY.includes("scope-disabled") || BOUNDARY.includes("future"),
+      "BOUNDARY must reference P-71 or scope-disabled context",
+    );
     assert.ok(
       BOUNDARY.includes("launch destination='search'") ||
         BOUNDARY.includes("LinkedIn navigation tools") ||
