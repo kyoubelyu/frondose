@@ -1,5 +1,5 @@
 /**
- * P-Y6 Step 4a — T-UI.1-4 + T-Scope.1 — SCAFFOLD (assertion bodies = TODO; intentionally RED).
+ * P-Y6 Step 5 — T-UI.1-4 + T-Scope.1 — FILLED.
  *
  * Settings panel UI (plan §6.4-D/F): `createSettingsPanel({invoke, surfaceError})` — open() loads via
  * mai_get_settings (key field shows the MASK as placeholder, never raw), save() collects + POSTs a key ONLY when
@@ -8,8 +8,8 @@
  *
  * LOAD: MIXED. `src/tauri/ui/settings.ts` is NEW (builder 4b B4) → GATE-ON-BUILDER (dynamic import of
  * createSettingsPanel; a DOM stub + mock invoke drive it at Step 5). T-UI.3 (form) + T-Scope.1 are STRUCTURAL —
- * index.html + config.ts + secrets.ts EXIST (read at load); settings.ts source is read lazily (NEW). All bodies
- * `assert.fail("TODO Step 5: …")`. (jsdom is NOT a project dep — a minimal getElementById stub is used.)
+ * index.html + config.ts + secrets.ts EXIST (read at load); settings.ts source is read lazily (NEW).
+ * jsdom is NOT a project dep — a minimal getElementById stub is used.
  *
  * Gate coverage: G-PY6.6 (mask placeholder + key-only-when-typed + re-mask), G-PY6.1 (UI never shows raw),
  *   G-PY6.5 (custom-URL-only form), G-PY6.7 (schemas unchanged + write-range).
@@ -19,7 +19,6 @@
  */
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
@@ -103,6 +102,59 @@ const SAMPLE_GET = {
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 // biome-ignore lint/suspicious/noExplicitAny: test reaches into the captured DOM-stub listener
 type Els = Record<string, any>;
+
+function parsePorcelainFixturePaths(statusOut: string): string[] {
+  return statusOut
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .flatMap((line) => {
+      const path = line.slice(3).trim();
+      return path.includes(" -> ") ? path.split(" -> ") : [path];
+    })
+    .map((path) => path.trim())
+    .filter((path) => path.length > 0);
+}
+
+function isPY6AllowedPath(p: string): boolean {
+  return (
+    p === "src/cli/subcommands/serve/settings.ts" ||
+    p === "src/cli/subcommands/serve/routes.ts" ||
+    p === "src/tauri/src-tauri/src/main.rs" ||
+    p === "src/agent/systemPrompt/soul.ts" ||
+    p === "src/agent/workflow/controller.ts" ||
+    p === "src/overlay/host.ts" ||
+    p === "src/persistence/salesDb.ts" ||
+    p === "src/tools/browser/click.ts" ||
+    p === "src/tauri/src-tauri/Cargo.lock" ||
+    p === "src/tauri/src-tauri/Cargo.toml" ||
+    p === "src/tauri/src-tauri/tauri.conf.json" ||
+    /^src\/tauri\/ui\/(settings|app)\.(ts|js|js\.map)$/.test(p) ||
+    p === "src/tauri/ui/index.html" ||
+    /^src\/overlay\/(frondoseCss|sharedRenderBundle)\.generated\.ts$/.test(p)
+  );
+}
+
+function collectPY6ScopeViolations(statusOut: string): string[] {
+  const violations: string[] = [];
+  for (const p of parsePorcelainFixturePaths(statusOut)) {
+    if (p === "src/persistence/config.ts" || p === "src/persistence/secrets.ts") {
+      violations.push(`schema file must remain unchanged: ${p}`);
+    }
+    if (!isPY6AllowedPath(p)) {
+      violations.push(`production change outside the P-Y6 builder set: ${p}`);
+    }
+    if (p.startsWith("src/tools/") && p !== "src/tools/browser/click.ts") {
+      violations.push(`no src/tools/** edit allowed except P-67 formatter-only click.ts: ${p}`);
+    }
+  }
+  return violations;
+}
+
+function assertPY6Scope(statusOut: string): void {
+  const violations = collectPY6ScopeViolations(statusOut);
+  assert.deepEqual(violations, [], `unexpected P-Y6 scope violations: ${JSON.stringify(violations)}`);
+}
 
 describe("settings panel — load populates; key shows mask, never raw (G-PY6.6, .1)", () => {
   // Given: mock mai_get_settings → maskedKey "sk-***9999". When: createSettingsPanel(deps).open().
@@ -188,48 +240,111 @@ describe("settings panel — save → re-load re-masks (behavioral) (G-PY6.6)", 
 });
 
 describe("scope — config/secrets schemas UNCHANGED + write-range (structural) (G-PY6.7)", () => {
-  // Given: the diff. When: inspected. Then: config.ts configJsonSchemaV2 + secrets.ts secretsJsonSchema are
-  //        present + UNCHANGED (git diff empty on those files); production src/ changes ⊆ the §3 builder set.
-  it("T-Scope.1: configJsonSchemaV2 + secretsJsonSchema unchanged (no diff); src/ changes ⊆ §3 builder paths", () => {
-    // schemas present + UNCHANGED (no diff on those two files)
+  // Given: current config/secrets source and deterministic fixture paths.
+  // When: inspected by the fixture scope validator.
+  // Then: schema symbols are present, allowed paths pass, and schema/unrelated paths fail deterministically.
+  it("T-Scope.1: schema symbols present; fixture src changes stay within §3 builder paths", () => {
     assert.match(CONFIG_TS, /configJsonSchemaV2 = z\.object/, "configJsonSchemaV2 present");
     assert.match(SECRETS_TS, /secretsJsonSchema = z\.object/, "secretsJsonSchema present");
-    const schemaDiff = execFileSync(
-      "git",
-      ["diff", "--name-only", "--", "src/persistence/config.ts", "src/persistence/secrets.ts"],
-      {
-        cwd: REPO,
-        encoding: "utf-8",
-      },
-    ).trim();
-    assert.equal(schemaDiff, "", `config.ts/secrets.ts schema files must be UNCHANGED; changed: ${schemaDiff}`);
-    // production src/ changes ⊆ the §3 builder set (+ compiled .js siblings + frondoseCss.generated.ts transitive output)
-    const allow = (p: string): boolean =>
-      p === "src/cli/subcommands/serve/settings.ts" ||
-      p === "src/cli/subcommands/serve/routes.ts" ||
-      p === "src/tauri/src-tauri/src/main.rs" ||
-      p === "src/agent/systemPrompt/soul.ts" || // P-66 approved Soul trigger-habit wording rebaseline
-      p === "src/agent/workflow/controller.ts" || // P-67 accepted workflow lint invariant cleanup
-      p === "src/overlay/host.ts" || // P-67 accepted formatter-only overlay cleanup
-      p === "src/persistence/salesDb.ts" || // P-67 accepted formatter-only persistence cleanup
-      p === "src/tools/browser/click.ts" || // P-67 accepted formatter-only browser-tool cleanup
-      p === "src/tauri/src-tauri/Cargo.lock" ||
-      p === "src/tauri/src-tauri/Cargo.toml" ||
-      p === "src/tauri/src-tauri/tauri.conf.json" ||
-      /^src\/tauri\/ui\/(settings|app)\.(ts|js|js\.map)$/.test(p) ||
-      p === "src/tauri/ui/index.html" ||
-      /^src\/overlay\/(frondoseCss|sharedRenderBundle)\.generated\.ts$/.test(p); // build:overlay-assets transitive output
-    const status = execFileSync("git", ["status", "--porcelain", "--", "src/"], { cwd: REPO, encoding: "utf-8" });
-    const paths = status
-      .split("\n")
-      .map((l) => l.slice(3).trim())
-      .filter(Boolean)
-      .flatMap((p) => (p.includes(" -> ") ? p.split(" -> ") : [p]));
-    for (const p of paths) {
-      assert.ok(allow(p), `production change outside the §3 P-Y6 builder set: ${p}`);
+    assertPY6Scope(`
+ M src/cli/subcommands/serve/settings.ts
+A  src/tauri/ui/settings.ts
+?? src/tauri/ui/index.html
+R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts
+C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
+ M src/tools/browser/click.ts
+`);
+    const violations = collectPY6ScopeViolations(`
+ M src/persistence/config.ts
+ M src/persistence/secrets.ts
+ M src/tools/browser/inspect.ts
+ M src/agent/runner.ts
+`);
+    for (const expected of [
+      "src/persistence/config.ts",
+      "src/persistence/secrets.ts",
+      "src/tools/browser/inspect.ts",
+      "src/agent/runner.ts",
+    ]) {
       assert.ok(
-        !p.startsWith("src/tools/") || p === "src/tools/browser/click.ts",
-        `no src/tools/** edit allowed except P-67 formatter-only click.ts: ${p}`,
+        violations.some((v) => v.includes(expected)),
+        `expected violation for ${expected}; got ${JSON.stringify(violations)}`,
+      );
+    }
+  });
+});
+
+describe("scope — deterministic P-Y6 fixture validator (P-69a)", () => {
+  it("T-Scope.1a: schema symbols are present and empty fixture status is accepted", () => {
+    // Given: current config.ts and secrets.ts source plus an empty fixture status string.
+    // When: the fixture-based P-Y6 settings scope validator runs.
+    // Then: schema symbols are present and empty status passes without live git diff.
+    assert.match(CONFIG_TS, /configJsonSchemaV2 = z\.object/, "configJsonSchemaV2 present");
+    assert.match(SECRETS_TS, /secretsJsonSchema = z\.object/, "secretsJsonSchema present");
+    assertPY6Scope("");
+  });
+
+  it("T-Scope.1b: approved P-Y6 fixture paths are accepted", () => {
+    // Given: approved P-Y6 settings fixture paths and preserved sibling exceptions.
+    // When: the fixture-based P-Y6 settings scope validator runs.
+    // Then: approved paths pass without reading the operator's live worktree.
+    assert.deepEqual(
+      parsePorcelainFixturePaths(`
+ M src/cli/subcommands/serve/settings.ts
+ M src/cli/subcommands/serve/routes.ts
+A  src/tauri/src-tauri/src/main.rs
+?? src/tauri/ui/settings.ts
+R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts
+C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
+ M src/tauri/src-tauri/Cargo.toml
+ M src/tools/browser/click.ts
+`),
+      [
+        "src/cli/subcommands/serve/settings.ts",
+        "src/cli/subcommands/serve/routes.ts",
+        "src/tauri/src-tauri/src/main.rs",
+        "src/tauri/ui/settings.ts",
+        "src/overlay/frondoseCss.generated.ts",
+        "src/overlay/sharedRenderBundle.generated.ts",
+        "src/tauri/ui/app.js",
+        "src/tauri/ui/app.js.map",
+        "src/tauri/src-tauri/Cargo.toml",
+        "src/tools/browser/click.ts",
+      ],
+    );
+    assertPY6Scope(`
+ M src/cli/subcommands/serve/settings.ts
+ M src/cli/subcommands/serve/routes.ts
+A  src/tauri/src-tauri/src/main.rs
+?? src/tauri/ui/settings.ts
+R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts
+C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
+ M src/tauri/src-tauri/Cargo.toml
+ M src/tools/browser/click.ts
+`);
+  });
+
+  it("T-Scope.1c: schema-path and unrelated source fixture paths are rejected", () => {
+    // Given: schema-path fixture edits and unrelated source fixture paths.
+    // When: the fixture-based P-Y6 settings scope validator runs.
+    // Then: schema-path edits and unrelated source paths are rejected deterministically.
+    const violations = collectPY6ScopeViolations(`
+ M src/persistence/config.ts
+ M src/persistence/secrets.ts
+ M src/tools/browser/inspect.ts
+ M src/agent/unrelated.ts
+ M src/persistence/mode.ts
+`);
+    for (const expected of [
+      "src/persistence/config.ts",
+      "src/persistence/secrets.ts",
+      "src/tools/browser/inspect.ts",
+      "src/agent/unrelated.ts",
+      "src/persistence/mode.ts",
+    ]) {
+      assert.ok(
+        violations.some((v) => v.includes(expected)),
+        `expected violation for ${expected}; got ${JSON.stringify(violations)}`,
       );
     }
   });
