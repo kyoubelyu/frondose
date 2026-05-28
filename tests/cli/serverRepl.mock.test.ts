@@ -147,14 +147,15 @@ function writeServerEnv(dir: string): void {
     "utf-8",
   );
 
-  // Write fake secrets.json so resolveModel({}) can find the anthropic provider.
+  // Write fake secrets.json so resolveModel({}) can find the deepseek provider.
+  // P-71: use deepseek (not anthropic which is now scope-disabled).
   // The key is never validated (no API call happens — readline exits on EOF before any turn).
   writeFileSync(
     join(maiAgentDir, "secrets.json"),
     JSON.stringify({
       schema_version: 1,
       providers: {
-        anthropic: { key: "sk-fake-test-key-not-real", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
+        deepseek: { key: "sk-fake-test-key-not-real", type: "openai", baseUrl: "https://api.deepseek.com/v1" },
       },
     }),
     "utf-8",

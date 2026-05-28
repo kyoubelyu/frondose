@@ -1,13 +1,21 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
-import type { ProviderEntry } from "../persistence/auth.js";
-import { readAuth, readAuthJsonKey as readAuthJsonKeyFromAuthJs } from "../persistence/auth.js";
+import type { AuthJson, ProviderEntry } from "../persistence/auth.js";
+import {
+  DEFAULT_DEEPSEEK_BASE_URL,
+  getOfficialDirectProviderBaseUrlVendor,
+  isAllowedRuntimeProviderEntry,
+  isReservedDirectProviderName,
+  normalizeDeepSeekBaseUrl,
+  normalizeProviderName,
+  readAuth,
+  readAuthJsonKey as readAuthJsonKeyFromAuthJs,
+} from "../persistence/auth.js";
 
 // P-7: re-export for callers (e.g. bootstrap-agent) that already import from modelResolver.
 export const readAuthJsonKey = readAuthJsonKeyFromAuthJs;
 
-export const DEFAULT_MODEL_SPEC = "anthropic:claude-sonnet-4-5";
+export const DEFAULT_MODEL_SPEC = "deepseek:deepseek-v4-flash";
 
 /** P-24 B-2 fix: pre-P-24 read direct from auth.json via readFileSync.
  *  Now routes through readAuth() shim which reads secrets.json (with legacy
@@ -59,14 +67,12 @@ export function resolveModelOrNull(opts: ResolveModelOpts = {}): LanguageModel |
  * Used by runIdentityBootstrap before runBootstrapAgent (chicken-and-egg guard per F-3r.4).
  */
 export function detectAnyModelKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (process.env.OPENAI_API_KEY) return true;
   if (process.env.DEEPSEEK_API_KEY) return true;
   try {
     const auth = readAuth();
     if (auth?.providers) {
-      for (const entry of Object.values(auth.providers)) {
-        if (entry.key) return true;
+      for (const [name, entry] of Object.entries(auth.providers)) {
+        if (isAllowedRuntimeProviderEntry(name, entry)) return true;
       }
     }
   } catch {
@@ -78,8 +84,11 @@ export function detectAnyModelKey(): boolean {
 export function parseModelSpec(spec: string): { provider: string; modelId: string } {
   const idx = spec.indexOf(":");
   if (idx === -1) {
+    if (isReservedDirectProviderName(spec)) {
+      throw new Error(directProviderDisabledMessage(spec));
+    }
     throw new Error(
-      `Invalid model spec '${spec}': must be '<provider>:<modelId>' (e.g. 'anthropic:claude-sonnet-4-5').`,
+      `Invalid model spec '${spec}': must be '<provider>:<modelId>' (e.g. 'deepseek:deepseek-v4-flash').`,
     );
   }
   const provider = spec.slice(0, idx);
@@ -138,67 +147,112 @@ export function makeNoThinkingFetch(modelId: string): typeof globalThis.fetch {
 }
 
 /**
- * P-21: Resolve the API key for a provider. Env var (backward compat) takes
- * precedence over auth.json stored key for the three well-known provider names
- * (anthropic / openai / deepseek). All other named providers use the stored key.
+ * P-71: Resolve the API key for an in-scope provider. Direct Anthropic/OpenAI env
+ * vars are intentionally ignored; DeepSeek env remains the approved default path.
  */
 function resolveModelKey(provider: string, entry: ProviderEntry): string {
-  if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-    return process.env.ANTHROPIC_API_KEY;
-  }
-  if (provider === "openai" && process.env.OPENAI_API_KEY) {
-    return process.env.OPENAI_API_KEY;
-  }
   if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
     return process.env.DEEPSEEK_API_KEY;
   }
   return entry.key;
 }
 
+function configuredProviderList(auth: AuthJson | null): string {
+  const configured = Object.keys(auth?.providers ?? {});
+  return configured.length > 0 ? configured.join(", ") : "(none)";
+}
+
+function specSource(spec: string): string {
+  return spec === process.env.MAI_MODEL
+    ? "the MAI_MODEL env var"
+    : spec === readAuthJsonDefault()
+      ? "the auth.json / secrets.json default"
+      : "a CLI flag or the built-in default";
+}
+
+function directProviderDisabledMessage(provider: string, auth?: AuthJson | null, spec?: string): string {
+  const normalized = normalizeProviderName(provider);
+  const source = spec ? ` (model spec came from ${specSource(spec)})` : "";
+  const configured = auth === undefined ? "" : ` Configured providers: ${configuredProviderList(auth)}.`;
+  const preP21Hint =
+    normalized === "openai"
+      ? " This looks like a pre-P-21 model spec if it was meant for DeepSeek/custom OpenAI-compatible routing; migrate it to 'deepseek:<modelId>' or another non-reserved provider name."
+      : "";
+  return (
+    `Direct provider '${provider}' is scope-disabled in P-71${source}.` +
+    `${configured}${preP21Hint} ` +
+    "Use 'deepseek:<modelId>' with DEEPSEEK_API_KEY/DEEPSEEK_BASE_URL, or configure a non-official " +
+    "OpenAI-compatible custom provider with: mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default."
+  );
+}
+
+function notConfiguredMessage(provider: string, auth: AuthJson | null, spec: string): string {
+  const preP21Hint =
+    normalizeProviderName(provider) === "openai"
+      ? "\n  This looks like a pre-P-21 model spec — 'openai' was the Vercel adapter name " +
+        "before P-21. The format is now '<your-provider-name>:<modelId>'."
+      : "";
+  return (
+    `Provider '${provider}' is not configured (model spec came from ${specSource(spec)}). ` +
+    `Configured providers: ${configuredProviderList(auth)}.${preP21Hint}\n` +
+    "  Configure DeepSeek/custom OpenAI-compatible routing with: " +
+    "mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default"
+  );
+}
+
+function runtimeDeepSeekEntry(provider: string, entry: ProviderEntry | undefined): ProviderEntry | undefined {
+  if (provider !== "deepseek") return entry;
+  if (entry) return entry;
+  if (!process.env.DEEPSEEK_API_KEY) return undefined;
+  return {
+    key: process.env.DEEPSEEK_API_KEY,
+    baseUrl: normalizeDeepSeekBaseUrl(process.env.DEEPSEEK_BASE_URL ?? DEFAULT_DEEPSEEK_BASE_URL),
+    type: "openai",
+  };
+}
+
+function resolveModelBaseUrl(provider: string, entry: ProviderEntry): string {
+  const normalizedProvider = normalizeProviderName(provider);
+  const baseUrl =
+    normalizedProvider === "deepseek"
+      ? normalizeDeepSeekBaseUrl(process.env.DEEPSEEK_BASE_URL ?? entry.baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL)
+      : entry.baseUrl?.trim();
+  if (!baseUrl) {
+    throw new Error(
+      `Provider '${provider}' is missing baseUrl. P-71 blocks OpenAI-compatible providers without a custom baseUrl because the SDK would otherwise fall back to the official OpenAI endpoint. Configure DeepSeek/custom URL with: mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default.`,
+    );
+  }
+  const officialVendor = getOfficialDirectProviderBaseUrlVendor(baseUrl);
+  if (officialVendor) {
+    throw new Error(
+      `Provider '${provider}' uses official ${officialVendor} baseUrl '${baseUrl}', which is direct-vendor and scope-disabled in P-71. Use DeepSeek or a non-official OpenAI-compatible custom URL instead.`,
+    );
+  }
+  return baseUrl;
+}
+
 function buildModel(spec: string): LanguageModel {
   const { provider, modelId } = parseModelSpec(spec);
   const auth = readAuth();
-  const entry = auth?.providers?.[provider];
+  if (isReservedDirectProviderName(provider)) {
+    throw new Error(directProviderDisabledMessage(provider, auth, spec));
+  }
+  const entry = runtimeDeepSeekEntry(provider, auth?.providers?.[provider]);
   if (!entry) {
-    const configured = Object.keys(auth?.providers ?? {});
-    const list = configured.length > 0 ? configured.join(", ") : "(none)";
-    // OQ-2: name the spec's source by direct inspection (no signature change).
-    const source =
-      spec === process.env.MAI_MODEL
-        ? "the MAI_MODEL env var"
-        : spec === readAuthJsonDefault()
-          ? "the auth.json / secrets.json default"
-          : "a CLI flag or the built-in default";
-    // FA.3: pre-P-21 stale-spec detection — `openai` was the Vercel adapter name.
-    const preP21Hint =
-      provider === "openai"
-        ? "\n  This looks like a pre-P-21 model spec — 'openai' was the Vercel adapter name " +
-          "before P-21. The format is now '<your-provider-name>:<modelId>'."
-        : "";
+    throw new Error(notConfiguredMessage(provider, auth, spec));
+  }
+
+  const type = entry.type ?? "openai"; // migrated entries always have type
+
+  if (type === "anthropic") {
     throw new Error(
-      `Provider '${provider}' is not configured (model spec came from ${source}). ` +
-        `Configured providers: ${list}.${preP21Hint}\n` +
-        "  Configure a provider with: " +
-        "mai auth set <url> --key <key> --model-id <modelId>",
+      `Provider '${provider}' is configured as direct Anthropic, which is scope-disabled in P-71. ` +
+        "Keep the legacy entry if needed for removal/listing, but use DeepSeek or a non-official OpenAI-compatible custom provider for runtime.",
     );
   }
 
   const key = resolveModelKey(provider, entry);
-  const type = entry.type ?? "openai"; // migrated entries always have type
-
-  if (type === "anthropic") {
-    return createAnthropic({
-      baseURL: entry.baseUrl,
-      apiKey: key,
-    })(modelId);
-  }
-
-  // type === "openai" — OpenAI-compatible provider.
-  // DEEPSEEK_BASE_URL env override preserved for backward compat (research §4.2a).
-  // Normalize to ensure trailing /v1 (idempotent).
-  const rawDeepseekOverride = provider === "deepseek" ? process.env.DEEPSEEK_BASE_URL : undefined;
-  const deepseekNorm = rawDeepseekOverride ? `${rawDeepseekOverride.replace(/\/v1\/?$/, "")}/v1` : undefined;
-  const baseURL = deepseekNorm ?? entry.baseUrl;
+  const baseURL = resolveModelBaseUrl(provider, entry);
   const fetchFn = DEEPSEEK_THINKING_DEFAULT_MODELS.has(modelId) ? makeNoThinkingFetch(modelId) : undefined;
   return createOpenAI({
     baseURL,

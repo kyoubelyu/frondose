@@ -50,13 +50,7 @@ function buildEnvSnapshot(): EnvSnapshot {
   try {
     const spec = resolveModelSpec({});
     const { provider } = parseModelSpec(spec);
-    if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-      env.providerKeyName = "ANTHROPIC_API_KEY";
-      env.providerKeyValue = process.env.ANTHROPIC_API_KEY;
-    } else if (provider === "openai" && process.env.OPENAI_API_KEY) {
-      env.providerKeyName = "OPENAI_API_KEY";
-      env.providerKeyValue = process.env.OPENAI_API_KEY;
-    } else if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
+    if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
       env.providerKeyName = "DEEPSEEK_API_KEY";
       env.providerKeyValue = process.env.DEEPSEEK_API_KEY;
     }

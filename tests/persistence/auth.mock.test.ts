@@ -177,20 +177,20 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
 test("T-Auth4: set then remove leaves provider absent in auth.json", async () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    // P-21: "set" now takes url: instead of spec:. Update to URL-based API.
+    // P-71: direct Anthropic/OpenAI writes are rejected; use an in-scope DeepSeek/custom provider.
     await runAuthSubcommand("set", {
-      url: "https://api.anthropic.com/v1",
-      key: "sk-ant-toremove",
-      model: "claude-sonnet-4-5",
-      name: "anthropic",
+      url: "https://api.deepseek.com/v1",
+      key: "sk-dsk-toremove",
+      model: "deepseek-v4-flash",
+      name: "deepseek",
       authPath,
     });
     const before = readAuth(authPath);
-    assert.ok(before?.providers?.anthropic, "T-Auth4: pre-condition: provider must exist before remove");
+    assert.ok(before?.providers?.deepseek, "T-Auth4: pre-condition: provider must exist before remove");
 
-    await runAuthSubcommand("remove", { provider: "anthropic", authPath });
+    await runAuthSubcommand("remove", { provider: "deepseek", authPath });
     const after = readAuth(authPath);
-    assert.ok(!after?.providers?.anthropic, "T-Auth4: provider must be absent after remove");
+    assert.ok(!after?.providers?.deepseek, "T-Auth4: provider must be absent after remove");
     console.log("T-Auth4: set-then-remove round-trip ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -202,9 +202,9 @@ test("T-Auth4: set then remove leaves provider absent in auth.json", async () =>
 test("T-Auth5: runAuthSubcommand default writes default field to auth.json", async () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    await runAuthSubcommand("default", { spec: "anthropic:claude-sonnet-4-5", authPath });
+    await runAuthSubcommand("default", { spec: "deepseek:deepseek-v4-flash", authPath });
     const auth = readAuth(authPath);
-    assert.equal(auth?.default, "anthropic:claude-sonnet-4-5", "T-Auth5: default must be written");
+    assert.equal(auth?.default, "deepseek:deepseek-v4-flash", "T-Auth5: default must be written");
     console.log("T-Auth5: default field written ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });

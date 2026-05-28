@@ -548,12 +548,12 @@ async function main(): Promise<void> {
     });
   }
 
-  // P-15: `mai search` — web search API key management
-  const search = program.command("search").description("Web search API key management");
+  // P-15/P-71: `mai search` — legacy search-key status/removal only.
+  const search = program.command("search").description("Legacy search-key status/removal");
   search
     .command("set")
-    .option("--brave <key>", "Brave Search API key")
-    .option("--tavily <key>", "Tavily Search API key")
+    .option("--brave <key>", "Legacy Brave key (ignored)")
+    .option("--tavily <key>", "Legacy Tavily key (ignored)")
     .action(async (cliOpts: { brave?: string; tavily?: string }) => {
       await runWithExitGuard(async () => {
         await runSearchSubcommand("set", { braveApiKey: cliOpts.brave, tavilyApiKey: cliOpts.tavily });

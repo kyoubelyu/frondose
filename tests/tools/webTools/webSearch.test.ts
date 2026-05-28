@@ -145,36 +145,35 @@ test("T-WebSearch.1b: BRAVE/TAVILY keys set but MCP_SEARCH_URL unset → scope_d
   );
 });
 
-// ─── T-WebSearch.2: with MCP_SEARCH_URL set, the Brave path still shapes results ──
-// (Keeps coverage of description→snippet mapping + maxResults slicing; the Brave/Tavily
-// path is reachable only past the MCP gate per webSearch.ts:51+.)
+// ─── T-WebSearch.2: P-71 — even with MCP_SEARCH_URL set, web_search is scope_disabled ──
+// P-71 removed all direct Brave/Tavily API calls from webSearch.ts. Both configured and
+// unconfigured MCP states now return scope_disabled. Zero fetch calls.
 
-test("T-WebSearch.2: MCP_SEARCH_URL set + BRAVE_API_KEY → Brave path maps description→snippet and slices to maxResults", async () => {
+test("T-WebSearch.2: P-71 — MCP_SEARCH_URL set + BRAVE_API_KEY set → still scope_disabled; no Brave fetch call", async () => {
   const tool = makeWebSearchTool();
-  let calledUrl = "";
+  let fetchCallCount = 0;
 
   await withEnv("MCP_SEARCH_URL", "https://mcp.example/search", () =>
     withEnv("BRAVE_API_KEY", "brave-test-key", () =>
       withEnv("TAVILY_API_KEY", undefined, () =>
         withMockFetch(
-          async (url) => {
-            calledUrl = url.toString();
-            return makeBraveResponse([
-              { title: "Example", url: "https://example.com", description: "An example site" },
-              { title: "Second", url: "https://second.com", description: "another" },
-              { title: "Third", url: "https://third.com", description: "yet another" },
-            ]);
+          async () => {
+            fetchCallCount++;
+            return makeBraveResponse([{ title: "X", url: "https://x.com", description: "x" }]);
           },
           async () => {
             const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
               ok: boolean;
-              data: { provider: string; results: Array<{ title: string; url: string; snippet: string }> };
+              error: { kind: string };
             };
-            assert.equal(result.ok, true, "Brave result must be ok:true once past the MCP gate");
-            assert.ok(calledUrl.includes("api.search.brave.com"), `must call Brave URL; got: "${calledUrl}"`);
-            assert.equal(result.data.provider, "brave", "provider must be 'brave'");
-            assert.equal(result.data.results.length, 2, "must slice to maxResults=2");
-            assert.equal(result.data.results[0]?.snippet, "An example site", "description must map to snippet");
+            // P-71: web_search is unconditionally scope-disabled; no direct API call made
+            assert.equal(
+              result.ok,
+              false,
+              "P-71: result.ok must be false (scope_disabled) even with MCP_SEARCH_URL set",
+            );
+            assert.equal(result.error.kind, "scope_disabled", "error.kind must be scope_disabled");
+            assert.equal(fetchCallCount, 0, "P-71: zero fetch calls — direct Brave/Tavily calls are removed");
           },
         ),
       ),

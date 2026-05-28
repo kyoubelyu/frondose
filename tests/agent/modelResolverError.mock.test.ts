@@ -320,11 +320,12 @@ describe("resolveModelOrNull — returns LanguageModel on success (G-P36.5)", ()
     // When:  resolveModelOrNull() called with factory pointing to configured provider
     // Then:  returns a non-null LanguageModel object; stderr empty; no throw
     const saved = saveEnv(...MODEL_ENV_KEYS);
+    // P-71: must use a non-official baseUrl; official OpenAI/Anthropic URLs are scope-disabled
     const { tmpHome, cleanup } = setupTmpHome({
       myprovider: {
         key: "sk-test-key-placeholder",
         type: "openai",
-        baseUrl: "https://api.openai.com/v1",
+        baseUrl: "https://api.deepseek.com/v1",
       },
     });
     process.env.HOME = tmpHome;

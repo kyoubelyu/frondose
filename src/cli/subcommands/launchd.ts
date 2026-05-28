@@ -12,7 +12,7 @@ export interface EnvSnapshot {
   TELEGRAM_TOKEN: string; // required
   TELEGRAM_PROXY?: string;
   MAI_MODEL?: string;
-  providerKeyName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "DEEPSEEK_API_KEY";
+  providerKeyName?: "DEEPSEEK_API_KEY";
   providerKeyValue?: string;
 }
 
