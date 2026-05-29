@@ -127,9 +127,7 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "set_memory_note",
   "sleep",
   "stop",
-  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
-  "suggest_card",
-  "suggest_next_actions",
+  // P-73: suggest_card/suggest_next_actions are worker-only overlay tools (removed from server)
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -263,8 +261,8 @@ describe("tool counts: worker 53 / server 27 (G-P38.8/.11, rebaselined at P-Y3)"
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        27,
-        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        25,
+        `server tool count must be 25; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
     } finally {

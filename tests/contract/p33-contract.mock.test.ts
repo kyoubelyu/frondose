@@ -127,8 +127,8 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "score_lead",
 ].sort();
 
-// Post-P-Y3 server tool name snapshot (27 tools).
-// P-44: updated from 20 to 23 to include P-39's search_memory/set_memory_note/get_memory_note.
+// Post-P-73 server tool name snapshot (25 tools).
+// P-44: updated from 20 to 23; P-73: removed suggest_card/suggest_next_actions (worker-only overlay tools).
 const FROZEN_SERVER_TOOL_KEYS = [
   "analyze_screenshot",
   "dispatch_google_login",
@@ -151,9 +151,6 @@ const FROZEN_SERVER_TOOL_KEYS = [
   "set_memory_note",
   "sleep",
   "stop",
-  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
-  "suggest_card",
-  "suggest_next_actions",
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -317,8 +314,8 @@ describe("makeAllTools server mode (G-P33.6 + P-Y3 supersedes count)", () => {
 
       assert.equal(
         keys.length,
-        27,
-        `server mode must have exactly 27 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        25,
+        `server mode must have exactly 25 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match current P-Y3 snapshot");
     } finally {

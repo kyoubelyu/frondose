@@ -140,14 +140,12 @@ const PRE_P31_SERVER_KEYS = [
   "web_search",
 ].sort();
 
-// P-Y3 rebaseline: current server tool snapshot (27 keys = pre-P-31 22 + schedule_task [P-31]
-// + suggest_card/suggest_next_actions [P-57a] + todo_write [P-Y1] + present_summary [P-Y3]).
+// P-73 rebaseline: current server tool snapshot (25 keys = pre-P-31 22 + schedule_task [P-31]
+// + todo_write [P-Y1] + present_summary [P-Y3]; suggest_card/suggest_next_actions worker-only per P-73).
 const POST_P31_SERVER_KEYS = [
   ...PRE_P31_SERVER_KEYS,
   "present_summary",
   "schedule_task",
-  "suggest_card",
-  "suggest_next_actions",
   "todo_write",
 ].sort();
 
@@ -194,11 +192,11 @@ describe("makeAllTools worker mode → 53 tool keys (rebaselined to P-Y3) (G-P31
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
-describe("makeAllTools server mode → 27 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 27 keys; set includes present_summary", () => {
+describe("makeAllTools server mode → 25 tool keys (rebaselined to P-73) (G-P31.12)", () => {
+  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 25 keys; set includes present_summary", () => {
     // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
     // When:   server mode tool set is built post-P-31
-    // Then:   20 keys; deepEqual to POST_P31_SERVER_KEYS; diff from PRE is exactly {schedule_task}
+    // Then:   25 keys; deepEqual to POST_P31_SERVER_KEYS (P-73: suggest_card/suggest_next_actions worker-only)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -218,8 +216,8 @@ describe("makeAllTools server mode → 27 tool keys (rebaselined to P-Y3) (G-P31
 
       assert.equal(
         keys.length,
-        27,
-        `server mode must return exactly 27 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        25,
+        `server mode must return exactly 25 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,

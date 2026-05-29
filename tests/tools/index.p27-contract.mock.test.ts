@@ -67,11 +67,11 @@ describe("makeAllTools P-27 tool-count contract — worker mode (G-P27.23)", () 
 // ─── T-CONTRACT.P27.SERVER ───────────────────────────────────────────────────
 
 describe("makeAllTools P-27 tool-count contract — server mode (G-P27.24)", () => {
-  it("T-CONTRACT.P27.SERVER: server mode → exactly 27 tools", () => {
+  it("T-CONTRACT.P27.SERVER: server mode → exactly 25 tools", () => {
     // Given: makeAllTools(undefined, persistence {+invitesDbPath +personasDir +serverUrl}, control, undefined, {mode:'server'})
     //        invitesDbPath omitted → invitesDb=null; provision_worker still registers with null DB
     // When:  Object.keys(tools).length
-    // Then:  27 (P-Y3 server power count)
+    // Then:  25 (P-73: suggest_card/suggest_next_actions removed from server mode)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -85,8 +85,8 @@ describe("makeAllTools P-27 tool-count contract — server mode (G-P27.24)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        27,
-        `T-CONTRACT.P27.SERVER: expected 27 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        25,
+        `T-CONTRACT.P27.SERVER: expected 25 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

@@ -574,8 +574,8 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
 
       assert.equal(workerConsumer.length, 51, `worker consumer inventory drifted: ${workerConsumer.join(", ")}`);
       assert.equal(workerPower.length, 53, `worker power inventory drifted: ${workerPower.join(", ")}`);
-      assert.equal(serverConsumer.length, 25, `server consumer inventory drifted: ${serverConsumer.join(", ")}`);
-      assert.equal(serverPower.length, 27, `server power inventory drifted: ${serverPower.join(", ")}`);
+      assert.equal(serverConsumer.length, 23, `server consumer inventory drifted: ${serverConsumer.join(", ")}`);
+      assert.equal(serverPower.length, 25, `server power inventory drifted: ${serverPower.join(", ")}`);
 
       for (const [label, consumer, power] of [
         ["worker", workerConsumer, workerPower],
