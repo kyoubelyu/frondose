@@ -351,6 +351,136 @@ test("T-M40: captureCurrentSurfaceContext on non-LinkedIn URL returns 'unknown' 
 //   T-G6.6 → G-P59.1 — selector regression defense (all 4 original arms preserved)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P-74 — T-P74.Overlay.1/.2 — behavioral regression guards for INSPECT-1
+// (already-shipped in b40013f; these lock the overlay-entry + retry paths)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build a fake handle for overlay-synthesis tests. The handle stubs:
+ *   - AX tree (empty by default — overlay path doesn't need AX entries)
+ *   - Runtime.evaluate:
+ *       • "window.location.href" → pageUrl
+ *       • expression containing setAttribute('data-mai-ov' → OVERLAY_SYNTH_JS → overlayEvalResults[n]
+ *       • cleanup expr containing removeAttribute → return undefined (best-effort)
+ *   - DOM: getDocument, querySelectorAll (→ overlayNodeIds), describeNode (→ backendNodeId)
+ */
+function makeOverlayFakeHandle(opts: {
+  pageUrl: string;
+  overlayEvalResults: string[]; // successive results for OVERLAY_SYNTH_JS calls
+  overlayNodeIds: number[]; // returned from querySelectorAll('[data-mai-ov=…]')
+  backendNodeId: number; // returned by DOM.describeNode
+  axNodes?: Array<{ nodeId: string; role: string; name: string; backendDOMNodeId: number }>;
+}) {
+  let overlayEvalCallCount = 0;
+  return {
+    handle: {
+      Accessibility: {
+        enable: async () => {},
+        getFullAXTree: async () => ({
+          nodes: (opts.axNodes ?? []).map((n) => ({
+            nodeId: n.nodeId,
+            role: { type: "role", value: n.role },
+            name: { type: "string", value: n.name },
+            backendDOMNodeId: n.backendDOMNodeId,
+            ignored: false,
+          })),
+        }),
+      },
+      Runtime: {
+        evaluate: async (args: { expression: string }) => {
+          if (args.expression === "window.location.href") {
+            return { result: { value: opts.pageUrl } };
+          }
+          // OVERLAY_SYNTH_JS is identified by its data-mai-ov setAttribute marker
+          if (args.expression.includes("setAttribute('data-mai-ov'")) {
+            const result = opts.overlayEvalResults[overlayEvalCallCount] ?? "[]";
+            overlayEvalCallCount++;
+            return { result: { value: result } };
+          }
+          // cleanup eval (removeAttribute) or other — best-effort, return nothing
+          return { result: { value: undefined } };
+        },
+      },
+      DOM: {
+        getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
+        querySelectorAll: async (_args: unknown) => ({ nodeIds: opts.overlayNodeIds }),
+        getAttributes: async (_args: unknown) => ({ attributes: [] }),
+        describeNode: async (_args: unknown) => ({ node: { backendNodeId: opts.backendNodeId } }),
+      },
+    },
+    getOverlayEvalCallCount: () => overlayEvalCallCount,
+  };
+}
+
+describe("T-P74.Overlay.1 (INSPECT-1 RC-1): overlay menuitem → clickable @ov1 + activeLayer=overlay + mergeRefs called", () => {
+  it(
+    "when OVERLAY_SYNTH_JS returns [{i:1,role:'menuitem',label:'Connect'}], captureCurrentSurfaceContext produces @ov1 entry + activeLayer:overlay + client refMap contains ov1",
+    async () => {
+      // Given: a fake CdpClient on a non-special URL ('unknown' surface, no messaging/profile/feed synth);
+      //        OVERLAY_SYNTH_JS eval returns one menuitem [{i:1,role:'menuitem',label:'Connect'}];
+      //        DOM.describeNode returns {node:{backendNodeId:99}} so @ov1 is clickable.
+      // When:  captureCurrentSurfaceContext(client) runs.
+      // Then:  entries include {ref:'@ov1',role:'menuitem',name:'Connect'};
+      //        activeLayer === 'overlay';
+      //        client.currentRefMap.ov1.backendNodeId === 99 (mergeRefs was called — the clickability lynchpin).
+      const { handle } = makeOverlayFakeHandle({
+        pageUrl: "https://www.linkedin.com/settings/",
+        overlayEvalResults: [JSON.stringify([{ i: 1, role: "menuitem", label: "Connect" }])],
+        overlayNodeIds: [42],
+        backendNodeId: 99,
+      });
+      const client = CdpClient.fromHandle(handle);
+      const ctx = await captureCurrentSurfaceContext(client);
+
+      const ov1 = ctx.entries.find((e) => e.ref === "@ov1");
+      assert.ok(ov1 !== undefined, "T-P74.Overlay.1: entries must include @ov1 ref");
+      assert.equal(ov1?.role, "menuitem", "T-P74.Overlay.1: @ov1 role must be 'menuitem'");
+      assert.equal(ov1?.name, "Connect", "T-P74.Overlay.1: @ov1 name must be 'Connect'");
+      assert.equal(ctx.activeLayer, "overlay", "T-P74.Overlay.1: activeLayer must be 'overlay' when overlay items found");
+      // mergeRefs called — ov1 is in the client's refMap with the correct backendNodeId
+      const refEntry = (client.currentRefMap as Record<string, { backendNodeId: number }>)["ov1"];
+      assert.ok(refEntry !== undefined, "T-P74.Overlay.1: client.currentRefMap must contain 'ov1' (mergeRefs called)");
+      assert.equal(refEntry?.backendNodeId, 99, "T-P74.Overlay.1: ov1.backendNodeId must be 99 (clickability lynchpin)");
+    },
+  );
+});
+
+describe("T-P74.Overlay.2 (INSPECT-1 RC-1 + D-G6): 0-item first eval triggers 350ms retry → dialog entry in output", () => {
+  it(
+    "when first OVERLAY_SYNTH_JS eval returns '[]' and second returns a dialog item, the retry fires and the dialog entry appears",
+    async () => {
+      // Given: a fake where OVERLAY_SYNTH_JS returns "[]" on call 1 and
+      //        JSON([{i:1,role:'dialog',label:'Invite to connect'}]) on call 2 (mid-transition overlay);
+      //        DOM.describeNode returns backendNodeId:77.
+      // When:  captureCurrentSurfaceContext(client) runs (the 350ms retry fires after the empty first eval).
+      // Then:  entries include {ref:'@ov1',role:'dialog',name:'Invite to connect'};
+      //        exactly 2 OVERLAY_SYNTH_JS evals occurred (bounded single retry).
+      const { handle, getOverlayEvalCallCount } = makeOverlayFakeHandle({
+        pageUrl: "https://www.linkedin.com/settings/",
+        overlayEvalResults: [
+          "[]",
+          JSON.stringify([{ i: 1, role: "dialog", label: "Invite to connect" }]),
+        ],
+        overlayNodeIds: [55],
+        backendNodeId: 77,
+      });
+      const client = CdpClient.fromHandle(handle);
+      const ctx = await captureCurrentSurfaceContext(client);
+
+      assert.equal(getOverlayEvalCallCount(), 2, "T-P74.Overlay.2: exactly 2 OVERLAY_SYNTH_JS evals must occur (bounded retry)");
+
+      const ov1 = ctx.entries.find((e) => e.ref === "@ov1");
+      assert.ok(ov1 !== undefined, "T-P74.Overlay.2: entries must include @ov1 after retry");
+      assert.equal(ov1?.role, "dialog", "T-P74.Overlay.2: @ov1 role must be 'dialog'");
+      assert.equal(ov1?.name, "Invite to connect", "T-P74.Overlay.2: @ov1 name must be 'Invite to connect'");
+      assert.equal(ctx.activeLayer, "overlay", "T-P74.Overlay.2: activeLayer must be 'overlay'");
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 describe("T-G6 — D-G6 fix: OVERLAY_SYNTH_JS + synthesizeOverlayEntries retry-with-delay (P-59 D-G6, source-structural)", () => {
   it("T-G6.1: when snapshotCapture.ts OVERLAY_SYNTH_JS constant is read, querySelectorAll selector list includes '[data-test-modal]' (covers H3 — unroled artdeco modals such as the LinkedIn 'Invite to connect' dialog)", () => {
     // Given: SNAPSHOT_CAPTURE_SRC = src/linkedin/snapshotCapture.ts source text
