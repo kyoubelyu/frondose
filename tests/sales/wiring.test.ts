@@ -94,7 +94,7 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
   it("T-SP-A.Wiring.2: server power tier does NOT register any sales-kernel tools", async () => {
     // Given: makeAllTools called with mode:'server', tier:'power', no session (server ignores session)
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 27; none of the 17 sales-kernel tool names appear in the set
+    // Then:  length === 25; none of the 17 sales-kernel tool names appear in the set
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(undefined, PERSISTENCE, CONTROL, undefined, {
@@ -105,8 +105,8 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      27,
-      `server+power must have 27 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      25,
+      `server+power must have 25 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {

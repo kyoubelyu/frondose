@@ -123,9 +123,7 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
   "set_memory_note",
   "sleep",
   "stop",
-  // P-Z2 rebaseline: accreted since P-39 (P-57a suggestion tools + P-Y1 workflow)
-  "suggest_card",
-  "suggest_next_actions",
+  // P-73: suggest_card/suggest_next_actions are worker-only overlay tools (removed from server)
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -164,11 +162,11 @@ describe("P-39 tool count: worker 53 (rebaselined to P-Y3) (G-P39.11)", () => {
 
 // ─── T-Count.2 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: server 27 (rebaselined to P-Y3) (G-P39.11)", () => {
-  it("T-Count.2: makeAllTools server mode → exactly 27 tools, including present_summary", () => {
+describe("P-39 tool count: server 25 (rebaselined to P-73) (G-P39.11)", () => {
+  it("T-Count.2: makeAllTools server mode → exactly 25 tools, including present_summary", () => {
     // Given: makeAllTools called with undefined session + persistence + control in server mode
-    // When:  Object.keys(serverTools).length checked; set includes the 3 new P-39 tools
-    // Then:  27 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-Y3 rebaseline)
+    // When:  Object.keys(serverTools).length checked; set excludes suggest_card/suggest_next_actions (P-73)
+    // Then:  25 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-73 rebaseline)
     const { dir, cleanup } = makeTmpDir();
     try {
       const serverTools = makeAllTools(
@@ -181,8 +179,8 @@ describe("P-39 tool count: server 27 (rebaselined to P-Y3) (G-P39.11)", () => {
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        27,
-        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        25,
+        `server tool count must be 25; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P39, "server tool set must match frozen P-39 snapshot");
     } finally {

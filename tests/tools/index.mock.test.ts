@@ -606,14 +606,12 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
   console.log(`T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`);
 });
 
-// ─── T-F.Wire.2 — worker=53/51, server=27/25 count contract (P-Y3) ─────────────
-// NOTE: P-66 rebaselines stale P-SP-F doc assertions to the post-P-Y3 exposed counts.
+// ─── T-F.Wire.2 — worker=53/51, server=25/23 count contract (P-73) ─────────────
+// NOTE: P-73 rebaselines server counts from P-Y3 27/25 to 25/23 (suggest_card/suggest_next_actions worker-only).
 
-test("T-F.Wire.2: post-P-Y3 tool count docs — CLAUDE.md contains worker 53/51 and server 27/25 plus present_summary", () => {
-  // Given: P-SP-E has shipped (start_auto_run + end_auto_run added, base=23: 7 core +
-  //        12 P-SP-A sales + 2 P-SP-B scoring + 2 P-SP-E auto-run lifecycle);
-  //        P-Y3 builder has added present_summary to control-backed inventories,
-  //        FULL worker power/consumer = 53/51 and server power/consumer = 27/25
+test("T-F.Wire.2: post-P-73 tool count docs — CLAUDE.md contains worker 53/51 and server 25/23 plus present_summary", () => {
+  // Given: P-73 has shipped (suggest_card/suggest_next_actions gated out of server mode);
+  //        FULL worker power/consumer = 53/51 (unchanged) and server power/consumer = 25/23
   //        AND CLAUDE.md documents present_summary in the breakdown
   // When:  makeAllTools() key count checked (base set = no session / persist / control)
   //        AND CLAUDE.md source scanned for count strings
@@ -644,8 +642,8 @@ test("T-F.Wire.2: post-P-Y3 tool count docs — CLAUDE.md contains worker 53/51 
     claudeMd.includes("worker = 51"),
     "T-F.Wire.2: CLAUDE.md must contain 'worker = 51' in the consumer-tier paragraph (P-Y3)",
   );
-  assert.ok(claudeMd.includes("server = 27"), "T-F.Wire.2: CLAUDE.md must contain 'server = 27' (P-Y3)");
-  assert.ok(claudeMd.includes("server = 25"), "T-F.Wire.2: CLAUDE.md must contain 'server = 25' (P-Y3)");
+  assert.ok(claudeMd.includes("server = 25"), "T-F.Wire.2: CLAUDE.md must contain 'server = 25' (P-73)");
+  assert.ok(claudeMd.includes("server = 23"), "T-F.Wire.2: CLAUDE.md must contain 'server = 23' (P-73)");
   assert.ok(claudeMd.includes("present_summary"), "T-F.Wire.2: CLAUDE.md must document present_summary (P-Y3)");
   console.log(`T-F.Wire.2 PASS: post-P-Y3 base count = ${baseCount}; CLAUDE.md count strings verified.`);
 });

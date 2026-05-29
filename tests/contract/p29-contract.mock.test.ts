@@ -95,10 +95,10 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 27 tools", () => {
+  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 25 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) (D-9)
     // When: Object.keys(tools).length
-    // Then: 27 (P-Y3 rebaseline: server power includes present_summary)
+    // Then: 25 (P-73: suggest_card/suggest_next_actions removed from server mode)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -109,8 +109,8 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        27,
-        `T-CONTRACT.TOOLS server: expected 27 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        25,
+        `T-CONTRACT.TOOLS server: expected 25 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

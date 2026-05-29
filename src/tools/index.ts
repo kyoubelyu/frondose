@@ -76,7 +76,7 @@ export interface PersistencePaths {
 /**
  * Build the full tool inventory. P-26 surface:
  *   - worker mode: 53 tools in power tier, 51 in consumer tier (P-Y3)
- *   - server  mode: 27 tools in power tier, 25 in consumer tier (P-Y3)
+ *   - server  mode: 25 tools in power tier, 23 in consumer tier (P-73: suggest_card/suggest_next_actions worker-only)
  *
  * Layer order applied across BOTH modes (outermost → innermost):
  *   hookWrapper → safeModeWrap → retryWrap → original execute
@@ -153,6 +153,7 @@ export function makeAllTools(
           ghIssueTool: operatorOutputTools.gh_issue!,
         },
         hookRunner,
+        { includeSuggestionTools: mode === "worker" },
       ),
     );
   }
