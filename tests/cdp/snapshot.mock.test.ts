@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import { getSnapshot } from "../../src/cdp/snapshot.js";
 
 /** Minimal AXNode shape matching snapshot.ts's internal interface. */
@@ -102,6 +102,71 @@ test("T-M10: nodes without a role are skipped", async () => {
 });
 
 // ─── T-M11 ─────────────────────────────────────────────────────────────────────
+
+// ─── T-P74.Retry.1 — getFullAXTree throw-once-then-succeed (INSPECT-1 RC-2 regression guard) ───
+
+describe("T-P74.Retry.1 (INSPECT-1 RC-2): getSnapshot retries getFullAXTree once after a throw", () => {
+  it("when getFullAXTree throws once then returns a node, getSnapshot resolves with the tree — no throw", async () => {
+    // Given: a fake Accessibility.getFullAXTree that throws on call 1 and returns one node on call 2
+    //        (simulates a transitioning/animating AX tree — the RC-2 scenario).
+    // When:  getSnapshot(client) runs.
+    // Then:  resolves without throwing; returned Snapshot.tree contains [ref=@e1];
+    //        the RC-2 catch+100ms-retry path was taken (not the happy path).
+    let callCount = 0;
+    const retryClient = {
+      Accessibility: {
+        enable: async () => {},
+        getFullAXTree: async () => {
+          callCount++;
+          if (callCount === 1) throw new Error("T-P74.Retry.1: simulated AX tree transition throw");
+          return {
+            nodes: [
+              {
+                nodeId: "ax-retry",
+                role: { type: "role", value: "button" },
+                name: { type: "string", value: "Retry node" },
+                backendDOMNodeId: 99,
+              },
+            ],
+          };
+        },
+      },
+    };
+
+    const snap = await getSnapshot(retryClient);
+    assert.ok(snap.tree.includes("[ref=@e1]"), "T-P74.Retry.1: tree must contain [ref=@e1] after retry");
+    assert.ok(snap.refs.e1 !== undefined, "T-P74.Retry.1: refs.e1 must exist after retry");
+    assert.equal(snap.refs.e1?.role, "button", "T-P74.Retry.1: refs.e1.role must be 'button' (from the retry result)");
+    assert.equal(callCount, 2, "T-P74.Retry.1: getFullAXTree must be called exactly twice (throw + retry)");
+  });
+
+  it("when getFullAXTree throws BOTH times, getSnapshot rejects (retry is bounded to one attempt)", async () => {
+    // Given: a fake Accessibility.getFullAXTree that always throws.
+    // When:  getSnapshot(client) runs.
+    // Then:  rejects (the single retry was exhausted); getFullAXTree was called exactly twice.
+    let callCount = 0;
+    const alwaysThrowClient = {
+      Accessibility: {
+        enable: async () => {},
+        getFullAXTree: async () => {
+          callCount++;
+          throw new Error("T-P74.Retry.1: simulated always-throw");
+        },
+      },
+    };
+
+    let threw = false;
+    try {
+      await getSnapshot(alwaysThrowClient);
+    } catch {
+      threw = true;
+    }
+    assert.equal(threw, true, "T-P74.Retry.1: getSnapshot must reject when getFullAXTree throws both times");
+    assert.equal(callCount, 2, "T-P74.Retry.1: getFullAXTree must be called exactly twice (bounded retry)");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 test("T-M11: RefMap[ref].backendNodeId matches the input node's backendDOMNodeId", async () => {
   const expectedBackendNodeId = 42;

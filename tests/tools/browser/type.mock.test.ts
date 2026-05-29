@@ -545,6 +545,116 @@ describe("T-Type.5 (G-P47.2 / B-1 regression): empty text='' uses Cmd+A+Backspac
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── T-P74.Clear.1 — React-safe-clear SUCCESS branch (D-RUN-3 regression guard) ──
+
+describe("T-P74.Clear.1 (D-RUN-3): React-safe-clear succeeds → Cmd+A+Backspace NOT dispatched", () => {
+  it(
+    "when evaluate(REACT_SAFE_CLEAR_ACTIVE_INPUT_JS) returns true, type skips the Cmd+A+Backspace fallback and still inserts per-char",
+    { timeout: 5000 },
+    async () => {
+      // Given: a CDP-mode session whose Runtime.evaluate returns true for the REACT_SAFE_CLEAR JS
+      //        (simulating a native input that accepted the native value-setter + InputEvent clear);
+      //        callLog records dispatchKeyEvent + insertText; text = "hi"; ref = "@e1".
+      // When:  the type tool executes.
+      // Then:  NO Cmd+A (key:keyDown:a:mod4) and NO Backspace events in callLog (React-safe early-return);
+      //        per-char insertText fires ("h", "i"); result.ok === true.
+      const callLog: string[] = [];
+      const evaluateCallLog: string[] = [];
+      const FAKE_BORDER = [0, 0, 10, 0, 10, 10, 0, 10];
+
+      const fakeHandle = {
+        Accessibility: {
+          enable: async () => {},
+          getFullAXTree: async () => ({
+            nodes: [
+              {
+                nodeId: "ax1",
+                role: { type: "role", value: "textbox" },
+                name: { type: "string", value: "Message" },
+                backendDOMNodeId: 55,
+              },
+            ],
+          }),
+        },
+        Runtime: {
+          evaluate: async (args: { expression: string }) => {
+            evaluateCallLog.push(args.expression.slice(0, 50));
+            // React-safe clear JS contains 'deleteContentBackward' — return true
+            if (args.expression.includes("deleteContentBackward")) {
+              return { result: { value: true } };
+            }
+            return { result: { value: null } };
+          },
+        },
+        DOM: {
+          getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
+          querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+          getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
+        },
+        Input: {
+          dispatchMouseEvent: async (args: { type: string }) => {
+            callLog.push(`mouse:${args.type}`);
+          },
+          dispatchKeyEvent: async (args: { type: string; key: string; modifiers?: number }) => {
+            callLog.push(`key:${args.type}:${args.key}:mod${args.modifiers ?? 0}`);
+          },
+          insertText: async (args: { text: string }) => {
+            callLog.push(`insertText:${args.text}`);
+          },
+        },
+      };
+
+      const { CdpClient } = await import("../../../src/cdp/client.js");
+      const client = CdpClient.fromHandle(fakeHandle);
+      const session = {
+        inputMode: "cdp" as const,
+        getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
+        getClient: () => client,
+        setLastContext: (_ctx: unknown) => {},
+        getLastContext: () =>
+          ({
+            pageUrl: "https://www.linkedin.com/feed/",
+            surface: "feed",
+            activeLayer: "page",
+            entries: [{ ref: "@e1", role: "textbox", name: "Message" }],
+          }) as never,
+      };
+
+      await session.getClient().snapshot(); // populate refMap with @e1
+      const { makeTypeTool } = await import("../../../src/tools/browser/type.js");
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "hi", ref: "@e1" },
+        { toolCallId: "t-p74-clear1", messages: [], abortSignal },
+      );
+
+      assert.equal(result.ok, true, "T-P74.Clear.1: result.ok must be true");
+
+      // React-safe SUCCESS: NO Cmd+A (mod4) and NO Backspace dispatched
+      const cmdAEvents = callLog.filter((e) => e.includes(":a:mod4"));
+      assert.equal(
+        cmdAEvents.length,
+        0,
+        `T-P74.Clear.1: Cmd+A (mod4) must NOT be dispatched when React-safe clear succeeds; got: ${cmdAEvents.join(",")}`,
+      );
+      const backspaceEvents = callLog.filter((e) => e.includes(":Backspace:"));
+      assert.equal(
+        backspaceEvents.length,
+        0,
+        `T-P74.Clear.1: Backspace must NOT be dispatched when React-safe clear succeeds; got: ${backspaceEvents.join(",")}`,
+      );
+
+      // Per-char insertText still fires ("h", "i")
+      const insertCalls = callLog.filter((e) => e.startsWith("insertText:"));
+      assert.equal(insertCalls.length, 2, `T-P74.Clear.1: insertText must fire 2× for 'hi'; got: ${insertCalls.join(",")}`);
+      assert.equal(insertCalls[0], "insertText:h", "T-P74.Clear.1: first char must be 'h'");
+      assert.equal(insertCalls[1], "insertText:i", "T-P74.Clear.1: second char must be 'i'");
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 test("T-M67: type tool execute without ref or label returns fail envelope", { timeout: 3000 }, async () => {
   const session = makeFakeSession();
   const tool = makeTypeTool(session);
