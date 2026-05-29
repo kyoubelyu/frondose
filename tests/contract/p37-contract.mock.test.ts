@@ -133,9 +133,7 @@ const FROZEN_SERVER_TOOL_KEYS_P37 = [
   "set_memory_note",
   "sleep",
   "stop",
-  // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
-  "suggest_card",
-  "suggest_next_actions",
+  // P-73: suggest_card/suggest_next_actions are worker-only overlay tools (removed from server)
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -172,11 +170,11 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 27 (rebaselined to P-Y3) (G-P37.12)", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 53 / server 27)", () => {
+describe("tool counts: worker 53 / server 25 (rebaselined to P-73) (G-P37.12)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 53 / server 25)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 53; server count === 27 (P-Y3 counts)
+    // Then:  worker count === 53; server count === 25 (P-73: suggest_card/suggest_next_actions worker-only)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -206,8 +204,8 @@ describe("tool counts: worker 53 / server 27 (rebaselined to P-Y3) (G-P37.12)", 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        27,
-        `server tool count must be 27; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
+        25,
+        `server tool count must be 25; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P37, "server tool name set must match P-37 P-Y3 snapshot");
     } finally {

@@ -34,16 +34,21 @@ export function makeControlTools(
   control: ControlSignals | undefined,
   deps?: ControlToolDeps,
   hookRunner?: HookRunner,
+  opts?: { includeSuggestionTools?: boolean },
 ): ToolSet {
   const out: ToolSet = {
     echo: echoTool,
     stop: makeStopTool(control, hookRunner),
     sleep: sleepTool,
     present_summary: presentSummaryTool,
-    suggest_card: suggestCardTool,
-    suggest_next_actions: suggestNextActionsTool,
     todo_write: todoWriteTool,
   };
+  // P-73 (F-DOC-1): suggest_card + suggest_next_actions render to the operator's in-page
+  // overlay dialog — a worker/browser concern. Default ON; server mode opts out (no overlay).
+  if (opts?.includeSuggestionTools ?? true) {
+    out.suggest_card = suggestCardTool;
+    out.suggest_next_actions = suggestNextActionsTool;
+  }
   if (deps) {
     out.escalate_for_capability = makeEscalateTool({
       telegramTool: deps.telegramTool,

@@ -107,8 +107,8 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "score_lead",
 ].sort();
 
-// Post-P-Y3 server tool name snapshot (27 tools).
-// P-44: updated from 20 to 23 to include P-39's search_memory/set_memory_note/get_memory_note.
+// Post-P-73 server tool name snapshot (25 tools).
+// P-44: updated from 20 to 23; P-73: removed suggest_card/suggest_next_actions (worker-only overlay tools).
 const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "analyze_screenshot",
   "dispatch_google_login",
@@ -131,9 +131,6 @@ const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "set_memory_note",
   "sleep",
   "stop",
-  // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
-  "suggest_card",
-  "suggest_next_actions",
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -170,11 +167,11 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 27 rebaselined at P-Y3 (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 53 / server 27)", () => {
+describe("tool counts: worker 53 / server 25 rebaselined at P-73 (G-P36.14)", () => {
+  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 53 / server 25)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 53; server count === 27 (P-Y3 counts)
+    // Then:  worker count === 53; server count === 25 (P-73: suggest_card/suggest_next_actions worker-only)
     const { dir, cleanup } = makeTmpDir();
     try {
       // Worker mode — 29 tools
@@ -209,8 +206,8 @@ describe("tool counts: worker 53 / server 27 rebaselined at P-Y3 (G-P36.14)", ()
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        27,
-        `T-CONTRACT.TOOLS: server mode must have exactly 27 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
+        25,
+        `T-CONTRACT.TOOLS: server mode must have exactly 25 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
       );
       assert.deepEqual(
         serverKeys,

@@ -51,17 +51,17 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 27 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
+  it("T-MODE.SERVER.1: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) returns 25 tools; includes echo, list_workers; does NOT include launch, inspect, qualify_profile", () => {
     // Given: makeAllTools called with mode='server' (5th opts arg)
     // When:  makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
-    // Then:  Object.keys result has length 27 (P-Y3 server power count).
+    // Then:  Object.keys result has length 25 (P-73: suggest_card/suggest_next_actions removed from server).
     //        includes "echo", "recall", "remember", "telegram_notify", "list_workers";
     //        does NOT include "launch", "inspect", "qualify_profile"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 27, `server mode must have 27 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 25, `server mode must have 25 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok("echo" in tools, "server must include 'echo'");
       assert.ok("getMemory" in tools, "server must include 'getMemory'");
       assert.ok("remember" in tools, "server must include 'remember'");
@@ -124,15 +124,15 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 27", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server startup tool count is 25", () => {
     // Given: server startup path — no session, persistence present, mode='server'
     // When:  Object.keys(tools).length checked
-    // Then:  27 (P-Y3 server power count)
+    // Then:  25 (P-73: suggest_card/suggest_next_actions removed from server mode)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const tools = makeAllTools(undefined, paths, fakeControl, undefined, { mode: "server" });
       const count = Object.keys(tools).length;
-      assert.equal(count, 27, `server tool count must be 27; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 25, `server tool count must be 25; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }
