@@ -491,3 +491,150 @@ describe("IDEMPOTENT_TOOLS + OUTREACH_TOOL_NAMES name-sets (G-P33.14)", () => {
     assert.equal(OUTREACH_TOOL_NAMES.size, 4, "OUTREACH_TOOL_NAMES must have exactly 4 entries");
   });
 });
+
+// ─── P-72: Full per-tool param-schema golden (worker power, all 53 tools) ────
+//
+// T-P33.SCHEMA.1 above covers only the 12 browser/LinkedIn tools. P-72 closes
+// the gap: freezes the FULL worker-power name→sorted-field-names map so a silent
+// Zod field rename in ANY of the remaining ~41 tools fails loudly.
+//
+// Captured from live makeAllTools at P-72 Step 3a/4 authoring time. Do NOT
+// hand-edit; update by re-running the capture script on a deliberate schema change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
+  analyze_screenshot: ["path", "prompt"],
+  clear_cookies: ["origins"],
+  click: ["label", "ref", "scope"],
+  close: [],
+  echo: ["message"],
+  end_auto_run: ["runId", "status", "summary"],
+  escalate_for_capability: ["neededCapability", "reproducerSteps", "whyExistingToolsInsufficient"],
+  get_account_context: ["accountId", "timelineLimit"],
+  get_auto_run_state: [],
+  get_lead_context: ["leadId", "timelineLimit"],
+  get_memory_note: ["key"],
+  get_sales_report: ["autoRunHistoryLimit", "sinceMs"],
+  getIdentity: [],
+  getMemory: ["personName", "profileUrl"],
+  gh_issue: ["body", "dedupKey", "labels", "title"],
+  identity: ["company", "contact", "fullName", "headline", "icp", "persona", "profileUrl", "role", "style"],
+  inspect: ["full", "scope"],
+  launch: ["args", "destination"],
+  list_due_followups: ["limit"],
+  mark_message_sent: ["draftId"],
+  navigate_to_url: ["url", "waitUntil"],
+  present_summary: ["bullets", "nextStep", "summary", "title"],
+  press: ["key"],
+  promote_candidate_to_lead: ["candidateId", "ownerMode"],
+  publish_event: ["data", "type"],
+  qualify_profile: ["companyName", "icp", "industry", "region", "role"],
+  query_lead_globally: ["lookbackHours", "personRef"],
+  record_auto_action: ["actionType", "countWeight", "leadId", "result", "runId"],
+  record_lead_event: ["eventType", "leadId", "metadata"],
+  record_raw_candidate: ["accountId", "evidenceSummary", "personName", "profileUrl", "source", "sourceContext"],
+  reload: [],
+  remember: ["avoid", "interaction", "nextAction", "notes", "personName", "profileUrl", "score", "summary"],
+  save_message_draft: ["createdBy", "evidence", "kind", "leadId", "text"],
+  schedule_follow_up: ["dueAt", "leadId", "nextAction"],
+  schedule_task: ["cron_expr", "task"],
+  score_account: ["accountScore", "candidateId", "companySize", "currentPainHypothesis", "evidence", "industry", "linkedinUrl", "name", "region"],
+  score_lead: ["authorityLevel", "buyingTrigger", "candidateId", "confidence", "evidenceJson", "icpFit", "leadId", "methodUsed", "nextAction", "painHypothesis", "suggestedOpeningLine", "totalScore"],
+  screenshot: ["out"],
+  scroll: ["amount", "direction"],
+  search_memory: ["limit", "query"],
+  set_memory_note: ["key", "value"],
+  sleep: ["reason", "seconds"],
+  start_auto_run: ["maxConnects", "maxDurationMinutes"],
+  stop: ["reason"],
+  suggest_card: ["dismissed", "evidenceSummary", "icpMatch", "painChainHypothesis", "painChainStage", "reason", "suggestedMove", "title", "totalScore"],
+  suggest_next_actions: ["actions", "summary"],
+  telegram_notify: ["body", "chatAction", "deleteMessageId", "editMessageId", "mediaFileId", "mediaGroup", "mediaPath", "mediaType", "mediaUrl", "parseMode", "pinMessageId", "replyMarkup", "severity", "unpinMessageId"],
+  todo_write: ["steps", "workflowTitle"],
+  type: ["label", "ref", "scope", "text"],
+  update_lead_stage: ["leadId", "stage"],
+  upload: ["file", "scope"],
+  web_fetch: ["maxChars", "prompt", "url"],
+  web_search: ["maxResults", "query"],
+};
+
+describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1)", () => {
+  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 53 tools)", () => {
+    // Given: makeAllTools in worker-power mode (reuses existing p33 harness + MAI_TIER=power above).
+    // When:  building {name: sorted field names} for every tool via getZodFieldNames.
+    // Then:  the map deep-equals FROZEN_TOOL_SCHEMAS_P72 — every tool present, no unexpected tool,
+    //        no field added/removed/renamed in any of the 53 worker-power tools.
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const session = makeFakeSession();
+      const tools = makeAllTools(
+        session,
+        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
+        mockControl,
+        undefined,
+        { mode: "worker", workerId: "w1" },
+      );
+
+      assert.equal(
+        Object.keys(tools).length,
+        53,
+        `T-P72.Schema.1: expected 53 worker-power tools; got ${Object.keys(tools).length}`,
+      );
+
+      const actual: Record<string, string[]> = {};
+      for (const [name, tool] of Object.entries(tools)) {
+        actual[name] = getZodFieldNames(tool.parameters as Parameters<typeof getZodFieldNames>[0]);
+      }
+
+      assert.deepEqual(
+        actual,
+        FROZEN_TOOL_SCHEMAS_P72,
+        "T-P72.Schema.1: worker-power tool param-schema map drifted from the P-72 golden — a Zod field was added, removed, or renamed",
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-P72.Schema.2: server tool schemas are a consistent subset — shared tools have identical field sets to the worker golden", () => {
+    // Given: makeAllTools in server mode (25 tools post-P-73).
+    // When:  for each server tool present in FROZEN_TOOL_SCHEMAS_P72 (the 19 shared tools),
+    //        compare getZodFieldNames to the golden entry.
+    // Then:  all 19 shared tools have identical field sets (same Zod schema objects, no per-mode variation).
+    //        The 6 server-only tools (dispatch_google_login, list_workers, list_personas,
+    //        provision_worker, revoke_worker, send_worker_message) are outside the worker golden;
+    //        they are NOT checked here (covered structurally by FROZEN_SERVER_TOOL_KEYS).
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const serverTools = makeAllTools(
+        undefined,
+        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
+        mockControl,
+        undefined,
+        { mode: "server" },
+      );
+
+      let checkedCount = 0;
+      for (const [name, tool] of Object.entries(serverTools)) {
+        const frozenFields = FROZEN_TOOL_SCHEMAS_P72[name];
+        if (frozenFields === undefined) continue; // server-only tool — outside worker golden
+        const actual = getZodFieldNames(tool.parameters as Parameters<typeof getZodFieldNames>[0]);
+        assert.deepEqual(
+          actual,
+          frozenFields,
+          `T-P72.Schema.2: server tool '${name}' field set [${actual.join(", ")}] differs from worker golden [${frozenFields.join(", ")}]`,
+        );
+        checkedCount++;
+      }
+
+      // 25 server tools − 6 server-only = 19 shared
+      assert.equal(
+        checkedCount,
+        19,
+        `T-P72.Schema.2: expected 19 shared server tools to be checked against the golden; got ${checkedCount}`,
+      );
+    } finally {
+      cleanup();
+    }
+  });
+});
