@@ -13,7 +13,9 @@ use hyper::{Body, Client, Method, Request, StatusCode};
 use hyperlocal::{UnixClientExt, Uri};
 use rand::RngCore;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, RunEvent, WindowEvent};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, Notify};
@@ -547,6 +549,43 @@ async fn main() {
 
     let app_handle = app.handle().clone();
 
+    let _tray = {
+        let show = MenuItemBuilder::with_id("show", "Show Frondose")
+            .build(&app)
+            .expect("menu show");
+        let quit = MenuItemBuilder::with_id("quit", "Quit Frondose")
+            .build(&app)
+            .expect("menu quit");
+        let menu = MenuBuilder::new(&app)
+            .items(&[&show, &quit])
+            .build()
+            .expect("tray menu");
+        TrayIconBuilder::new()
+            .icon(app.default_window_icon().cloned().expect("window icon"))
+            .tooltip("Frondose — running in the menu bar")
+            .menu(&menu)
+            .on_menu_event(|app, event| match event.id().as_ref() {
+                "show" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+                "quit" => {
+                    let state = app.state::<MaiServeState>();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            shutdown_sidecar(&state).await;
+                        })
+                    });
+                    app.exit(0);
+                }
+                _ => {}
+            })
+            .build(&app)
+            .expect("tray build")
+    };
+
     // P-58d.1 [3b/CMR-2 + 3b-r2/CONCERN-MR]: spawn the updater task BEFORE the
     // sidecar-readiness gate so it runs INDEPENDENT of sidecar health — a sidecar-breaking
     // SHELL release can self-recover. (Thin-launcher .1 swaps the shell only; full
@@ -608,16 +647,18 @@ async fn main() {
             // control) would survive and keep driving the browser. Kill the sidecar and
             // force the app to exit so app-close reliably stops the agent.
             RunEvent::WindowEvent {
-                event: WindowEvent::CloseRequested { .. },
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
                 ..
             } => {
-                let state_for_shutdown = state_clone.clone();
-                tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async {
-                        shutdown_sidecar(&state_for_shutdown).await;
-                    })
-                });
-                app_handle.exit(0);
+                // P-76.1 (E1): hide-to-tray instead of quit+kill. The window is HIDDEN (not destroyed) →
+                // sidecar + agent + Chrome control keep running AND the SSE subscriber stays connected, so
+                // the serve disconnect-belt (routes.ts:62-69) does NOT fire. The always-visible tray (E2) is
+                // the D-RUN-1 "never invisible" guarantee; tray Quit (+ ExitRequested/SIGTERM) is the full stop.
+                api.prevent_close();
+                if let Some(win) = app_handle.get_webview_window(&label) {
+                    let _ = win.hide();
+                }
             }
             // Cmd+Q / programmatic exit (incl. our SIGTERM handler). shutdown_sidecar is
             // idempotent (child handle is take()n once) so double-invocation is safe.
