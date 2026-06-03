@@ -243,10 +243,53 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     );
   }
 
-  // [P-75 D-9] Auto-advance workflow on save_message_draft so the approval gate engages
-  // even if the model fails to re-call todo_write between actions (DeepSeek-v4-flash
-  // does not reliably advance todo state after performing an action, per docs/phase-75-d6-round2.md
-  // §4 residual). This is the deterministic, code-level fix for the L2 outbound stall.
+  // [P-75 D-9 + D-14] Auto-advance workflow on save_message_draft so the approval gate engages
+  // even if the model (a) fails to re-call todo_write between actions [D-9] OR
+  // (b) skips todo_write entirely and goes straight to save_message_draft without
+  // ever proposing a workflow plan [D-14]. In case (b) we synthesize a minimal
+  // single-step workflow "Send the saved draft" with requiresApproval=true so the
+  // operator can still approve and the gate plumbing works end-to-end.
+  function ensureWorkflowForSaveDraft(ctx: { turnId: string; isCronTurn: boolean }, tr: ToolResultLike): void {
+    if (state.current !== null || ctx.isCronTurn) return;
+    const args = (tr.args as { leadId?: string; kind?: string } | null | undefined) ?? {};
+    const kind = typeof args.kind === "string" ? args.kind : "outbound";
+    const leadId = typeof args.leadId === "string" ? args.leadId : "";
+    const nowIso = new Date().toISOString();
+    const step: TodoStep = {
+      id: `step_${randomUUID()}`,
+      title: `Send the saved ${kind} draft${leadId ? ` (lead ${leadId.slice(0, 8)})` : ""}`,
+      requiresApproval: true,
+      state: "in_progress",
+      startedAt: nowIso,
+    };
+    const wf: Workflow = {
+      id: `wf_${randomUUID()}`,
+      title: `Outbound: send ${kind}`,
+      approvalMode: "manual",
+      steps: [step],
+      state: "active",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    state.current = wf;
+    deps.emitFrame({
+      type: "workflow-proposed",
+      turnId: ctx.turnId,
+      workflowId: wf.id,
+      title: wf.title,
+      approvalMode: wf.approvalMode,
+      steps: wf.steps.map(stepFrame),
+      ts: Date.now(),
+    });
+    deps.writeWorkflowAudit({
+      kind: "proposed",
+      workflowId: wf.id,
+      title: wf.title,
+      approvalMode: wf.approvalMode,
+      stepCount: 1,
+    });
+  }
+
   function autoAdvanceOnSaveDraft(ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
     const wf = state.current;
     if (!wf || ctx.isCronTurn || wf.approvalMode !== "manual") return { abort: false };
@@ -318,6 +361,7 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
         abort = reconcileTodoWrite(tr.result, ctx).abort || abort;
       }
       if (tr.toolName === "save_message_draft" && isSaveDraftSuccess(tr.result)) {
+        ensureWorkflowForSaveDraft(ctx, tr); // [D-14] synthesize workflow if agent skipped todo_write
         abort = autoAdvanceOnSaveDraft(ctx).abort || abort;
       }
       if (manualMode && (tr.toolName === "telegram_notify" || tr.toolName === "gh_issue")) {
