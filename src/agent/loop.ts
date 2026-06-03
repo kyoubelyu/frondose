@@ -43,6 +43,51 @@ function budgetWarningMessage(remaining: number): CoreMessage {
 }
 
 /**
+ * [P-75 D-12] Detect "narrate-without-execute" — the model emitted forward-looking text
+ * ("Let me…", "I'll now…", "Next, I will…") and finished the turn with `stop` instead
+ * of `tool-calls`, AND the final assistant message has no tool-call parts. This is a
+ * recurring failure mode where the agent announces an action and quits without performing
+ * it. We inject one synthetic continuation message and re-run a small phase.
+ */
+const NARRATIVE_HOOK_RE =
+  /(let me (now |start |continue |first |go ahead |proceed |then |)|now let me|i['']?ll (now |start |go |then |next |proceed |first )|i will (now |then |proceed |first )|let['']?s (now |then |next )|next,?\s*(i['']?ll|i will))/i;
+
+function lastAssistantMessageMissedExecute(messages: CoreMessage[]): boolean {
+  // Walk backward to find the LAST assistant message (tool results may follow it).
+  let lastText = "";
+  let hadToolCall = false;
+  let found = false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.role !== "assistant") continue;
+    found = true;
+    const content = m.content as unknown;
+    if (typeof content === "string") {
+      lastText = content;
+    } else if (Array.isArray(content)) {
+      for (const part of content as Array<{ type?: string; text?: string }>) {
+        if (part.type === "text" && typeof part.text === "string") lastText += part.text;
+        if (part.type === "tool-call") hadToolCall = true;
+      }
+    }
+    break;
+  }
+  if (!found || hadToolCall) return false;
+  const tail = lastText.length > 500 ? lastText.slice(-500) : lastText;
+  return NARRATIVE_HOOK_RE.test(tail);
+}
+
+function narrationContinueMessage(): CoreMessage {
+  return {
+    role: "user",
+    content:
+      "Continue — execute the action you just announced. Call the next tool NOW; do not narrate further. " +
+      "If you said you'd plan, call `todo_write`. If you said you'd draft, call `save_message_draft`. " +
+      "If you said you'd click/type/inspect, call that tool. No more 'Let me…' or 'I'll…' prose this turn.",
+  };
+}
+
+/**
  * Run one turn of the agent loop:
  *  - sends the messages array to the LLM via streamText
  *  - executes any tool calls in-line (Vercel handles execution per scout Q2)
@@ -103,16 +148,25 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
 
   try {
     const phase1 = await runPhase(twoPhase ? softCap : maxSteps);
-    // C-1: `finishReason === "tool-calls"` alone is a heuristic — the SDK type
-    // defines it as "model triggered tool calls", not "maxSteps reached", and it
-    // can fire without a cutoff (e.g. unexecuted tool results). Confirm a GENUINE
-    // mid-task cutoff by ALSO requiring Phase 1 to have consumed the full softCap
-    // (`stepCount >= softCap`). Only then inject the warning + run Phase 2.
-    // 'stop' / a short Phase 1 → finished naturally, no warning, no Phase 2.
     const cutOffMidTask = phase1.finishReason === "tool-calls" && phase1.stepCount >= softCap;
     if (twoPhase && cutOffMidTask && !opts.abortSignal?.aborted) {
       opts.messages.push(budgetWarningMessage(remaining));
       await runPhase(remaining);
+      return;
+    }
+    // [P-75 D-12] Narrate-without-execute retry. The model emitted forward-looking text
+    // and stopped without performing the announced action. Inject a single continuation
+    // user message and re-run with a small budget.
+    if (
+      phase1.finishReason === "stop" &&
+      !opts.abortSignal?.aborted &&
+      lastAssistantMessageMissedExecute(opts.messages)
+    ) {
+      const retryBudget = Math.min(twoPhase ? remaining : maxSteps, 30);
+      if (retryBudget >= 1) {
+        opts.messages.push(narrationContinueMessage());
+        await runPhase(retryBudget);
+      }
     }
   } catch (e) {
     // P-6 Step 5a (Failure 1 fix): when the stop tool fires control.requestStop(),
