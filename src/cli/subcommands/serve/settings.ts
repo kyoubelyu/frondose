@@ -7,6 +7,7 @@ import { BOUNDARY, BOUNDARY_RESUME } from "../../../agent/systemPrompt/boundary.
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../agent/systemPrompt/soul.js";
+import { readMode } from "../../../persistence/mode.js";
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
   getOfficialDirectProviderBaseUrlVendor,
@@ -167,7 +168,11 @@ export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "syst
   try {
     const cfg = readConfig();
     const identity = readIdentity();
-    const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment("manual")}`;
+    // [P-75 D-15] Was hardcoded to "manual" — meaning a POST /settings hot-reload would
+    // overwrite the Auto-band system prompt with a Manual-band one, breaking Auto mode
+    // until restart. Read the current mode from mode.json so Auto stays Auto.
+    const currentMode = readMode();
+    const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment(currentMode)}`;
     const newSystem = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
     const newSystemResume = composeSystemPrompt({
       boundary: BOUNDARY_RESUME,
