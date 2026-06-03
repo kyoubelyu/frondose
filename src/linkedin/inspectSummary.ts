@@ -1,3 +1,4 @@
+import { FOLLOW_LABEL_RE, OUTBOUND_LABEL_RE } from "../tools/browser/outboundGuard.js";
 import type { CurrentSurfaceContext, InspectSummary, LinkedInSurface, SnapshotEntry } from "./types.js";
 
 export const CLICKABLE_ROLES = new Set([
@@ -44,6 +45,17 @@ function isComposerInputEntry(e: SnapshotEntry): boolean {
 
 function isComposerPublishEntry(e: SnapshotEntry): boolean {
   return e.role === "button" && COMPOSER_PUBLISH_RE.test(e.name);
+}
+
+/** [P-75 D-11 inspect-side] An outbound-action button: matches the OUTBOUND_LABEL_RE
+ *  set used by `outboundGuard.requiresApproval`, OR (on the profile surface only)
+ *  matches the FOLLOW_LABEL_RE — so the entries the agent will click to execute the
+ *  approved outbound action are surfaced as a distinct category in the inspect output. */
+function isOutboundActionEntry(e: SnapshotEntry, surface: LinkedInSurface): boolean {
+  if (!CLICKABLE_ROLES.has(e.role)) return false;
+  if (OUTBOUND_LABEL_RE.test(e.name)) return true;
+  if (surface === "profile" && FOLLOW_LABEL_RE.test(e.name)) return true;
+  return false;
 }
 
 /**
@@ -101,10 +113,25 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   // P-46 D-3 (OQ-3): when a composer is open, promote composer buttons (esp.
   // "Post") ahead of the MAX_BUTTONS truncation so the unscoped inspect output
   // surfaces them without the agent needing to know the "composerModal" scope.
+  // [P-75 D-11 inspect-side] Also promote OUTBOUND-action buttons (Connect / Invite /
+  // Send invite / Send / 邀请 / 连接 / Follow on profile) to the FRONT of the list
+  // and prefix their labels with `[OUTBOUND]` so the agent can't miss them when an
+  // approved outbound step is in_progress. The list ranking + category prefix make
+  // "which button executes the approved outbound" unambiguous at the inspect surface.
   const clickables = deduped.filter((e) => CLICKABLE_ROLES.has(e.role));
   const composerBtns = clickables.filter(isComposerButtonEntry);
-  const otherBtns = clickables.filter((e) => !isComposerButtonEntry(e));
-  const buttons = [...composerBtns, ...otherBtns].slice(0, MAX_BUTTONS).map((e) => ({ ref: e.ref, label: e.name }));
+  const outboundBtns = clickables
+    .filter((e) => !isComposerButtonEntry(e))
+    .filter((e) => isOutboundActionEntry(e, ctx.surface));
+  const otherBtns = clickables.filter(
+    (e) => !isComposerButtonEntry(e) && !isOutboundActionEntry(e, ctx.surface),
+  );
+  const buttons = [...composerBtns, ...outboundBtns, ...otherBtns]
+    .slice(0, MAX_BUTTONS)
+    .map((e) => ({
+      ref: e.ref,
+      label: isOutboundActionEntry(e, ctx.surface) ? `[OUTBOUND] ${e.name}` : e.name,
+    }));
 
   const inputs = deduped
     .filter((e) => INPUT_ROLES.has(e.role))

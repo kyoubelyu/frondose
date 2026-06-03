@@ -154,14 +154,12 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
       await runPhase(remaining);
       return;
     }
-    // [P-75 D-12] Narrate-without-execute retry. The model emitted forward-looking text
-    // and stopped without performing the announced action. Inject a single continuation
-    // user message and re-run with a small budget.
-    if (
-      phase1.finishReason === "stop" &&
-      !opts.abortSignal?.aborted &&
-      lastAssistantMessageMissedExecute(opts.messages)
-    ) {
+    // [P-75 D-12] Vercel SDK can report finishReason='tool-calls' even when the
+    // model's actual final step had no tool call — so we don't gate on finishReason.
+    // The reliable signal is: the LAST assistant message has no tool-call parts AND
+    // its trailing text matches the narrative-intent pattern ("Let me…", "I'll…",
+    // "Now let me…"). Cap at 1 retry per turn.
+    if (!opts.abortSignal?.aborted && lastAssistantMessageMissedExecute(opts.messages)) {
       const retryBudget = Math.min(twoPhase ? remaining : maxSteps, 30);
       if (retryBudget >= 1) {
         opts.messages.push(narrationContinueMessage());
