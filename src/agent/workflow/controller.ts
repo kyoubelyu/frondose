@@ -149,7 +149,35 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     };
     state.current = wf;
     // [P-59 WF-1] a NEW workflow invalidates all prior approvals (approvedStepIds is session-global).
-    if (continuationPrior === null && prior !== null) approvedStepIds.clear();
+    // [P-75 D-10] EXCEPT when the new workflow is a same-title re-plan during an unresolved
+    // outbound — DeepSeek-v4-flash often re-plans during resume turns instead of continuing
+    // the existing plan, breaking the approval lineage. Carry approvals forward by title:
+    // any new step whose title was a previously-approved step's title stays approved, and any
+    // new step whose prior counterpart was completed stays completed. Truly-new requiresApproval
+    // steps still gate.
+    if (continuationPrior === null && prior !== null) {
+      const sameTitle = prior.title === result.workflowTitle && !terminalWorkflowIds.has(prior.id);
+      if (sameTitle) {
+        const priorApprovedTitles = new Set(
+          prior.steps.filter((s) => approvedStepIds.has(s.id)).map((s) => s.title),
+        );
+        const priorCompletedTitles = new Set(
+          prior.steps.filter((s) => s.state === "completed").map((s) => s.title),
+        );
+        approvedStepIds.clear();
+        for (const newStep of wf.steps) {
+          if (priorApprovedTitles.has(newStep.title)) {
+            approvedStepIds.add(newStep.id);
+          }
+          if (priorCompletedTitles.has(newStep.title) && newStep.state === "pending") {
+            newStep.state = "completed";
+            if (!newStep.completedAt) newStep.completedAt = now;
+          }
+        }
+      } else {
+        approvedStepIds.clear();
+      }
+    }
     if (continuationPrior === null) {
       deps.emitFrame({
         type: "workflow-proposed",
@@ -204,6 +232,81 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     return pickString(ref, ["ariaLabel", "controlName", "text"]) ?? pickString(tr.args, ["label", "ref"]) ?? "";
   }
 
+  function isSaveDraftSuccess(r: unknown): boolean {
+    return (
+      typeof r === "object" &&
+      r !== null &&
+      "ok" in r &&
+      (r as { ok: unknown }).ok === true &&
+      "command" in r &&
+      (r as { command: unknown }).command === "save_message_draft"
+    );
+  }
+
+  // [P-75 D-9] Auto-advance workflow on save_message_draft so the approval gate engages
+  // even if the model fails to re-call todo_write between actions (DeepSeek-v4-flash
+  // does not reliably advance todo state after performing an action, per docs/phase-75-d6-round2.md
+  // §4 residual). This is the deterministic, code-level fix for the L2 outbound stall.
+  function autoAdvanceOnSaveDraft(ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
+    const wf = state.current;
+    if (!wf || ctx.isCronTurn || wf.approvalMode !== "manual") return { abort: false };
+    if (state.awaitingApprovalStepId !== null) return { abort: false };
+    const target = wf.steps.find(
+      (s) => s.requiresApproval && s.state !== "completed" && s.state !== "failed" && !approvedStepIds.has(s.id),
+    );
+    if (!target) return { abort: false };
+    const nowIso = new Date().toISOString();
+    let advanced = false;
+    for (const s of wf.steps) {
+      if (s.id === target.id) break;
+      if (s.state === "pending" || s.state === "in_progress") {
+        const prev = s.state;
+        s.state = "completed";
+        if (!s.completedAt) s.completedAt = nowIso;
+        deps.emitFrame({
+          type: "workflow-step-advanced",
+          turnId: ctx.turnId,
+          workflowId: wf.id,
+          stepId: s.id,
+          prevState: prev,
+          nextState: "completed",
+          ts: Date.now(),
+        });
+        deps.writeWorkflowAudit({
+          kind: "step_advance",
+          workflowId: wf.id,
+          stepId: s.id,
+          prevState: prev,
+          nextState: "completed",
+        });
+        advanced = true;
+      }
+    }
+    if (target.state === "pending") {
+      target.state = "in_progress";
+      if (!target.startedAt) target.startedAt = nowIso;
+      deps.emitFrame({
+        type: "workflow-step-advanced",
+        turnId: ctx.turnId,
+        workflowId: wf.id,
+        stepId: target.id,
+        prevState: "pending",
+        nextState: "in_progress",
+        ts: Date.now(),
+      });
+      deps.writeWorkflowAudit({
+        kind: "step_advance",
+        workflowId: wf.id,
+        stepId: target.id,
+        prevState: "pending",
+        nextState: "in_progress",
+      });
+      advanced = true;
+    }
+    if (!advanced) return { abort: false };
+    return checkApprovalGate(wf, ctx);
+  }
+
   function onToolResults(
     toolResults: ToolResultLike[],
     ctx: { turnId: string; isCronTurn: boolean },
@@ -213,6 +316,9 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     for (const tr of toolResults) {
       if (tr.toolName === "todo_write" && isTodoWriteResult(tr.result)) {
         abort = reconcileTodoWrite(tr.result, ctx).abort || abort;
+      }
+      if (tr.toolName === "save_message_draft" && isSaveDraftSuccess(tr.result)) {
+        abort = autoAdvanceOnSaveDraft(ctx).abort || abort;
       }
       if (manualMode && (tr.toolName === "telegram_notify" || tr.toolName === "gh_issue")) {
         const workflowId = state.current?.id ?? null;

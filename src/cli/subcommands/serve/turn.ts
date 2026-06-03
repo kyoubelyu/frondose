@@ -5,7 +5,26 @@ import { callInOverlay } from "../../../overlay/inject.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
 import { hideEdgeRing, showEdgeRing } from "./takeover.js";
 
-const RESUME_EXCLUDED_TOOLS = new Set(["search_memory", "getMemory", "get_memory_note", "suggest_card"]);
+// [P-75 D-13] Resume turns must NOT re-run task-start ritual or re-qualify; the workflow
+// state is preserved across approvals. Block the planning/qualification tools the agent
+// reaches for out of habit so it focuses on completing the approved outbound action.
+const RESUME_EXCLUDED_TOOLS = new Set([
+  "search_memory",
+  "getMemory",
+  "get_memory_note",
+  "suggest_card",
+  // task-start ritual / re-qualification habit
+  "todo_write",
+  "record_raw_candidate",
+  "score_lead",
+  "score_account",
+  "promote_candidate_to_lead",
+  "get_lead_context",
+  "get_account_context",
+  "save_message_draft",
+  "list_due_followups",
+  "get_sales_report",
+]);
 
 export interface TurnArgs {
   turnId: string;
