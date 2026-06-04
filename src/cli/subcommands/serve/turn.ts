@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import type { StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../../../agent/loop.js";
 import { callInOverlay } from "../../../overlay/inject.js";
+import { getCurrentAutoRun } from "../../../persistence/salesDb.js";
+import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
 import { hideEdgeRing, showEdgeRing } from "./takeover.js";
 
@@ -54,6 +56,35 @@ export function createTurnRunner(
       void callInOverlay(client0.handle, ctxId0, "function() { window.__maiClearOutput(); }");
     }
     showEdgeRing(state, deps.session); // P-Y2.3: Auto-mode page-edge ring for the turn (no-op in Manual)
+    // [P-75 D-16] Runtime-enforced Auto duration cap. Without this, the cap is
+    // self-policed by the agent's prompt and only checked before outbound — so an
+    // Auto run with maxConnects=0 (discovery-only) never reaches the check and runs
+    // past its time budget. Wall-clock watcher: every 15s, if the current auto_run
+    // is running AND (now - started_at) >= max_duration_minutes, abort the turn
+    // and the controller's salesDb-managed end_auto_run will be called by the agent
+    // OR by the next /agent/turn that wraps up an orphan running run (separate
+    // cleanup). Watcher self-cancels when the turn ends (clearInterval in finally).
+    const capWatcher = setInterval(() => {
+      try {
+        const db = getSalesDb(deps.salesDbPath);
+        const run = getCurrentAutoRun(db);
+        if (!run || run.status !== "running") return;
+        const elapsedMs = Date.now() - run.startedAt;
+        const capMs = run.maxDurationMinutes * 60_000;
+        if (elapsedMs >= capMs && !abortController.signal.aborted) {
+          deps.emitFrame({
+            type: "error",
+            turnId,
+            message:
+              `[auto-run-cap] Duration cap reached: ${Math.round(elapsedMs / 60_000)}min >= ${run.maxDurationMinutes}min cap. ` +
+              `Aborting turn. Call end_auto_run({status:"completed", summary:"..."}) on the next opportunity if not already done.`,
+          });
+          abortController.abort();
+        }
+      } catch {
+        /* watcher must never crash the turn */
+      }
+    }, 15_000);
     try {
       const activeTools = args.isWorkflowResume
         ? Object.keys(deps.tools).filter((n) => !RESUME_EXCLUDED_TOOLS.has(n))
@@ -185,6 +216,7 @@ export function createTurnRunner(
         void callInOverlay(client.handle, ctxId, fn);
       }
     } finally {
+      clearInterval(capWatcher); // [P-75 D-16] stop the auto-run cap watcher
       hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     }
   }
