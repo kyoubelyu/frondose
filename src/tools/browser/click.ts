@@ -83,6 +83,28 @@ export function makeClickTool(session: LinkedinSession) {
             );
           }
         }
+        // [P-75 D-17] Re-validate the ref before dispatching the click. LinkedIn re-uses
+        // the same DOM input across modal states (Connect overlay, New Message dialog,
+        // comment composer) — backendNodeId is unchanged but the aria-label flips. Without
+        // this check, a click on a stale ref silently hits the wrong-purpose element.
+        // Skip when the agent passed a label (resolveByLabel already used CURRENT entries)
+        // OR when the entry wasn't in lastContext (selector fallback OR ad-hoc ref).
+        if (target.startsWith("@") && targetEntry) {
+          const verify = await client.verifyRef(target.slice(1), {
+            role: targetEntry.role,
+            name: targetEntry.name,
+          });
+          if (!verify.matches) {
+            return fail(
+              "click",
+              "runtime_error",
+              `ref_stale: ${target} no longer points at "${targetEntry.name}" (role=${targetEntry.role}). ` +
+                `Current state: role=${verify.currentRole ?? "<gone>"} name=${verify.currentName ?? "<gone>"}. ` +
+                `The DOM changed between your inspect and this click (e.g. a modal swapped its input role). ` +
+                `Call inspect again to refresh refs, then retry the click against the fresh ref.`,
+            );
+          }
+        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
         else await client.clickAt(target);
