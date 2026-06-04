@@ -633,6 +633,18 @@ async fn main() {
         );
     }
 
+    // [P-75 D-19] Enable WKInspectable on the main webview so the orchestrator (and the
+    // operator for ad-hoc debugging) can attach Safari's Web Inspector to inspect the
+    // Tauri WebView's DOM, console, and storage. Requires the `devtools` Cargo feature.
+    // Without this, macOS's WebKit content protection makes the WebView invisible to all
+    // screen-capture APIs (screencapture, CGDisplayCreateImage, AX entire-contents) — a
+    // hard limit for any dogfood-test orchestrator that tries to verify UI rendering.
+    // Once enabled, Safari → Develop menu → <Mac name> → main shows the inspector.
+    if let Some(w) = app.handle().get_webview_window("main") {
+        #[cfg(feature = "devtools")]
+        w.open_devtools();
+    }
+
     app.run(move |app_handle, event| {
         match event {
             // P-58d.1 [3b-r2/CONCERN-MR]: the event loop is live — release the parked
