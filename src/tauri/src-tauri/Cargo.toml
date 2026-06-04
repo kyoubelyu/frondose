@@ -13,7 +13,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "devtools"] } # P-75 D-19: devtools enables WKInspectable for Safari Web Inspector attach (release build orchestrator UI introspection)
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "net", "fs", "signal", "time"] }
 hyper = { version = "0.14", features = ["client", "http1", "stream"] }
 hyperlocal = "0.8"
