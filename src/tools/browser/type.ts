@@ -117,6 +117,31 @@ export function makeTypeTool(session: LinkedinSession) {
             }
           }
         }
+        // [P-75 D-17] Re-validate the ref before typing. LinkedIn's New Message dialog
+        // re-uses the same <input> element across recipient-search vs message-body modes;
+        // backendNodeId stays the same but aria-label flips. Without this guard, the agent
+        // can type the message body into the recipient-search field (observed in the
+        // 2026-06-04 DM dogfood — text appeared under "No results found" instead of being
+        // sent). Skip when the target wasn't in lastContext (selector/label fallback that
+        // already used the current entries).
+        const typeCtx = session.getLastContext();
+        const typeEntry = typeCtx?.entries?.find((e) => e.ref === target);
+        if (target.startsWith("@") && typeEntry) {
+          const verify = await client.verifyRef(target.slice(1), {
+            role: typeEntry.role,
+            name: typeEntry.name,
+          });
+          if (!verify.matches) {
+            return fail(
+              "type",
+              "runtime_error",
+              `ref_stale: ${target} no longer points at "${typeEntry.name}" (role=${typeEntry.role}). ` +
+                `Current state: role=${verify.currentRole ?? "<gone>"} name=${verify.currentName ?? "<gone>"}. ` +
+                `The DOM changed between your inspect and this type — likely an input swapped purpose ` +
+                `(e.g. recipient-search → message-body). Call inspect again and retry against the fresh ref.`,
+            );
+          }
+        }
         // P-Y2.3: paint the agent cursor + highlight on the resolved target before the focus click. Best-effort,
         // visual-only (a getBox/overlay failure must NEVER block typing); the injected driver Auto-gates (no paint
         // + no dwell in Manual/headless/REPL). The type dispatch is OUTSIDE this try (unaffected on failure).

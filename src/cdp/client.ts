@@ -89,6 +89,44 @@ export class CdpClient {
     await waitForLoad(this.client, waitUntil ?? "load");
   }
 
+  /** [P-75 D-17] Verify that the AX node behind a ref still has the expected role/name.
+   *  LinkedIn re-uses input elements across modal states (Connect overlay, New Message
+   *  dialog): the backendNodeId stays the same but the aria-label flips ("Search
+   *  recipients" → "Write a message…", or vice-versa). When click/type acts on a stale
+   *  ref, the CDP dispatch still works on the (now-different-purpose) element and the
+   *  message text ends up in the wrong field.
+   *
+   *  Returns: {matches, currentRole, currentName}. matches=true when the AX role+name
+   *  at the backendNodeId STILL equal what inspect recorded. expected.name is compared
+   *  case-insensitive after trim. Cheap (~10-20ms): one Accessibility.getPartialAXTree
+   *  CDP roundtrip per action; click+type already issue several roundtrips so the
+   *  overhead is negligible vs the silent-mis-targeting failure mode it prevents.
+   */
+  async verifyRef(
+    refKey: string,
+    expected: { role: string; name?: string },
+  ): Promise<{ matches: boolean; currentRole?: string; currentName?: string }> {
+    const entry = this.refMap[refKey];
+    if (!entry) return { matches: false };
+    try {
+      const r = (await this.client.Accessibility.getPartialAXTree({
+        backendNodeId: entry.backendNodeId,
+        fetchRelatives: false,
+      })) as { nodes?: Array<{ role?: { value?: string }; name?: { value?: string }; ignored?: boolean }> };
+      const node = r.nodes?.find((n) => !n.ignored) ?? r.nodes?.[0];
+      const currentRole = node?.role?.value;
+      const currentName = node?.name?.value;
+      if (!currentRole) return { matches: false, currentRole, currentName };
+      const expectedName = (expected.name ?? "").trim().toLowerCase();
+      const actualName = (currentName ?? "").trim().toLowerCase();
+      const roleOk = currentRole === expected.role;
+      const nameOk = expectedName.length === 0 || actualName === expectedName;
+      return { matches: roleOk && nameOk, currentRole, currentName };
+    } catch {
+      return { matches: true }; // verification failed at AX layer; don't block legitimate action
+    }
+  }
+
   async clickAt(selectorOrRef: string): Promise<void> {
     let backendNodeId: number | undefined;
     let nodeId: number | undefined;
