@@ -139,6 +139,20 @@ export function createRequestHandler(
         const turnId = randomBytes(4).toString("hex");
         const abortController = new AbortController();
         state.currentTurn = { turnId, abortController };
+
+        // [P-75 D-18] Clear stale workflow state on every fresh top-level operator
+        // prompt. Observed in the comment-on-feed-post scenario (2026-06-04): a prior
+        // DM workflow's title bled into the new comment task ("Internal DM to Poem
+        // Rick + Feed Comment"). Chat history (state.messages) is preserved so the
+        // operator can refer back, but the workflow controller's state.current is
+        // null'd so any new todo_write declares a fresh plan instead of merging the
+        // new task's steps with the prior workflow's title and pending steps.
+        // /agent/activate (Magical) and /workflow/approve (resume) deliberately bypass
+        // this — resume must keep the workflow it's resuming into.
+        const wfState = deps.workflow.getState();
+        wfState.current = null;
+        wfState.awaitingApprovalStepId = null;
+
         state.messages.push({ role: "user", content: prompt });
         state.lastTurnUserPrompt = prompt;
 
