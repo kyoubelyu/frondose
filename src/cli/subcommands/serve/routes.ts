@@ -126,9 +126,27 @@ export function createRequestHandler(
       }
 
       if (method === "POST" && url === "/agent/turn") {
+        // [P-75 D-21] Force-release stuck prior turn before accepting a new one.
+        // CDP method calls (Page.navigate, DOM.getBoxModel, Accessibility.getPartialAXTree)
+        // returned by chrome-remote-interface don't honor AbortSignal — so a hung CDP call
+        // (page never finished loading, AX tree query stalled, etc.) leaves runOneTurn's
+        // promise pending forever even after abortController.abort() fires. The `.finally`
+        // that clears state.currentTurn never runs, and every subsequent /agent/turn
+        // rejects with turn_in_progress until pkill -9. The fix: when /agent/turn is
+        // called with state.currentTurn non-null, signal the prior turn AND release the
+        // slot immediately. The hung CDP call is now a leaked promise (resolved on sidecar
+        // GC) but the operator can dispatch new work. The natural UX: the operator
+        // dispatching a NEW prompt clearly wants the new task, even if it interrupts the
+        // hung prior one.
         if (state.currentTurn !== null) {
-          sendJson(res, 409, { ok: false, reason: "turn_in_progress", turnId: state.currentTurn.turnId });
-          return;
+          const stuck = state.currentTurn;
+          stuck.abortController.abort();
+          state.currentTurn = null;
+          deps.emitFrame({
+            type: "error",
+            turnId: stuck.turnId,
+            message: `Turn ${stuck.turnId} force-released by new /agent/turn (D-21: prior turn's tool call did not honor abort).`,
+          });
         }
         const body = await readJsonBody(req);
         const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
@@ -204,8 +222,15 @@ export function createRequestHandler(
           sendJson(res, 200, { ok: false, reason: "not_found" });
           return;
         }
-        state.currentTurn.abortController.abort();
-        sendJson(res, 200, { ok: true });
+        // [P-75 D-21] Same fix as /agent/turn: signal abort AND release the slot
+        // immediately. Don't wait for runOneTurn's promise to settle — if a CDP call
+        // is hung, it won't ever settle (chrome-remote-interface doesn't honor
+        // AbortSignal). The hung promise becomes a leaked Promise that resolves on
+        // sidecar GC. The operator can now /agent/turn again without restart.
+        const stuck = state.currentTurn;
+        stuck.abortController.abort();
+        state.currentTurn = null;
+        sendJson(res, 200, { ok: true, turnId: stuck.turnId, released: true });
         return;
       }
 
