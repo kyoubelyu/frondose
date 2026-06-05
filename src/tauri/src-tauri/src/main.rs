@@ -5,6 +5,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,11 +22,21 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, Notify};
 
 /// Per-app state: bearer token + UDS path + sidecar child handle.
+///
+/// [P-75 D-24] `shutting_down` + `child_pid` added to support the sidecar-watchdog
+/// supervisor task. The supervisor owns the Child during `.wait()` (which removes it
+/// from the mutex), so `shutdown_sidecar` cannot reach it via the mutex. It instead
+/// reads the current sidecar PID from `child_pid` and `libc::kill`s it directly;
+/// the supervisor observes `shutting_down=true` after the wait returns and exits
+/// without respawning. Both fields are atomics so all Arc-clones share them
+/// (Tauri's `manage()` copies the Arc handles via `.clone()`, not the inner data).
 struct MaiServeState {
     token: String,
     sock_path: PathBuf,
     parent_dir: PathBuf,
     child: Arc<Mutex<Option<Child>>>,
+    shutting_down: Arc<AtomicBool>,
+    child_pid: Arc<AtomicU32>,
 }
 
 /// Build a hyperlocal URI for a path on the UDS sock.
@@ -489,19 +500,142 @@ async fn await_serve_ready(state: &MaiServeState, timeout_ms: u64) -> Result<(),
 }
 
 /// Tear down sidecar process + clean up UDS dir.
+///
+/// [P-75 D-24] Refactored to coexist with `supervise_sidecar`. The supervisor owns
+/// the Child during `child.wait()` (the mutex is empty for the lifetime of a wait),
+/// so this function must NOT take from `state.child` — it instead sets the
+/// `shutting_down` flag (read by the supervisor on wait-return) and SIGTERM/SIGKILLs
+/// by PID directly via `state.child_pid`. The supervisor then sees the flag and
+/// returns without respawning. UDS dir cleanup runs unconditionally.
 async fn shutdown_sidecar(state: &MaiServeState) {
-    let mut child_guard = state.child.lock().await;
-    if let Some(mut child) = child_guard.take() {
-        if let Some(pid) = child.id() {
+    // Mark shutdown FIRST so any pending respawn iteration sees it.
+    state.shutting_down.store(true, Ordering::SeqCst);
+
+    let pid = state.child_pid.load(Ordering::SeqCst);
+    if pid > 0 {
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+        // Brief wait for graceful exit; force-kill if still alive.
+        tokio::time::sleep(Duration::from_millis(800)).await;
+        let still_alive = state.child_pid.load(Ordering::SeqCst) > 0;
+        if still_alive {
             #[cfg(unix)]
             unsafe {
-                libc::kill(pid as i32, libc::SIGTERM);
+                libc::kill(pid as i32, libc::SIGKILL);
             }
         }
-        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
-        let _ = child.kill().await;
     }
     let _ = std::fs::remove_dir_all(&state.parent_dir);
+}
+
+/// [P-75 D-24] Sidecar supervision watchdog. Owns the Child between spawn+wait,
+/// detects unexpected exit (kill -9, crash, panic), and respawns with bounded
+/// exponential backoff. Pre-D-24 the Tauri host did NOT supervise the sidecar:
+/// a `kill -9 <sidecar PID>` left the host process alive but unable to serve
+/// any /agent/turn (the UDS responded with nothing); only a Frondose relaunch
+/// restored a working agent. Now: dead sidecar → 500ms backoff → respawn at
+/// the SAME sock path + same auth token, so the UI keeps working transparently.
+///
+/// Bounds:
+///   - Initial backoff: 500ms.
+///   - Backoff doubles on each consecutive respawn failure, capped at 30s.
+///   - After 8 consecutive respawn-spawn failures (NOT respawn-wait deaths),
+///     the supervisor gives up and exits. The user sees a degraded UI; the
+///     updater task may still recover a bad release.
+///   - When `shutting_down` is set, the supervisor returns immediately (after
+///     any in-flight `child.wait()` resolves), without attempting to respawn.
+///
+/// Race protection: `shutdown_sidecar` does NOT take from `state.child`; the
+/// supervisor is the sole owner of the Child during its lifetime. Shutdown
+/// signals via SIGTERM-by-PID + the `shutting_down` flag.
+async fn supervise_sidecar(state: Arc<MaiServeState>) {
+    const INITIAL_BACKOFF_MS: u64 = 500;
+    const MAX_BACKOFF_MS: u64 = 30_000;
+    const MAX_CONSECUTIVE_SPAWN_FAILURES: u32 = 8;
+    let mut backoff_ms = INITIAL_BACKOFF_MS;
+    let mut consecutive_spawn_failures: u32 = 0;
+
+    loop {
+        if state.shutting_down.load(Ordering::SeqCst) {
+            eprintln!("[mai-tauri] D-24 supervisor: shutdown flag set, exiting");
+            return;
+        }
+
+        // Take ownership of the current Child. May be None on initial spawn failure
+        // or if a prior respawn iteration hasn't completed yet — fall through to
+        // the spawn block below.
+        let taken = { state.child.lock().await.take() };
+
+        if let Some(mut child) = taken {
+            let pid = child.id().unwrap_or(0);
+            state.child_pid.store(pid, Ordering::SeqCst);
+            eprintln!("[mai-tauri] D-24 supervisor: watching sidecar pid={}", pid);
+
+            let exit = child.wait().await;
+            state.child_pid.store(0, Ordering::SeqCst);
+
+            if state.shutting_down.load(Ordering::SeqCst) {
+                eprintln!(
+                    "[mai-tauri] D-24 supervisor: child exited during shutdown (pid={}) — done",
+                    pid
+                );
+                return;
+            }
+            eprintln!(
+                "[mai-tauri] D-24 sidecar (pid={}) died UNEXPECTEDLY: {:?} — respawning",
+                pid, exit
+            );
+            consecutive_spawn_failures = 0;
+            backoff_ms = INITIAL_BACKOFF_MS;
+        } else {
+            eprintln!("[mai-tauri] D-24 supervisor: no child to wait on; attempting (re)spawn");
+        }
+
+        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+        if state.shutting_down.load(Ordering::SeqCst) {
+            return;
+        }
+
+        // [P-75 D-24] Remove the stale UDS socket file from the dead sidecar.
+        // Unix domain socket files DON'T auto-delete on process exit (only the
+        // bind reference is released); a respawned `mai serve` calling listen()
+        // on the same path then hits EADDRINUSE and exits immediately, causing
+        // the supervisor to thrash in a tight respawn loop. Removing the file
+        // pre-spawn restores the happy path. `remove_file` is best-effort —
+        // missing file is fine (initial-spawn-failure case has no socket yet).
+        let _ = std::fs::remove_file(&state.sock_path);
+
+        match spawn_mai_serve(&state.sock_path, &state.token).await {
+            Ok(new_child) => {
+                let new_pid = new_child.id().unwrap_or(0);
+                state.child_pid.store(new_pid, Ordering::SeqCst);
+                eprintln!("[mai-tauri] D-24 sidecar respawned: pid={}", new_pid);
+                {
+                    let mut g = state.child.lock().await;
+                    *g = Some(new_child);
+                }
+                consecutive_spawn_failures = 0;
+                backoff_ms = INITIAL_BACKOFF_MS;
+            }
+            Err(e) => {
+                consecutive_spawn_failures += 1;
+                eprintln!(
+                    "[mai-tauri] D-24 respawn failed (#{}): {} — retry after {}ms",
+                    consecutive_spawn_failures, e, backoff_ms
+                );
+                if consecutive_spawn_failures >= MAX_CONSECUTIVE_SPAWN_FAILURES {
+                    eprintln!(
+                        "[mai-tauri] D-24 supervisor: giving up after {} consecutive respawn failures",
+                        MAX_CONSECUTIVE_SPAWN_FAILURES
+                    );
+                    return;
+                }
+                backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -511,13 +645,33 @@ async fn main() {
     // before the updater gets a turn (the updater is the recovery path).
     let child = spawn_mai_serve(&sock_path, &token).await.ok();
 
+    // [P-75 D-24] Atomics for the watchdog: shared by the outer `state` Arc AND the
+    // Tauri-managed state (via Arc::clone in `manage()` below). The supervisor reads/
+    // writes `child_pid` around `child.wait()`; `shutdown_sidecar` reads it to send
+    // SIGTERM. `shutting_down` is the supervisor's exit signal.
+    let shutting_down = Arc::new(AtomicBool::new(false));
+    let child_pid = Arc::new(AtomicU32::new(child.as_ref().and_then(|c| c.id()).unwrap_or(0)));
+
     let state = Arc::new(MaiServeState {
         token,
         sock_path: sock_path.clone(),
         parent_dir: parent_dir.clone(),
         child: Arc::new(Mutex::new(child)),
+        shutting_down: shutting_down.clone(),
+        child_pid: child_pid.clone(),
     });
     let state_clone = state.clone();
+
+    // [P-75 D-24] Spawn the sidecar supervision watchdog. Must run for the lifetime
+    // of the Tauri host process so any sidecar death (kill -9, crash) is observed
+    // and recovered. The watchdog OWNS the Child during wait() — see
+    // `supervise_sidecar` for the race contract with `shutdown_sidecar`.
+    {
+        let state_for_supervisor = state.clone();
+        tokio::spawn(async move {
+            supervise_sidecar(state_for_supervisor).await;
+        });
+    }
 
     let app = tauri::Builder::default()
         .manage(MaiServeState {
@@ -525,6 +679,8 @@ async fn main() {
             sock_path: state.sock_path.clone(),
             parent_dir: state.parent_dir.clone(),
             child: state.child.clone(),
+            shutting_down: state.shutting_down.clone(),
+            child_pid: state.child_pid.clone(),
         })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
