@@ -100,6 +100,39 @@ export function createTurnRunner(
         /* watcher must never crash the turn */
       }
     }, 15_000);
+    // [P-75 D-27] Turn-level silent-hang detector. Completes the D-25 coverage gap:
+    // when the LLM SDK (DeepSeek custom URL via @ai-sdk/openai) silently hangs on a
+    // network black hole (DNS retry loop, TCP keepalive stall) without throwing AND
+    // without returning finishReason='error', neither D-25's throw-catch path nor the
+    // D-22 stalled-detector helps — they need the SDK to either error or finish. A
+    // separate progress watcher: track last activity (text chunk or tool call) and if
+    // NO progress in 180s, classify the turn as `llm_silent_hang`, write an llm_error
+    // audit row, emit an SSE error frame, and abort the controller. Self-cancels on
+    // turn end via clearInterval in finally.
+    let lastProgressAt = Date.now();
+    const noteProgress = (): void => {
+      lastProgressAt = Date.now();
+    };
+    const SILENT_HANG_MS = 180_000;
+    const silentHangWatcher = setInterval(() => {
+      if (abortController.signal.aborted) return;
+      const elapsed = Date.now() - lastProgressAt;
+      if (elapsed < SILENT_HANG_MS) return;
+      const message =
+        `[llm-silent-hang] LLM call made no progress (no text chunk, no tool call) for ${Math.round(elapsed / 1000)}s. ` +
+        "Likely cause: SDK hanging on a network black hole (DNS retry, TCP stall, upstream not responding). " +
+        "Aborting turn and surfacing as llm_error.";
+      turnDbg(`[runOneTurn D-27] turnId=${turnId} silent-hang elapsed=${Math.round(elapsed / 1000)}s — aborting`);
+      writeLlmErrorAudit(deps.auditPath, {
+        turnId,
+        errorMessage: message,
+        errorName: "LlmSilentHang",
+        turnKind: args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator",
+        status: undefined,
+      });
+      deps.emitFrame({ type: "error", turnId, message });
+      abortController.abort();
+    }, 30_000);
     try {
       // [P-75 D-23] Filter the `tools` parameter ITSELF instead of using Vercel SDK's
       // experimental_activeTools. Observed in resume turn d13-debug-v2 (2026-06-05):
@@ -184,6 +217,7 @@ export function createTurnRunner(
           deps.emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
         },
         onText: (delta) => {
+          noteProgress(); // [P-75 D-27] feed the silent-hang watcher
           deps.emitFrame({ type: "text", turnId, chunk: delta });
           const ctxId = state.overlayContextId;
           const client = deps.session.getClient();
@@ -193,6 +227,7 @@ export function createTurnRunner(
           }
         },
         onToolCall: (toolName) => {
+          noteProgress(); // [P-75 D-27] feed the silent-hang watcher
           deps.emitFrame({ type: "tool-call", turnId, toolName });
           const ctxId = state.overlayContextId;
           const client = deps.session.getClient();
@@ -271,6 +306,7 @@ export function createTurnRunner(
       }
     } finally {
       clearInterval(capWatcher); // [P-75 D-16] stop the auto-run cap watcher
+      clearInterval(silentHangWatcher); // [P-75 D-27] stop the silent-hang watcher
       hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     }
   }
