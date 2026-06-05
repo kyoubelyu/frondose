@@ -88,6 +88,51 @@ function narrationContinueMessage(): CoreMessage {
 }
 
 /**
+ * [P-75 D-22] Stalled-turn detector. The model sometimes stops after only a
+ * handful of tool calls without finishing the task — observed in Auto-Mastars
+ * dogfood: start_auto_run + todo_write then silence for 3 minutes. D-12 narrative
+ * detector only fires when the model emits "Let me…" prose first; a pure
+ * silent-stop bypasses it. This complementary signal: when the turn ends with
+ * very few tool-calling steps AND the last assistant message has no tool calls,
+ * inject a continuation pushing the model to call its NEXT planned tool.
+ *
+ * Heuristic gate: stepCount <= STALL_STEP_THRESHOLD AND last assistant message
+ * had no tool calls. Combined with the D-12 narrative check, we cover both
+ * "stopped after announcing intent" (D-12) and "stopped without saying anything"
+ * (D-22). Same retry budget pool — at most one retry per turn.
+ */
+const STALL_STEP_THRESHOLD = 4;
+
+function lastAssistantMessageHasNoToolCalls(messages: CoreMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.role !== "assistant") continue;
+    const content = m.content as unknown;
+    if (typeof content === "string") return true;
+    if (Array.isArray(content)) {
+      for (const part of content as Array<{ type?: string }>) {
+        if (part.type === "tool-call") return false;
+      }
+      return true;
+    }
+    return true;
+  }
+  return false;
+}
+
+function stalledContinueMessage(): CoreMessage {
+  return {
+    role: "user",
+    content:
+      "You stopped without completing the task. Call your next planned tool NOW. " +
+      "Look at the workflow plan you declared with `todo_write` (if any) and execute the next in_progress step. " +
+      "If the page is blank, call `navigate_to_url` to my LinkedIn feed. " +
+      "If you don't know what to do next, call `escalate_for_capability` with a clear question OR call `end_auto_run` (if an auto run is active) OR `stop`. " +
+      "Do NOT respond with text only — call a tool.",
+  };
+}
+
+/**
  * Run one turn of the agent loop:
  *  - sends the messages array to the LLM via streamText
  *  - executes any tool calls in-line (Vercel handles execution per scout Q2)
@@ -154,16 +199,22 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
       await runPhase(remaining);
       return;
     }
-    // [P-75 D-12] Vercel SDK can report finishReason='tool-calls' even when the
-    // model's actual final step had no tool call — so we don't gate on finishReason.
-    // The reliable signal is: the LAST assistant message has no tool-call parts AND
-    // its trailing text matches the narrative-intent pattern ("Let me…", "I'll…",
-    // "Now let me…"). Cap at 1 retry per turn.
-    if (!opts.abortSignal?.aborted && lastAssistantMessageMissedExecute(opts.messages)) {
-      const retryBudget = Math.min(twoPhase ? remaining : maxSteps, 30);
-      if (retryBudget >= 1) {
-        opts.messages.push(narrationContinueMessage());
-        await runPhase(retryBudget);
+    // [P-75 D-12] narrative-without-execute detection.
+    // [P-75 D-22] complementary stalled-turn detection (silent stop after few tools).
+    // Both detectors share a single retry budget — at most one continuation per turn.
+    if (!opts.abortSignal?.aborted) {
+      const narrative = lastAssistantMessageMissedExecute(opts.messages);
+      const stalled =
+        !narrative &&
+        phase1.stepCount > 0 &&
+        phase1.stepCount <= STALL_STEP_THRESHOLD &&
+        lastAssistantMessageHasNoToolCalls(opts.messages);
+      if (narrative || stalled) {
+        const retryBudget = Math.min(twoPhase ? remaining : maxSteps, 30);
+        if (retryBudget >= 1) {
+          opts.messages.push(narrative ? narrationContinueMessage() : stalledContinueMessage());
+          await runPhase(retryBudget);
+        }
       }
     }
   } catch (e) {
