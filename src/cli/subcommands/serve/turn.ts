@@ -5,6 +5,7 @@ import * as path from "node:path";
 import type { StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../../../agent/loop.js";
 import { callInOverlay } from "../../../overlay/inject.js";
+import { writeLlmErrorAudit } from "../../../persistence/audit.js";
 import { getCurrentAutoRun } from "../../../persistence/salesDb.js";
 import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
@@ -219,6 +220,10 @@ export function createTurnRunner(
       }
     } catch (e) {
       const aborted = abortController.signal.aborted;
+      // [P-75 D-25 dbg] confirm catch fires + log error shape to turn-debug.log
+      turnDbg(
+        `[runOneTurn CATCH] turnId=${turnId} aborted=${aborted} errorName=${e instanceof Error ? e.name : "Unknown"} message=${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`,
+      );
       if (aborted) {
         state.lastFailedTurnPrompt = null;
         deps.emitFrame({ type: "done", turnId, finishReason: "aborted", aborted: true });
@@ -231,6 +236,29 @@ export function createTurnRunner(
       }
       const message = e instanceof Error ? e.message : String(e);
       const retryable = state.lastFailedTurnPrompt !== null;
+      // [P-75 D-25] Persist the LLM-call error to audit.jsonl. Pre-D-25 these errors
+      // (401 bad key / 429 rate limit / network drops / malformed JSON / etc.) were
+      // only printed to sidecar stderr — which is /dev/null when the sidecar is
+      // launched by Tauri — so the operator could not distinguish "agent did nothing"
+      // from "agent's LLM call failed" without scraping process logs. With this row,
+      // every operator-facing audit reader (the in-app log panel, downstream analytics,
+      // dogfood scripts) sees the failure surfaced as a first-class event.
+      const turnKind = args.isWorkflowResume
+        ? "workflow_resume"
+        : args.isCronTurn
+          ? "cron"
+          : "operator";
+      // Try to extract an HTTP status from common SDK error shapes (AI SDK propagates
+      // upstream status via .status, .statusCode, or .cause.status). Best-effort.
+      const errAny = e as { status?: number; statusCode?: number; cause?: { status?: number } } | null;
+      const status = errAny?.status ?? errAny?.statusCode ?? errAny?.cause?.status;
+      writeLlmErrorAudit(deps.auditPath, {
+        turnId,
+        errorMessage: message,
+        errorName: e instanceof Error ? e.name : "Unknown",
+        turnKind,
+        status,
+      });
       deps.emitFrame({ type: "error", turnId, message, retryable });
       const ctxId = state.overlayContextId;
       const client = deps.session.getClient();
