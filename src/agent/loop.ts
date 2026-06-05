@@ -163,7 +163,17 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
   const twoPhase = remaining >= 2;
 
   /** Run one streamText pass: stream text deltas, append response messages,
-   *  return the resolved finishReason and the number of steps consumed. */
+   *  return the resolved finishReason and the number of steps consumed.
+   *
+   *  [P-75 D-25] The Vercel AI SDK does NOT throw for upstream provider errors
+   *  in many cases — when the LLM endpoint returns a 401/429/network failure,
+   *  streamText resolves cleanly with finishReason='error' and an empty stream
+   *  rather than rejecting. Without explicit detection here, the agent loop
+   *  silently returns, no audit row is written, no SSE error is emitted, and
+   *  the operator sees a "turn done" frame with zero output. We throw a
+   *  synthetic Error on finishReason='error' so the upstream catch in
+   *  runOneTurn (and its writeLlmErrorAudit + SSE error frame) fires.
+   */
   const runPhase = async (stepCap: number): Promise<{ finishReason: FinishReason; stepCount: number }> => {
     const result = streamText({
       model: opts.model,
@@ -188,7 +198,23 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
     const { messages: responseMessages } = await result.response;
     opts.messages.push(...responseMessages);
     const steps = await result.steps;
-    return { finishReason: await result.finishReason, stepCount: steps.length };
+    const finishReason = await result.finishReason;
+    if (finishReason === "error" && !opts.abortSignal?.aborted) {
+      // The SDK exposes upstream details on result.warnings + result.experimental_providerMetadata
+      // in some versions; fold them into the synthetic error message so the operator-facing
+      // audit row has enough context to act (401 → bad key, 429 → rate limit, network → URL).
+      const warnings = (await result.warnings.catch(() => null)) ?? null;
+      const warningStr = warnings && Array.isArray(warnings) && warnings.length
+        ? `warnings=${JSON.stringify(warnings).slice(0, 400)}`
+        : "";
+      const err = new Error(
+        `LLM call returned finishReason='error' (empty stream, no tool calls). ${warningStr} ` +
+          "Likely causes: invalid API key (401), rate limit (429), network/DNS failure, or upstream malformed response.",
+      );
+      err.name = "LlmCallError";
+      throw err;
+    }
+    return { finishReason, stepCount: steps.length };
   };
 
   try {

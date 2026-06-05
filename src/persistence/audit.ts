@@ -115,6 +115,42 @@ export function writeWorkflowAudit(auditPath: string, event: WorkflowAuditEntry[
   }
 }
 
+/**
+ * [P-75 D-25] LLM-call error audit. Pre-D-25, an LLM API failure (bad key → 401,
+ * rate limit → 429, network drop, malformed response) was invisible in
+ * audit.jsonl — only sidecar stderr saw it, which on Tauri is `/dev/null` at
+ * spawn. The operator could not tell "agent did nothing this turn" from "agent's
+ * LLM call failed with a 401" without scraping process logs. Now we write a
+ * single audit row when the streamText call throws (after filtering out
+ * AbortError, which is the normal stop-tool path). Schema is intentionally
+ * `type:"llm_error"` to mirror the workflow_event convention and stay
+ * backward-compatible with existing audit readers (which assume the absence of
+ * `type` means a tool-call row).
+ */
+export interface LlmErrorAuditRow {
+  ts: string;
+  type: "llm_error";
+  turnId: string;
+  errorMessage: string;
+  errorName: string;
+  /** Free-form: 'manual' | 'auto' | 'magical' | 'workflow_resume' | 'cron'. */
+  turnKind: string;
+  /** Optional HTTP status if the upstream surfaced one. */
+  status?: number;
+}
+export function writeLlmErrorAudit(auditPath: string, row: Omit<LlmErrorAuditRow, "ts" | "type">): void {
+  try {
+    const dir = dirname(auditPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const full: LlmErrorAuditRow = { ts: new Date().toISOString(), type: "llm_error", ...row };
+    appendFileSync(auditPath, `${JSON.stringify(full)}\n`, "utf-8");
+  } catch (e) {
+    process.stderr.write(
+      `[mai] writeLlmErrorAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
+  }
+}
+
 function truncateForAudit(value: unknown): unknown {
   if (typeof value === "string") {
     return value.length > TRUNCATE_BYTES ? `${value.slice(0, TRUNCATE_BYTES)}…[truncated]` : value;
