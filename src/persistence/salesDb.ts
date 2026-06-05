@@ -52,6 +52,19 @@ function runSalesMigrations(db: DB): void {
       db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(1);
     })();
   }
+  if (current < 2) {
+    // [P-75 D-20] message_drafts: lead_id nullable + kind enum gains 'post'.
+    // SQLite doesn't support ALTER COLUMN to change CHECK constraints; the canonical
+    // pattern is recreate-and-swap: build new table, INSERT-SELECT, drop+rename.
+    // FK pragma toggled OFF for the swap so lead_scores/lead_timeline FKs to leads
+    // (still valid post-swap because we don't touch leads) don't try to validate during
+    // the intermediate state. Idempotent: the IF NOT EXISTS + version check make
+    // re-running the migration a no-op.
+    db.transaction(() => {
+      applyV2(db);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
+    })();
+  }
 }
 
 /** P-SP-A v1 schema — 8 tables + indexes. All timestamps stored as INTEGER
@@ -188,6 +201,40 @@ function applyV1(db: DB): void {
   `);
 }
 
+/** [P-75 D-20] v2 schema migration: message_drafts.lead_id becomes nullable + kind enum
+ *  gains 'post'. SQLite cannot ALTER COLUMN to change CHECK constraints — the canonical
+ *  pattern is build-new, INSERT-SELECT, drop, rename. FK pragma toggled OFF for the swap
+ *  so the drop+rename of a referenced table doesn't fail (no other table references
+ *  message_drafts, but the pattern is defensive). Existing rows preserve their lead_id.
+ *  Idempotent: a re-run is a no-op because the version check in runSalesMigrations
+ *  gates on schema_version < 2.
+ */
+function applyV2(db: DB): void {
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.exec(`
+      CREATE TABLE message_drafts_v2 (
+        id           TEXT    PRIMARY KEY,
+        lead_id      TEXT    REFERENCES leads(id),
+        kind         TEXT    NOT NULL CHECK (kind IN ('connect_note','dm','follow_up','comment','post')),
+        text         TEXT    NOT NULL,
+        status       TEXT    NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','sent','rejected','revised')),
+        created_by   TEXT    NOT NULL CHECK (created_by IN ('llm','user')),
+        evidence     TEXT,
+        created_at   INTEGER NOT NULL
+      );
+      INSERT INTO message_drafts_v2 (id, lead_id, kind, text, status, created_by, evidence, created_at)
+        SELECT id, lead_id, kind, text, status, created_by, evidence, created_at FROM message_drafts;
+      DROP TABLE message_drafts;
+      ALTER TABLE message_drafts_v2 RENAME TO message_drafts;
+      CREATE INDEX IF NOT EXISTS idx_drafts_lead ON message_drafts (lead_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_drafts_status ON message_drafts (status);
+    `);
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Repository functions (used by tool wrappers in src/tools/sales/*).
 // Pure SQL — no Zod, no envelopes; the tool layer handles validation + envelope.
@@ -221,7 +268,9 @@ export type LeadEventType =
   | "disqualified"
   | "follow_up_scheduled"
   | "auto_stopped";
-export type DraftKind = "connect_note" | "dm" | "follow_up" | "comment";
+// [P-75 D-20] 'post' added — operator-as-content-creator broadcasts that aren't bound to
+// a specific lead. message_drafts.lead_id is nullable in schema v2 (see applyV2 + insertDraft).
+export type DraftKind = "connect_note" | "dm" | "follow_up" | "comment" | "post";
 export type DraftStatus = "draft" | "approved" | "sent" | "rejected" | "revised";
 export type DraftCreatedBy = "llm" | "user";
 export type AutoRunStatus = "running" | "completed" | "stopped_by_user" | "stopped_by_agent" | "blocked";
@@ -483,7 +532,13 @@ export interface DraftRow {
 
 export function insertDraft(
   db: DB,
-  input: { leadId: string; kind: DraftKind; text: string; createdBy: DraftCreatedBy; evidence?: string },
+  input: {
+    leadId: string | null;
+    kind: DraftKind;
+    text: string;
+    createdBy: DraftCreatedBy;
+    evidence?: string;
+  },
 ): string {
   const id = randomUUID();
   db.prepare(`
