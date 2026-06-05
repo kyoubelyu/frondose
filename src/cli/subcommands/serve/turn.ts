@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../../../agent/loop.js";
 import { callInOverlay } from "../../../overlay/inject.js";
@@ -6,6 +9,17 @@ import { getCurrentAutoRun } from "../../../persistence/salesDb.js";
 import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "./context.js";
 import { hideEdgeRing, showEdgeRing } from "./takeover.js";
+
+// [P-75 D-13 dbg] file-based diagnostic
+const TURN_DBG = path.join(os.homedir(), ".mai", "agent", "logs", "turn-debug.log");
+function turnDbg(msg: string): void {
+  try {
+    fs.mkdirSync(path.dirname(TURN_DBG), { recursive: true });
+    fs.appendFileSync(TURN_DBG, `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* ignore */
+  }
+}
 
 // [P-75 D-13] Resume turns must NOT re-run task-start ritual or re-qualify; the workflow
 // state is preserved across approvals. Block the planning/qualification tools the agent
@@ -86,15 +100,27 @@ export function createTurnRunner(
       }
     }, 15_000);
     try {
-      const activeTools = args.isWorkflowResume
-        ? Object.keys(deps.tools).filter((n) => !RESUME_EXCLUDED_TOOLS.has(n))
-        : undefined;
+      // [P-75 D-23] Filter the `tools` parameter ITSELF instead of using Vercel SDK's
+      // experimental_activeTools. Observed in resume turn d13-debug-v2 (2026-06-05):
+      // experimental_activeTools is NOT reliably honored by @ai-sdk/openai for the
+      // DeepSeek custom-URL provider — the resume turn correctly computed an excluded
+      // list including save_message_draft, but the model still SAW + CALLED that tool
+      // (and succeeded). Subsetting the tools registry itself is foolproof: the model
+      // literally cannot see a tool that isn't in the tools object.
+      const filteredTools: ToolSet = args.isWorkflowResume
+        ? (Object.fromEntries(
+            Object.entries(deps.tools).filter(([n]) => !RESUME_EXCLUDED_TOOLS.has(n)),
+          ) as ToolSet)
+        : deps.tools;
+      // [P-75 D-13 dbg] log the filtered tools count
+      turnDbg(
+        `[runOneTurn] turnId=${turnId} isWorkflowResume=${args.isWorkflowResume} filteredTools.size=${Object.keys(filteredTools).length} (vs full=${Object.keys(deps.tools).length})`,
+      );
       await runAgentLoop({
         model: deps.model,
         system: args.isWorkflowResume ? deps.systemResume : deps.system,
         messages: state.messages,
-        tools: deps.tools,
-        activeTools,
+        tools: filteredTools,
         maxSteps: args.maxSteps ?? deps.maxSteps,
         abortSignal: abortController.signal,
         onStepFinish: async (step: StepResult<ToolSet>) => {
