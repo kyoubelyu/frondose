@@ -1,6 +1,19 @@
-import { type AssistantMessage, complete, type ToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+  type AssistantMessage,
+  complete,
+  type Message as PiMessage,
+  type ToolCall,
+  type ToolResultMessage,
+} from "@earendil-works/pi-ai";
 import type { CoreMessage, StepResult, ToolSet } from "ai";
-import type { AgentLoopOpts } from "../loop.js";
+import {
+  type AgentLoopOpts,
+  lastAssistantMessageHasNoToolCalls,
+  lastAssistantMessageMissedExecute,
+  narrationContinueMessage,
+  STALL_STEP_THRESHOLD,
+  stalledContinueMessage,
+} from "../loop.js";
 import { DEFAULT_MAX_STEPS } from "../maxSteps.js";
 import { coreMessagesToPi, piAssistantToCore, piToolResultToCore } from "./messageAdapter.js";
 import { resolvePiModel } from "./model.js";
@@ -19,10 +32,12 @@ import { buildPiToolBundle } from "./toolAdapter.js";
  *   call directly); the CDP-I/O abort still relies on raced.ts (loop-agnostic, unchanged).
  * - opts.messages: NEW assistant + tool messages are converted back to CoreMessage and pushed
  *   onto the caller's array (matching runAgentLoop), so persistence + audit stay Vercel-shaped.
+ * - D-12 (narrate-without-execute) + D-22 (stall) retry gate: PORTED — runs the SAME shared
+ *   detectors (exported from loop.ts) on the CoreMessage transcript after the main phase and
+ *   injects one continuation, exactly like the Vercel loop.
  *
- * NOT yet ported (follow-up within Gate 2): the D-12 narrate-without-execute + D-22 stall
- * continuation retries, and token-level streaming via stream() (this v1 uses complete() and
- * emits each assistant text block as one onText chunk).
+ * Remaining follow-up: token-level streaming via stream() (this v1 uses complete() and emits
+ * each assistant text block as one onText chunk).
  */
 export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
@@ -31,14 +46,17 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   const { piMessages } = coreMessagesToPi(opts.messages, model.id);
   const newCore: CoreMessage[] = [];
 
-  try {
-    for (let step = 0; step < maxSteps; step++) {
+  /** Run one phase (up to stepCap complete() iterations); returns the iteration count. */
+  const runPhase = async (stepCap: number): Promise<number> => {
+    let count = 0;
+    for (let step = 0; step < stepCap; step++) {
       if (opts.abortSignal?.aborted) break;
       const assistant: AssistantMessage = await complete(
         model,
         { systemPrompt: opts.system, messages: piMessages, tools },
         { apiKey, signal: opts.abortSignal, onPayload },
       );
+      count++;
       piMessages.push(assistant);
       newCore.push(piAssistantToCore(assistant));
 
@@ -61,6 +79,33 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
 
       if (assistant.stopReason !== "toolUse" || toolCalls.length === 0) break;
     }
+    return count;
+  };
+
+  try {
+    const stepCount = await runPhase(maxSteps);
+
+    // [P-75 D-12 + D-22] Retry gate — ported verbatim from the Vercel loop (shared detectors).
+    // Run the detectors on the full CoreMessage transcript (history + this turn's new messages);
+    // the last assistant message lives in newCore. At most one continuation per turn.
+    if (!opts.abortSignal?.aborted) {
+      const transcript = [...opts.messages, ...newCore];
+      const narrative = lastAssistantMessageMissedExecute(transcript);
+      const stalled =
+        !narrative &&
+        stepCount > 0 &&
+        stepCount <= STALL_STEP_THRESHOLD &&
+        lastAssistantMessageHasNoToolCalls(transcript);
+      if (narrative || stalled) {
+        const retryBudget = Math.min(maxSteps, 30);
+        if (retryBudget >= 1) {
+          const cont = narrative ? narrationContinueMessage() : stalledContinueMessage();
+          piMessages.push(coreUserToPi(cont));
+          newCore.push(cont);
+          await runPhase(retryBudget);
+        }
+      }
+    }
   } catch (e) {
     if (opts.abortSignal?.aborted) return;
     throw e;
@@ -69,6 +114,12 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
     // abort/error the partial transcript is still recorded for audit + the next turn).
     opts.messages.push(...newCore);
   }
+}
+
+/** Convert a synthetic CoreMessage user-continuation to a Pi UserMessage. */
+function coreUserToPi(msg: CoreMessage): PiMessage {
+  const content = typeof msg.content === "string" ? msg.content : "";
+  return { role: "user", content, timestamp: Date.now() };
 }
 
 function parseToolResult(tr: ToolResultMessage): unknown {
