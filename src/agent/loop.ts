@@ -204,9 +204,10 @@ export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
       // in some versions; fold them into the synthetic error message so the operator-facing
       // audit row has enough context to act (401 → bad key, 429 → rate limit, network → URL).
       const warnings = (await result.warnings.catch(() => null)) ?? null;
-      const warningStr = warnings && Array.isArray(warnings) && warnings.length
-        ? `warnings=${JSON.stringify(warnings).slice(0, 400)}`
-        : "";
+      const warningStr =
+        warnings && Array.isArray(warnings) && warnings.length
+          ? `warnings=${JSON.stringify(warnings).slice(0, 400)}`
+          : "";
       const err = new Error(
         `LLM call returned finishReason='error' (empty stream, no tool calls). ${warningStr} ` +
           "Likely causes: invalid API key (401), rate limit (429), network/DNS failure, or upstream malformed response.",
