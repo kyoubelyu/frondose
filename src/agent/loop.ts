@@ -52,7 +52,7 @@ function budgetWarningMessage(remaining: number): CoreMessage {
 const NARRATIVE_HOOK_RE =
   /(let me (now |start |continue |first |go ahead |proceed |then |)|now let me|i['']?ll (now |start |go |then |next |proceed |first )|i will (now |then |proceed |first )|let['']?s (now |then |next )|next,?\s*(i['']?ll|i will))/i;
 
-function lastAssistantMessageMissedExecute(messages: CoreMessage[]): boolean {
+export function lastAssistantMessageMissedExecute(messages: CoreMessage[]): boolean {
   // Walk backward to find the LAST assistant message (tool results may follow it).
   let lastText = "";
   let hadToolCall = false;
@@ -77,7 +77,7 @@ function lastAssistantMessageMissedExecute(messages: CoreMessage[]): boolean {
   return NARRATIVE_HOOK_RE.test(tail);
 }
 
-function narrationContinueMessage(): CoreMessage {
+export function narrationContinueMessage(): CoreMessage {
   return {
     role: "user",
     content:
@@ -101,9 +101,9 @@ function narrationContinueMessage(): CoreMessage {
  * "stopped after announcing intent" (D-12) and "stopped without saying anything"
  * (D-22). Same retry budget pool — at most one retry per turn.
  */
-const STALL_STEP_THRESHOLD = 4;
+export const STALL_STEP_THRESHOLD = 4;
 
-function lastAssistantMessageHasNoToolCalls(messages: CoreMessage[]): boolean {
+export function lastAssistantMessageHasNoToolCalls(messages: CoreMessage[]): boolean {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (!m || m.role !== "assistant") continue;
@@ -120,7 +120,7 @@ function lastAssistantMessageHasNoToolCalls(messages: CoreMessage[]): boolean {
   return false;
 }
 
-function stalledContinueMessage(): CoreMessage {
+export function stalledContinueMessage(): CoreMessage {
   return {
     role: "user",
     content:
