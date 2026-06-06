@@ -16,10 +16,15 @@ interface CorePart {
   args?: unknown;
   result?: unknown;
   isError?: boolean;
+  image?: unknown;
+  mimeType?: string;
 }
 
-/** placeholder metadata for an AssistantMessage reconstructed from history (Pi re-serializes role+content). */
-function assistantStub(modelId: string): Omit<AssistantMessage, "content"> {
+/** placeholder metadata for an AssistantMessage reconstructed from history (Pi re-serializes role+content).
+ *  [MA-3] stopReason carries the real history state ('toolUse' when the message had tool-calls) — pi-ai's
+ *  provider SKIPS replaying assistant messages with stopReason 'error'/'aborted', so a constant 'stop'
+ *  would mislabel them; the loop (PI-LOOP-2) already declines to persist empty error/abort turns. */
+function assistantStub(modelId: string, stopReason: AssistantMessage["stopReason"]): Omit<AssistantMessage, "content"> {
   return {
     role: "assistant",
     api: "openai-completions",
@@ -34,7 +39,7 @@ function assistantStub(modelId: string): Omit<AssistantMessage, "content"> {
       totalTokens: 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
-    stopReason: "stop",
+    stopReason,
   };
 }
 
@@ -62,13 +67,21 @@ export function coreMessagesToPi(
       continue;
     }
     if (m.role === "user") {
-      const content =
-        typeof m.content === "string"
-          ? m.content
-          : (m.content as CorePart[])
-              .filter((p) => p.type === "text" && typeof p.text === "string")
-              .map((p) => ({ type: "text" as const, text: p.text as string }));
-      piMessages.push({ role: "user", content, timestamp: ts });
+      if (typeof m.content === "string") {
+        piMessages.push({ role: "user", content: m.content, timestamp: ts });
+      } else {
+        // [MA-2] Map BOTH text and image parts (e.g. analyze_screenshot base64) — dropping images
+        // silently broke any vision flow. The provider's own downgrade handles non-vision placeholders.
+        const parts: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+        for (const p of m.content as CorePart[]) {
+          if (p.type === "text" && typeof p.text === "string") parts.push({ type: "text", text: p.text });
+          else if (p.type === "image" && p.image !== undefined) {
+            const data = typeof p.image === "string" ? p.image : String(p.image);
+            parts.push({ type: "image", data, mimeType: typeof p.mimeType === "string" ? p.mimeType : "image/png" });
+          }
+        }
+        piMessages.push({ role: "user", content: parts, timestamp: ts });
+      }
       continue;
     }
     if (m.role === "assistant") {
@@ -88,7 +101,9 @@ export function coreMessagesToPi(
           }
         }
       }
-      piMessages.push({ ...assistantStub(modelId), content: out });
+      // [MA-3] preserve the history stop state: a message with tool-calls was a 'toolUse' turn.
+      const stop: AssistantMessage["stopReason"] = out.some((c) => c.type === "toolCall") ? "toolUse" : "stop";
+      piMessages.push({ ...assistantStub(modelId, stop), content: out });
       continue;
     }
     if (m.role === "tool") {
@@ -121,12 +136,15 @@ export function piAssistantToCore(msg: AssistantMessage): CoreMessage {
   return { role: "assistant", content: parts as never };
 }
 
-/** A single Pi ToolResultMessage -> a Vercel CoreToolMessage. The text is JSON-parsed back to an object when possible. */
+/** A single Pi ToolResultMessage -> a Vercel CoreToolMessage. [MA-1] Parse back to the envelope ONLY
+ *  when genuinely structured (object/array); a bare JSON scalar (quoted string, "1e999"→null, bare
+ *  number) must stay the original string or the round-trip corrupts the tool output. */
 export function piToolResultToCore(msg: ToolResultMessage): CoreMessage {
   const text = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   let result: unknown = text;
   try {
-    result = JSON.parse(text);
+    const v = JSON.parse(text);
+    if (v && typeof v === "object") result = v;
   } catch {
     // non-JSON tool output stays a string
   }
