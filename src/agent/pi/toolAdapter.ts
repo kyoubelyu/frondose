@@ -44,10 +44,12 @@ export function buildPiToolBundle(toolSet: ToolSet, activeTools?: string[]): PiT
     let parameters: Record<string, unknown> = { type: "object", properties: {}, additionalProperties: false };
     if (t.parameters) {
       try {
-        parameters = zodToJsonSchema(t.parameters as never, { target: "openApi3", $refStrategy: "none" }) as Record<
-          string,
-          unknown
-        >;
+        parameters = sanitizeDraft7(
+          zodToJsonSchema(t.parameters as never, { target: "openApi3", $refStrategy: "none" }) as Record<
+            string,
+            unknown
+          >,
+        ) as Record<string, unknown>;
       } catch {
         // keep the empty-object schema; the tool still registers + dispatches
       }
@@ -87,6 +89,43 @@ async function runExec(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Normalize a zod-to-json-schema (target "openApi3") output to draft-7-strict so DeepSeek's
+ * tools API accepts it. zod-to-json-schema emits draft-4 BOOLEAN `exclusiveMinimum`/`exclusiveMaximum`
+ * (from Zod `.positive()`/`.gt()`/`.lt()`/`.negative()`), but DeepSeek validates against draft-7 where
+ * these MUST be numbers — otherwise: `400 Invalid schema ... true is not of type number` (scroll.amount,
+ * telegram_notify.{edit,delete,pin,unpin}MessageId). Rewrites `{exclusiveMinimum:true, minimum:N}` ->
+ * `{exclusiveMinimum:N}` in place. Recurses every nested object/array; idempotent; mutates the fresh
+ * per-conversion object only (zodToJsonSchema returns a new object each call — no shared/cached schema).
+ */
+function sanitizeDraft7(node: unknown): unknown {
+  if (node === null || typeof node !== "object") return node;
+  if (Array.isArray(node)) {
+    for (const el of node) sanitizeDraft7(el);
+    return node;
+  }
+  const obj = node as Record<string, unknown>;
+  if (typeof obj.exclusiveMinimum === "boolean") {
+    if (obj.exclusiveMinimum === true && typeof obj.minimum === "number") {
+      obj.exclusiveMinimum = obj.minimum;
+      delete obj.minimum;
+    } else {
+      // exclusiveMinimum:false is a draft-4 no-op; draft-7 has no boolean form.
+      delete obj.exclusiveMinimum;
+    }
+  }
+  if (typeof obj.exclusiveMaximum === "boolean") {
+    if (obj.exclusiveMaximum === true && typeof obj.maximum === "number") {
+      obj.exclusiveMaximum = obj.maximum;
+      delete obj.maximum;
+    } else {
+      delete obj.exclusiveMaximum;
+    }
+  }
+  for (const v of Object.values(obj)) sanitizeDraft7(v);
+  return node;
 }
 
 function isErrorEnvelope(result: unknown): boolean {
