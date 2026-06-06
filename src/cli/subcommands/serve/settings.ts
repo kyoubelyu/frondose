@@ -7,7 +7,6 @@ import { BOUNDARY, BOUNDARY_RESUME } from "../../../agent/systemPrompt/boundary.
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../agent/systemPrompt/soul.js";
-import { readMode } from "../../../persistence/mode.js";
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
   getOfficialDirectProviderBaseUrlVendor,
@@ -22,6 +21,7 @@ import {
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../persistence/config.js";
 import { applyIdentityPatch, readIdentity } from "../../../persistence/identity.js";
 import { type IdentityPatch, identityPatchSchema } from "../../../persistence/identitySchema.js";
+import { readMode } from "../../../persistence/mode.js";
 import type { ServeDeps } from "./context.js";
 
 export interface SettingsView {
