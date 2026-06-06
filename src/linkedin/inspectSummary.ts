@@ -119,19 +119,24 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   // approved outbound step is in_progress. The list ranking + category prefix make
   // "which button executes the approved outbound" unambiguous at the inspect surface.
   const clickables = deduped.filter((e) => CLICKABLE_ROLES.has(e.role));
-  const composerBtns = clickables.filter(isComposerButtonEntry);
-  const outboundBtns = clickables
+  // [P-75 D-11] Subject-scoped profile action controls (@pa*/@pm* synthesized refs from
+  // snapshotCapture) ALWAYS lead the button list — they are the profile subject's OWN
+  // Connect/Message/More/Follow, isolated from the sidebar "People you may know" invite/follow
+  // buttons the flat AX tree mixes in. Without this, the [OUTBOUND] promotion ranked a dozen
+  // sidebar "Invite <Other> to connect" buttons above the subject's own More (the path to Connect) —
+  // the D-11 mis-targeting root cause.
+  const isSubjectActionRef = (e: SnapshotEntry): boolean => /^@(pa|pm)\d/.test(e.ref);
+  const subjectBtns = clickables.filter(isSubjectActionRef);
+  const rest = clickables.filter((e) => !isSubjectActionRef(e));
+  const composerBtns = rest.filter(isComposerButtonEntry);
+  const outboundBtns = rest
     .filter((e) => !isComposerButtonEntry(e))
     .filter((e) => isOutboundActionEntry(e, ctx.surface));
-  const otherBtns = clickables.filter(
-    (e) => !isComposerButtonEntry(e) && !isOutboundActionEntry(e, ctx.surface),
-  );
-  const buttons = [...composerBtns, ...outboundBtns, ...otherBtns]
-    .slice(0, MAX_BUTTONS)
-    .map((e) => ({
-      ref: e.ref,
-      label: isOutboundActionEntry(e, ctx.surface) ? `[OUTBOUND] ${e.name}` : e.name,
-    }));
+  const otherBtns = rest.filter((e) => !isComposerButtonEntry(e) && !isOutboundActionEntry(e, ctx.surface));
+  const buttons = [...subjectBtns, ...composerBtns, ...outboundBtns, ...otherBtns].slice(0, MAX_BUTTONS).map((e) => ({
+    ref: e.ref,
+    label: isOutboundActionEntry(e, ctx.surface) ? `[OUTBOUND] ${e.name}` : e.name,
+  }));
 
   const inputs = deduped
     .filter((e) => INPUT_ROLES.has(e.role))

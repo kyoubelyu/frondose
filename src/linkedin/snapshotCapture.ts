@@ -148,6 +148,50 @@ const PROFILE_MORE_SYNTH_JS = `(() => {
   return JSON.stringify({ name, label: norm(pick.getAttribute('aria-label')||pick.innerText||'More') });
 })()`;
 
+// [P-75 D-11] The SUBJECT's primary action controls (Connect/Message/Follow/More), scoped to the
+// top card. Root cause this fixes (references/surface-profile.md:37): the profile Connect renders as
+// an <a> (role=link), and the flat AX tree mixes the subject's actions with a dozen sidebar
+// "People you may know" / "More profiles for you" invite/follow BUTTONS — so the agent was shown
+// "Invite Jason Adkins to connect" (a sidebar suggestion) ranked above the subject's own controls,
+// and the subject's Connect (a link, often behind "More") never surfaced. This synth isolates the
+// subject's action row via the h1 anchor (nav/aside excluded) and keeps only controls that reference
+// the subject by name OR are a bare top-level action — dropping the sidebar "Invite <Other>" noise.
+const PROFILE_ACTIONS_SYNTH_JS = `(() => {
+  const norm = (s) => (s||"").replace(/\\s+/g," ").trim();
+  const EXCL = "[role='banner'],[role='navigation'],nav,header,aside,[role='complementary']";
+  const m = document.title.match(/^(.+?)\\s*\\|\\s*LinkedIn\\b/);
+  const name = m ? (m[1].includes(' - ') ? m[1].split(' - ')[0] : m[1]).trim() : null;
+  if (!name) return JSON.stringify(null);
+  const headings = Array.from(document.querySelectorAll("h1,h2,h3"));
+  const h1 = headings.find(el => norm(el.innerText)===name && !el.closest(EXCL)) || headings.find(el => norm(el.innerText)===name);
+  if (!h1) return JSON.stringify(null);
+  // Climb from the h1 to the container that actually holds the action row (Connect/Message/More),
+  // staying within the top card and out of nav/aside.
+  let card = h1.closest('section') || h1.parentElement;
+  for (let k=0; k<3 && card && card.parentElement; k++) {
+    if (card.querySelector('button[aria-label*="More" i],a[aria-label*="connect" i],button[aria-label*="Message" i],a[aria-label*="Message" i]')) break;
+    card = card.parentElement;
+  }
+  if (!card) return JSON.stringify(null);
+  const ACTION_RE = /\\b(connect|invite\\b.*\\bto connect|message|more|follow|pending|following)\\b/i;
+  const BARE_RE = /^(connect|message|more|follow|pending|following)\\b/i;
+  const nameLc = name.toLowerCase();
+  const out = []; let i = 0;
+  const cands = Array.from(card.querySelectorAll('button,a[role="button"],a[aria-label]')).filter(el => !el.closest(EXCL));
+  for (const el of cands) {
+    const label = norm(el.getAttribute('aria-label') || el.innerText);
+    if (!label || label.length > 80 || !ACTION_RE.test(label)) continue;
+    const refsSubject = label.toLowerCase().includes(nameLc);
+    const bare = BARE_RE.test(label) && label.length < 40;
+    if (!refsSubject && !bare) continue; // drop sidebar "Invite <Other> to connect" / "Follow <Other>"
+    if (out.some(o => o.label === label)) continue;
+    i++; el.setAttribute('data-mai-pa', String(i));
+    const role = (el.tagName === 'A' && el.getAttribute('role') !== 'button') ? 'link' : 'button';
+    out.push({ i, role, label });
+  }
+  return JSON.stringify({ name, actions: out });
+})()`;
+
 /** Capture the current surface: AX snapshot + URL routing + (messaging) opener synthesis. */
 export async function captureCurrentSurfaceContext(client: CdpClient): Promise<CurrentSurfaceContext> {
   await client.snapshot();
@@ -176,6 +220,14 @@ export async function captureCurrentSurfaceContext(client: CdpClient): Promise<C
     if (pm.entries.length > 0) {
       entries.unshift(...pm.entries); // lead the list (survives MAX_TEXT truncation, like @pp)
       client.mergeRefs(pm.refs); // register so clickAt("@pm1") resolves (same lynchpin as overlay)
+    }
+    // [P-75 D-11] Surface the SUBJECT's scoped primary action controls (Connect-as-<a>/Message/Follow)
+    // ahead of the sidebar "People you may know" invite/follow noise that polluted the flat AX buttons
+    // and buried the subject's own Connect. Prepended LAST so these lead the entire list.
+    const pa = await synthesizeProfileActionEntries(client);
+    if (pa.entries.length > 0) {
+      entries.unshift(...pa.entries);
+      client.mergeRefs(pa.refs);
     }
   }
 
@@ -295,6 +347,43 @@ async function synthesizeFeedPostEntries(client: CdpClient): Promise<SnapshotEnt
 
 /** P-47 G-3: synthesize structured profile-card entries from the profile DOM.
  *  Best-effort — any extraction failure yields no entries (never throws). */
+/** [P-75 D-11] Resolve the subject's scoped primary action controls (Connect-as-link / Message /
+ *  Follow / More) to clickable refs. Mirrors synthesizeProfileMoreEntry: evaluate-mark → resolve each
+ *  marked node to a real backendNodeId via describeNode → register @pa{i} refs. Best-effort; never throws. */
+async function synthesizeProfileActionEntries(client: CdpClient): Promise<{ entries: SnapshotEntry[]; refs: RefMap }> {
+  let info: { name: string | null; actions: Array<{ i: number; role: string; label: string }> } | null = null;
+  try {
+    info = JSON.parse(await client.evaluate<string>(PROFILE_ACTIONS_SYNTH_JS));
+  } catch {
+    return { entries: [], refs: {} };
+  }
+  if (!info || !Array.isArray(info.actions) || info.actions.length === 0) return { entries: [], refs: {} };
+  const entries: SnapshotEntry[] = [];
+  const refs: RefMap = {};
+  for (const a of info.actions) {
+    try {
+      const nodeIds = await client.querySelectorAll(`[data-mai-pa="${a.i}"]`);
+      const nodeId = nodeIds[0];
+      if (typeof nodeId !== "number") continue;
+      const desc = await client.handle.DOM.describeNode({ nodeId });
+      const backendNodeId = desc.node?.backendNodeId;
+      if (typeof backendNodeId !== "number") continue;
+      const ref = `pa${a.i}`;
+      const role = a.role === "link" ? "link" : "button";
+      entries.push({ ref: `@${ref}`, role, name: a.label });
+      refs[ref] = { axNodeId: "", backendNodeId, role, name: a.label };
+    } catch {
+      // best-effort per action
+    }
+  }
+  try {
+    await client.evaluate("document.querySelectorAll('[data-mai-pa]').forEach(e=>e.removeAttribute('data-mai-pa'));");
+  } catch {
+    // best-effort cleanup
+  }
+  return { entries, refs };
+}
+
 async function synthesizeProfileEntries(client: CdpClient): Promise<SnapshotEntry[]> {
   let p: ProfileCardRaw | null = null;
   try {
