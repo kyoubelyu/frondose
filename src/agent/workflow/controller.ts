@@ -158,12 +158,8 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     if (continuationPrior === null && prior !== null) {
       const sameTitle = prior.title === result.workflowTitle && !terminalWorkflowIds.has(prior.id);
       if (sameTitle) {
-        const priorApprovedTitles = new Set(
-          prior.steps.filter((s) => approvedStepIds.has(s.id)).map((s) => s.title),
-        );
-        const priorCompletedTitles = new Set(
-          prior.steps.filter((s) => s.state === "completed").map((s) => s.title),
-        );
+        const priorApprovedTitles = new Set(prior.steps.filter((s) => approvedStepIds.has(s.id)).map((s) => s.title));
+        const priorCompletedTitles = new Set(prior.steps.filter((s) => s.state === "completed").map((s) => s.title));
         approvedStepIds.clear();
         for (const newStep of wf.steps) {
           if (priorApprovedTitles.has(newStep.title)) {
@@ -438,8 +434,7 @@ export function createWorkflowController(deps: WorkflowControllerDeps): Workflow
     // outbound button. List the OUTBOUND_LABEL_RE labels explicitly so the model has
     // the targets in front of it instead of guessing from prose.
     const isOutboundStep =
-      step.requiresApproval &&
-      /(send|connect|invite|message|dm|note|comment|post|follow)/i.test(step.title);
+      step.requiresApproval && /(send|connect|invite|message|dm|note|comment|post|follow)/i.test(step.title);
     const outboundExtra = isOutboundStep
       ? ` THIS STEP IS THE OUTBOUND ACTION. Do NOT navigate, do NOT search, do NOT re-qualify, do NOT save another draft. ` +
         `Your VERY FIRST tool call MUST be \`inspect\` on the current page (no \`navigate_to_url\`). ` +
