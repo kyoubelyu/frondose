@@ -1,6 +1,6 @@
 [package]
 name = "mai-tauri"
-version = "0.5.0-alpha.44"
+version = "0.5.0-alpha.45"
 description = "mai-agent v0.5 hover-pivot Tauri shell (M-1 demo skeleton)"
 edition = "2021"
 rust-version = "1.75"
