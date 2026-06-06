@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../../../agent/loop.js";
+import { runAgentLoopPi } from "../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../persistence/audit.js";
 import { getCurrentAutoRun } from "../../../persistence/salesDb.js";
@@ -152,10 +153,15 @@ export function createTurnRunner(
         ? (Object.fromEntries(Object.entries(deps.tools).filter(([n]) => !RESUME_EXCLUDED_TOOLS.has(n))) as ToolSet)
         : deps.tools;
       // [P-75 D-13 dbg] log the filtered tools count
+      // [P-PI Gate 3] Runtime selector — MAI_AGENT_RUNTIME=pi swaps the Vercel loop for the Pi
+      // loop (drop-in AgentLoopOpts). Defaults to the Vercel loop so production is unchanged
+      // until the Pi path passes its live gates. Both honor abortSignal + raced.ts (loop-agnostic).
+      const usePi = process.env.MAI_AGENT_RUNTIME === "pi";
+      const runLoop = usePi ? runAgentLoopPi : runAgentLoop;
       turnDbg(
-        `[runOneTurn] turnId=${turnId} isWorkflowResume=${args.isWorkflowResume} filteredTools.size=${Object.keys(filteredTools).length} (vs full=${Object.keys(deps.tools).length})`,
+        `[runOneTurn] turnId=${turnId} runtime=${usePi ? "pi" : "vercel"} isWorkflowResume=${args.isWorkflowResume} filteredTools.size=${Object.keys(filteredTools).length} (vs full=${Object.keys(deps.tools).length})`,
       );
-      await runAgentLoop({
+      await runLoop({
         model: deps.model,
         system: args.isWorkflowResume ? deps.systemResume : deps.system,
         messages: state.messages,
