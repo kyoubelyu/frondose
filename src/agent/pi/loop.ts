@@ -57,8 +57,26 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
         { apiKey, signal: opts.abortSignal, onPayload },
       );
       count++;
-      piMessages.push(assistant);
-      newCore.push(piAssistantToCore(assistant));
+
+      // [PI-LOOP-1] pi-ai does NOT throw on a provider error — it RETURNS an AssistantMessage with
+      // stopReason='error' (e.g. the DeepSeek 400 schema reject). Surface it like the Vercel D-25 path:
+      // throw so turn.ts's catch writes an llm_error audit row + emits the SSE error frame, instead of
+      // silently looping. Thrown BEFORE persisting the empty assistant (PI-LOOP-2) and before the retry
+      // gate (PI-LOOP-3 — no wasted second call on the same broken request).
+      if (assistant.stopReason === "error" && !opts.abortSignal?.aborted) {
+        const err = new Error(
+          assistant.errorMessage || "LLM call returned stopReason='error' (no content, no tool calls)",
+        );
+        err.name = "LlmCallError";
+        throw err;
+      }
+
+      // [PI-LOOP-2] Only persist an assistant that carries content/tool-calls. An error/aborted turn
+      // yields content=[] — persisting it pollutes the transcript and risks a 400 on the next turn.
+      if (assistant.content.length > 0) {
+        piMessages.push(assistant);
+        newCore.push(piAssistantToCore(assistant));
+      }
 
       for (const c of assistant.content) {
         if (c.type === "text" && c.text) opts.onText?.(c.text);
@@ -116,16 +134,23 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   }
 }
 
-/** Convert a synthetic CoreMessage user-continuation to a Pi UserMessage. */
+/** Convert a synthetic CoreMessage user-continuation (always a string) to a Pi UserMessage. */
 function coreUserToPi(msg: CoreMessage): PiMessage {
   const content = typeof msg.content === "string" ? msg.content : "";
   return { role: "user", content, timestamp: Date.now() };
 }
 
+/**
+ * [MA-1] Parse a tool-result text back to its envelope ONLY when it is genuinely structured
+ * (object/array). A bare JSON-valid scalar — a quoted string, a numeric-overflow string like
+ * "1e999" (→ null), a bare number — must stay the original string, or the round-trip corrupts
+ * the tool output that turn.ts + the re-sent DeepSeek history read.
+ */
 function parseToolResult(tr: ToolResultMessage): unknown {
   const text = tr.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   try {
-    return JSON.parse(text);
+    const v = JSON.parse(text);
+    return v && typeof v === "object" ? v : text;
   } catch {
     return text;
   }
