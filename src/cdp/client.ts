@@ -1,6 +1,7 @@
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
 import { waitForPageTarget } from "./launcher.js";
+import { raceCdp } from "./raced.js";
 import { getSnapshot } from "./snapshot.js";
 import type {
   CdpHandle,
@@ -32,6 +33,14 @@ export function borderQuadToBox(border: number[]): { x: number; y: number; w: nu
   return { x: x0, y: y0, w: x1 - x0, h: y2 - y0 };
 }
 
+/** [P-75 P-WEDGE-1] Per-CDP-call deadline. Set well above a healthy call (a heavy
+ *  LinkedIn getFullAXTree is single-digit seconds; navigate's own load wait is the
+ *  separate 30s waitForLoad timeout) so it never false-positives on a slow-but-live
+ *  page, but finite so a hung call can never pend forever → the permanent-wedge fix.
+ *  The turn abort signal (D-16 cap / D-27 silent-hang / operator abort) interrupts
+ *  in-flight calls EARLIER when wired; this deadline is the unconditional backstop. */
+const CDP_CALL_DEADLINE_MS = 45_000;
+
 /** Typed wrapper around chrome-remote-interface's dynamic CDP client. */
 export class CdpClient {
   private readonly client: CdpHandle;
@@ -39,9 +48,30 @@ export class CdpClient {
   /** [P-62 F-1] Set ONLY by injectStealth(client) after Page.addScriptToEvaluateOnNewDocument
    *  registers STEALTH_INIT_SCRIPT on this target. navigate() asserts it before any nav. */
   private stealthInjected = false;
+  /** [P-75 P-WEDGE-1] Turn-scoped abort signal. Set by the session at turn start
+   *  (and applied to a client booted mid-turn), cleared at turn end. When present,
+   *  raced CDP calls reject immediately on abort instead of waiting out the deadline. */
+  private turnSignal?: AbortSignal;
 
   private constructor(client: CdpHandle) {
     this.client = client;
+  }
+
+  /** [P-75 P-WEDGE-1] Wire/clear the current turn's abort signal. Idempotent; pass
+   *  undefined to clear at turn end. */
+  setTurnAbortSignal(signal?: AbortSignal): void {
+    this.turnSignal = signal;
+  }
+
+  /** [P-75 P-WEDGE-1] Race a raw CDP promise against the per-call deadline + the
+   *  current turn abort signal. The single choke-point every hangable CDP call
+   *  routes through, so no individual call can pend forever (the unattended wedge).
+   *  Param/return are `any` to preserve the existing CdpHandle (=any, types.ts:8)
+   *  bleed — a generic `<T>` would collapse the untyped CDP result to `unknown` and
+   *  break every call site's property access. */
+  // biome-ignore lint/suspicious/noExplicitAny: mirrors CdpHandle=any (types.ts:8); generic would force unknown at every call site.
+  private race(p: Promise<any>, label: string): Promise<any> {
+    return raceCdp(p, { label, deadlineMs: CDP_CALL_DEADLINE_MS, signal: this.turnSignal });
   }
 
   /** Connect to a Chrome on the given port (default page target). */
@@ -83,8 +113,8 @@ export class CdpClient {
     if (!this.stealthInjected) {
       throw new Error("navigate: stealth not injected — call injectStealth(client) first");
     }
-    await this.client.Page.enable();
-    const r = await this.client.Page.navigate({ url });
+    await this.race(this.client.Page.enable(), "Page.enable");
+    const r = await this.race(this.client.Page.navigate({ url }), "Page.navigate");
     if (r.errorText) throw new Error(`navigate failed: ${r.errorText}`);
     await waitForLoad(this.client, waitUntil ?? "load");
   }
@@ -109,10 +139,13 @@ export class CdpClient {
     const entry = this.refMap[refKey];
     if (!entry) return { matches: false };
     try {
-      const r = (await this.client.Accessibility.getPartialAXTree({
-        backendNodeId: entry.backendNodeId,
-        fetchRelatives: false,
-      })) as { nodes?: Array<{ role?: { value?: string }; name?: { value?: string }; ignored?: boolean }> };
+      const r = (await this.race(
+        this.client.Accessibility.getPartialAXTree({
+          backendNodeId: entry.backendNodeId,
+          fetchRelatives: false,
+        }),
+        "Accessibility.getPartialAXTree",
+      )) as { nodes?: Array<{ role?: { value?: string }; name?: { value?: string }; ignored?: boolean }> };
       const node = r.nodes?.find((n) => !n.ignored) ?? r.nodes?.[0];
       const currentRole = node?.role?.value;
       const currentName = node?.name?.value;
@@ -136,33 +169,42 @@ export class CdpClient {
       if (!entry) throw new Error(`clickAt: ref @${refKey} not found in current snapshot`);
       backendNodeId = entry.backendNodeId;
     } else {
-      const doc = await this.client.DOM.getDocument({ depth: 0 });
-      const r = await this.client.DOM.querySelectorAll({
-        nodeId: doc.root.nodeId,
-        selector: selectorOrRef,
-      });
+      const doc = await this.race(this.client.DOM.getDocument({ depth: 0 }), "DOM.getDocument");
+      const r = await this.race(
+        this.client.DOM.querySelectorAll({
+          nodeId: doc.root.nodeId,
+          selector: selectorOrRef,
+        }),
+        "DOM.querySelectorAll",
+      );
       const first = r.nodeIds?.[0];
       if (typeof first !== "number") throw new Error(`clickAt: selector ${selectorOrRef} matched no element`);
       nodeId = first;
     }
     const arg = backendNodeId !== undefined ? { backendNodeId } : { nodeId };
-    const box = await this.client.DOM.getBoxModel(arg);
+    const box = await this.race(this.client.DOM.getBoxModel(arg), "DOM.getBoxModel");
     const { x, y } = center(box.model.border);
-    await this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x, y });
-    await this.client.Input.dispatchMouseEvent({
-      type: "mousePressed",
-      x,
-      y,
-      button: "left",
-      clickCount: 1,
-    });
-    await this.client.Input.dispatchMouseEvent({
-      type: "mouseReleased",
-      x,
-      y,
-      button: "left",
-      clickCount: 1,
-    });
+    await this.race(this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x, y }), "Input.mouseMoved");
+    await this.race(
+      this.client.Input.dispatchMouseEvent({
+        type: "mousePressed",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      }),
+      "Input.mousePressed",
+    );
+    await this.race(
+      this.client.Input.dispatchMouseEvent({
+        type: "mouseReleased",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      }),
+      "Input.mouseReleased",
+    );
   }
 
   /** P-Y2.3: resolve an element's viewport box for the takeover highlight. Same resolution as clickAt
@@ -176,33 +218,39 @@ export class CdpClient {
       if (!entry) throw new Error(`getBox: ref @${refKey} not found in current snapshot`);
       backendNodeId = entry.backendNodeId;
     } else {
-      const doc = await this.client.DOM.getDocument({ depth: 0 });
-      const r = await this.client.DOM.querySelectorAll({ nodeId: doc.root.nodeId, selector: selectorOrRef });
+      const doc = await this.race(this.client.DOM.getDocument({ depth: 0 }), "DOM.getDocument");
+      const r = await this.race(
+        this.client.DOM.querySelectorAll({ nodeId: doc.root.nodeId, selector: selectorOrRef }),
+        "DOM.querySelectorAll",
+      );
       const first = r.nodeIds?.[0];
       if (typeof first !== "number") throw new Error(`getBox: selector ${selectorOrRef} matched no element`);
       nodeId = first;
     }
     const arg = backendNodeId !== undefined ? { backendNodeId } : { nodeId };
-    const box = await this.client.DOM.getBoxModel(arg);
+    const box = await this.race(this.client.DOM.getBoxModel(arg), "DOM.getBoxModel");
     return borderQuadToBox(box.model.border as number[]);
   }
 
   async typeAt(selectorOrRef: string, text: string): Promise<void> {
     await this.clickAt(selectorOrRef);
-    await this.client.Input.insertText({ text });
+    await this.race(this.client.Input.insertText({ text }), "Input.insertText");
   }
 
   async pressKey(key: string): Promise<void> {
-    await this.client.Input.dispatchKeyEvent({ type: "keyDown", key });
-    await this.client.Input.dispatchKeyEvent({ type: "keyUp", key });
+    await this.race(this.client.Input.dispatchKeyEvent({ type: "keyDown", key }), "Input.keyDown");
+    await this.race(this.client.Input.dispatchKeyEvent({ type: "keyUp", key }), "Input.keyUp");
   }
 
   async evaluate<T>(expression: string): Promise<T> {
-    const r = await this.client.Runtime.evaluate({
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
+    const r = await this.race(
+      this.client.Runtime.evaluate({
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+      }),
+      "Runtime.evaluate",
+    );
     if (r.exceptionDetails) {
       throw new Error(`evaluate threw: ${r.exceptionDetails.text ?? "unknown"}`);
     }
@@ -210,27 +258,30 @@ export class CdpClient {
   }
 
   async screenshot(opts: ScreenshotOptions = {}): Promise<string> {
-    const r = await this.client.Page.captureScreenshot({
-      format: opts.format ?? "png",
-      quality: opts.quality,
-    });
+    const r = await this.race(
+      this.client.Page.captureScreenshot({
+        format: opts.format ?? "png",
+        quality: opts.quality,
+      }),
+      "Page.captureScreenshot",
+    );
     return r.data as string;
   }
 
   async reload(): Promise<void> {
-    await this.client.Page.reload({});
+    await this.race(this.client.Page.reload({}), "Page.reload");
   }
 
   async closeTab(): Promise<void> {
-    await this.client.Page.close();
+    await this.race(this.client.Page.close(), "Page.close");
   }
 
   async closeBrowser(): Promise<void> {
-    await this.client.Browser.close();
+    await this.race(this.client.Browser.close(), "Browser.close");
   }
 
   async snapshot(opts?: SnapshotOptions): Promise<Snapshot> {
-    const result = await getSnapshot(this.client, opts);
+    const result = await getSnapshot(this.client, opts, (p, label) => this.race(p, label));
     this.refMap = result.refs;
     return result;
   }

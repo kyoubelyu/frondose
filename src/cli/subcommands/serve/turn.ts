@@ -65,6 +65,13 @@ export function createTurnRunner(
 } {
   async function runOneTurn(args: TurnArgs): Promise<void> {
     const { turnId, abortController } = args;
+    // [P-75 P-WEDGE-1] Wire this turn's abort signal into the CDP layer so the D-16
+    // cap watcher, the D-27 silent-hang watcher, and operator /agent/abort can
+    // interrupt an in-flight (otherwise un-abortable) chrome-remote-interface call.
+    // Stored on the session so a client booted mid-turn inherits it; the per-call
+    // deadline is the unconditional backstop even before any signal fires. Cleared
+    // in finally so a later turn never inherits a stale aborted signal.
+    deps.session.setTurnAbortSignal(abortController.signal);
     const ctxId0 = state.overlayContextId;
     const client0 = deps.session.getClient();
     if (ctxId0 !== undefined && client0) {
@@ -142,9 +149,7 @@ export function createTurnRunner(
       // (and succeeded). Subsetting the tools registry itself is foolproof: the model
       // literally cannot see a tool that isn't in the tools object.
       const filteredTools: ToolSet = args.isWorkflowResume
-        ? (Object.fromEntries(
-            Object.entries(deps.tools).filter(([n]) => !RESUME_EXCLUDED_TOOLS.has(n)),
-          ) as ToolSet)
+        ? (Object.fromEntries(Object.entries(deps.tools).filter(([n]) => !RESUME_EXCLUDED_TOOLS.has(n))) as ToolSet)
         : deps.tools;
       // [P-75 D-13 dbg] log the filtered tools count
       turnDbg(
@@ -278,11 +283,7 @@ export function createTurnRunner(
       // from "agent's LLM call failed" without scraping process logs. With this row,
       // every operator-facing audit reader (the in-app log panel, downstream analytics,
       // dogfood scripts) sees the failure surfaced as a first-class event.
-      const turnKind = args.isWorkflowResume
-        ? "workflow_resume"
-        : args.isCronTurn
-          ? "cron"
-          : "operator";
+      const turnKind = args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator";
       // Try to extract an HTTP status from common SDK error shapes (AI SDK propagates
       // upstream status via .status, .statusCode, or .cause.status). Best-effort.
       const errAny = e as { status?: number; statusCode?: number; cause?: { status?: number } } | null;
@@ -307,6 +308,7 @@ export function createTurnRunner(
     } finally {
       clearInterval(capWatcher); // [P-75 D-16] stop the auto-run cap watcher
       clearInterval(silentHangWatcher); // [P-75 D-27] stop the silent-hang watcher
+      deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
       hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     }
   }

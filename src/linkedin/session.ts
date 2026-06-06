@@ -118,6 +118,9 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
   let initPromise: Promise<CdpClient> | undefined;
   let lastContext: CurrentSurfaceContext | undefined;
   let visualDriver: ((fnDeclaration: string) => boolean) | undefined;
+  // [P-75 P-WEDGE-1] Turn abort signal, stored on the session so a client booted
+  // mid-turn inherits it (the cached client may be undefined at turn start).
+  let turnSignal: AbortSignal | undefined;
 
   // P-32: resolve the effective input mode ONCE at session creation
   // (graceful downgrade to "cdp" — D-4).
@@ -149,6 +152,8 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
         }
         // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
         const client = await CdpClient.connect(handle.port);
+        // [P-75 P-WEDGE-1] A client booted mid-turn inherits the current turn signal.
+        client.setTurnAbortSignal(turnSignal);
         await injectStealth(client);
         // [P-62 OQ-5] Auto-inject stealth on EVERY new page target (popups, OAuth windows, new
         // tabs). Without this, addScriptToEvaluateOnNewDocument's per-target/per-session scope
@@ -189,6 +194,12 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
 
     getClient(): CdpClient | undefined {
       return cached;
+    },
+
+    setTurnAbortSignal(signal?: AbortSignal): void {
+      // [P-75 P-WEDGE-1] store for mid-turn boots + apply to the live client now.
+      turnSignal = signal;
+      cached?.setTurnAbortSignal(signal);
     },
 
     setLastContext(ctx: CurrentSurfaceContext): void {
