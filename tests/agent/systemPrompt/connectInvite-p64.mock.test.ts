@@ -60,18 +60,71 @@ describe("T-P64 — P-64 checkpoint F1 directive: preload-URL connect-invite wor
   });
 
   // ─── T-P64.4 ─────────────────────────────────────────────────────────────────
-  it("T-P64.4 (G-P64.2): CHECKPOINT.length is within [4350, 4400] — post-edit estimate 4392 (4350-4400 band; upper cap load-bearing)", () => {
-    // Given: CHECKPOINT imported from checkpoint.ts
-    //        Pre-edit baseline: 4386 chars (post-P-SP-E cherry-pick; 2026-05-27)
-    //        Net delta: TRIM A (−42) + TRIM B (−71) + TRIM C (−63) + INSERT F1 (+182) = +6
-    //        Post-edit estimate: 4392 (architect-measured 2026-05-27 via live probe)
-    //        Upper cap 4400: Boundary band design intent — keeps Checkpoint readable at every turn
-    //        Lower bound 4350: loose-bracket regression catch (accidental content deletion)
+  it("T-P64.4 (G-P64.2): CHECKPOINT.length is within [4900, 5100] — Phase 9 raised the cap from [4350, 4400] to fit the no-note fallback directive", () => {
+    // Given: CHECKPOINT imported from checkpoint.ts.
+    //        Phase-9 (2026-06-08) added the No-note autonomous fallback directive
+    //        (operator pre-authorizes degradation when with-note Send fails) — this
+    //        is a load-bearing safety contract that earned a cap raise. Post-edit:
+    //        ~5014 chars. New band [4900, 5100] — same regression-bracket pattern
+    //        as the pre-Phase-9 [4350, 4400] band, just centered around the new mass.
     // When:  CHECKPOINT.length measured
-    // Then:  4350 <= CHECKPOINT.length <= 4400
+    // Then:  4900 <= CHECKPOINT.length <= 5100
     const len = CHECKPOINT.length;
-    assert.ok(len >= 4350, `T-P64.4: CHECKPOINT.length must be >= 4350 (lower regression bracket); got ${len}`);
-    assert.ok(len <= 4400, `T-P64.4: CHECKPOINT.length must be <= 4400 (upper budget cap); got ${len}`);
+    assert.ok(len >= 4900, `T-P64.4: CHECKPOINT.length must be >= 4900 (lower regression bracket); got ${len}`);
+    assert.ok(len <= 5100, `T-P64.4: CHECKPOINT.length must be <= 5100 (upper budget cap, post-Phase-9 raise); got ${len}`);
+  });
+
+  // ─── T-P9.1 + T-P9.2: no-note autonomous fallback (Phase 9) ─────────────────
+  it("T-P9.1 (Phase 9): CHECKPOINT contains 'No-note fallback' directive — agent autonomously sends without-a-note when with-note path fails", () => {
+    // Given: operator's outbound approval is meant to cover BOTH the with-note send
+    //        AND the no-note fallback (per operator directive 2026-06-08). The agent
+    //        must not block the lead on humans-in-loop when quota/modal issues defeat
+    //        the personalized path.
+    // When:  CHECKPOINT searched for the fallback directive
+    // Then:  the substring 'No-note fallback' is present
+    assert.ok(
+      CHECKPOINT.includes("No-note fallback"),
+      `T-P9.1: CHECKPOINT must contain 'No-note fallback' directive — operator pre-authorizes the degradation path; CHECKPOINT.length=${CHECKPOINT.length}`,
+    );
+  });
+
+  it("T-P9.2 (Phase 9): no-note fallback names the specific failure triggers (Send invitation not findable / quota / modal variant) and the recovery actions (mark_message_sent + update_lead_stage + telegram_notify)", () => {
+    // Given: the fallback directive must be specific enough that an LLM can recognize
+    //        the failure mode AND knows what to do post-recovery. Loose hand-waving like
+    //        "try harder" would not unblock the actual hazards (quota, modal variant).
+    // When:  CHECKPOINT inspected for the specific failure-recovery vocabulary
+    // Then:  all three failure triggers + all three recovery actions are present
+    const triggers = ["not findable", "quota", "unfamiliar variant"];
+    const recoveries = ["mark_message_sent", "update_lead_stage", "telegram_notify"];
+    for (const t of triggers) {
+      assert.ok(
+        CHECKPOINT.includes(t),
+        `T-P9.2: CHECKPOINT must name failure trigger "${t}" — vague directives don't reliably activate the fallback`,
+      );
+    }
+    for (const r of recoveries) {
+      assert.ok(
+        CHECKPOINT.includes(r),
+        `T-P9.2: CHECKPOINT must name recovery action "${r}" — without it the agent could send the invite and forget to close the DB loop`,
+      );
+    }
+  });
+
+  it("T-P9.3 (Phase 9): no-note fallback explicitly forbids paraphrased / agent-rewritten text via raw type+click (preserves the brand-safety fence)", () => {
+    // Given: the type-fidelity guard at src/tools/browser/type.ts is the load-bearing
+    //        defense against the Linfeng-class rewrite hazard. The fallback directive
+    //        could be misread as "anything goes once with-note fails" — explicitly
+    //        forbid the paraphrase path in the same paragraph.
+    // When:  CHECKPOINT inspected for the explicit forbid
+    // Then:  the paraphrase-forbid clause is present
+    assert.ok(
+      CHECKPOINT.includes("paraphrased") || CHECKPOINT.includes("agent-rewritten"),
+      `T-P9.3: CHECKPOINT must explicitly forbid paraphrased/agent-rewritten text in the fallback paragraph — without this the fallback could be misread as license to rewrite`,
+    );
+    assert.ok(
+      CHECKPOINT.includes("text-fidelity guard"),
+      `T-P9.3: CHECKPOINT must reference the text-fidelity guard as the load-bearing fence — connects the directive to the actual enforcement code`,
+    );
   });
 
   // ─── T-P64.5 ─────────────────────────────────────────────────────────────────
