@@ -20,11 +20,12 @@ import { LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js
  *  this port restores that property so the agent can do plain inspect → type → click(Send)
  *  without a dedicated `linkedin_connect` primitive (which was brittle to UI variance). Retries
  *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
-async function resolveByLabelWithRetry(
-  session: LinkedinSession,
+export async function resolveByLabelWithRetry(
+  session: { getLastContext: () => { entries: SnapshotEntry[] } | undefined },
   label: string,
   scope: string | undefined,
   capture: () => Promise<{ entries: SnapshotEntry[] }>,
+  opts: { timeoutMs?: number; stepMs?: number } = {},
 ): Promise<SnapshotEntry> {
   const ctx0 = session.getLastContext();
   if (ctx0) {
@@ -35,11 +36,19 @@ async function resolveByLabelWithRetry(
       if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
     }
   }
-  const deadline = Date.now() + 3000;
+  const deadline = Date.now() + (opts.timeoutMs ?? 3000);
+  const stepMs = opts.stepMs ?? 300;
   let lastErr: unknown = new Error(`click: no label '${label}' visible`);
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 300));
-    const fresh = await capture();
+    await new Promise((r) => setTimeout(r, stepMs));
+    let fresh: { entries: SnapshotEntry[] };
+    try {
+      fresh = await capture();
+    } catch (e) {
+      // Transient CDP/AX failure mid-retry — keep trying. The deadline acts as the backstop.
+      lastErr = e;
+      continue;
+    }
     try {
       return resolveByLabel(fresh.entries, label, { kind: "click", scope });
     } catch (e) {
