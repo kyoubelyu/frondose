@@ -10,7 +10,8 @@ import { getSalesDb } from "../sales/_dbHandle.js";
 
 const NOTE_FIELD_RE = /note|message|备注|附言|留言/i;
 const ADD_NOTE_RE = /add\s+a?\s*note|^note$|添加备注|添加附言/i;
-const SEND_BTN_RE = /^(send( invitation| invite| now)?|send\s+without\s+a?\s*note|发送(邀请)?|直接发送|无备注发送|不留言)\s*$/i;
+const SEND_BTN_RE =
+  /^(send( invitation| invite| now)?|send\s+without\s+a?\s*note|发送(邀请)?|直接发送|无备注发送|不留言)\s*$/i;
 const CLICKABLE = new Set(["button", "link", "menuitem", "MenuItem"]);
 const TEXTBOX = new Set(["textbox", "textarea", "TextBox"]);
 
@@ -67,9 +68,7 @@ function latestDraftTextForCurrentLead(pageUrl: string | undefined): string | nu
     const db = getSalesDb(dbPath);
     const candidateRow = db
       .prepare("SELECT id FROM raw_candidates WHERE profile_url = ? OR profile_url = ?")
-      .get(`https://www.linkedin.com/in/${slug}/`, `https://www.linkedin.com/in/${slug}`) as
-      | { id: string }
-      | undefined;
+      .get(`https://www.linkedin.com/in/${slug}/`, `https://www.linkedin.com/in/${slug}`) as { id: string } | undefined;
     if (!candidateRow) return null;
     const leadRow = db.prepare("SELECT id FROM leads WHERE candidate_id = ?").get(candidateRow.id) as
       | { id: string }
@@ -184,8 +183,7 @@ export function makeTypeTool(session: LinkedinSession) {
             );
           }
           if (text !== expected) {
-            const preview = (s: string): string =>
-              s.length > 80 ? `${s.slice(0, 38)}…${s.slice(-38)}` : s;
+            const preview = (s: string): string => (s.length > 80 ? `${s.slice(0, 38)}…${s.slice(-38)}` : s);
             return fail(
               "type",
               "invalid_input",
