@@ -48,6 +48,10 @@ function makeFakeCdpClient(): { client: CdpClient; clickAtCalled: string[] } {
     },
     scroll: async () => {},
     pressKey: async () => {},
+    // [P-75 D-17] click.ts checks ref staleness via verifyRef before dispatch — fake must provide it.
+    async verifyRef(_refKey: string, _expected: { role: string; name?: string }) {
+      return { matches: true };
+    },
   } as unknown as CdpClient;
   return { client, clickAtCalled };
 }

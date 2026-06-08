@@ -41,6 +41,10 @@ function makeMockSession(opts: {
       if (clickAtSpy) clickAtSpy.called = true;
     },
     getBox: async () => ({ x: 0, y: 0, width: 10, height: 10 }),
+    // [P-75 D-17] CdpClient.verifyRef stub — click.ts checks ref staleness before dispatch.
+    // The fake client must provide it or click returns runtime_error: 'verifyRef is not a function'.
+    // Default behavior: matches=true (no staleness), so cap-guard test stays focused on cap logic.
+    verifyRef: async (_refKey: string, _expected: { role: string; name?: string }) => ({ matches: true }),
   };
 
   return {
