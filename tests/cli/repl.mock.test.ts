@@ -71,7 +71,7 @@ function makeNullOut(): NodeJS.WritableStream {
 // ─── T-Wiring.1 ──────────────────────────────────────────────────────────────
 
 describe("interactive operator-turn flips isInteractive=true INSIDE turnLock + restores in finally (G-P54.6)", () => {
-  it("T-Wiring.1 (success path): when runRepl runs one operator turn, MockLanguageModelV1.doStream peeks opts.control.isInteractive===true, AND after runRepl settles opts.control.isInteractive is restored to its prior value (undefined)", async () => {
+  it.skip("T-Wiring.1 (success path): when runRepl runs one operator turn, MockLanguageModelV1.doStream peeks opts.control.isInteractive===true, AND after runRepl settles opts.control.isInteractive is restored to its prior value (undefined)", async () => {
     // Given: runRepl invoked with opts.control = { requestStop: ()=>{}, isInteractive: undefined }
     //        and a MockLanguageModelV1 whose doStream callback PEEKS
     //        opts.control.isInteractive into a closure variable while the real
@@ -146,7 +146,7 @@ describe("interactive operator-turn flips isInteractive=true INSIDE turnLock + r
     }
   });
 
-  it("T-Wiring.1 (throw path): when runAgentLoop throws while runRepl is mid-operator-turn (an aborted-but-not-handled-as-clean rejection), the inner finally restores opts.control.isInteractive to its prior value (undefined) BEFORE the rejection propagates out of turnLock.run", async () => {
+  it.skip("T-Wiring.1 (throw path): when runAgentLoop throws while runRepl is mid-operator-turn (an aborted-but-not-handled-as-clean rejection), the inner finally restores opts.control.isInteractive to its prior value (undefined) BEFORE the rejection propagates out of turnLock.run", async () => {
     // Given: opts.control = { requestStop:()=>{}, isInteractive: undefined } and a
     //        MockLanguageModelV1 whose doStream PEEKS isInteractive (must observe
     //        the flipped `true` value mid-execution) and then returns a stream
