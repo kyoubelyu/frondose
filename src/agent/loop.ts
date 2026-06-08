@@ -1,45 +1,29 @@
-import { type CoreMessage, type FinishReason, type LanguageModel, type StepResult, streamText, type ToolSet } from "ai";
-import { DEFAULT_MAX_STEPS } from "./maxSteps.js";
+import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 
-/** P-46 D-2: fraction of the step budget consumed before the soft warning fires. */
-const WARN_FRACTION = 0.8;
-
+/**
+ * AgentLoopOpts — the stable contract every caller passes in (kept after the P-PI cutover so
+ * the three call sites — src/index.ts, serve/turn.ts, serve/passive.ts — don't have to change).
+ * Pi (runAgentLoopPi) ignores opts.model and resolves DeepSeek from env/secrets; the rest of the
+ * shape (system / messages / tools / callbacks / abortSignal) maps 1:1.
+ */
 export interface AgentLoopOpts {
   model: LanguageModel;
   system: string;
   messages: CoreMessage[];
   tools: ToolSet;
   activeTools?: string[];
-  /** Called for each text-delta chunk. Optional. */
+  /** Called for each text chunk. Optional. */
   onText?: (delta: string) => void;
   /** Max LLM round-trips for tool-call loops. Default 200 (P-46 D-1). */
   maxSteps?: number;
   /** Abort signal for graceful cancellation (P-1; reused by P-6 stop tool). */
   abortSignal?: AbortSignal;
-  /** Vercel onStepFinish hook — fires after each LLM step. Used by audit writer (P-6). */
+  /** Fires after each LLM step — used by the P-6 audit writer + turn.ts overlay/workflow handlers. */
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
   /** Informational callback; the actual abort happens via abortSignal. Reserved for future use (P-6). */
   onStopRequested?: () => void;
   /** P-56b: fires when the model starts a tool call before execution. */
   onToolCall?: (toolName: string) => void;
-}
-
-/**
- * P-46 D-2: step-budget warning injected as a `user` turn between Phase 1 and
- * Phase 2 when Phase 1 was cut off mid-task. Deliberately distinct from the
- * Checkpoint band's token-limit / compaction guidance — this is a step-count
- * limit. Reuses the Checkpoint convention of reporting via `telegram_notify`.
- */
-function budgetWarningMessage(remaining: number): CoreMessage {
-  return {
-    role: "user",
-    content:
-      `[STEP-BUDGET WARNING] About ${remaining} tool-call steps remain before this turn is ` +
-      `force-ended. This is a step-count limit, not a context/token limit. Do NOT start new ` +
-      `sub-tasks. Either complete the current action now, or stop and report your current ` +
-      `progress and what still remains. Before the turn ends, call telegram_notify with the ` +
-      `outcome (done / partial / blocked) so the operator is informed.`,
-  };
 }
 
 /**
@@ -152,104 +136,19 @@ export function stalledContinueMessage(): CoreMessage {
  *
  * Caller is responsible for persisting the new messages after this resolves.
  */
+/**
+ * [P-PI cutover] runAgentLoop is now a thin delegate to runAgentLoopPi — the Vercel AI SDK
+ * `streamText` path has been removed. Pi (DeepSeek via openai-completions) is THE loop;
+ * `opts.model` is ignored (Pi resolves DeepSeek from env/secrets). Kept as a function so the
+ * three existing callers (src/index.ts SDK wrapper, src/cli/subcommands/serve/turn.ts,
+ * src/cli/subcommands/serve/passive.ts) don't have to change. The D-12/D-22 retry detectors
+ * exported above are shared with runAgentLoopPi. The D-25 finishReason='error' synthetic-throw
+ * hack is GONE — Pi natively throws LlmCallError on stopReason='error' (PI-LOOP-1). The D-2
+ * two-phase budget warning was a Vercel-specific workaround for the lack of mid-loop hooks; it
+ * is a recorded follow-up (PI-LOOP-4) to port into runAgentLoopPi when long-Auto-turn cases
+ * actually need it.
+ */
 export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
-  const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
-  const softCap = Math.max(1, Math.floor(maxSteps * WARN_FRACTION));
-  const remaining = maxSteps - softCap;
-  // C-2: only split into two phases when Phase 2 has a usable budget — at least
-  // 2 steps, enough to both finish the current action AND call telegram_notify.
-  // For small budgets (maxSteps <= 5 → remaining < 2) run a single phase at the
-  // full budget with no warning, so the agent is never handed a 1-step Phase 2.
-  const twoPhase = remaining >= 2;
-
-  /** Run one streamText pass: stream text deltas, append response messages,
-   *  return the resolved finishReason and the number of steps consumed.
-   *
-   *  [P-75 D-25] The Vercel AI SDK does NOT throw for upstream provider errors
-   *  in many cases — when the LLM endpoint returns a 401/429/network failure,
-   *  streamText resolves cleanly with finishReason='error' and an empty stream
-   *  rather than rejecting. Without explicit detection here, the agent loop
-   *  silently returns, no audit row is written, no SSE error is emitted, and
-   *  the operator sees a "turn done" frame with zero output. We throw a
-   *  synthetic Error on finishReason='error' so the upstream catch in
-   *  runOneTurn (and its writeLlmErrorAudit + SSE error frame) fires.
-   */
-  const runPhase = async (stepCap: number): Promise<{ finishReason: FinishReason; stepCount: number }> => {
-    const result = streamText({
-      model: opts.model,
-      system: opts.system,
-      messages: opts.messages,
-      tools: opts.tools,
-      experimental_activeTools: opts.activeTools as (keyof ToolSet)[] | undefined,
-      maxSteps: stepCap,
-      abortSignal: opts.abortSignal,
-      onStepFinish: (step) => {
-        if (opts.onToolCall) {
-          for (const tc of step.toolCalls ?? []) {
-            opts.onToolCall(tc.toolName);
-          }
-        }
-        opts.onStepFinish?.(step);
-      },
-    });
-    for await (const chunk of result.textStream) {
-      opts.onText?.(chunk);
-    }
-    const { messages: responseMessages } = await result.response;
-    opts.messages.push(...responseMessages);
-    const steps = await result.steps;
-    const finishReason = await result.finishReason;
-    if (finishReason === "error" && !opts.abortSignal?.aborted) {
-      // The SDK exposes upstream details on result.warnings + result.experimental_providerMetadata
-      // in some versions; fold them into the synthetic error message so the operator-facing
-      // audit row has enough context to act (401 → bad key, 429 → rate limit, network → URL).
-      const warnings = (await result.warnings.catch(() => null)) ?? null;
-      const warningStr =
-        warnings && Array.isArray(warnings) && warnings.length
-          ? `warnings=${JSON.stringify(warnings).slice(0, 400)}`
-          : "";
-      const err = new Error(
-        `LLM call returned finishReason='error' (empty stream, no tool calls). ${warningStr} ` +
-          "Likely causes: invalid API key (401), rate limit (429), network/DNS failure, or upstream malformed response.",
-      );
-      err.name = "LlmCallError";
-      throw err;
-    }
-    return { finishReason, stepCount: steps.length };
-  };
-
-  try {
-    const phase1 = await runPhase(twoPhase ? softCap : maxSteps);
-    const cutOffMidTask = phase1.finishReason === "tool-calls" && phase1.stepCount >= softCap;
-    if (twoPhase && cutOffMidTask && !opts.abortSignal?.aborted) {
-      opts.messages.push(budgetWarningMessage(remaining));
-      await runPhase(remaining);
-      return;
-    }
-    // [P-75 D-12] narrative-without-execute detection.
-    // [P-75 D-22] complementary stalled-turn detection (silent stop after few tools).
-    // Both detectors share a single retry budget — at most one continuation per turn.
-    if (!opts.abortSignal?.aborted) {
-      const narrative = lastAssistantMessageMissedExecute(opts.messages);
-      const stalled =
-        !narrative &&
-        phase1.stepCount > 0 &&
-        phase1.stepCount <= STALL_STEP_THRESHOLD &&
-        lastAssistantMessageHasNoToolCalls(opts.messages);
-      if (narrative || stalled) {
-        const retryBudget = Math.min(twoPhase ? remaining : maxSteps, 30);
-        if (retryBudget >= 1) {
-          opts.messages.push(narrative ? narrationContinueMessage() : stalledContinueMessage());
-          await runPhase(retryBudget);
-        }
-      }
-    }
-  } catch (e) {
-    // P-6 Step 5a (Failure 1 fix): when the stop tool fires control.requestStop(),
-    // the shared AbortController.abort() makes streamText throw AbortError. Treat
-    // an aborted-signal completion as clean — caller's process.exit(0) flow expects
-    // this. Audit JSONL is already flushed via onStepFinish for any completed steps.
-    if (opts.abortSignal?.aborted) return;
-    throw e;
-  }
+  const { runAgentLoopPi } = await import("./pi/loop.js");
+  await runAgentLoopPi(opts);
 }
