@@ -1,4 +1,5 @@
 import type { ToolSet } from "ai";
+import type { LinkedinSession } from "../../linkedin/types.js";
 import { makeEndAutoRunTool } from "./endAutoRun.js";
 import { makeGetAccountContextTool } from "./getAccountContext.js";
 import { makeGetAutoRunStateTool } from "./getAutoRunState.js";
@@ -18,10 +19,11 @@ import { makeStartAutoRunTool } from "./startAutoRun.js";
 import { makeUpdateLeadStageTool } from "./updateLeadStage.js";
 
 /** P-SP-A/P-SP-F: build the 17 sales-kernel tools.
- *  Worker-mode only (per P-SP-A non-goal: server mode has no LinkedIn primitives). */
-export function makeSalesTools(salesDbPath: string): ToolSet {
+ *  Worker-mode only (per P-SP-A non-goal: server mode has no LinkedIn primitives).
+ *  [P-75 D-30] Optional `session` plumbed to record_raw_candidate for live identity verification. */
+export function makeSalesTools(salesDbPath: string, session?: LinkedinSession): ToolSet {
   return {
-    record_raw_candidate: makeRecordRawCandidateTool(salesDbPath),
+    record_raw_candidate: makeRecordRawCandidateTool(salesDbPath, session),
     promote_candidate_to_lead: makePromoteCandidateToLeadTool(salesDbPath),
     update_lead_stage: makeUpdateLeadStageTool(salesDbPath),
     record_lead_event: makeRecordLeadEventTool(salesDbPath),

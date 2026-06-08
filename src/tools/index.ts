@@ -209,8 +209,9 @@ export function makeAllTools(
     Object.assign(out, makeCronTools(persistence?.schedulePath ?? SERVER_SCHEDULE_PATH()));
   } else {
     // P-SP-A: sales kernel — worker-only (server has no LinkedIn primitives).
+    // [P-75 D-30] pass session so record_raw_candidate can live-identity-check profileUrl.
     const salesDbPath = persistence?.salesDbPath ?? join(getHomeBase(), ".mai", "agent", "sales.sqlite");
-    Object.assign(out, makeSalesTools(salesDbPath));
+    Object.assign(out, makeSalesTools(salesDbPath, session));
     // worker-only: query_lead_globally + publish_event. Both always register;
     // both return a structured envelope when serverCoords===null.
     Object.assign(out, {
