@@ -1,9 +1,55 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
-import { applyPacing, fail, failFromError, ok, resolveByLabel, withHint } from "../../linkedin/index.js";
-import type { LinkedinSession } from "../../linkedin/types.js";
+import {
+  applyPacing,
+  captureCurrentSurfaceContext,
+  fail,
+  failFromError,
+  ok,
+  resolveByLabel,
+  withHint,
+} from "../../linkedin/index.js";
+import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
+
+/** [P-75 D-11 round 3] When click is called by `label` (not `ref`), the current ctx may be stale
+ *  by 500–1500ms vs the live DOM — Chrome's AX tree lags after DOM mutations, especially
+ *  disabled→enabled state changes LinkedIn does in React after type/click. The mai-linkedin
+ *  original worked because each command re-resolved the target against a fresh AX snapshot;
+ *  this port restores that property so the agent can do plain inspect → type → click(Send)
+ *  without a dedicated `linkedin_connect` primitive (which was brittle to UI variance). Retries
+ *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
+async function resolveByLabelWithRetry(
+  session: LinkedinSession,
+  label: string,
+  scope: string | undefined,
+  capture: () => Promise<{ entries: SnapshotEntry[] }>,
+): Promise<SnapshotEntry> {
+  const ctx0 = session.getLastContext();
+  if (ctx0) {
+    try {
+      return resolveByLabel(ctx0.entries, label, { kind: "click", scope });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+    }
+  }
+  const deadline = Date.now() + 3000;
+  let lastErr: unknown = new Error(`click: no label '${label}' visible`);
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 300));
+    const fresh = await capture();
+    try {
+      return resolveByLabel(fresh.entries, label, { kind: "click", scope });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
 
 const clickParams = z
   .object({
@@ -30,12 +76,12 @@ export function makeClickTool(session: LinkedinSession) {
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
         } else {
-          const ctx = session.getLastContext();
-          if (!ctx) {
-            throw new Error("click: call inspect first to populate refs and entries.");
-          }
           // biome-ignore lint/style/noNonNullAssertion: refine guarantees ref OR label is set; ref is undefined here so label is non-null.
-          const entry = resolveByLabel(ctx.entries, label!, { kind: "click", scope });
+          const entry = await resolveByLabelWithRetry(session, label!, scope, async () => {
+            const next = await captureCurrentSurfaceContext(client);
+            session.setLastContext(next);
+            return next;
+          });
           target = entry.ref;
         }
         // P-Y2.3: paint the agent cursor + highlight on the resolved target before acting. Best-effort,
