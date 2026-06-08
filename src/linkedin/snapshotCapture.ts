@@ -116,15 +116,37 @@ interface ProfileCardRaw {
 // Mark visible overlay items with a transient data-attr (DOM query is NOT subject to the AX-tree
 // aria-hidden timing race — RC-1), return their {idx, role, label}. Skips aria-hidden subtrees +
 // invisible nodes (avoids surfacing CLOSED-dropdown items still in the DOM).
+//
+// [Phase 10 2026-06-08] For role=dialog / role=alertdialog matches, ALSO enumerate clickable
+// children (button, [role=button], a[role=button]) as separate entries. Without this, the
+// 2nd-degree Connect-invite modal ("Add a note to your invitation?") surfaced as ONE dialog
+// entry with no clickable inner buttons — agent's inspect saw the modal text but couldn't
+// click(label="Send invitation"). Hootan Farhat 2026-05-25 + Dmitry Balanovsky 2026-06-08.
 const OVERLAY_SYNTH_JS = `(() => {
   const vis = (el) => { const s = getComputedStyle(el); if (s.display==='none'||s.visibility==='hidden'||s.opacity==='0') return false; const r = el.getBoundingClientRect(); return r.width>0 && r.height>0; };
   const out = []; let i = 0;
   for (const el of document.querySelectorAll('[role="menuitem"],[role="option"],[role="dialog"],[role="alertdialog"],[data-test-modal]')) {
     if (!vis(el) || el.closest('[aria-hidden="true"]')) continue;
     i++; el.setAttribute('data-mai-ov', String(i));
-    const role = (el.getAttribute('role')||'').includes('dialog') ? 'dialog' : 'menuitem';
+    const elRole = el.getAttribute('role')||'';
+    const isDialog = elRole.includes('dialog') || el.hasAttribute('data-test-modal');
+    const role = isDialog ? 'dialog' : 'menuitem';
     const label = (el.getAttribute('aria-label') || el.innerText || '').trim().slice(0,120);
     out.push({ i, role, label });
+    // [Phase 10] Enumerate dialog's INNER clickable children so the agent can click them.
+    // Without this, agents reach the modal but can't click(label='Send invitation') because
+    // the AX-tree-flat capture surfaces ~39 page-level buttons that crowd the modal buttons
+    // out of MAX_BUTTONS=12. Inner-button refs (@ov<N>) lead and survive truncation.
+    if (isDialog) {
+      const innerSel = 'button,[role="button"],a[role="button"]';
+      for (const btn of el.querySelectorAll(innerSel)) {
+        if (!vis(btn)) continue;
+        i++; btn.setAttribute('data-mai-ov', String(i));
+        const btnLabel = (btn.getAttribute('aria-label') || btn.innerText || '').trim().slice(0,120);
+        if (!btnLabel) { i--; btn.removeAttribute('data-mai-ov'); continue; }
+        out.push({ i, role: 'button', label: btnLabel });
+      }
+    }
   }
   return JSON.stringify(out);
 })()`;
