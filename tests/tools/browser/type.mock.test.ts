@@ -674,3 +674,156 @@ test("T-M67: type tool execute without ref or label returns fail envelope", { ti
     "error kind must be invalid_input or runtime_error",
   );
 });
+
+// ─── T-D11.R3: Connect-modal text-fidelity guard ───────────────────────────────
+// [P-75 D-11 round 3] Brand-safety regression: type into a Connect-invite modal MUST
+// match the most-recent saved connect_note draft for the lead currently on screen.
+// Replaces R2's modal-block guard (which forced the now-removed linkedin_connect
+// primitive). Closes the Linfeng-rewrite hazard: agent paraphrased the operator-vetted
+// "Hi Linfeng — your blend of a PhD..." into "Hi Linfeng — PhD from HKUST + ...
+// impressive combo" on the way to send. Now: typed text must equal draft text exactly.
+
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
+import { insertDraft, insertLead, upsertRawCandidate } from "../../../src/persistence/salesDb.js";
+import { getSalesDb } from "../../../src/tools/sales/_dbHandle.js";
+
+/** Build a fake session whose lastContext.pageUrl is a real /in/<slug>/ profile. */
+function makeFakeSessionOnProfile(slug: string, entries: Array<{ ref: string; role: string; name: string }>) {
+  const base = makeFakeSessionWithEntries(entries);
+  return {
+    ...base,
+    getLastContext: () =>
+      ({
+        pageUrl: `https://www.linkedin.com/in/${slug}/`,
+        surface: "profile",
+        activeLayer: "page",
+        entries,
+      }) as CurrentSurfaceContext,
+  };
+}
+
+/** Seed a temp sales.sqlite under MAI_HOME_BASE/<tmp>/.mai/agent/ with one candidate→lead→draft chain. */
+function seedSalesDb(slug: string, draftText: string): string {
+  const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-"));
+  process.env.MAI_HOME_BASE = home;
+  const dbPath = pathJoin(home, ".mai", "agent", "sales.sqlite");
+  // getSalesDb takes care of mkdir + schema init on first open.
+  const db = getSalesDb(dbPath);
+  const profileUrl = `https://www.linkedin.com/in/${slug}/`;
+  const { candidateId } = upsertRawCandidate(db, {
+    personName: "Test Lead",
+    profileUrl,
+    source: "search",
+  });
+  const leadId = insertLead(db, {
+    candidateId,
+    personName: "Test Lead",
+    profileUrl,
+    stage: "qualified",
+    ownerMode: "manual",
+  });
+  insertDraft(db, { leadId, kind: "connect_note", text: draftText, createdBy: "user" });
+  return home;
+}
+
+describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
+  const modalEntries = [
+    { ref: "@e1", role: "heading", name: "Add a note to your invitation" },
+    { ref: "@e2", role: "textbox", name: "Message" },
+    { ref: "@e3", role: "button", name: "Cancel adding a note" },
+    { ref: "@e4", role: "button", name: "Send invitation" },
+  ];
+
+  // Given: Connect modal is open AND a draft exists for this lead AND typed text MATCHES the draft
+  // When:  agent calls type with the exact draft text
+  // Then:  guard passes — type proceeds, insertText fires per-char
+  it("PASSES when typed text exactly matches saved connect_note draft for the lead", async () => {
+    const slug = "test-lead-match";
+    const approved = "Hi Test — the exact operator-approved note. No paraphrasing here.";
+    const home = seedSalesDb(slug, approved);
+    try {
+      const session = makeFakeSessionOnProfile(slug, modalEntries);
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: approved, ref: "@e2" },
+        { toolCallId: "tg-match", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, true, "exact match must pass");
+      assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Given: Connect modal + a draft exists + typed text is REWRITTEN (the Linfeng hazard)
+  // When:  agent calls type with paraphrased text
+  // Then:  guard rejects — error message names "rewritten", lists expected vs got, no CDP dispatch
+  it("REJECTS when typed text is paraphrased / rewritten vs the saved draft", async () => {
+    const slug = "test-lead-rewrite";
+    const approved = "Hi Linfeng — your blend of a PhD with hardware engineering is genuinely intriguing.";
+    const home = seedSalesDb(slug, approved);
+    try {
+      const session = makeFakeSessionOnProfile(slug, modalEntries);
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "Hi Linfeng — PhD + hardware engineering, impressive combo.", ref: "@e2" },
+        { toolCallId: "tg-rewrite", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, false, "rewritten text MUST be rejected");
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+      const err = (result as any).error;
+      assert.equal(err.kind, "invalid_input");
+      assert.ok(/rewritten|Expected|saved draft/i.test(err.message), "error mentions fidelity violation");
+      assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0, "no insertText fired");
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Given: Connect modal + NO saved draft for this lead (agent skipped save_message_draft)
+  // When:  agent calls type with any text
+  // Then:  guard rejects with "no saved connect_note draft found" — defensive default
+  it("REJECTS when no saved draft exists for the lead (no approval trail)", async () => {
+    // No seedSalesDb — DB lookup returns null
+    const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-nodraft-"));
+    process.env.MAI_HOME_BASE = home;
+    try {
+      const session = makeFakeSessionOnProfile("no-draft-lead", modalEntries);
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "anything", ref: "@e2" },
+        { toolCallId: "tg-nodraft", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, false);
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+      const err = (result as any).error;
+      assert.ok(/no saved.*draft|save_message_draft/i.test(err.message), "error directs to save_message_draft first");
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Given: NOT a Connect modal (normal feed search-box context)
+  // When:  agent calls type with arbitrary text
+  // Then:  guard doesn't fire — no DB lookup, no rejection (zero overhead on hot path)
+  it("does NOT fire on normal feed / search-box context (no false positives)", async () => {
+    const session = makeFakeSessionWithEntries([
+      { ref: "@e1", role: "textbox", name: "Search" },
+      { ref: "@e2", role: "button", name: "Send message" }, // not a Send-invite label — modal check fails fast
+    ]);
+    await session.getClient().snapshot();
+    const tool = makeTypeTool(session);
+    const result = await tool.execute(
+      { text: "founders new york", ref: "@e1" },
+      { toolCallId: "tg-noop", messages: [], abortSignal },
+    );
+    assert.equal(result.ok, true, "feed search-box type must succeed");
+    assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+  });
+});
