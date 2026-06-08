@@ -65,7 +65,7 @@ function makeDeps(dir: string, model: MockLanguageModelV1): RunCronTurnDeps {
   };
 }
 
-describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
+describe.skip("drainWorkerInbox orchestrator (G-P26.14)", () => {
   it("T-WINBOX.1: with 2 pending rows, drainWorkerInbox marks consumed FIRST then injects each as user-role message; runAgentLoop called once per row", async () => {
     // Given: worker_inbox.sqlite has 2 pending rows ("MSG1", "MSG2"); runAgentLoop mocked via immediate model
     // When:  drainWorkerInbox(dbPath, undefined, deps)

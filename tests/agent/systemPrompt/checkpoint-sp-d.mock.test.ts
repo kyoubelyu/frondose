@@ -54,10 +54,11 @@ describe("T-SP-D.Checkpoint — draft-before-outbound invariant + DM-send-verify
       "CHECKPOINT must contain the verbatim Sketch B draft-before-gate directive (F-3.1, G-PSPD.3)",
     );
 
-    // Soft cap invariant (builder measured: 4394 chars)
+    // Soft cap invariant (Phase 9 2026-06-08: raised from 4400 → 5100 to fit the
+    // no-note autonomous fallback directive — a load-bearing safety contract).
     assert.ok(
-      CHECKPOINT.length <= 4400,
-      `CHECKPOINT.length must be ≤ 4400 chars (got ${CHECKPOINT.length}) — P-SP-D Sketch B must not push over cap (G-PSPD.3)`,
+      CHECKPOINT.length <= 5100,
+      `CHECKPOINT.length must be ≤ 5100 chars (got ${CHECKPOINT.length}) — Phase 9 cap, raised from 4400 (G-PSPD.3)`,
     );
   });
 
