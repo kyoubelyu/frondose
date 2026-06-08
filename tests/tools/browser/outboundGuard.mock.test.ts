@@ -52,6 +52,7 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
       "Invite 杨哲 to connect",
       "Send without a note",
       "Send invite",
+      "Send invitation", // [P-75 D-11 round 4] LinkedIn's actual Stage-2 modal label — Hootan 2026-05-25 + Dmitry 2026-06-08
       "Send now",
     ];
     const failures: string[] = [];

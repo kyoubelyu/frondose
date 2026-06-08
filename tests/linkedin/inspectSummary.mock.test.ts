@@ -552,3 +552,75 @@ describe("T-Contract.1 (G-P46.9): InspectSummary Zod schema shape unchanged; act
     );
   });
 });
+
+// ─── T-D11.R4: 2nd-degree Connect modal — "Send invitation" promoted ─────────
+// [P-75 D-11 round 4] Live evidence (Hootan Farhat 2026-05-25, Dmitry Balanovsky
+// 2026-06-08): on a 3rd-deg or 2nd-deg modal, the "Send invitation" button can be
+// outnumbered by ~25 sidebar / nav / page-level buttons. inspectSummary's
+// MAX_BUTTONS=12 truncation crowds Send invitation out unless it's promoted to the
+// front by the outbound-action ranking. Pre-round-4: OUTBOUND_LABEL_RE matched
+// "Send invite/Send now/Send without a note" but NOT bare "Send invitation" —
+// agent couldn't see / click the actual button. Round-4 fix: added \bSend
+// invitation\b to the regex.
+
+describe("T-D11.R4: Send-invitation outbound promotion (2nd-degree modal regression)", () => {
+  // Given: a profile-surface modal entry set where "Send invitation" is preceded by
+  //        13+ sidebar / nav buttons (simulating the live Hootan/Dmitry surface
+  //        where button:39 was captured but only top-12 surfaced).
+  // When:  buildInspectSummary builds the inspect output.
+  // Then:  "Send invitation" is in the top-12 buttons AND tagged with [OUTBOUND] prefix.
+  it("promotes 'Send invitation' to top-12 buttons + [OUTBOUND]-prefixes it (modal regression)", () => {
+    const noisySidebar: SnapshotEntry[] = [];
+    for (let i = 1; i <= 15; i++) {
+      noisySidebar.push({ ref: `@e${i}`, role: "button", name: `Invite Sidebar Person ${i} to connect` });
+    }
+    // Mixed in: the actual modal's Send invitation button somewhere in the middle.
+    const entries: SnapshotEntry[] = [
+      ...noisySidebar.slice(0, 8),
+      { ref: "@e99", role: "button", name: "Send invitation" }, // <-- the live 2nd-deg modal button
+      ...noisySidebar.slice(8),
+      { ref: "@e100", role: "button", name: "Cancel adding a note" },
+    ];
+    const ctx = makeCtx("profile", entries);
+    const summary = buildInspectSummary(ctx);
+    const sendBtn = summary.buttons.find((b) => /Send invitation/i.test(b.label));
+    assert.ok(
+      sendBtn,
+      `'Send invitation' must be in the top-${summary.buttons.length} buttons; got: ${JSON.stringify(summary.buttons.map((b) => b.label))}`,
+    );
+    assert.ok(
+      sendBtn.label.startsWith("[OUTBOUND]"),
+      `'Send invitation' must be [OUTBOUND]-prefixed; got: "${sendBtn.label}"`,
+    );
+  });
+
+  // Given: same noisy sidebar PLUS a Connect button (the entry-step button)
+  // When:  buildInspectSummary builds the output
+  // Then:  BOTH "Connect" AND "Send invitation" surface above the sidebar noise
+  it("promotes both 'Connect' and 'Send invitation' above sidebar 'Invite X to connect' noise", () => {
+    const noisySidebar: SnapshotEntry[] = [];
+    for (let i = 1; i <= 15; i++) {
+      // These match OUTBOUND_LABEL_RE too (Invite ... to connect), so the regex's
+      // ordering must keep the SUBJECT-relevant labels surfaced. In a real session
+      // the subject's actions come via @pa* synth refs (already prioritized); here
+      // we use flat refs to test the outboundBtns ranking layer.
+      noisySidebar.push({ ref: `@e${i}`, role: "button", name: `Invite Sidebar Person ${i} to connect` });
+    }
+    const entries: SnapshotEntry[] = [
+      { ref: "@e99", role: "button", name: "Connect" },
+      ...noisySidebar,
+      { ref: "@e100", role: "button", name: "Send invitation" },
+    ];
+    const ctx = makeCtx("profile", entries);
+    const summary = buildInspectSummary(ctx);
+    // Verify both labels appear somewhere in the surfaced 12
+    assert.ok(
+      summary.buttons.some((b) => /^\[OUTBOUND\] Connect$/i.test(b.label)),
+      `'[OUTBOUND] Connect' must appear; got: ${JSON.stringify(summary.buttons.map((b) => b.label))}`,
+    );
+    assert.ok(
+      summary.buttons.some((b) => /Send invitation/i.test(b.label)),
+      `'Send invitation' must appear; got: ${JSON.stringify(summary.buttons.map((b) => b.label))}`,
+    );
+  });
+});

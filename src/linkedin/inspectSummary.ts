@@ -58,6 +58,20 @@ function isOutboundActionEntry(e: SnapshotEntry, surface: LinkedInSurface): bool
   return false;
 }
 
+/** [P-75 D-11 round 4] Send-family priority within outbound buttons. When a Connect-invite
+ *  modal is open AND the page also has sidebar "Invite <Other> to connect" entries (the
+ *  Hootan/Dmitry pattern: ~15 sidebar invites), the modal's Send button would be ranked
+ *  alphabetically/positionally among the sidebar invites and could fall outside MAX_BUTTONS=12.
+ *  Send-family always wins inside outboundBtns: Send invitation / Send invite / Send without
+ *  a note / Send now / 发送(邀请)? / 直接发送 / 无备注发送 — these are the modal's outbound-
+ *  COMMIT buttons (clicking sends), not the modal's outbound-ENTER buttons (clicking opens
+ *  invite dialog). Commit-buttons are the highest-stakes click in any session — never crowd
+ *  them out. */
+const SEND_FAMILY_RE = /^(?:Send(?:\s+(?:invitation|invite|now|without\s+a\s+note))?\b|发送(?:邀请)?\b|直接发送|无备注发送)/i;
+function isSendFamilyEntry(e: SnapshotEntry): boolean {
+  return CLICKABLE_ROLES.has(e.role) && SEND_FAMILY_RE.test(e.name);
+}
+
 /**
  * True when the captured AX entries contain a STRONG post-composer signal.
  * C-5: a single weak composer-adjacent button (e.g. "create a post" — the feed
@@ -129,14 +143,21 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   const subjectBtns = clickables.filter(isSubjectActionRef);
   const rest = clickables.filter((e) => !isSubjectActionRef(e));
   const composerBtns = rest.filter(isComposerButtonEntry);
-  const outboundBtns = rest
+  // [P-75 D-11 round 4] Split outboundBtns: Send-family (modal COMMIT button) ALWAYS
+  // ranks above the rest. Without this, sidebar "Invite <Other> to connect" entries
+  // (which also match OUTBOUND_LABEL_RE) can crowd Send invitation out of the top-12.
+  const allOutboundBtns = rest
     .filter((e) => !isComposerButtonEntry(e))
     .filter((e) => isOutboundActionEntry(e, ctx.surface));
+  const sendFamilyBtns = allOutboundBtns.filter(isSendFamilyEntry);
+  const outboundBtns = allOutboundBtns.filter((e) => !isSendFamilyEntry(e));
   const otherBtns = rest.filter((e) => !isComposerButtonEntry(e) && !isOutboundActionEntry(e, ctx.surface));
-  const buttons = [...subjectBtns, ...composerBtns, ...outboundBtns, ...otherBtns].slice(0, MAX_BUTTONS).map((e) => ({
-    ref: e.ref,
-    label: isOutboundActionEntry(e, ctx.surface) ? `[OUTBOUND] ${e.name}` : e.name,
-  }));
+  const buttons = [...subjectBtns, ...composerBtns, ...sendFamilyBtns, ...outboundBtns, ...otherBtns]
+    .slice(0, MAX_BUTTONS)
+    .map((e) => ({
+      ref: e.ref,
+      label: isOutboundActionEntry(e, ctx.surface) ? `[OUTBOUND] ${e.name}` : e.name,
+    }));
 
   const inputs = deduped
     .filter((e) => INPUT_ROLES.has(e.role))
