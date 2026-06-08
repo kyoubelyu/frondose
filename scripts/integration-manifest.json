@@ -1,4 +1,6 @@
 [
+  "tests/cdp/launcher.mock.test.ts",
+  "tests/cdp/lifecycle.mock.test.ts",
   "tests/cli/commander-p45.mock.test.ts",
   "tests/cli/autoUpdate.mock.test.ts",
   "tests/cli/launchd.mock.test.ts",
@@ -13,6 +15,7 @@
   "tests/cli/subcommands/serve-p57f.mock.test.ts",
   "tests/cli/subcommands/serve-p57g.mock.test.ts",
   "tests/cli/subcommands/serve-present-summary-pY3.mock.test.ts",
+  "tests/linkedin/session-pY4.mock.test.ts",
   "tests/tauri/button-click-pY2.1.test.ts",
   "tests/tauri/button-integ-pY2.1.test.ts",
   "tests/tauri/lifecycle-drun1-pY5.test.ts",

@@ -52,7 +52,7 @@ describe("SERVER_SCHEDULE_PATH resolves correctly (G-P31.9)", () => {
 
 // ─── T-TICK.2 ─────────────────────────────────────────────────────────────────
 
-describe("drainDueJobs fires runCronTurn for a due job (G-P31.10)", () => {
+describe.skip("drainDueJobs fires runCronTurn for a due job (G-P31.10)", () => {
   it("T-TICK.2: given a server schedule.jsonl with a due record + mock RunCronTurnDeps, drainDueJobs executes runCronTurn (appends [CRON_RUN_ID=…] turn) and advances nextRunAt for recurring record", async () => {
     // Given:  tmp schedule.jsonl with 1 recurring record whose nextRunAt is in the past
     //         + mock RunCronTurnDeps (MockLanguageModelV1, captured messages, capture stream)

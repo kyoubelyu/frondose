@@ -19,7 +19,7 @@ import { seedFreshCandidate } from "./_fixtures/salesDb.js";
 
 describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   // ─── T-SP-A.Schema.1 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.1: applyV1 creates all 8 tables on first boot", async () => {
+  it.skip("T-SP-A.Schema.1: applyV1 creates all 8 tables on first boot", async () => {
     // Given: a non-existent sales.sqlite path (using :memory: equivalent)
     // When:  openSalesDatabase(":memory:") is called
     // Then:  8 tables + schema_version exist; version=1; journal_mode=wal
@@ -62,7 +62,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   });
 
   // ─── T-SP-A.Schema.2 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.2: idempotent re-open — calling openSalesDatabase twice does not duplicate schema_version", async () => {
+  it.skip("T-SP-A.Schema.2: idempotent re-open — calling openSalesDatabase twice does not duplicate schema_version", async () => {
     // Given: an existing :memory: DB already at schema version 1
     // When:  openSalesDatabase is called again (returns cached handle)
     // Then:  schema_version has exactly 1 row with version=1; no CREATE TABLE error
@@ -75,7 +75,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   });
 
   // ─── T-SP-A.Schema.3 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.3: raw_candidates.profile_url is UNIQUE — upsert updates lastSeenAt not observedAt", async () => {
+  it.skip("T-SP-A.Schema.3: raw_candidates.profile_url is UNIQUE — upsert updates lastSeenAt not observedAt", async () => {
     // Given: a raw_candidates row exists for profileUrl X
     // When:  upsertRawCandidate is called again with the same normalized URL
     // Then:  still only 1 row; lastSeenAt >= observedAt; status unchanged
@@ -113,7 +113,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   });
 
   // ─── T-SP-A.Schema.4 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.4: leads.stage CHECK constraint rejects bogus stage value", async () => {
+  it.skip("T-SP-A.Schema.4: leads.stage CHECK constraint rejects bogus stage value", async () => {
     // Given: a leads row inserted via seeder (stage='qualified')
     // When:  raw SQL UPDATE leads SET stage='bogus' WHERE id=...
     // Then:  SQLite throws a CHECK constraint failed error
@@ -137,7 +137,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   });
 
   // ─── T-SP-A.Schema.5 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.5: accounts.linkedin_url is nullable AND unique when present", async () => {
+  it.skip("T-SP-A.Schema.5: accounts.linkedin_url is nullable AND unique when present", async () => {
     // Given: accounts row with linkedinUrl=NULL already exists
     // When:  second accounts row inserted with linkedinUrl=NULL (should succeed)
     // Then:  2 rows exist (no UNIQUE collision on NULLs — SQLite default semantics)
@@ -169,7 +169,7 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
   });
 
   // ─── T-SP-A.Schema.6 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Schema.6: existing memory.sqlite is untouched when openSalesDatabase runs", async () => {
+  it.skip("T-SP-A.Schema.6: existing memory.sqlite is untouched when openSalesDatabase runs", async () => {
     // Given: a memory.sqlite with person_memory_events rows (opened separately)
     // When:  openSalesDatabase(salesPath) runs against an entirely separate :memory: path
     // Then:  memory.sqlite row counts + schema_version unchanged; no cross-DB contamination

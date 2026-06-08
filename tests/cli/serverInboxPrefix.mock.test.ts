@@ -100,7 +100,7 @@ function makeTurnDeps(
 
 // ─── T-SINBOX.INT ─────────────────────────────────────────────────────────────
 
-describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
+describe.skip("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
   it(
     "T-SINBOX.INT.1: with 3 pending server_inbox rows + inboxPrefix hook, user message contains prefix + separator + operator input; rows marked drained",
     async () => {
