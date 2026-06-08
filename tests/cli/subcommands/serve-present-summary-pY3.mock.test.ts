@@ -64,6 +64,12 @@ before(async () => {
           ],
         });
       },
+      // [P-PI-followup] Pi loop transitive imports from loop.js — see _loopMockHelper.ts.
+      STALL_STEP_THRESHOLD: 4,
+      lastAssistantMessageHasNoToolCalls: () => false,
+      lastAssistantMessageMissedExecute: () => false,
+      narrationContinueMessage: () => ({ role: "user" as const, content: "" }),
+      stalledContinueMessage: () => ({ role: "user" as const, content: "" }),
     },
   });
 

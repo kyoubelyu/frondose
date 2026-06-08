@@ -34,7 +34,7 @@
     "lint:fix": "biome check --write .",
     "test": "npm run test:fast",
     "test:fast": "node scripts/test-fast.mjs",
-    "test:integration": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/cli/commander-p45.mock.test.ts' 'tests/cli/autoUpdate.mock.test.ts' 'tests/cli/launchd.mock.test.ts' 'tests/cli/install-sh.test.ts' 'tests/cli/update-subcommand.mock.test.ts' 'tests/cli/subcommands/serverLaunchd.mock.test.ts' 'tests/tauri/button-click-pY2.1.test.ts' 'tests/tauri/button-integ-pY2.1.test.ts' 'tests/tauri/lifecycle-drun1-pY5.test.ts' 'tests/tauri/entry-flow-pY4.mock.test.ts'",
+    "test:integration": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/cli/commander-p45.mock.test.ts' 'tests/cli/autoUpdate.mock.test.ts' 'tests/cli/launchd.mock.test.ts' 'tests/cli/install-sh.test.ts' 'tests/cli/update-subcommand.mock.test.ts' 'tests/cli/subcommands/serverLaunchd.mock.test.ts' 'tests/cli/subcommands/serve-p56b.mock.test.ts' 'tests/cli/subcommands/serve-p57a.mock.test.ts' 'tests/cli/subcommands/serve-p57b.mock.test.ts' 'tests/cli/subcommands/serve-p57c.mock.test.ts' 'tests/cli/subcommands/serve-p57e.mock.test.ts' 'tests/cli/subcommands/serve-p57f.mock.test.ts' 'tests/cli/subcommands/serve-p57g.mock.test.ts' 'tests/cli/subcommands/serve-present-summary-pY3.mock.test.ts' 'tests/tauri/button-click-pY2.1.test.ts' 'tests/tauri/button-integ-pY2.1.test.ts' 'tests/tauri/lifecycle-drun1-pY5.test.ts' 'tests/tauri/entry-flow-pY4.mock.test.ts'",
     "test:all": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/**/*.test.ts'",
     "test:live": "tsx --test 'tests/live/**/*.smoke.ts'"
   },
