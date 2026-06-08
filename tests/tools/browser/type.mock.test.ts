@@ -809,6 +809,42 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
     }
   });
 
+  // Given: Connect modal IS open AND page is on the custom-invite preload URL
+  //        (linkedin.com/preload/custom-invite/?vanityName=<slug>) — agent's modal-open shortcut.
+  //        Draft exists for the lead matching vanityName + typed text matches the draft.
+  // When:  agent calls type with the exact draft text
+  // Then:  guard finds the lead via vanityName slug → exact match → PASSES.
+  //        Regression test for the Hung-I Lin 2026-06-08 false-reject: agent navigates via
+  //        /preload/custom-invite/?vanityName=<slug>, original guard only handled /in/<slug>/.
+  it("PASSES when on /preload/custom-invite/?vanityName=<slug> + text matches saved draft", async () => {
+    const slug = "test-lead-vanityname";
+    const approved = "Hi Test — exact approved note for the vanityName URL path.";
+    const home = seedSalesDb(slug, approved);
+    try {
+      const baseSession = makeFakeSessionWithEntries(modalEntries);
+      const session = {
+        ...baseSession,
+        getLastContext: () =>
+          ({
+            pageUrl: `https://www.linkedin.com/preload/custom-invite/?vanityName=${slug}`,
+            surface: "profile",
+            activeLayer: "page",
+            entries: modalEntries,
+          }) as CurrentSurfaceContext,
+      };
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: approved, ref: "@e2" },
+        { toolCallId: "tg-vn", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, true, "vanityName preload URL must resolve the lead and pass on exact match");
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Given: NOT a Connect modal (normal feed search-box context)
   // When:  agent calls type with arbitrary text
   // Then:  guard doesn't fire — no DB lookup, no rejection (zero overhead on hot path)

@@ -30,12 +30,23 @@ function inConnectModal(entries: SnapshotEntry[] | undefined): boolean {
 }
 
 const PROFILE_SLUG_RE = /^\/in\/([^/]+)\/?$/i;
+/** Resolve the lead's canonical /in/<slug>/ from either:
+ *   • a profile page URL: linkedin.com/in/<slug>/
+ *   • the custom-invite preload URL: linkedin.com/preload/custom-invite/?vanityName=<slug>
+ *     (agents commonly open the invite modal directly via this URL — see e.g. the
+ *     Hung-I Lin flow 2026-06-08). Without this fallback, the text-fidelity guard
+ *     false-rejects every preload-URL path. */
 function profileSlugFromUrl(url: string): string | null {
   try {
     const u = new URL(url);
     if (!u.hostname.endsWith("linkedin.com")) return null;
     const m = u.pathname.match(PROFILE_SLUG_RE);
-    return m?.[1] ? m[1].toLowerCase() : null;
+    if (m?.[1]) return m[1].toLowerCase();
+    if (/\/preload\/custom-invite\/?$/i.test(u.pathname)) {
+      const vn = u.searchParams.get("vanityName");
+      if (vn) return vn.toLowerCase();
+    }
+    return null;
   } catch {
     return null;
   }
