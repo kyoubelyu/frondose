@@ -9,10 +9,10 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
-import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
-import { makeClickTool } from "../../../src/tools/browser/click.js";
+import type { CurrentSurfaceContext, SnapshotEntry } from "../../../src/linkedin/types.js";
+import { makeClickTool, resolveByLabelWithRetry } from "../../../src/tools/browser/click.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
 process.env.MAI_PACE_MIN_MS = "0";
@@ -149,3 +149,100 @@ test(
     assert.equal(result2.ok, false, "label click without prior inspect must fail");
   },
 );
+
+// ─── T-D11.R3-Click: label-resolve retry-poll ──────────────────────────────────
+// [P-75 D-11 round 3] resolveByLabelWithRetry — when click(label=…) misses in current ctx,
+// recapture surface up to ~3s before failing. Restores mai-linkedin's per-command
+// re-resolution property so AX-tree lag (Chrome debounces 500-1500ms after DOM mutations,
+// esp. disabled→enabled state changes LinkedIn does in React after type) doesn't force
+// the agent into linkedin_connect-style specialized primitives. ref-based clicks bypass.
+
+describe("T-D11.R3-Click: resolveByLabelWithRetry (round-3)", () => {
+  // resolveByLabelWithRetry is unit-tested directly with a stubbed capture function
+  // so the test exercises the retry/deadline logic in isolation from the full CDP stack.
+  const lead: SnapshotEntry = { ref: "@e2", role: "button", name: "Send invitation" };
+  const onlyConnect: SnapshotEntry[] = [{ ref: "@e1", role: "button", name: "Connect" }];
+  const withSend: SnapshotEntry[] = [...onlyConnect, lead];
+
+  // Given: initial ctx has only [Connect] but the capture function returns [Connect, Send] starting
+  //        on its 2nd call (simulates LinkedIn React enabling Send after type debounce).
+  // When:  resolveByLabelWithRetry asks for "Send invitation"
+  // Then:  succeeds on the 2nd capture, well under the 3s deadline; captured at least twice.
+  it("RETRIES capture when label not in initial ctx, succeeds when it appears", async () => {
+    let captureCount = 0;
+    const capture = async () => {
+      captureCount++;
+      return { entries: captureCount >= 2 ? withSend : onlyConnect };
+    };
+    const fakeSession = { getLastContext: () => ({ entries: onlyConnect }) };
+    const t0 = Date.now();
+    const found = await resolveByLabelWithRetry(fakeSession, "Send invitation", undefined, capture, {
+      timeoutMs: 3000,
+      stepMs: 80,
+    });
+    const elapsed = Date.now() - t0;
+    assert.equal(found.ref, "@e2", "must resolve to the Send-invitation entry");
+    assert.equal(found.name, "Send invitation");
+    assert.ok(captureCount >= 2, `must have re-captured at least once; got ${captureCount}`);
+    assert.ok(elapsed < 1500, `should resolve quickly when entry appears mid-retry; took ${elapsed}ms`);
+  });
+
+  // Given: capture function NEVER returns the requested label
+  // When:  resolveByLabelWithRetry asks for "Send invitation"
+  // Then:  loops until the deadline, then throws a "no click target matches" error;
+  //        elapsed time approximately equals timeoutMs (proves the deadline gate works).
+  it("FAILS after timeoutMs when label never appears", async () => {
+    const capture = async () => ({ entries: onlyConnect });
+    const fakeSession = { getLastContext: () => ({ entries: onlyConnect }) };
+    const t0 = Date.now();
+    await assert.rejects(
+      () =>
+        resolveByLabelWithRetry(fakeSession, "Send invitation", undefined, capture, {
+          timeoutMs: 500,
+          stepMs: 80,
+        }),
+      /no click target matches/i,
+    );
+    const elapsed = Date.now() - t0;
+    assert.ok(elapsed >= 400, `must wait near the full deadline; only waited ${elapsed}ms`);
+    assert.ok(elapsed < 900, `should not significantly exceed deadline; took ${elapsed}ms`);
+  });
+
+  // Given: capture throws on EVERY call (transient CDP failure)
+  // When:  resolveByLabelWithRetry asks for any label
+  // Then:  retries through the deadline (capture failures are treated as transient, not fatal),
+  //        then throws the final captured error rather than crashing on the first capture-throw.
+  //        Defensive design — a single AX hiccup mid-deadline shouldn't kill a valid click.
+  it("treats capture-throws as transient, retries until deadline, then throws", async () => {
+    let captureCount = 0;
+    const capture = async (): Promise<{ entries: SnapshotEntry[] }> => {
+      captureCount++;
+      throw new Error("transient CDP hiccup");
+    };
+    const fakeSession = { getLastContext: () => ({ entries: onlyConnect }) };
+    await assert.rejects(
+      () =>
+        resolveByLabelWithRetry(fakeSession, "Send invitation", undefined, capture, {
+          timeoutMs: 400,
+          stepMs: 80,
+        }),
+      /no label.*visible|no click target matches|transient/i,
+    );
+    assert.ok(captureCount >= 2, `must have retried capture at least once; got ${captureCount}`);
+  });
+
+  // Given: initial ctx ALREADY contains the requested label
+  // When:  resolveByLabelWithRetry asks for that label
+  // Then:  resolves immediately from ctx0 — capture is NEVER called (fast path holds).
+  it("resolves immediately from initial ctx when label is already visible (no retry)", async () => {
+    let captureCount = 0;
+    const capture = async () => {
+      captureCount++;
+      return { entries: withSend };
+    };
+    const fakeSession = { getLastContext: () => ({ entries: withSend }) };
+    const found = await resolveByLabelWithRetry(fakeSession, "Send invitation", undefined, capture);
+    assert.equal(found.ref, "@e2");
+    assert.equal(captureCount, 0, "capture must not be called when initial ctx already has the label");
+  });
+});
