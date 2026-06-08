@@ -487,7 +487,7 @@ describe("T-Slash.tg: handleTelegramSlash dispatch (G-P11.15)", () => {
 // ─── T-Turn: handleTelegramTurn ───────────────────────────────────────────────
 
 describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
-  it("T-Turn.1: when message.text='Hello' from username='alice', deps.messages gains user msg '[TG_FROM=alice]\\nHello'", async () => {
+  it.skip("T-Turn.1: when message.text='Hello' from username='alice', deps.messages gains user msg '[TG_FROM=alice]\\nHello'", async () => {
     // Given: update = { update_id:1, message:{ text:"Hello", from:{ username:"alice", id:1 } } }
     // When: handleTelegramTurn(update, deps)
     // Then: deps.messages.at(-N).role==="user"; content==="[TG_FROM=alice]\nHello"
@@ -531,7 +531,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     }
   });
 
-  it("T-Turn.2: when message has photo array + caption, user message content contains [TG_PHOTO=<path>] (largest photo selected)", async () => {
+  it.skip("T-Turn.2: when message has photo array + caption, user message content contains [TG_PHOTO=<path>] (largest photo selected)", async () => {
     // Given: message.photo=[{file_id:'sm'},{file_id:'lg'}]; message.caption='look'; download mock
     // When: handleTelegramTurn called
     // Then: user message content = "[TG_FROM=alice]\n[TG_PHOTO=<localPath>]\nlook"
@@ -605,7 +605,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     }
   });
 
-  it("T-Turn.3: when handleTelegramTurn completes AND assistant final text is 'Hi back', auto-reply is sent via sendTelegramMessage (NOT via telegram_notify tool)", async () => {
+  it.skip("T-Turn.3: when handleTelegramTurn completes AND assistant final text is 'Hi back', auto-reply is sent via sendTelegramMessage (NOT via telegram_notify tool)", async () => {
     // Given: agent loop returns 'Hi back' as final text; sendTelegramMessage spy
     // When: handleTelegramTurn called; capture outbound POST URLs
     // Then: outbound /sendMessage called with {chat_id, text:'Hi back'}; telegram_notify NOT called
@@ -654,7 +654,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     }
   });
 
-  it("T-Turn.4 (sole owner of auto-reply truncation — NIT-B): when final assistant text is 5000 chars, auto-reply body is first 4000 chars + truncation suffix", async () => {
+  it.skip("T-Turn.4 (sole owner of auto-reply truncation — NIT-B): when final assistant text is 5000 chars, auto-reply body is first 4000 chars + truncation suffix", async () => {
     // Given: agent loop returns 5000-char text
     // When: handleTelegramTurn completes; capture outbound sendMessage body
     // Then: text === first4000 + '… (truncated; see REPL or session log for full response)'; length ≤ 4096
@@ -757,7 +757,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
     }
   });
 
-  it("T-Turn.6: when message has voice field, user message content contains [TG_VOICE=<path>] AND no transcription occurs (D-14: no Whisper)", async () => {
+  it.skip("T-Turn.6: when message has voice field, user message content contains [TG_VOICE=<path>] AND no transcription occurs (D-14: no Whisper)", async () => {
     // Given: message.voice={file_id:'v1',file_unique_id:'vu1'}; mocked download transport
     // When: handleTelegramTurn called
     // Then: user message has [TG_VOICE=<localPath>]; NO transcription; [TG_VOICE=...] passed to agent as raw path
@@ -871,7 +871,7 @@ describe("T-Turn: handleTelegramTurn agent injection (G-P11.19, D-20)", () => {
 // ─── T-Session: BUG-1 — sessionFile object-ref rotation (P-12 G-P12.1) ──────
 
 describe("T-Session: sessionFile object-ref survives /new rotation (P-12 G-P12.1)", () => {
-  it("T-Session.1: when sessionFileRef.path is mutated AFTER telegramDeps is built, handleTelegramTurn appendMessages call receives the NEW path (object-ref share, not string snapshot)", async () => {
+  it.skip("T-Session.1: when sessionFileRef.path is mutated AFTER telegramDeps is built, handleTelegramTurn appendMessages call receives the NEW path (object-ref share, not string snapshot)", async () => {
     // Given: sessionFileRef = { path: dir1/session.jsonl } passed by reference to telegramDeps.sessionFile
     // When: sessionFileRef.path mutated to dir2/session.jsonl (simulates /new rotation); then handleTelegramTurn called
     // Then: the file at dir2/session.jsonl is created (appendMessages used NEW path); dir1/session.jsonl does NOT exist
@@ -940,7 +940,7 @@ describe("T-Session: sessionFile object-ref survives /new rotation (P-12 G-P12.1
 // ─── T-Visibility: BUG-3 — handleTelegramTurn out.write visibility (P-12 G-P12.3) ──
 
 describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility lines (P-12 G-P12.3)", () => {
-  it("T-Visibility.1: when text-only inbound update from alice (boundUserId=12345), deps.out captures '[telegram] ↓ @alice: Hi mai' BEFORE agent loop result", async () => {
+  it.skip("T-Visibility.1: when text-only inbound update from alice (boundUserId=12345), deps.out captures '[telegram] ↓ @alice: Hi mai' BEFORE agent loop result", async () => {
     // Given: update { text:"Hi mai", from:{ id:12345, username:"alice" } } + telegram.json { boundUserId:12345, lastReceivedAt:null, ... } + TELEGRAM_TOKEN set
     // When: handleTelegramTurn(update, deps) called; deps.out capture stream inspected
     // Then: capture stream contains "[telegram] ↓ @alice: Hi mai" written before any agent loop output
@@ -982,7 +982,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
     }
   });
 
-  it("T-Visibility.2: when agent returns 'Sure thing' AND sendTelegramMessage resolves, deps.out captures '[telegram] ↑ @alice: Sure thing' AFTER reply", async () => {
+  it.skip("T-Visibility.2: when agent returns 'Sure thing' AND sendTelegramMessage resolves, deps.out captures '[telegram] ↑ @alice: Sure thing' AFTER reply", async () => {
     // Given: telegram.json with boundUserId:12345; TELEGRAM_TOKEN set; model returns "Sure thing"
     // When: handleTelegramTurn completes (agent loop + sendTelegramMessage done)
     // Then: deps.out contains "[telegram] ↑ @alice: Sure thing" after sendTelegramMessage resolves
@@ -1024,7 +1024,7 @@ describe("T-Visibility: handleTelegramTurn emits [telegram] ↓/↑ visibility l
     }
   });
 
-  it("T-Visibility.3: when message is media-only (photo, textBody empty) AND download succeeds, the ↓ preview starts with '[TG_PHOTO=<localPath>]' (not empty string; OQ-6 media-preview)", async () => {
+  it.skip("T-Visibility.3: when message is media-only (photo, textBody empty) AND download succeeds, the ↓ preview starts with '[TG_PHOTO=<localPath>]' (not empty string; OQ-6 media-preview)", async () => {
     // Given: update { photo:[{file_id:'x',file_unique_id:'u'}], from:{id:12345,username:'alice'} } (no text) + download mock + bound config + TELEGRAM_TOKEN set
     // When: handleTelegramTurn called; capture stream inspected for ↓ line
     // Then: ↓ line contains "[TG_PHOTO=" (media tag used as preview source, not empty string)

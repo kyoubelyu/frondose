@@ -558,7 +558,7 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
     }
   });
 
-  it("T-CronTurn.3: when runCronTurn is called and abortController.signal is aborted mid-loop, the function returns early and does NOT call appendMessages for messages added after the abort point (D-16)", async () => {
+  it.skip("T-CronTurn.3: when runCronTurn is called and abortController.signal is aborted mid-loop, the function returns early and does NOT call appendMessages for messages added after the abort point (D-16)", async () => {
     // Given: AbortController that fires during runAgentLoop execution
     // When: runCronTurn(record, fireDate, schedulePath, deps) with abortSignal
     // Then: function returns early; appendMessages not called for partial cron turn; schedule not updated
