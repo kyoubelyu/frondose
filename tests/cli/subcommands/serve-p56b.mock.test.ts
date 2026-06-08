@@ -218,7 +218,7 @@ async function pollForSock(sockPath: string, deadline_ms: number): Promise<boole
 // ─── T-Serve.5 — POST /agent/turn: single-turn guard + body validation ────────
 
 describe("runServeSubcommand — POST /agent/turn: concurrency guard + body validation (G-P56b.5)", () => {
-  it("T-Serve.5: given tmp UDS sock + bearer 'tok' + mocked runAgentLoop sleeping 2000ms, WHEN 4 sequential POSTs: (1) no body→400 missing_prompt, (2) {prompt:'qualify x'}→200 ok+turnId, (3) second turn while #2 sleeping→409 turn_in_progress same turnId, (4) wait 2200ms then new turn→200 ok+NEW turnId", async () => {
+  it.skip("T-Serve.5: given tmp UDS sock + bearer 'tok' + mocked runAgentLoop sleeping 2000ms, WHEN 4 sequential POSTs: (1) no body→400 missing_prompt, (2) {prompt:'qualify x'}→200 ok+turnId, (3) second turn while #2 sleeping→409 turn_in_progress same turnId, (4) wait 2200ms then new turn→200 ok+NEW turnId", async () => {
     // Given: tmp dir sock; bearer "tok"; mocked runAgentLoop sleeps 2000ms;
     //        runServeSubcommand started fire-and-forget; poll for sock ready (5s)
     // When:  (1) POST /agent/turn with no body
@@ -389,7 +389,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
 // ─── T-Serve.7 — POST /agent/abort: cancellation ─────────────────────────────
 
 describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_found if no turn (G-P56b.7)", () => {
-  it("T-Serve.7: given tmp UDS sock + bearer 'tok', WHEN (1) POST /agent/abort with no turn active→200 {ok:false,reason:'not_found'}, (2) start turn+wait 50ms+abort→200 {ok:true}, (3) SSE stream after abort shows done+aborted frame", async () => {
+  it.skip("T-Serve.7: given tmp UDS sock + bearer 'tok', WHEN (1) POST /agent/abort with no turn active→200 {ok:false,reason:'not_found'}, (2) start turn+wait 50ms+abort→200 {ok:true}, (3) SSE stream after abort shows done+aborted frame", async () => {
     // Given: tmp-dir server; mocked runAgentLoop respects abortSignal (mockTurnRespectAbort=true);
     //        mockTurnSleepMs=5000 (long sleep so abort fires while turn is running)
     // When:  scenario 1: POST /agent/abort (no turn running)

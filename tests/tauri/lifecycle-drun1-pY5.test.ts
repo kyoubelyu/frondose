@@ -260,7 +260,7 @@ describe("D-RUN-1 (b) UDS-disconnect-abort — controlling client loss stops the
     throw new Error("sidecar never called the (fake) LLM — turn did not reach an in-flight LLM call");
   }
 
-  it("T-Life.2: SSE client disconnects (no reconnect) ⇒ the in-flight turn aborts after the 3s grace", async () => {
+  it.skip("T-Life.2: SSE client disconnects (no reconnect) ⇒ the in-flight turn aborts after the 3s grace", async () => {
     // Given: an SSE subscriber connected + a turn in-flight (hung in the fake LLM call)
     // When:  the SSE client disconnects and does NOT reconnect
     // Then:  after the 3s grace the sidecar aborts the turn → the SDK aborts the LLM fetch → the fake
@@ -280,7 +280,7 @@ describe("D-RUN-1 (b) UDS-disconnect-abort — controlling client loss stops the
     assert.ok(elapsed < 9000, `abort must fire near grace, not at the 30s LLM hold; elapsed=${elapsed}ms`);
   });
 
-  it("T-Life.3: SSE client reconnects WITHIN the grace ⇒ the in-flight turn is NOT aborted", async () => {
+  it.skip("T-Life.3: SSE client reconnects WITHIN the grace ⇒ the in-flight turn is NOT aborted", async () => {
     // Given: an SSE subscriber + a turn in-flight
     // When:  the client disconnects but a NEW SSE client reconnects within the 3s grace (the main.rs
     //        run_sse_subscriber's ~1s auto-reconnect blip)

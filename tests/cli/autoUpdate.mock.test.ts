@@ -916,14 +916,20 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool() count in src/tools/ (P-SP-A rebaseline → 53; autoUpdate is NOT a Vercel tool)", async () => {
+  it("T-CONTRACT: tool() invocation count in src/tools/ (current: 59 = 53 factory-returns + 6 const exports)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
-    // When:  grep tool() in src/tools/**
-    // Then:  53 tool() calls — P-SP-A rebaseline adds 12 sales kernel tool definitions.
-    //        mai auto-update is a startup hook, not a Vercel tool.
-    const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
+    // When:  count actual tool({...}) invocations in src/tools/**
+    // Then:  59 tool() invocations across two definition styles:
+    //          - 53 `return tool({...})` factory returns (makeXTool helpers)
+    //          - 6 `export const X = tool({...})` constants (todoWrite, suggestCard,
+    //            presentSummary, echo, sleep, suggestNextActions — added by P-Y1/Y3 etc)
+    // Updated 2026-06-08 to reflect post-P-Y3 inventory drift.
+    const out = execSync(
+      'grep -rE "(return|=)\\s+tool\\(" src/tools/ --include="*.ts" | wc -l',
+      { encoding: "utf-8" },
+    );
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 59, `Expected exactly 59 tool() invocations in src/tools/, got ${count}.`);
   });
 });
 

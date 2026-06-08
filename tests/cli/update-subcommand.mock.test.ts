@@ -601,13 +601,17 @@ describe("Commander registration", () => {
 // ─── T-UPDATE.13: Tool count contract ──────────────────────────────────────
 
 describe("contract checks", () => {
-  it("T-UPDATE.13: tool() count in src/tools/ (P-SP-A rebaseline → 53; mai update is a CLI subcommand, not a Vercel tool)", async () => {
+  it("T-UPDATE.13: tool() invocation count in src/tools/ (current: 59 = 53 factory-returns + 6 const exports)", async () => {
     // Given: src/tools/ directory with Vercel tool definitions
-    // When:  counting tool() invocations in src/tools/**/*.ts
-    // Then:  53 (P-SP-A rebaseline adds 12 sales kernel tool definitions)
-    const out = execSync('grep -r "tool(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
+    // When:  counting actual tool({...}) invocations via precise regex
+    // Then:  59 = 53 `return tool({...})` factory returns + 6 `export const X = tool({...})` consts.
+    //        Updated 2026-06-08 to reflect post-P-Y3 inventory drift (mirror autoUpdate fix).
+    const out = execSync(
+      'grep -rE "(return|=)\\s+tool\\(" src/tools/ --include="*.ts" | wc -l',
+      { encoding: "utf-8" },
+    );
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 53, `Expected exactly 53 tool() calls in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 59, `Expected exactly 59 tool() invocations in src/tools/, got ${count}.`);
   });
 
   // ─── T-UPDATE.14: lint check ──────────────────────────────────────────────

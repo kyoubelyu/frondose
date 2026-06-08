@@ -222,15 +222,17 @@ describe("P-23 contract: Hard Rule 8 + tool count", () => {
     assert.strictEqual(result.trim(), "", `child_process found in src/tools/: ${result.trim()}`);
   });
 
-  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) returns exactly 47 tools", () => {
-    // Given:  full tool inventory (worker mode: session + persistence + control)
+  it("T-CONTRACT.TC: makeAllTools(session, persistence, control) returns exactly 53 tools (default tier=power worker)", () => {
+    // Given:  full tool inventory (worker mode: session + persistence + control; no opts → resolveTier default)
     // When:   Object.keys(makeAllTools(session, persistence, control)) counted
-    // Then:   count === 47 (P-SP-A rebaseline: +12 worker-only sales kernel tools)
+    // Then:   count === 53 (CLAUDE.md product contract — power-tier worker count after
+    //         P-SP-A (+12), P-SP-B (+2), P-SP-E (+2), P-SP-F (+1), P-Y3 (+1) = 47 → 53).
+    //         No env override → resolveTier returns "power" by default in test envs.
     const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
     const persistence = { memoryDbPath: ":memory:", identityPath: "/tmp/fake-identity.json" };
     const control = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" };
     const toolSet = makeAllTools(session, persistence, control);
     const count = Object.keys(toolSet).length;
-    assert.strictEqual(count, 47, `expected 47 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
+    assert.strictEqual(count, 53, `expected 53 tools, got ${count}: ${Object.keys(toolSet).join(", ")}`);
   });
 });
