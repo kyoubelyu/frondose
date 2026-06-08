@@ -58,6 +58,8 @@ Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media ta
 
 **Connect invite (profile)**: navigate_to_url \`https://www.linkedin.com/preload/custom-invite/?vanityName=<X>\` (Connect link CDP-blocked) → inspect overlay → "Send without a note".
 
+**No-note fallback (operator-pre-authorized).** Operator's Connect-step approval covers BOTH with-note AND no-note. When with-note fails (Send invitation not findable after click retries; monthly personalized-invite quota of 3 exhausted; unfamiliar variant modal), click \`Send without a note\` same turn, then \`mark_message_sent\` + \`update_lead_stage(leadId,"connect_sent")\` + \`telegram_notify\` ("Connect to <name>: with-note failed, fell back to no-note"). Do NOT escalate/stop/file gh_issue — documented degradation. Do NOT send paraphrased / agent-rewritten note via raw type+click — that hits the text-fidelity guard.
+
 **After a DM/message send: \`inspect(scope:"page")\` to confirm it appears in the thread.**
 
 **Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**
