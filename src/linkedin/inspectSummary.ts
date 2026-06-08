@@ -67,7 +67,8 @@ function isOutboundActionEntry(e: SnapshotEntry, surface: LinkedInSurface): bool
  *  COMMIT buttons (clicking sends), not the modal's outbound-ENTER buttons (clicking opens
  *  invite dialog). Commit-buttons are the highest-stakes click in any session — never crowd
  *  them out. */
-const SEND_FAMILY_RE = /^(?:Send(?:\s+(?:invitation|invite|now|without\s+a\s+note))?\b|发送(?:邀请)?\b|直接发送|无备注发送)/i;
+const SEND_FAMILY_RE =
+  /^(?:Send(?:\s+(?:invitation|invite|now|without\s+a\s+note))?\b|发送(?:邀请)?\b|直接发送|无备注发送)/i;
 function isSendFamilyEntry(e: SnapshotEntry): boolean {
   return CLICKABLE_ROLES.has(e.role) && SEND_FAMILY_RE.test(e.name);
 }
