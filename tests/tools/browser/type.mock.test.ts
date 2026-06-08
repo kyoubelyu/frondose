@@ -729,8 +729,24 @@ function seedSalesDb(slug: string, draftText: string): string {
 }
 
 describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
+  // 3rd-degree modal layout: direct note-entry view with textarea + Send invitation visible.
+  // Observed live for Linfeng (2026-06-07) + standard for 3rd-deg targets.
   const modalEntries = [
     { ref: "@e1", role: "heading", name: "Add a note to your invitation" },
+    { ref: "@e2", role: "textbox", name: "Message" },
+    { ref: "@e3", role: "button", name: "Cancel adding a note" },
+    { ref: "@e4", role: "button", name: "Send invitation" },
+  ];
+
+  // 2nd-degree modal layout: confirmation question with the same labels but a "?" in the heading.
+  // Observed live for Dmitry Balanovsky (2026-06-08) + Hootan Farhat (2026-05-25).
+  // Same affordance set (textbox + Send invitation) — the heading question mark is the only
+  // surface-level difference, so the type-fidelity guard MUST treat them identically.
+  // [P-D11-R4 2026-06-08] Snapshot-capture WAS observed to NOT surface the 2nd-deg dialog's
+  // inner buttons in some cases (separate snapshotCapture bug — tracked in audit-followup).
+  // This test verifies that WHEN the entries ARE captured correctly, the fidelity guard works.
+  const modalEntries2nd = [
+    { ref: "@e1", role: "heading", name: "Add a note to your invitation?" },
     { ref: "@e2", role: "textbox", name: "Message" },
     { ref: "@e3", role: "button", name: "Cancel adding a note" },
     { ref: "@e4", role: "button", name: "Send invitation" },
@@ -861,5 +877,56 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
     );
     assert.equal(result.ok, true, "feed search-box type must succeed");
     assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+  });
+
+  // [P-D11-R4 — 2nd-degree modal variant coverage]
+  // Given: 2nd-degree modal entries (heading with "?" — "Add a note to your invitation?") AND
+  //        a draft exists for this lead AND typed text MATCHES the draft.
+  // When:  agent calls type with the exact draft text on a 2nd-deg target's profile.
+  // Then:  guard PASSES — the question-mark heading variant is detected as a Connect modal
+  //        same as 3rd-deg (heading text isn't part of the predicate), fidelity check passes.
+  it("PASSES on 2nd-degree modal variant when typed text matches saved draft", async () => {
+    const slug = "test-lead-2nd-deg";
+    const approved = "Hi 2nd-deg target — exact approved note for the confirmation variant.";
+    const home = seedSalesDb(slug, approved);
+    try {
+      const session = makeFakeSessionOnProfile(slug, modalEntries2nd);
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: approved, ref: "@e2" },
+        { toolCallId: "tg-2nd-match", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, true, "2nd-deg exact match must pass — modal-detection vocabulary is variant-agnostic");
+      assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Given: 2nd-degree modal + a draft exists + typed text is REWRITTEN
+  // When:  agent calls type with paraphrased text on a 2nd-deg target
+  // Then:  guard rejects — same Linfeng-class brand-safety check fires regardless of variant
+  it("REJECTS rewritten text on 2nd-degree modal variant (same brand-safety contract)", async () => {
+    const slug = "test-lead-2nd-deg-rewrite";
+    const approved = "Hi target — your work on photonics caught my attention. Would love to connect.";
+    const home = seedSalesDb(slug, approved);
+    try {
+      const session = makeFakeSessionOnProfile(slug, modalEntries2nd);
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "Hi target — photonics is interesting; let's connect.", ref: "@e2" },
+        { toolCallId: "tg-2nd-rewrite", messages: [], abortSignal },
+      );
+      assert.equal(result.ok, false, "2nd-deg rewritten text MUST be rejected");
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+      const err = (result as any).error;
+      assert.equal(err.kind, "invalid_input");
+      assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0);
+    } finally {
+      delete process.env.MAI_HOME_BASE;
+      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    }
   });
 });
