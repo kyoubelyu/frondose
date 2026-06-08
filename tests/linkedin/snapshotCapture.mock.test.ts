@@ -609,3 +609,70 @@ describe("T-G6 — D-G6 fix: OVERLAY_SYNTH_JS + synthesizeOverlayEntries retry-w
     );
   });
 });
+
+// ─── T-P10: 2nd-degree Connect modal inner-button enumeration ──────────────
+// [Phase 10 2026-06-08] OVERLAY_SYNTH_JS used to surface a role=dialog match as
+// ONE entry only — the dialog's INNER buttons (Cancel adding a note, Send invitation,
+// Add a note) never reached the agent. Live evidence: Hootan Farhat 2026-05-25 +
+// Dmitry Balanovsky 2026-06-08 — agent's inspect showed the dialog text but no
+// modal buttons, click(label='Send invitation') retry-polled forever. Fix: when
+// matching role=dialog/alertdialog/[data-test-modal], enumerate inner clickable
+// children (button, [role=button], a[role=button]) as separate entries.
+
+describe("T-P10: 2nd-degree modal inner-button enumeration (Phase 10)", () => {
+  // Given: snapshotCapture.ts contains OVERLAY_SYNTH_JS
+  // When:  source inspected for the inner-button enumeration block
+  // Then:  the JS contains the inner-selector + iteration that turns each child
+  //        button into a separate {role:'button', label} entry
+  it("T-P10.1: OVERLAY_SYNTH_JS contains 'innerSel' + inner-button iteration (source-structural)", () => {
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("innerSel"),
+      "T-P10.1: OVERLAY_SYNTH_JS must define an `innerSel` variable for the dialog-children selector — proves the inner-button enumeration block is present",
+    );
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("a[role=\"button\"]"),
+      "T-P10.1: OVERLAY_SYNTH_JS must include 'a[role=\"button\"]' in the inner selector — covers LinkedIn's <a role=button> Connect-link pattern",
+    );
+  });
+
+  // Given: source inspected for the role differentiation between dialog and inner buttons
+  // When:  search for the role-assignment lines
+  // Then:  the dialog entry's role stays 'dialog' while inner buttons get role 'button'
+  it("T-P10.2: dialog vs inner-button roles are differentiated (dialog stays 'dialog'; children get role:'button')", () => {
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.match(/role:\s*['"]button['"]/),
+      "T-P10.2: OVERLAY_SYNTH_JS must push entries with `role: 'button'` for the inner-button children — without this they'd inherit the dialog role and not pass CLICKABLE filter",
+    );
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("isDialog"),
+      "T-P10.2: OVERLAY_SYNTH_JS must compute an `isDialog` flag to gate the inner-button enumeration — proves the enumeration ONLY runs for dialogs (not menuitems)",
+    );
+  });
+
+  // Given: source inspected for visibility guard on inner buttons
+  // When:  search for the vis() call inside the inner loop
+  // Then:  the inner iteration calls vis(btn) — prevents surfacing offscreen / hidden
+  //        buttons that would mislead the agent
+  it("T-P10.3: inner-button enumeration applies the same vis() visibility guard as outer overlays", () => {
+    // Heuristic: there must be at least 2 `vis(` calls in the JS string — one for the
+    // outer overlay loop, one for the inner-button loop.
+    const visCalls = (SNAPSHOT_CAPTURE_SRC.match(/vis\(/g) ?? []).length;
+    assert.ok(
+      visCalls >= 2,
+      `T-P10.3: OVERLAY_SYNTH_JS must call vis() at least twice (once outer, once inner); got ${visCalls}`,
+    );
+  });
+
+  // Given: source inspected for empty-label guard on inner buttons
+  // When:  search for the empty-label rollback pattern
+  // Then:  the iteration drops buttons whose label is empty (no aria-label + no innerText)
+  //        — those are typically dropdown carets, icon-only buttons, etc. The rollback
+  //        also un-marks the data-mai-ov attribute so it doesn't accumulate.
+  it("T-P10.4: empty-label inner buttons are dropped (rollback `i` + remove data-mai-ov)", () => {
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("removeAttribute('data-mai-ov')") &&
+        SNAPSHOT_CAPTURE_SRC.includes("i--"),
+      "T-P10.4: OVERLAY_SYNTH_JS must roll back the index + remove the data-mai-ov attribute when an inner button has no usable label — without this the agent gets noisy unnamed refs",
+    );
+  });
+});
