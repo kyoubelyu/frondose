@@ -70,7 +70,11 @@ before(async () => {
     },
   });
 
-  // 2. Mock runAgentLoop (needed because serve.ts P-56b uses it in POST /agent/turn)
+  // 2. Mock runAgentLoop (needed because serve.ts P-56b uses it in POST /agent/turn).
+  // [P-PI-followup] Pi cutover (bea6023) made loop.ts a thin delegate that imports
+  // pi/loop.ts, which in turn imports STALL_STEP_THRESHOLD + 4 retry-detector helpers
+  // back from loop.ts. The mock MUST expose all of them or Pi's import chain fails
+  // with "does not provide an export named 'STALL_STEP_THRESHOLD'".
   const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
   mock.module(loopUrl, {
     namedExports: {
@@ -91,6 +95,13 @@ before(async () => {
           await new Promise<void>((r) => setTimeout(r, sleepMs));
         }
       },
+      // Pi-loop transitive imports — these are NOT exercised by the runAgentLoop stub
+      // (the stub never iterates messages), so safe-default stubs keep the chain importable.
+      STALL_STEP_THRESHOLD: 4,
+      lastAssistantMessageHasNoToolCalls: () => false,
+      lastAssistantMessageMissedExecute: () => false,
+      narrationContinueMessage: () => ({ role: "user" as const, content: "" }),
+      stalledContinueMessage: () => ({ role: "user" as const, content: "" }),
     },
   });
 
