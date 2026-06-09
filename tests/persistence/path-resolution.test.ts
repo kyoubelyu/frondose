@@ -141,7 +141,8 @@ const T_PATHS_2_PRIVATE_MATRIX = [
   },
   {
     name: "UPDATE_LOCK (autoUpdate)",
-    file: "src/cli/autoUpdate.ts",
+    // P-72 slice 9: UPDATE_LOCK moved to src/cli/autoUpdate/lock.ts (barrel split)
+    file: "src/cli/autoUpdate/lock.ts",
     getter: "UPDATE_LOCK",
     relPathFragment: '.mai", "agent", "update.lock"',
   },
