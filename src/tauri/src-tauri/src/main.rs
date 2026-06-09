@@ -415,6 +415,32 @@ fn read_update_server_url() -> Option<String> {
     }
 }
 
+/// P-58d.3 — Periodic update-check interval in seconds. Reads
+/// `updateCheckIntervalSec` from ~/.mai/agent/config.json. Defaults to 3600
+/// (1 hour) — early-release operator directive 2026-06-09: "发布初期会经常更新".
+/// Floor of 60s (sanity guard against a config typo that hammers the server).
+/// Returning 0 disables periodic polling (operator opt-out without removing
+/// updateServerUrl).
+fn read_update_check_interval_sec() -> u64 {
+    let default_sec: u64 = 3600;
+    let Some(home) = std::env::var("HOME").ok() else {
+        return default_sec;
+    };
+    let path = std::path::Path::new(&home).join(".mai/agent/config.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return default_sec;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else {
+        return default_sec;
+    };
+    match v.get("updateCheckIntervalSec").and_then(|x| x.as_u64()) {
+        Some(0) => 0, // operator-set 0 → disable periodic polling
+        Some(n) if n < 60 => 60,
+        Some(n) => n,
+        None => default_sec,
+    }
+}
+
 /// P-58d.1: check the runtime-configured update endpoint once at launch
 /// (OQ-58d.6: check-on-launch). Runs in a spawned task so a down/slow server
 /// never blocks the UI. No URL → returns immediately. On a found update:
@@ -756,6 +782,34 @@ async fn main() {
     tokio::spawn(async move {
         updater_ready.notified().await; // park until the run loop signals Ready
         run_update_check(app_handle_updater).await;
+    });
+
+    // P-58d.3 — Periodic update-check task (operator directive 2026-06-09:
+    // "发布初期会经常更新"). After the boot-time check above, poll at
+    // updateCheckIntervalSec (default 3600s = 1h, floor 60s, 0 = disabled).
+    // First periodic tick fires AFTER one interval (so it doesn't double-check
+    // back-to-back with the boot check). Runs forever; checks are
+    // best-effort (run_update_check swallows all errors). Returns immediately
+    // when no updateServerUrl is configured — same no-op contract as the boot
+    // check, so a typo'd config never wastes cycles.
+    let app_handle_periodic = app_handle.clone();
+    let periodic_ready = ready_notify.clone();
+    tokio::spawn(async move {
+        periodic_ready.notified().await; // park alongside the boot check
+        let interval_sec = read_update_check_interval_sec();
+        if interval_sec == 0 {
+            return; // operator opt-out
+        }
+        let mut ticker = tokio::time::interval(Duration::from_secs(interval_sec));
+        ticker.tick().await; // first tick fires immediately — discard so we don't double-check
+        loop {
+            ticker.tick().await;
+            // Re-read updateServerUrl on every tick so toggling config.json
+            // updateServerUrl=null is honored without an app restart.
+            if read_update_server_url().is_some() {
+                run_update_check(app_handle_periodic.clone()).await;
+            }
+        }
     });
 
     // P-56b: SSE subscriber (reconnecting — tolerates a not-yet-ready sidecar).
