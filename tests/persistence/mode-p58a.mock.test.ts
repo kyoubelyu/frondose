@@ -32,6 +32,9 @@ import type { OverlayEvent } from "../../src/overlay/eventBus.js";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SERVE_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve.ts"), "utf8");
 const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf8");
+// P-72 slice 6: setCronMode call moved to routes/agent.ts; cronEnabled=false on disconnect moved to routes/events.ts
+const ROUTES_AGENT_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "agent.ts"), "utf8");
+const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "events.ts"), "utf8");
 
 /** Run `fn` with MAI_HOME_BASE pointed at a fresh temp dir (so DEFAULT_MODE_PATH → temp mode.json). */
 function withTempHome<T>(fn: () => T): T {
@@ -141,7 +144,12 @@ describe("setCronMode — sets runtime cronEnabled AND persists (the /agent/cron
       assert.equal(m.readMode(), "manual", "persisted manual");
     });
     // structural companion: the /agent/cron-mode route calls setCronMode(state, enabled)
-    assert.match(ROUTES_TS, /setCronMode\(state,\s*enabled\)/, "routes.ts /agent/cron-mode routes through setCronMode");
+    // P-72 slice 6: the call moved to routes/agent.ts; widen to check EITHER location.
+    assert.ok(
+      /setCronMode\(state,\s*enabled\)/.test(ROUTES_AGENT_TS) ||
+        /setCronMode\(state,\s*enabled\)/.test(ROUTES_TS),
+      "routes.ts or routes/agent.ts (after P-72 slice 6) /agent/cron-mode routes through setCronMode",
+    );
   });
 });
 
@@ -150,10 +158,14 @@ describe("D-RUN-1 auto-stop does NOT persist (structural guard) (G-P58a.6)", () 
   //        state.cronEnabled = false DIRECTLY (NOT via setCronMode/writeMode) — a transient disconnect must not
   //        flip the persisted operator mode.
   it("T-Mode.6: the SSE-disconnect grace auto-stop sets state.cronEnabled=false directly (never setCronMode/writeMode)", () => {
-    // The grace auto-stop lives in the res.on("close") handler. Extract that block + assert direct flip, no persist.
-    const closeIdx = ROUTES_TS.indexOf('res.on("close"');
-    assert.ok(closeIdx > 0, "the SSE close handler exists");
-    const block = ROUTES_TS.slice(closeIdx, closeIdx + 700);
+    // The grace auto-stop lives in the res.on("close") handler.
+    // P-72 slice 6: the handler moved to routes/events.ts; widen to check EITHER location.
+    const eventsCloseIdx = ROUTES_EVENTS_TS.indexOf('res.on("close"');
+    const routesCloseIdx = ROUTES_TS.indexOf('res.on("close"');
+    const closeIdx = eventsCloseIdx > 0 ? eventsCloseIdx : routesCloseIdx;
+    const src = eventsCloseIdx > 0 ? ROUTES_EVENTS_TS : ROUTES_TS;
+    assert.ok(closeIdx > 0, "the SSE close handler exists (routes.ts or routes/events.ts after P-72 slice 6)");
+    const block = src.slice(closeIdx, closeIdx + 700);
     assert.match(block, /state\.cronEnabled\s*=\s*false/, "the auto-stop flips cronEnabled DIRECTLY");
     assert.ok(!block.includes("setCronMode"), "the transient-disconnect auto-stop must NOT call setCronMode");
     assert.ok(!block.includes("writeMode"), "the transient-disconnect auto-stop must NOT writeMode (no persist)");

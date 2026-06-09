@@ -30,6 +30,8 @@ import { DEFAULT_SECRETS_PATH, readSecrets, writeSecrets } from "../../../src/pe
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf8");
+// P-72 slice 6: POST /settings handler moved to routes/settings.ts; widen T-Post.5 to check either location.
+const ROUTES_SETTINGS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "settings.ts"), "utf8");
 
 // gate-on-builder: serve/settings.ts is NEW (builder 4b B1)
 // biome-ignore lint/suspicious/noExplicitAny: gate-on-builder dynamic import of a not-yet-existing module
@@ -218,13 +220,24 @@ describe("/settings handler — sendJson only, NO SSE/audit leak (structural) (G
   // Given: routes.ts. When: the /settings handler block is inspected. Then: it sendJsons the response and does
   //        NOT pass the body/key to deps.emitFrame / deps.auditWriter (the key never reaches SSE/audit/log).
   it("T-Post.5: the /settings handler uses sendJson and never emitFrame/auditWriter the body", () => {
-    // Extract the POST "/settings" handler block (from its `if` to the next `if (method ===`).
-    const start = ROUTES_TS.indexOf('if (method === "POST" && url === "/settings")');
-    assert.ok(start > 0, "the POST /settings handler exists");
-    const rest = ROUTES_TS.slice(start + 10);
-    const end = rest.indexOf("if (method ===");
-    const block = rest.slice(0, end > 0 ? end : 600);
-    assert.match(block, /sendJson\(/, "the /settings handler responds via sendJson");
+    // P-72 slice 6: POST /settings handler moved to routes/settings.ts. Widen to check EITHER location.
+    // Prefer routes/settings.ts (the new home); fall back to routes.ts dispatcher block.
+    const useSplit = ROUTES_SETTINGS_TS.includes("sendJson(");
+    const src = useSplit ? ROUTES_SETTINGS_TS : ROUTES_TS;
+    let block: string;
+    if (useSplit) {
+      // The whole routes/settings.ts IS the handler — use the full file as the block.
+      block = ROUTES_SETTINGS_TS;
+    } else {
+      // Legacy monolithic scan: extract the POST "/settings" handler block.
+      const start = ROUTES_TS.indexOf('if (method === "POST" && url === "/settings")');
+      assert.ok(start > 0, "the POST /settings handler exists in routes.ts");
+      const rest = ROUTES_TS.slice(start + 10);
+      const end = rest.indexOf("if (method ===");
+      block = rest.slice(0, end > 0 ? end : 600);
+    }
+    void src; // used via block
+    assert.match(block, /sendJson\(/, "the /settings handler responds via sendJson (routes.ts or routes/settings.ts after P-72 slice 6)");
     assert.ok(!block.includes("emitFrame"), "the /settings handler must NEVER emitFrame the body (no SSE key leak)");
     assert.ok(
       !block.includes("auditWriter"),

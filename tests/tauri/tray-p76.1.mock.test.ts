@@ -52,6 +52,8 @@ const tauriConf = JSON.parse(readFileSync(join(REPO, "src/tauri/src-tauri/tauri.
 };
 const packageJson = JSON.parse(readFileSync(join(REPO, "package.json"), "utf-8")) as { version?: string };
 const routesSrc = readFileSync(join(REPO, "src/cli/subcommands/serve/routes.ts"), "utf-8");
+// P-72 slice 6: cronEnabled=false on disconnect moved to routes/events.ts; widen T-Belt.1(b) to check EITHER.
+const routesEventsSrc = readFileSync(join(REPO, "src/cli/subcommands/serve/routes/events.ts"), "utf-8");
 
 // ─── Source-slicing helpers ───────────────────────────────────────────────────
 
@@ -280,16 +282,17 @@ describe("P-76.1 E4: serve belt unchanged + hide does not flip cron (G-P76.1-Bel
     //        (c) main.rs CloseRequested arm does NOT write cronEnabled (hide ≠ autonomy escalation).
     //        Note: when the window is hidden the SSE subscriber STAYS connected → belt does NOT fire.
 
-    // (a) belt timeout constant
+    // (a) belt timeout constant — CLIENT_DISCONNECT_GRACE_MS = 3000 stays in routes.ts (passed as arg to handler)
     assert.ok(
       routesSrc.includes("CLIENT_DISCONNECT_GRACE_MS = 3000"),
       "T-Belt.1(a): routes.ts must still define CLIENT_DISCONNECT_GRACE_MS = 3000 (belt timing unchanged)",
     );
 
     // (b) cronEnabled=false on disconnect (the autonomy safety net)
+    // P-72 slice 6: the assignment moved to routes/events.ts; widen to check EITHER location.
     assert.ok(
-      routesSrc.includes("cronEnabled = false"),
-      "T-Belt.1(b): routes.ts must set cronEnabled = false on disconnect (no-autonomy-while-invisible invariant)",
+      routesSrc.includes("cronEnabled = false") || routesEventsSrc.includes("cronEnabled = false"),
+      "T-Belt.1(b): routes.ts or routes/events.ts (after P-72 slice 6) must set cronEnabled = false on disconnect (no-autonomy-while-invisible invariant)",
     );
 
     // (c) CloseRequested (hide) arm must NOT write cronEnabled
