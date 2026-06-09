@@ -56,6 +56,9 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BOUNDARY_TS = readFileSync(join(REPO, "src/agent/systemPrompt/boundary.ts"), "utf-8");
 const CHECKPOINT_TS = readFileSync(join(REPO, "src/agent/systemPrompt/checkpoint.ts"), "utf-8");
 const TURN_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+// P-72 slice 7: isWorkflowResume + deps.systemResume moved to turn/runOne.ts; steerThenTrigger(prompt, true) moved to turn/steer.ts.
+const TURN_RUN_ONE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"), "utf-8");
+const TURN_STEER_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/steer.ts"), "utf-8");
 const CONTEXT_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/context.ts"), "utf-8");
 const SERVE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf-8");
 const LOOP_TS = readFileSync(join(REPO, "src/agent/loop.ts"), "utf-8");
@@ -77,25 +80,33 @@ describe("turn.ts — isWorkflowResume flag threads resume path to deps.systemRe
     // When: scanned for isWorkflowResume flag threading + system selection + ServeDeps field
     // Then: all four wiring points are present — all currently absent → FAIL
 
-    // (1) TurnArgs gains the flag
+    // P-72 slice 7: isWorkflowResume + deps.systemResume moved to turn/runOne.ts (Strategy A split).
+    // steerThenTrigger(prompt, true) call moved to turn/steer.ts (resumeWorkflowTurn → await steer(prompt, true)).
+    // Widen each check to OR across the original turn.ts and the relevant submodule.
+    const combinedTurnAndRunOne = TURN_TS + TURN_RUN_ONE_TS;
+    const combinedTurnAndSteer = TURN_TS + TURN_STEER_TS;
+
+    // (1) TurnArgs gains the flag — lives in turn/runOne.ts post-split
     assert.ok(
-      TURN_TS.includes("isWorkflowResume"),
-      `turn.ts TurnArgs must declare "isWorkflowResume" — ` +
+      combinedTurnAndRunOne.includes("isWorkflowResume"),
+      `turn.ts or turn/runOne.ts TurnArgs must declare "isWorkflowResume" — ` +
         `V5 adds: isWorkflowResume?: boolean to TurnArgs (§9.4(e)). FAILS pre-builder.`,
     );
 
-    // (2) runOneTurn selects deps.systemResume when the flag is set
+    // (2) runOneTurn selects deps.systemResume when the flag is set — in turn/runOne.ts post-split
     assert.ok(
-      TURN_TS.includes("deps.systemResume"),
-      `turn.ts runOneTurn must reference deps.systemResume for the system selection — ` +
+      combinedTurnAndRunOne.includes("deps.systemResume"),
+      `turn.ts or turn/runOne.ts runOneTurn must reference deps.systemResume for the system selection — ` +
         `V5 adds: system: args.isWorkflowResume ? deps.systemResume : deps.system (§9.4(e) sketch). ` +
         `FAILS pre-builder.`,
     );
 
-    // (3) resumeWorkflowTurn passes true — the ONLY path that sets the flag
+    // (3) resumeWorkflowTurn passes true — in turn/steer.ts post-split (await steer(prompt, true))
     assert.ok(
-      TURN_TS.includes("steerThenTrigger(prompt, true)") || TURN_TS.includes("steerThenTrigger(newPrompt, true)"),
-      `turn.ts resumeWorkflowTurn must call steerThenTrigger(prompt, true) — ` +
+      combinedTurnAndSteer.includes("steerThenTrigger(prompt, true)") ||
+        combinedTurnAndSteer.includes("steerThenTrigger(newPrompt, true)") ||
+        combinedTurnAndSteer.includes("steer(prompt, true)"),
+      `turn.ts or turn/steer.ts resumeWorkflowTurn must call steerThenTrigger / steer with true — ` +
         `currently: steerThenTrigger(prompt) [no flag]. ` +
         `V5 adds the second arg (§9.4(e)): await steerThenTrigger(prompt, true). FAILS pre-builder.`,
     );
