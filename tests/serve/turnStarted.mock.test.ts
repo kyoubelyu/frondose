@@ -55,6 +55,9 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ── Serve source strings (for T-Turn.5 structural inventory) ─────────────────────────────────────
 
 const TURN_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+// P-72 slice 7: triggerCardActionTurn + triggerAnalyzeProfile moved to turn/triggers.ts (Strategy A split).
+// state.currentTurn = { and emitFrame turn-started sites moved there too. Widen T-Turn.5 scan.
+const TURN_TRIGGERS_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/triggers.ts"), "utf-8");
 const CRON_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/cron.ts"), "utf-8");
 const ROUTES_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/routes.ts"), "utf-8");
 const DISPATCH_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/dispatch.ts"), "utf-8");
@@ -228,11 +231,15 @@ describe("serve/**/*.ts — structural inventory: every state.currentTurn = { si
 
     // ── Count: state.currentTurn = { sites per file (regression guard for new unclassified sites) ──
 
-    const turnCurrentSites = (TURN_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length;
+    // P-72 slice 7: triggerCardActionTurn moved to turn/triggers.ts (Strategy A split).
+    // Widen count to turn.ts + turn/triggers.ts combined so the assertion holds post-split.
+    const turnCurrentSites =
+      (TURN_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length +
+      (TURN_TRIGGERS_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length;
     assert.equal(
       turnCurrentSites,
       1,
-      `turn.ts must have exactly 1 state.currentTurn = { site (triggerCardActionTurn); ` +
+      `turn.ts + turn/triggers.ts must have exactly 1 state.currentTurn = { site (triggerCardActionTurn); ` +
         `got ${turnCurrentSites} — a new site needs explicit classification in this test`,
     );
 
@@ -265,18 +272,25 @@ describe("serve/**/*.ts — structural inventory: every state.currentTurn = { si
 
     // ── EMITS-TURN-STARTED classification (3 sites) ──────────────────────────────────────────────
 
-    // turn.ts/triggerCardActionTurn must emit turn-started (F3C1)
+    // P-72 slice 7: triggerCardActionTurn + triggerAnalyzeProfile moved to turn/triggers.ts.
+    // Widen each check to OR across turn.ts + turn/triggers.ts combined.
+    const combinedTurnAndTriggers = TURN_SRC + TURN_TRIGGERS_SRC;
+
+    // turn.ts/triggerCardActionTurn (now turn/triggers.ts) must emit turn-started (F3C1)
     assert.ok(
-      TURN_SRC.includes('emitFrame({ type: "turn-started"') || TURN_SRC.includes("emitFrame({ type: 'turn-started'"),
-      `turn.ts must contain emitFrame({ type: "turn-started"... }) for triggerCardActionTurn (F3C1 required — FAILS pre-builder)`,
+      combinedTurnAndTriggers.includes('emitFrame({ type: "turn-started"') ||
+        combinedTurnAndTriggers.includes("emitFrame({ type: 'turn-started'"),
+      `turn.ts or turn/triggers.ts must contain emitFrame({ type: "turn-started"... }) for triggerCardActionTurn (F3C1 required)`,
     );
 
-    // turn.ts/triggerAnalyzeProfile must also emit turn-started (F3C2) — must have ≥2 total emits
-    const turnStartedEmitCount = (TURN_SRC.match(/emitFrame\(\{\s*type:\s*["']turn-started["']/g) ?? []).length;
+    // turn.ts/triggerAnalyzeProfile (now turn/triggers.ts) must also emit turn-started (F3C2) — must have ≥2 total emits
+    const turnStartedEmitCount = (
+      combinedTurnAndTriggers.match(/emitFrame\(\{\s*type:\s*["']turn-started["']/g) ?? []
+    ).length;
     assert.ok(
       turnStartedEmitCount >= 2,
-      `turn.ts must have ≥2 turn-started emits (triggerCardActionTurn + triggerAnalyzeProfile); ` +
-        `found ${turnStartedEmitCount} (F3C1+F3C2 required — FAILS pre-builder)`,
+      `turn.ts + turn/triggers.ts must have ≥2 turn-started emits (triggerCardActionTurn + triggerAnalyzeProfile); ` +
+        `found ${turnStartedEmitCount} (F3C1+F3C2 required)`,
     );
 
     // cron.ts/tick must emit turn-started (F6)
