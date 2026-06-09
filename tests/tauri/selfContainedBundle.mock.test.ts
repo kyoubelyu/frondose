@@ -104,13 +104,10 @@ describe("tauri.conf.json bundle.resources — self-contained runtime bundling (
 // T-Conf.2 — P-58d.1 updater no-regression (createUpdaterArtifacts + endpoints + pubkey + targets)
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 describe("tauri.conf.json updater contract — P-58d.1 no-regression (G-P58d3.3)", () => {
-  it('T-Conf.2: createUpdaterArtifacts===true; endpoints deep-equals []; pubkey===28D6A7F5 string; targets includes "app"+"dmg"', () => {
+  it('T-Conf.2: createUpdaterArtifacts===true; endpoints points at local update-server; pubkey===28D6A7F5 string; targets includes "app"+"dmg"', () => {
     // Given: tauri.conf.json
     // When:  parsed
-    // Then:  all four P-58d.1 updater invariants hold — F2 must not break them.
-    //
-    // Currently PASSES (regression guard). If this fails after F2 is applied,
-    // the builder accidentally broke the P-58d.1 updater wiring.
+    // Then:  all four P-58d.1 updater invariants hold (with the P-58d endpoint baked in).
 
     // (a) createUpdaterArtifacts — controls .app.tar.gz + .sig emission
     assert.strictEqual(
@@ -119,11 +116,15 @@ describe("tauri.conf.json updater contract — P-58d.1 no-regression (G-P58d3.3)
       "bundle.createUpdaterArtifacts must be true (P-58d.1 updater wiring)",
     );
 
-    // (b) endpoints — must remain [] (populated at runtime via UpdaterExt; build-time bake is rejected)
+    // (b) endpoints — Phase 12 (P-58d) wired the local update-server URL as
+    // the baked-in default. Runtime override still flows through UpdaterExt
+    // when config.json:updateServerUrl is set (run_update_check builds its
+    // own updater with that URL); the baked-in value is the fallback for a
+    // fresh install with no config.
     assert.deepStrictEqual(
       tauriConf.plugins?.updater?.endpoints,
-      [],
-      "plugins.updater.endpoints must deep-equal [] (runtime-set via UpdaterExt, not baked in)",
+      ["http://127.0.0.1:4875/latest.json"],
+      "plugins.updater.endpoints must point at the local update-server (P-58d wiring)",
     );
 
     // (c) pubkey — must remain the P-58d.1 28D6A7F5 key (changing this would brick existing installs)
