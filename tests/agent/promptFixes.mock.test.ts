@@ -40,6 +40,8 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Pre-read source files (all source-structural — no runtime import of production modules needed)
 const TURN_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+// P-72 slice 7: RESUME_EXCLUDED_TOOLS moved to turn/runOne.ts (Strategy A split). Widen scan.
+const TURN_RUN_ONE_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"), "utf-8");
 const CHECKPOINT_SRC = readFileSync(join(REPO, "src/agent/systemPrompt/checkpoint.ts"), "utf-8");
 const BOUNDARY_SRC = readFileSync(join(REPO, "src/agent/systemPrompt/boundary.ts"), "utf-8");
 const IDENTITY_SRC = readFileSync(join(REPO, "src/tools/identity/identity.ts"), "utf-8");
@@ -55,17 +57,19 @@ describe("T-Exec.1m — D-P59-9 under-execution fix: source contract (turn.ts + 
     // When:  RESUME_EXCLUDED_TOOLS set definition is located
     // Then:  the literal "suggest_card" appears within the set definition
 
-    // Locate the RESUME_EXCLUDED_TOOLS definition block
-    const resumeExcludedIdx = TURN_SRC.indexOf("RESUME_EXCLUDED_TOOLS");
-    assert.notEqual(resumeExcludedIdx, -1, "T-Exec.1m.1: RESUME_EXCLUDED_TOOLS must be defined in turn.ts");
+    // P-72 slice 7: RESUME_EXCLUDED_TOOLS moved from turn.ts → turn/runOne.ts (Strategy A split).
+    // Widen to check either file so this assertion holds both pre- and post-split.
+    const combinedTurnSrc = TURN_SRC + TURN_RUN_ONE_SRC;
+    const resumeExcludedIdx = combinedTurnSrc.indexOf("RESUME_EXCLUDED_TOOLS");
+    assert.notEqual(resumeExcludedIdx, -1, "T-Exec.1m.1: RESUME_EXCLUDED_TOOLS must be defined in turn.ts or turn/runOne.ts");
 
     // Extract the block around the definition (up to 200 chars)
-    const block = TURN_SRC.slice(resumeExcludedIdx, resumeExcludedIdx + 200);
+    const block = combinedTurnSrc.slice(resumeExcludedIdx, resumeExcludedIdx + 200);
 
     assert.ok(
       block.includes('"suggest_card"') || block.includes("'suggest_card'"),
       "T-Exec.1m.1: RESUME_EXCLUDED_TOOLS must include 'suggest_card' (§6.4(G)). " +
-        `Current definition (pre-builder): ${block.replace(/\n/g, " ").slice(0, 120)}. ` +
+        `Current definition: ${block.replace(/\n/g, " ").slice(0, 120)}. ` +
         'Pre-builder: set is `new Set(["search_memory", "getMemory", "get_memory_note"])` — suggest_card ABSENT. FAILS pre-builder.',
     );
   });
