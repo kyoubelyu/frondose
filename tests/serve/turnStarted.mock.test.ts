@@ -58,6 +58,8 @@ const TURN_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "
 const CRON_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/cron.ts"), "utf-8");
 const ROUTES_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/routes.ts"), "utf-8");
 const DISPATCH_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/dispatch.ts"), "utf-8");
+// P-72 slice 6: state.currentTurn = { assignments moved to routes/agent.ts; combine for T-Turn.5 count.
+const ROUTES_AGENT_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/routes/agent.ts"), "utf-8");
 
 // ── Mock factories (T-Turn.1 / T-Turn.2) ─────────────────────────────────────────────────────────
 
@@ -249,11 +251,15 @@ describe("serve/**/*.ts — structural inventory: every state.currentTurn = { si
         `got ${dispatchCurrentSites}`,
     );
 
-    const routesCurrentSites = (ROUTES_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length;
+    // P-72 slice 6: /agent/turn, /agent/activate, /agent/retry handlers moved to routes/agent.ts.
+    // Widen to count state.currentTurn = { across BOTH routes.ts (dispatcher) + routes/agent.ts.
+    const routesCurrentSites =
+      (ROUTES_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length +
+      (ROUTES_AGENT_SRC.match(/state\.currentTurn\s*=\s*\{/g) ?? []).length;
     assert.equal(
       routesCurrentSites,
       3,
-      `routes.ts must have exactly 3 state.currentTurn = { sites (/agent/turn + /agent/activate + /agent/retry); ` +
+      `routes.ts + routes/agent.ts (after P-72 slice 6) must have exactly 3 state.currentTurn = { sites total (/agent/turn + /agent/activate + /agent/retry); ` +
         `got ${routesCurrentSites} — a new site needs explicit classification in this test`,
     );
 

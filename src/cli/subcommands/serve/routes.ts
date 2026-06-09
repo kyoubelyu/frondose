@@ -1,57 +1,24 @@
-import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { CdpClient } from "../../../cdp/client.js";
-import { attachEventBus, type OverlayEvent } from "../../../overlay/eventBus.js";
-import { subscribeContextId } from "../../../overlay/inject.js";
-import { readIdentity } from "../../../persistence/identity.js";
-import { setCronMode } from "../../../persistence/mode.js";
-import { countAutoLedgerByAction, endAutoRun, getAutoRun } from "../../../persistence/salesDb.js";
-import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
-import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
+import type { ServeDeps, ServeState } from "./context.js";
 import type { createOverlayDispatcher } from "./dispatch.js";
-import { checkBearer, readAuditTail, readJsonBody, sendJson } from "./http.js";
-import { applySettings, parseSettingsPatch, readSettings, reloadAgentDeps } from "./settings.js";
-import { showEdgeRing } from "./takeover.js";
+import { checkBearer, sendJson } from "./http.js";
+import {
+  handlePostAgentAbort,
+  handlePostAgentActivate,
+  handlePostAgentRetry,
+  handlePostAgentTurn,
+  handlePostCronMode,
+  handlePostPassiveMode,
+} from "./routes/agent.js";
+import { handleGetAuditTail } from "./routes/audit.js";
+import { handleChromeEnsure } from "./routes/cdp.js";
+import { handleGetEvents, type TimerHolder } from "./routes/events.js";
+import { handleHealth, handleIdentity } from "./routes/health.js";
+import { handleGetSettings, handlePostSettings } from "./routes/settings.js";
+import { handlePostWorkflow } from "./routes/workflow.js";
 import type { createTurnRunner } from "./turn.js";
 
-/**
- * P-Y4 (ask d): wire the in-page overlay to a booted CDP client — capture the overlay
- * execution-context id (for callInOverlay) + route in-page overlay events (pill activate,
- * passive observe) into serve. Extracted verbatim from the old POST /chrome/ensure body so
- * BOTH that route AND the lazy onClientBooted boot path share one idempotent implementation.
- * Idempotent via the state guards: a second call (e.g. ensure after onClientBooted already
- * ran) no-ops.
- */
-export async function ensureOverlaySubscription(
-  state: ServeState,
-  deps: ServeDeps,
-  onOverlayEvent: (event: OverlayEvent) => void,
-  client: CdpClient,
-): Promise<void> {
-  if (!state.unsubscribeContextId) {
-    state.unsubscribeContextId = await subscribeContextId(client.handle, (id) => {
-      const wasReconnect = state.overlayContextId !== undefined && state.overlayContextId !== id;
-      state.overlayContextId = id;
-      if (state.currentTurn !== null && state.cronEnabled) showEdgeRing(state, deps.session);
-      if (wasReconnect) {
-        deps.emitFrame({ type: "overlay-reconnected" });
-        const ts = Date.now();
-        deps.emitOverlayEvent({
-          kind: "overlay-event",
-          ts,
-          event_type: "overlay-reconnected",
-          t0: ts,
-          latency_ms: 0,
-        });
-      }
-    });
-  }
-  if (!state.unsubscribeOverlayEvents) {
-    state.unsubscribeOverlayEvents = attachEventBus(client.handle, (event) => {
-      onOverlayEvent(event);
-    });
-  }
-}
+export { ensureOverlaySubscription } from "./routes/cdp.js";
 
 export function createRequestHandler(
   state: ServeState,
@@ -67,7 +34,7 @@ export function createRequestHandler(
   // ~1s reconnect (main.rs run_sse_subscriber) so a transient blip never stops a live
   // session. Headless `mai serve` (cron, no SSE client) never connects → never triggers.
   const CLIENT_DISCONNECT_GRACE_MS = 3000;
-  let clientGoneTimer: ReturnType<typeof setTimeout> | null = null;
+  const timerHolder: TimerHolder = { value: null };
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const authError = checkBearer(req, deps.expectedToken);
@@ -79,318 +46,72 @@ export function createRequestHandler(
       const method = req.method ?? "GET";
 
       if (method === "GET" && url === "/health") {
-        sendJson(res, 200, { ok: true, ts: Date.now(), pid: process.pid });
+        handleHealth(res);
         return;
       }
 
       if (method === "GET" && url === "/identity") {
-        const id = readIdentity();
-        if (id === null) {
-          sendJson(res, 200, { ok: false, reason: "identity not set; run `mai setup`" });
-          return;
-        }
-        sendJson(res, 200, { ok: true, ...id });
+        handleIdentity(res);
         return;
       }
 
-      // P-Y6 GET — mirror /identity, sendJson only (masked view; the raw key never leaves serve).
       if (method === "GET" && url === "/settings") {
-        sendJson(res, 200, { ok: true, ...readSettings() });
+        handleGetSettings(res);
         return;
       }
 
-      // P-Y6 POST — VALIDATE-before-write (Step-3b CONCERN-MR) → write-merge → hot-reload → masked echo.
-      // NO emitFrame/auditWriter (no key leak). A malformed body 400s and writes NOTHING.
       if (method === "POST" && url === "/settings") {
-        const body = await readJsonBody(req);
-        const parsed = parseSettingsPatch(body);
-        if (!parsed.ok) {
-          sendJson(res, 400, { ok: false, error: parsed.error });
-          return; // config/secrets UNCHANGED — fail-fast at write, not corrupt-then-break-on-read
-        }
-        applySettings(parsed.patch);
-        const { restartRequired } = reloadAgentDeps(deps);
-        sendJson(res, 200, { ok: true, restartRequired, ...readSettings() });
+        await handlePostSettings(deps, req, res);
         return;
       }
 
       if (method === "POST" && url === "/chrome/ensure") {
-        const result = await deps.session.getOrInitClient();
-        if (result.ok === false) {
-          sendJson(res, 503, { ok: false, error: result.error, message: result.message });
-          return;
-        }
-        await ensureOverlaySubscription(state, deps, dispatch.dispatchOverlayEvent, result.client);
-        sendJson(res, 200, { ok: true, chromePort: 9222, overlayInstalled: true });
+        await handleChromeEnsure(state, deps, dispatch, res);
         return;
       }
 
       if (method === "POST" && url === "/agent/turn") {
-        // [P-75 D-21] Force-release stuck prior turn before accepting a new one.
-        // CDP method calls (Page.navigate, DOM.getBoxModel, Accessibility.getPartialAXTree)
-        // returned by chrome-remote-interface don't honor AbortSignal — so a hung CDP call
-        // (page never finished loading, AX tree query stalled, etc.) leaves runOneTurn's
-        // promise pending forever even after abortController.abort() fires. The `.finally`
-        // that clears state.currentTurn never runs, and every subsequent /agent/turn
-        // rejects with turn_in_progress until pkill -9. The fix: when /agent/turn is
-        // called with state.currentTurn non-null, signal the prior turn AND release the
-        // slot immediately. The hung CDP call is now a leaked promise (resolved on sidecar
-        // GC) but the operator can dispatch new work. The natural UX: the operator
-        // dispatching a NEW prompt clearly wants the new task, even if it interrupts the
-        // hung prior one.
-        if (state.currentTurn !== null) {
-          const stuck = state.currentTurn;
-          stuck.abortController.abort();
-          state.currentTurn = null;
-          deps.emitFrame({
-            type: "error",
-            turnId: stuck.turnId,
-            message: `Turn ${stuck.turnId} force-released by new /agent/turn (D-21: prior turn's tool call did not honor abort).`,
-          });
-        }
-        const body = await readJsonBody(req);
-        const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-        if (!prompt) {
-          sendJson(res, 400, { ok: false, reason: "missing_prompt" });
-          return;
-        }
-        const turnId = randomBytes(4).toString("hex");
-        const abortController = new AbortController();
-        state.currentTurn = { turnId, abortController };
-
-        // [P-75 D-18] Clear stale workflow state on every fresh top-level operator
-        // prompt. Observed in the comment-on-feed-post scenario (2026-06-04): a prior
-        // DM workflow's title bled into the new comment task ("Internal DM to Poem
-        // Rick + Feed Comment"). Chat history (state.messages) is preserved so the
-        // operator can refer back, but the workflow controller's state.current is
-        // null'd so any new todo_write declares a fresh plan instead of merging the
-        // new task's steps with the prior workflow's title and pending steps.
-        // /agent/activate (Magical) and /workflow/approve (resume) deliberately bypass
-        // this — resume must keep the workflow it's resuming into.
-        const wfState = deps.workflow.getState();
-        wfState.current = null;
-        wfState.awaitingApprovalStepId = null;
-
-        state.messages.push({ role: "user", content: prompt });
-        state.lastTurnUserPrompt = prompt;
-
-        sendJson(res, 200, { ok: true, turnId, status: "queued" });
-        void turn
-          .runOneTurn({
-            turnId,
-            abortController,
-            userPrompt: prompt,
-            isRetryable: true,
-            isCronTurn: false,
-          })
-          .catch((e) => {
-            deps.emitFrame({
-              type: "error",
-              turnId,
-              message: e instanceof Error ? e.message : String(e),
-            });
-          })
-          .finally(() => {
-            state.currentTurn = null;
-          });
+        await handlePostAgentTurn(state, deps, turn, req, res);
         return;
       }
 
       if (method === "POST" && url === "/agent/activate") {
-        const body = await readJsonBody(req);
-        const pageUrl = typeof body?.url === "string" ? body.url : null;
-        if (!pageUrl) {
-          sendJson(res, 400, { ok: false, reason: "missing_url" });
-          return;
-        }
-        if (state.currentTurn !== null) {
-          sendJson(res, 409, { ok: false, reason: "turn_in_progress", turnId: state.currentTurn.turnId });
-          return;
-        }
-        const turnId = randomBytes(4).toString("hex");
-        const abortController = new AbortController();
-        state.currentTurn = { turnId, abortController };
-        sendJson(res, 200, { ok: true, turnId, status: "queued" });
-        void turn.triggerAnalyzeProfile(pageUrl, turnId, abortController).finally(() => {
-          state.currentTurn = null;
-        });
+        await handlePostAgentActivate(state, turn, req, res);
         return;
       }
 
       if (method === "POST" && url === "/agent/abort") {
-        if (state.currentTurn === null) {
-          sendJson(res, 200, { ok: false, reason: "not_found" });
-          return;
-        }
-        // [P-75 D-21] Same fix as /agent/turn: signal abort AND release the slot
-        // immediately. Don't wait for runOneTurn's promise to settle — if a CDP call
-        // is hung, it won't ever settle (chrome-remote-interface doesn't honor
-        // AbortSignal). The hung promise becomes a leaked Promise that resolves on
-        // sidecar GC. The operator can now /agent/turn again without restart.
-        const stuck = state.currentTurn;
-        stuck.abortController.abort();
-        state.currentTurn = null;
-        sendJson(res, 200, { ok: true, turnId: stuck.turnId, released: true });
+        handlePostAgentAbort(state, res);
         return;
       }
 
       if (method === "POST" && url === "/agent/retry") {
-        if (state.currentTurn !== null) {
-          sendJson(res, 409, { ok: false, reason: "turn_in_progress", turnId: state.currentTurn.turnId });
-          return;
-        }
-        if (state.lastFailedTurnPrompt === null) {
-          sendJson(res, 200, { ok: false, reason: "no_failed_turn" });
-          return;
-        }
-        if (state.retryAttempts >= MAX_RETRY_ATTEMPTS) {
-          sendJson(res, 200, { ok: false, reason: "retry_limit_reached", attempts: state.retryAttempts });
-          return;
-        }
-        const prompt = state.lastFailedTurnPrompt ?? state.lastTurnUserPrompt;
-        state.lastFailedTurnPrompt = null;
-        state.retryAttempts++;
-        const turnId = randomBytes(4).toString("hex");
-        const abortController = new AbortController();
-        state.currentTurn = { turnId, abortController };
-        state.messages.push({ role: "user", content: prompt });
-        state.lastTurnUserPrompt = prompt;
-        sendJson(res, 200, { ok: true, turnId, status: "queued", attempts: state.retryAttempts });
-        void turn
-          .runOneTurn({
-            turnId,
-            abortController,
-            userPrompt: prompt,
-            isRetryable: true,
-            isCronTurn: false,
-          })
-          .finally(() => {
-            state.currentTurn = null;
-          });
+        handlePostAgentRetry(state, turn, res);
         return;
       }
 
       if (method === "POST" && url.startsWith("/workflow/")) {
-        const body = await readJsonBody(req);
-        const r = deps.workflow.handleEndpoint(url, body);
-        if (url === "/workflow/cancel" && state.autoRunId !== null) {
-          const runId = state.autoRunId;
-          const db = getSalesDb(deps.salesDbPath);
-          const counters = countAutoLedgerByAction(db, runId);
-          const endResult = endAutoRun(db, runId, {
-            status: "stopped_by_user",
-            summary: "Cancelled by operator via /workflow/cancel",
-            counters,
-          });
-          if (!endResult.alreadyEnded) {
-            const endedRow = getAutoRun(db, runId);
-            deps.emitFrame({
-              type: "auto-run-completed",
-              runId,
-              status: "stopped_by_user",
-              summary: endedRow?.summary ?? "Cancelled by operator via /workflow/cancel",
-              finalCounters: counters,
-              endedAt: endedRow?.endedAt ?? Date.now(),
-              ts: Date.now(),
-            });
-          }
-          state.autoRunId = null;
-          state.lastEmittedAutoCounters = null;
-          state.currentTurn?.abortController.abort();
-
-          const controllerResponse = r.response;
-          const controllerSaidNoWorkflow =
-            typeof controllerResponse === "object" &&
-            controllerResponse !== null &&
-            "ok" in controllerResponse &&
-            "reason" in controllerResponse &&
-            controllerResponse.ok === false &&
-            controllerResponse.reason === "no_workflow";
-          if (controllerSaidNoWorkflow) {
-            sendJson(res, 200, { ok: true, closedAutoRun: true });
-            return;
-          }
-        }
-        if (r.resumePrompt) void turn.resumeWorkflowTurn(r.resumePrompt);
-        sendJson(res, r.status, r.response);
+        await handlePostWorkflow(state, deps, turn, req, res, url);
         return;
       }
 
       if (method === "POST" && url === "/agent/cron-mode") {
-        const body = await readJsonBody(req);
-        const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
-        if (enabled === null) {
-          sendJson(res, 400, { ok: false, reason: "missing_enabled" });
-          return;
-        }
-        setCronMode(state, enabled);
-        deps.emitFrame({ type: "cron-mode", cronEnabled: enabled });
-        sendJson(res, 200, { ok: true, cronEnabled: state.cronEnabled });
+        await handlePostCronMode(state, deps, req, res);
         return;
       }
 
       if (method === "POST" && url === "/agent/passive-mode") {
-        const body = await readJsonBody(req);
-        const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
-        if (enabled === null) {
-          sendJson(res, 400, { ok: false, reason: "missing_enabled" });
-          return;
-        }
-        state.passiveEnabled = enabled;
-        deps.emitFrame({ type: "passive-mode", passiveEnabled: enabled });
-        sendJson(res, 200, { ok: true, passiveEnabled: state.passiveEnabled });
+        await handlePostPassiveMode(state, deps, req, res);
         return;
       }
 
       if (method === "GET" && url === "/agent/events") {
-        res.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        });
-        res.write(":\n\n");
-        state.sseClients.add(res);
-        res.write(`data: ${JSON.stringify({ type: "cron-mode", cronEnabled: state.cronEnabled })}\n\n`);
-        // A (re)connected client cancels any pending orphan-abort.
-        if (clientGoneTimer) {
-          clearTimeout(clientGoneTimer);
-          clientGoneTimer = null;
-        }
-        const ping = setInterval(() => {
-          try {
-            res.write(":\n\n");
-          } catch {
-            // ignore; close handler will clean up.
-          }
-        }, 30_000);
-        ping.unref();
-        res.on("close", () => {
-          clearInterval(ping);
-          state.sseClients.delete(res);
-          if (state.sseClients.size === 0) {
-            if (clientGoneTimer) clearTimeout(clientGoneTimer);
-            clientGoneTimer = setTimeout(() => {
-              clientGoneTimer = null;
-              if (state.sseClients.size === 0) {
-                // Controlling client gone + no reconnect → stop the agent loop entirely.
-                state.cronEnabled = false;
-                if (state.currentTurn !== null) state.currentTurn.abortController.abort();
-              }
-            }, CLIENT_DISCONNECT_GRACE_MS);
-            clientGoneTimer.unref?.();
-          }
-        });
+        handleGetEvents(state, timerHolder, res, CLIENT_DISCONNECT_GRACE_MS);
         return;
       }
 
       if (method === "GET" && url.startsWith("/audit/tail")) {
-        const u = new URL(url, "http://localhost");
-        const nParam = u.searchParams.get("n");
-        const sinceParam = u.searchParams.get("since");
-        const n = nParam ? Math.min(Math.max(Number.parseInt(nParam, 10) || 20, 1), 100) : 20;
-        const since = sinceParam ? Number.parseInt(sinceParam, 10) : undefined;
-        const rows = readAuditTail(deps.auditPath, n, since);
-        sendJson(res, 200, { ok: true, rows, total: rows.length });
+        handleGetAuditTail(deps, url, res);
         return;
       }
 
