@@ -55,9 +55,41 @@ interface CliOpts {
   maxSteps?: string; // P-46 D-1b — Commander delivers <n> as a string
 }
 
+/** [Phase 15 / P-APP-11 slice 2] Transitional-surface banner. Visible signal to the
+ *  operator that direct CLI usage is internal/transitional infra — the product is
+ *  the compiled Frondose.app. Suppressed for code paths that are LEGITIMATE
+ *  operator-facing CLI use today: serve (Tauri sidecar spawn), update-server
+ *  (operator-launched local update server), update (explicit update refresh), and
+ *  the commander-internal --help/--version output (where the banner would clobber
+ *  the help text). Prints to stderr so it never pollutes stdout consumers. */
+function maybePrintTransitionalBanner(): void {
+  const sub = process.argv[2] ?? "";
+  // Skip on Tauri sidecar spawn + legit operator-internal commands
+  if (sub === "serve" || sub === "update-server" || sub === "update") return;
+  // Skip on commander --help/--version short-circuit (would clobber the standard output)
+  if (
+    sub === "--help" ||
+    sub === "-h" ||
+    sub === "--version" ||
+    sub === "-V" ||
+    sub === "help" ||
+    sub === "version"
+  ) {
+    return;
+  }
+  process.stderr.write(
+    "[mai] transitional CLI surface — the product is /Applications/Frondose.app\n" +
+      "      This CLI is scheduled for internalization in P-APP-11. Admin commands\n" +
+      "      (telegram, server, update-server, auth) remain supported during the transition.\n\n",
+  );
+}
+
 async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
+
+  // [Phase 15] Surface the transitional-CLI banner before any further work.
+  maybePrintTransitionalBanner();
 
   // P-18 D-1: register crash handlers early — before any async work that could throw
   registerCrashHandlers();
