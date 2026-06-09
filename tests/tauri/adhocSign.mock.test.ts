@@ -137,11 +137,15 @@ describe("tauri.conf.json no-regression — P-58d.1 updater + P-58d.3 self-conta
       `plugins.updater.pubkey must be the P-58d.1 28D6A7F5 minisign public key (got: ${tauriConf.plugins?.updater?.pubkey?.slice(0, 40)}…)`,
     );
 
-    // (e) endpoints — must remain [] (populated at runtime via UpdaterExt; baking them in is rejected)
+    // (e) endpoints — Phase 12 (P-58d) wired the local-update-server URL as a
+    // baked-in default. UpdaterExt at runtime still overrides this with the
+    // updateServerUrl from config.json (run_update_check builds its own
+    // updater with the resolved URL). The baked-in default exists so a fresh
+    // install with no config.json still has SOMETHING to fall back to.
     assert.deepStrictEqual(
       tauriConf.plugins?.updater?.endpoints,
-      [],
-      "plugins.updater.endpoints must deep-equal [] (runtime-set via UpdaterExt, not baked in)",
+      ["http://127.0.0.1:4875/latest.json"],
+      "plugins.updater.endpoints must point at the local update-server (P-58d wiring; runtime override via UpdaterExt + config.json)",
     );
   });
 });
