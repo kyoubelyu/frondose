@@ -39,6 +39,15 @@ import type { WorkflowSseFrame } from "../../src/agent/workflow/types.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CONTROLLER_SRC = readFileSync(join(REPO, "src/agent/workflow/controller.ts"), "utf-8");
+// P-72 slice 5: isContinuation + prefix-match logic moved to controller/reconcile.ts.
+// Structural checks in T-WF.4 widened to include reconcile.ts as the canonical location.
+const RECONCILE_SRC = (() => {
+  try {
+    return readFileSync(join(REPO, "src/agent/workflow/controller/reconcile.ts"), "utf-8");
+  } catch {
+    return "";
+  }
+})();
 
 // ─── Shared helper: build a fresh controller + drive one todo_write ───────────────────────────────
 
@@ -403,22 +412,26 @@ describe("T-WF.4 — D-P59-5 non-regression: genuine continuation (same title, s
       "T-WF.4 NON-REGRESSION: workflow-step-advanced must be emitted for the progressed step. PASSES pre-builder.",
     );
 
-    // ── Assertion 4 (source-structural): `isContinuation` variable must exist in controller.ts ──
+    // ── Assertion 4 (source-structural): `isContinuation` variable must exist ──
     // This is the LOAD-BEARING failing assertion pre-builder — all behavioral checks above pass,
     // but the source check confirms the new predicate was actually added (not just coincidentally correct).
+    // P-72 slice 5: isContinuation moved from controller.ts to controller/reconcile.ts —
+    // check either location (the identifier must exist in the workflow controller source tree).
     assert.ok(
-      CONTROLLER_SRC.includes("isContinuation"),
-      "T-WF.4: controller.ts must define the `isContinuation` predicate (§6.4(A1)). " +
+      CONTROLLER_SRC.includes("isContinuation") || RECONCILE_SRC.includes("isContinuation"),
+      "T-WF.4: controller.ts or controller/reconcile.ts must define the `isContinuation` predicate (§6.4(A1)). " +
         "Pre-builder: variable does NOT exist. FAILS pre-builder.",
     );
 
     // ── Assertion 5 (source-structural): prefix-match predicate must exist ──────────────────────
     // Builder used inline logic instead of a named `sameStepTitles` variable; check for the
     // prefix-match pattern: result.steps.length >= prior.steps.length (the discriminator).
+    // P-72 slice 5: logic moved to controller/reconcile.ts — check either location.
+    const allWorkflowSrc = CONTROLLER_SRC + RECONCILE_SRC;
     assert.ok(
-      CONTROLLER_SRC.includes("result.steps.length >= prior.steps.length") ||
-        (CONTROLLER_SRC.includes("prior.steps.length") && CONTROLLER_SRC.includes("result.steps.length")),
-      "T-WF.4: controller.ts must implement prefix-match step-set discriminator " +
+      allWorkflowSrc.includes("result.steps.length >= prior.steps.length") ||
+        (allWorkflowSrc.includes("prior.steps.length") && allWorkflowSrc.includes("result.steps.length")),
+      "T-WF.4: controller.ts or controller/reconcile.ts must implement prefix-match step-set discriminator " +
         "(prior.steps is a prefix of result.steps) — §6.4(A1 D-NEW-2 fix).",
     );
   });
