@@ -1,109 +1,17 @@
 import type { CdpClient } from "../cdp/client.js";
+import { FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
+import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { inferSurface } from "./scopeResolver.js";
 import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
 
-/** P-37 B4: synthesize feed-post entries — LinkedIn's feed DOM does not expose
- *  post author/body in the AX tree. Heuristic is TEXT-SIGNAL-PRIMARY (OQ-2):
- *  the post container is the nearest ancestor whose innerText carries a
- *  post-action signal — NOT the `feed-shared-update-v2` BEM class (which churns).
- *  Capped at 5 posts (the feed renders ~5-7 visible per scroll). */
-export const FEED_POST_SYNTH_JS = `(() => {
-  const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
-  const visible = (el) => {
-    if (!(el instanceof Element)) return false;
-    const s = getComputedStyle(el);
-    if (s.display === "none" || s.visibility === "hidden") return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  };
-  const SIGNALS = ["comment", "repost", "reaction"];
-  const anchors = Array.from(document.querySelectorAll("button,[role='button']"))
-    .filter((b) => /^Open control menu for post by /i.test(norm(b.getAttribute("aria-label") || b.innerText)) && visible(b))
-    .slice(0, 5);
-  const out = [];
-  for (const a of anchors) {
-    const author = norm(a.getAttribute("aria-label") || a.innerText)
-      .replace(/^Open control menu for post by /i, "").trim();
-    // text-signal-primary container walk (D-3): ascend until innerText carries
-    // a post-action signal. No reliance on the feed-shared-update-v2 class.
-    let container = a, hops = 0;
-    while (container.parentElement && hops < 12) {
-      container = container.parentElement; hops++;
-      if (SIGNALS.some((sig) => (container.innerText || "").toLowerCase().includes(sig))) break;
-    }
-    const actor = container.querySelector('[class*="actor"]') || container;
-    const link = actor.querySelector('a[href*="/in/"], a[href*="/company/"]');
-    const profileUrl = link ? link.getAttribute("href") : null;
-    let headline = "";
-    for (const el of container.querySelectorAll("span,div,p")) {
-      if (!visible(el)) continue;
-      const t = norm(el.innerText);
-      if (t.length > 12 && !t.startsWith(author) && !/^Open control menu/i.test(t)) { headline = t; break; }
-    }
-    out.push({ author, headline: headline.slice(0, 160), profileUrl });
-  }
-  return JSON.stringify(out);
-})()`;
+export * from "./snapshotCapture/feedPostSynth.js";
+export * from "./snapshotCapture/profileSynth.js";
 
 interface FeedPostRaw {
   author: string;
   headline: string;
   profileUrl: string | null;
 }
-
-/** P-47 G-3: synthesize a structured profile card from the rendered profile DOM.
- *  The AX tree buries name/headline/location under ~15 nav/sidebar entries; this
- *  h1-anchored DOM scan (ported from mai-linkedin profileFieldExtractor.ts)
- *  extracts the identity fields directly. ASSUMED-confidence (plan OQ-2) — the
- *  Step-5 live test against a real LinkedIn profile is the authoritative check. */
-export const PROFILE_SYNTH_JS = `(() => {
-  const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
-  const CHROME_PREFIXES = [
-    "Profile photo", "Edit profile", "Edit background", "Contact info",
-    "Add section", "Open to", "Compose", "Message", "Connect",
-    "Manage notifications", "View", "Follow", "Report", "Pending", "Save",
-  ];
-  const isChrome = (t) => CHROME_PREFIXES.some((p) => t.startsWith(p));
-  const titleMatch = document.title.match(/^(.+?)\\s*\\|\\s*LinkedIn\\b/);
-  if (!titleMatch) return JSON.stringify(null);
-  let name = titleMatch[1].trim();
-  if (name.includes(' - ')) name = name.split(' - ')[0].trim();
-  const headings = Array.from(document.querySelectorAll("h1, h2, h3"));
-  const NAV_SELECTOR = "[role='banner'], [role='navigation'], nav, header";
-  let anchor = headings.find(el => norm(el.innerText) === name && !el.closest(NAV_SELECTOR));
-  if (!anchor) anchor = headings.find(el => norm(el.innerText) === name);
-  if (!anchor) return JSON.stringify(null);
-  const afterH1Ps = Array.from(document.querySelectorAll("p, span[class*='_']"))
-    .filter((el) => anchor.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
-    .slice(0, 20);
-  let headline = null;
-  let subtitle = null;
-  let location = null;
-  for (const p of afterH1Ps) {
-    const t = norm(p.innerText);
-    if (!t || t.length < 3) continue;
-    if (isChrome(t)) continue;
-    if (t.toLowerCase() === name.toLowerCase()) continue;
-    if (t.startsWith("·")) continue;
-    if (!headline && !t.includes("·") && t.length >= 8) {
-      headline = t.slice(0, 200);
-    } else if (!subtitle && t.includes("·") && !t.startsWith("·")) {
-      subtitle = t.slice(0, 200);
-    } else if (subtitle && !location) {
-      if (!t.includes("·") && !/^\\d/.test(t) && t.length >= 3 && t.length <= 80) {
-        location = t;
-      }
-    }
-    if (headline && subtitle && location) break;
-  }
-  const company = subtitle ? ((subtitle.split("·")[0] || "").trim() || null) : null;
-  const connEl = Array.from(document.querySelectorAll("a, span")).find((el) => {
-    const t = norm(el.innerText);
-    return /\\d.*connection/i.test(t) && t.length < 50;
-  });
-  const connections = connEl ? norm(connEl.innerText) : null;
-  return JSON.stringify({ name, headline, company, location, connections });
-})()`;
 
 interface ProfileCardRaw {
   name: string;
