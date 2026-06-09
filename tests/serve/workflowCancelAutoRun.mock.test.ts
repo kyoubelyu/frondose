@@ -22,6 +22,8 @@ import { describe, it } from "node:test";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const ROUTES_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes.ts"), "utf-8");
+// P-72 slice 6: /workflow/cancel extension moved to routes/workflow.ts; widen Cancel tests to check EITHER.
+const ROUTES_WORKFLOW_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"), "utf-8");
 const CONTEXT_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/context.ts"), "utf-8");
 
 describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts + OQ-E5)", () => {
@@ -38,11 +40,13 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     // DEFECT D-SP-E-Cancel.1: routes.ts /workflow/ handler does NOT implement
     // the auto-run extension. Lines 232-238 just call deps.workflow.handleEndpoint()
     // and sendJson the result — no autoRunId check, no endAutoRun, no emitFrame.
+    // P-72 slice 6: /workflow/cancel extension moved to routes/workflow.ts; widen to check EITHER location.
+    const combinedCancel1 = ROUTES_WORKFLOW_SRC + ROUTES_SRC;
     assert.ok(
-      ROUTES_SRC.includes("autoRunId") &&
-        ROUTES_SRC.includes("endAutoRun") &&
-        ROUTES_SRC.includes("auto-run-completed"),
-      "T-E.Cancel.1: routes.ts MUST contain autoRunId check + endAutoRun call + auto-run-completed emission for /workflow/cancel [DEFECT D-SP-E-Cancel.1: OQ-E5 extension not implemented]",
+      combinedCancel1.includes("autoRunId") &&
+        combinedCancel1.includes("endAutoRun") &&
+        combinedCancel1.includes("auto-run-completed"),
+      "T-E.Cancel.1: routes.ts or routes/workflow.ts (after P-72 slice 6) MUST contain autoRunId check + endAutoRun call + auto-run-completed emission for /workflow/cancel",
     );
   });
 
@@ -54,9 +58,11 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     //
     // DEFECT D-SP-E-Cancel.2: routes.ts has no autoRunId guard in cancel handler.
     // The entire extension is missing (D-SP-E-Cancel.1). This test also fails.
+    // P-72 slice 6: guard moved to routes/workflow.ts; widen to check EITHER location.
     assert.ok(
-      ROUTES_SRC.includes("autoRunId !== null") || ROUTES_SRC.includes("state.autoRunId"),
-      "T-E.Cancel.2: routes.ts must guard the auto-run close path with state.autoRunId check [DEFECT D-SP-E-Cancel.2: guard not present]",
+      ROUTES_WORKFLOW_SRC.includes("autoRunId !== null") || ROUTES_WORKFLOW_SRC.includes("state.autoRunId") ||
+        ROUTES_SRC.includes("autoRunId !== null") || ROUTES_SRC.includes("state.autoRunId"),
+      "T-E.Cancel.2: routes.ts or routes/workflow.ts (after P-72 slice 6) must guard the auto-run close path with state.autoRunId check",
     );
   });
 
@@ -69,9 +75,11 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     //        (c) OVERRIDES with {ok:true, closedAutoRun:true} when autoRunId was set
     //
     // DEFECT D-SP-E-Cancel.3: no override logic present (extension not implemented).
+    // P-72 slice 6: closedAutoRun + stopped_by_user moved to routes/workflow.ts; widen to check EITHER.
     assert.ok(
-      ROUTES_SRC.includes("closedAutoRun") || ROUTES_SRC.includes("stopped_by_user"),
-      "T-E.Cancel.3: routes.ts must contain closedAutoRun override or stopped_by_user call [DEFECT D-SP-E-Cancel.3: CONCERN-MR-3 override not implemented]",
+      ROUTES_WORKFLOW_SRC.includes("closedAutoRun") || ROUTES_WORKFLOW_SRC.includes("stopped_by_user") ||
+        ROUTES_SRC.includes("closedAutoRun") || ROUTES_SRC.includes("stopped_by_user"),
+      "T-E.Cancel.3: routes.ts or routes/workflow.ts (after P-72 slice 6) must contain closedAutoRun override or stopped_by_user call",
     );
   });
 });
