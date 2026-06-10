@@ -319,7 +319,7 @@ export function assertGeneratedOverlayFresh(input: GeneratedOverlayFreshInput): 
 
 export function assertSidecarProvenance(input: SidecarProvenanceInput): EvidenceItem {
   const contents = input.contents ?? (existsSync(input.artifactPath) ? readFileSync(input.artifactPath, "utf8") : "");
-  const entrypointMarkers = ["serve", "--sock", "--token"];
+  const entrypointMarkers = ["--sock", "--token"];
   const entrypointMissing = entrypointMarkers.filter((marker) => !contents.includes(marker));
 
   if (contents.length === 0) {
@@ -332,8 +332,10 @@ export function assertSidecarProvenance(input: SidecarProvenanceInput): Evidence
   }
 
   const routeArtifactEvidence = collectRouteArtifactEvidence(input);
+  const routeHasHealthPath = routeArtifactEvidence.some((evidence) => evidence.hasHealthRoute);
+  const routeHasHealthBody = routeArtifactEvidence.some((evidence) => evidence.hasHealthBody);
   const hasHealthRoute =
-    contents.includes("/health") || routeArtifactEvidence.some((evidence) => evidence.hasHealthRoute);
+    contents.includes("/health") || (routeHasHealthPath && routeHasHealthBody);
 
   if (entrypointMissing.length > 0 || !hasHealthRoute) {
     return item(
@@ -359,11 +361,15 @@ export function assertSidecarProvenance(input: SidecarProvenanceInput): Evidence
 
 function collectRouteArtifactEvidence(
   input: SidecarProvenanceInput,
-): Array<{ artifactPath: string; hasHealthRoute: boolean }> {
+): Array<{ artifactPath: string; hasHealthRoute: boolean; hasHealthBody: boolean }> {
   return (input.routeArtifactPaths ?? []).map((artifactPath) => {
     const contents =
       input.routeContents?.[artifactPath] ?? (existsSync(artifactPath) ? readFileSync(artifactPath, "utf8") : "");
-    return { artifactPath, hasHealthRoute: contents.includes("/health") && contents.includes("pid: process.pid") };
+    return {
+      artifactPath,
+      hasHealthRoute: contents.includes("/health"),
+      hasHealthBody: contents.includes("pid: process.pid"),
+    };
   });
 }
 
@@ -461,7 +467,19 @@ async function collectDefaultEvidence(input: RunPreflightOptions): Promise<Evide
     }),
     assertSidecarProvenance({
       artifactPath: fromRoot("dist/cli/main.js"),
-      routeArtifactPaths: [fromRoot("dist/cli/subcommands/serve.js"), fromRoot("dist/cli/subcommands/serve/routes.js")],
+      routeArtifactPaths: [
+        fromRoot("dist/cli/subcommands/serve.js"),
+        fromRoot("dist/cli/subcommands/serve/routes.js"),
+        fromRoot("dist/cli/subcommands/serve/routes/health.js"),
+      ],
+    }),
+    assertSidecarProvenance({
+      artifactPath: fromRoot("dist/app/sidecarMain.js"),
+      routeArtifactPaths: [
+        fromRoot("dist/cli/subcommands/serve.js"),
+        fromRoot("dist/cli/subcommands/serve/routes.js"),
+        fromRoot("dist/cli/subcommands/serve/routes/health.js"),
+      ],
     }),
     ...detectReleaseDrift({
       packageJsonPath: fromRoot("package.json"),
