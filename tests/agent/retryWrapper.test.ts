@@ -118,6 +118,8 @@ test("T-Retry.4: error envelope (ok:false) is NOT retried — it is returned, no
 
 test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 16 members (11 existing + web_fetch + web_search + query_lead_globally + navigate_to_url + clear_cookies)", () => {
   // P-26: +query_lead_globally (14). P-28.5: +navigate_to_url +clear_cookies (16).
+  // clear_cookies remains in IDEMPOTENT_TOOLS even though it is no longer registered
+  // in makeBrowserTools — the retry set is harmlessly superset of the active tool set.
   assert.equal(
     IDEMPOTENT_TOOLS.size,
     16,

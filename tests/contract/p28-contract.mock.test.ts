@@ -42,10 +42,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 53 tools", () => {
+  it("T-CONTRACT.P28.WORKER: worker mode → exactly 52 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length
-    // Then:  53 (P-Y3 rebaseline: present_summary + current 17-tool sales kernel)
+    // Then:  52 (clear_cookies removed from browser registry)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -59,8 +59,8 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.P28.WORKER: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        52,
+        `T-CONTRACT.P28.WORKER: expected 52 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

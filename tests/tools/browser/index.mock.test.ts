@@ -2,10 +2,10 @@
  * P-33 Step 4a — T-P33.BROWSER.INDEX: makeBrowserTools inventory.
  *
  * Replaces the stale T-M80 test (which asserted makeLinkedinTools → 10 tools).
- * Now asserts makeBrowserTools(session) returns exactly the 11 expected browser
- * tool keys after the P-33 reorg.
+ * Now asserts makeBrowserTools(session) returns exactly the 10 expected browser
+ * tool keys after the P-33 reorg (clear_cookies removed from registry).
  *
- * Gate coverage: G-P33.3 (makeBrowserTools → 11 tools, exact name set)
+ * Gate coverage: G-P33.3 (makeBrowserTools → 10 tools, exact name set)
  *
  * Note (Step 4a): this file imports src/tools/browser/index.js which does NOT
  * exist yet — expected compile/import failure until builder Step 4b creates
@@ -37,17 +37,16 @@ function makeFakeSession() {
 // ─── T-P33.BROWSER.INDEX ─────────────────────────────────────────────────────
 
 describe("makeBrowserTools registry (G-P33.3)", () => {
-  it("T-P33.BROWSER.INDEX: makeBrowserTools returns exactly 11 browser tools with correct names", () => {
+  it("T-P33.BROWSER.INDEX: makeBrowserTools returns exactly 10 browser tools with correct names", () => {
     // Given: a fake LinkedinSession (no Chrome required)
     // When:  makeBrowserTools(session) is called
-    // Then:  exactly 11 tools returned; names match the expected browser-tool set
+    // Then:  exactly 10 tools returned (clear_cookies removed from registry)
 
     const session = makeFakeSession();
     const tools = makeBrowserTools(session);
     const keys = Object.keys(tools).sort();
 
     const expectedKeys = [
-      "clear_cookies",
       "click",
       "close",
       "inspect",
@@ -60,8 +59,8 @@ describe("makeBrowserTools registry (G-P33.3)", () => {
       "upload",
     ].sort();
 
-    assert.deepEqual(keys, expectedKeys, "makeBrowserTools must return exactly 11 browser tool keys");
-    assert.equal(keys.length, 11, "must have exactly 11 tools");
+    assert.deepEqual(keys, expectedKeys, "makeBrowserTools must return exactly 10 browser tool keys");
+    assert.equal(keys.length, 10, "must have exactly 10 tools");
 
     // Each tool must be a defined object with a description string
     for (const key of keys) {

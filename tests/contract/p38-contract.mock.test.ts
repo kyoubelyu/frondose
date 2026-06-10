@@ -47,9 +47,9 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 
 // Frozen tool name snapshots — updated at P-39 Step 5 to include the 3 new memory tools.
 // P-38 added no tools (29/20); P-39 adds search_memory + set_memory_note + get_memory_note (32/23).
+// clear_cookies removed from browser registry (no longer LLM-visible).
 const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "analyze_screenshot",
-  "clear_cookies",
   "click",
   "close",
   "echo",
@@ -227,11 +227,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 27 (G-P38.8/.11, rebaselined at P-Y3)", () => {
-  it("T-CONTRACT.TOOLS: tool set after P-Y3 is worker 53 / server 27", () => {
+describe("tool counts: worker 52 / server 25 (G-P38.8/.11, rebaselined)", () => {
+  it("T-CONTRACT.TOOLS: tool set is worker 52 / server 25 (clear_cookies removed)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 53 / server 27 (P-Y3 counts)
+    // Then:  worker 52 / server 25 (clear_cookies removed from browser registry)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -246,8 +246,8 @@ describe("tool counts: worker 53 / server 27 (G-P38.8/.11, rebaselined at P-Y3)"
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        52,
+        `worker tool count must be 52; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen P-Y3 snapshot");
 

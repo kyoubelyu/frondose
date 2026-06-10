@@ -73,10 +73,10 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 53 tools", () => {
+  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 52 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'}) (D-9 — no new tools)
     // When: Object.keys(tools).length
-    // Then: 53 (P-Y3 rebaseline: present_summary + current 17-tool sales kernel)
+    // Then: 52 (clear_cookies removed from browser registry)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -87,8 +87,8 @@ describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () =>
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.TOOLS worker: expected 53 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        52,
+        `T-CONTRACT.TOOLS worker: expected 52 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
