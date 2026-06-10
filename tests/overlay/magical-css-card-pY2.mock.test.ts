@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -28,7 +28,10 @@ const CSS_TRANSFORM_TS = readFileSync(join(REPO, "src", "overlay", "cssTransform
 
 function copyIntoTempRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "p-y2-magical-gen-"));
-  for (const dir of ["scripts", "src/overlay", "src/tauri/ui"]) mkdirSync(join(root, dir), { recursive: true });
+  // P-72 slice 12: render.ts is now a pure re-export barrel; the render/ leaves must be copied too
+  for (const dir of ["scripts", "src/overlay", "src/tauri/ui", "src/tauri/ui/render"]) {
+    mkdirSync(join(root, dir), { recursive: true });
+  }
   for (const file of [
     "package.json",
     "scripts/gen-overlay-assets.ts",
@@ -40,6 +43,13 @@ function copyIntoTempRepo(): string {
     "src/tauri/ui/index.html",
   ]) {
     copyFileSync(join(REPO, file), join(root, file));
+  }
+  // Copy the render/ leaf .ts files (barrel delegates to these; esbuild bundles from .ts source)
+  const renderDir = join(REPO, "src/tauri/ui/render");
+  for (const entry of readdirSync(renderDir)) {
+    if (entry.endsWith(".ts")) {
+      copyFileSync(join(renderDir, entry), join(root, "src/tauri/ui/render", entry));
+    }
   }
   symlinkSync(join(REPO, "node_modules"), join(root, "node_modules"), "dir");
   return root;
