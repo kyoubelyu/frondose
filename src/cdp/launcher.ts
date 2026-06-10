@@ -101,20 +101,22 @@ export async function ensureChrome(opts: ChromeLaunchOptions = {}): Promise<Chro
 
   await clearStaleSingletonLocks(profileDir);
 
-  // P-15 fix: chrome-launcher's DEFAULT_FLAGS include --password-store=basic and
-  // --use-mock-keychain. When the profile is shared with mai-browser (which does
-  // NOT use these flags), cookie encryption via mock keychain is incompatible with
-  // cookies previously encrypted via the system keychain — li_at (LinkedIn auth)
-  // becomes unreadable and the operator is silently logged out. Filter both out
-  // and use --password-store=default instead so cookie encryption stays compatible.
-  const persistentFlags = DEFAULT_FLAGS.filter(
-    (f: string) => f !== "--password-store=basic" && f !== "--use-mock-keychain",
-  );
-  persistentFlags.push("--password-store=default");
+  // P-75 D-6.3 fix (supersedes P-15 rationale): the mai-browser shell-out is
+  // retired (P-APP-1) so this profile dir is Frondose-exclusive. The Frondose
+  // .app bundle is ad-hoc signed, so Chrome cannot read the macOS Keychain
+  // "Chrome Safe Storage" ACL (errSecInteractionNotAllowed -25308) — every
+  // cookie write under the default keychain path fails and the LinkedIn
+  // session is lost on relaunch. chrome-launcher's DEFAULT_FLAGS already
+  // include --use-mock-keychain, which makes Chromium derive the cookie
+  // wrapping key from a constant in-binary string instead of the Keychain
+  // (verified empirically 2026-06-10: cookie round-trip across graceful
+  // restart, 3/3 stable runs). Let DEFAULT_FLAGS flow through unmodified.
+  // NOTE: cookies are encrypted at rest under a constant, non-secret key;
+  // treat ~/.mai/agent/chrome-profile/ as session-equivalent secret state.
   const launched = await launchFn({
     port,
     userDataDir: profileDir,
-    chromeFlags: [...persistentFlags, ...(opts.chromeFlags ?? [])],
+    chromeFlags: [...DEFAULT_FLAGS, ...(opts.chromeFlags ?? [])],
     ignoreDefaultFlags: true,
     handleSIGINT: true,
   });
