@@ -363,6 +363,38 @@ fn resolve_node() -> String {
     "node".to_string() // dev fallback (shell PATH under `cargo tauri dev`)
 }
 
+/// [P-APP-6] Resolve the app sidecar entrypoint (dist/app/sidecarMain.js).
+/// Replaces the CLI-routed sidecar boot. MAI_SIDECAR_BIN_PATH overrides
+/// (dev / sibling installs). Bundled path is the .app's
+/// Contents/Resources/runtime/dist/app/sidecarMain.js. CLI `serve` stays in
+/// parallel during P-APP-11 migration; it is not the spawn target.
+fn resolve_sidecar_bin() -> String {
+    if let Ok(p) = std::env::var("MAI_SIDECAR_BIN_PATH") {
+        let p = p.trim();
+        if !p.is_empty() {
+            if std::path::Path::new(p).is_file() {
+                return p.to_string();
+            }
+            eprintln!("[mai-tauri] ignoring MAI_SIDECAR_BIN_PATH={} (not a file)", p);
+        }
+    }
+    if let Some(dir) = bundled_resource_dir() {
+        let entry = dir.join("runtime").join("dist").join("app").join("sidecarMain.js");
+        if entry.is_file() {
+            return entry.to_string_lossy().into_owned();
+        }
+    }
+    for candidate in [
+        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
+        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
+    ] {
+        if std::path::Path::new(candidate).is_file() {
+            return candidate.to_string();
+        }
+    }
+    "../../../dist/app/sidecarMain.js".to_string() // dev fallback (cargo tauri dev)
+}
+
 /// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
 /// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/mai-agent` →
 /// `~/.mai/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
@@ -371,6 +403,8 @@ fn resolve_node() -> String {
 /// NOTE: a fresh Mac with ONLY the `.app` (no prior install.sh) hits the dev
 /// fallback, fails to resolve, and exits via the existing `await_serve_ready`
 /// timeout — DEFERRED to P-58c (self-contained bundle).
+// Kept for the P-APP-11 transition; delete with the CLI entrypoint.
+#[allow(dead_code)]
 fn resolve_mai_bin() -> String {
     if let Ok(p) = std::env::var("MAI_BIN_PATH") {
         let p = p.trim();
@@ -486,20 +520,19 @@ async fn run_update_check(app: AppHandle) {
     }
 }
 
-/// Spawn `node <mai_bin> serve --sock <path> --token <tok>` as a child process.
+/// Spawn `node <sidecar_bin> --sock <path> --token <tok>` as a child process.
 async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
-    // P-58b: resolve node + the install.sh-installed CLI by absolute path so a
-    // Finder-launched bundle (launchd minimal PATH) can spawn the sidecar.
-    let mai_bin = PathBuf::from(resolve_mai_bin());
+    // P-APP-6: resolve node + the dedicated app sidecar entrypoint by absolute
+    // path so a Finder-launched bundle (launchd minimal PATH) can spawn it.
+    let sidecar_bin = PathBuf::from(resolve_sidecar_bin());
     let node_path = PathBuf::from(resolve_node());
     eprintln!(
-        "[mai-tauri] node={} mai={}",
+        "[mai-tauri] node={} sidecar={}",
         node_path.display(),
-        mai_bin.display()
+        sidecar_bin.display()
     );
     let child = Command::new(&node_path)
-        .arg(&mai_bin)
-        .arg("serve")
+        .arg(&sidecar_bin)
         .arg("--sock")
         .arg(sock.to_str().ok_or("invalid sock path utf-8")?)
         .arg("--token")
@@ -509,7 +542,7 @@ async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("spawn mai serve: {}", e))?;
+        .map_err(|e| format!("spawn mai sidecar: {}", e))?;
     Ok(child)
 }
 
