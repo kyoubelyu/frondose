@@ -246,3 +246,64 @@ describe("P-APP-3 app-only validation preflight scaffold", () => {
     assert.equal(report.ok, false);
   });
 });
+
+// ── P-APP-6 additions ────────────────────────────────────────────────────────
+
+describe("P-APP-6 assertSidecarProvenance — new entry + relaxed marker set", () => {
+  before(async () => {
+    helper = await import("../../scripts/app-validation-preflight.ts").catch(() => null);
+  });
+
+  it("T-AppValidation.SidecarProvenance.NewEntry: dist/app/sidecarMain.js provenance item passes when markers present", () => {
+    // Given: a stub artifact for dist/app/sidecarMain.js containing "--sock", "--token", and "/health"
+    // When:  assertSidecarProvenance({artifactPath: "dist/app/sidecarMain.js", contents}) runs
+    // Then:  classification = sidecar-implementation-smoke, status = pass (new entry recognized)
+    const assertSidecarProvenance = requireHelperExport("assertSidecarProvenance");
+
+    const item = assertSidecarProvenance({
+      artifactPath: "dist/app/sidecarMain.js",
+      contents: "--sock --token /health",
+    });
+
+    assert.equal(item.classification, "sidecar-implementation-smoke");
+    assert.equal(item.status, "pass");
+  });
+
+  it("T-AppValidation.SidecarProvenance.MarkerRelaxed: artifact with --sock + --token but no 'serve' literal passes (relaxed marker set)", () => {
+    // Given: a stub artifact containing only "--sock", "--token", "/health" — no "serve" literal
+    // When:  assertSidecarProvenance runs after P-APP-6 entrypointMarkers relaxation
+    // Then:  status = "pass" (the relaxed marker set ["--sock", "--token"] without "serve")
+    const assertSidecarProvenance = requireHelperExport("assertSidecarProvenance");
+
+    // Pre-P-APP-6: entrypointMarkers = ["serve", "--sock", "--token"]
+    // Post-P-APP-6: entrypointMarkers = ["--sock", "--token"] (drop "serve")
+    // A sidecarMain.js artifact that has --sock + --token + /health but no "serve" literal
+    // must pass after the relaxation.
+    const item = assertSidecarProvenance({
+      artifactPath: "dist/app/sidecarMain.js",
+      contents: "--sock --token /health pid: process.pid",
+    });
+
+    // This assertion fails pre-impl because today entrypointMarkers still requires "serve"
+    assert.equal(
+      item.status,
+      "pass",
+      `assertSidecarProvenance must pass when artifact has --sock + --token + /health but no 'serve' literal; got status="${item.status}" message="${item.message}"`,
+    );
+    assert.equal(item.classification, "sidecar-implementation-smoke");
+  });
+
+  it("T-AppValidation.DirectCliRoutes.Unchanged: DIRECT_CLI_ROUTES still rejects dist/cli/main.js for product acceptance", () => {
+    // Given: DIRECT_CLI_ROUTES is unchanged by P-APP-6 (dist/app/sidecarMain.js is NOT in it)
+    // When:  classifyEvidence({ route: "dist/cli/main.js", purpose: "product-acceptance" }) runs
+    // Then:  classification = rejected-product-route, status = fail
+    //        (the guard that blocks direct-CLI-route product claims is intact)
+    const classifyEvidence = requireHelperExport("classifyEvidence");
+
+    const item = classifyEvidence({ route: "dist/cli/main.js", purpose: "product-acceptance" });
+
+    assert.equal(item.classification, "rejected-product-route");
+    assert.equal(item.status, "fail");
+    assert.match(item.message, /direct CLI\/dist route|direct cli/i);
+  });
+});
