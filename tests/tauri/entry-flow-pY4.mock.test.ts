@@ -230,27 +230,40 @@ describe("entry-flow — app.ts state machine collapse (§6.2)", () => {
 });
 
 describe("entry-flow — overlay re-home structural wiring (§6.2)", () => {
-  it("T-Rehome.4: routes.ts exports ensureOverlaySubscription + /chrome/ensure calls it; serve.ts passes onClientBooted; session.ts's CreateLinkedinSessionOpts declares onClientBooted?", () => {
-    // Given: routes.ts + serve.ts + session.ts as strings
-    // When:  grepped for the extracted helper export, the route call, the factory wiring, and the opt declaration
-    // Then:  routes.ts contains "export async function ensureOverlaySubscription" AND the /chrome/ensure arm
-    //        calls ensureOverlaySubscription(...); serve.ts passes onClientBooted: to createLinkedinSession;
+  it("T-Rehome.4: routes.ts re-exports ensureOverlaySubscription from barrel; routes/cdp.ts defines + calls it; serve.ts passes onClientBooted; session.ts's CreateLinkedinSessionOpts declares onClientBooted?", () => {
+    // Given: routes.ts (barrel) + routes/cdp.ts + serve.ts + session.ts as strings (post-P-72-slice-6 layout:
+    //        definition + /chrome/ensure call live in routes/cdp.ts; routes.ts re-exports via barrel)
+    // When:  grepped for the barrel re-export in routes.ts, the definition + call in cdp.ts, the factory wiring
+    //        in serve.ts, and the opt declaration in session.ts
+    // Then:  routes.ts re-exports ensureOverlaySubscription from "./routes/cdp.js";
+    //        routes/cdp.ts defines "export async function ensureOverlaySubscription" AND calls it from the
+    //        /chrome/ensure handler (no inline subscribe/attach block left behind);
+    //        serve.ts passes onClientBooted: to createLinkedinSession delegating to ensureOverlaySubscription;
     //        session.ts's CreateLinkedinSessionOpts declares onClientBooted?
-    // helper extracted + exported
-    assert.ok(
-      ROUTES_TS.includes("export async function ensureOverlaySubscription"),
-      "routes.ts must export ensureOverlaySubscription",
+    const ROUTES_CDP_TS = readFileSync(
+      join(REPO, "src", "cli", "subcommands", "serve", "routes", "cdp.ts"),
+      "utf-8",
     );
-    // appears ≥2× = the definition PLUS the /chrome/ensure route call (presence, not order — import-order drift)
-    const ensureRefs = ROUTES_TS.split("ensureOverlaySubscription").length - 1;
+    // barrel re-exports the helper (semantic contract: symbol is publicly accessible via routes.ts)
     assert.ok(
-      ensureRefs >= 2,
-      `routes.ts must both define AND call ensureOverlaySubscription (found ${ensureRefs} refs; expected ≥2)`,
+      ROUTES_TS.includes("ensureOverlaySubscription") && ROUTES_TS.includes("routes/cdp"),
+      'routes.ts (barrel) must re-export ensureOverlaySubscription from "./routes/cdp.js"',
     );
-    // the /chrome/ensure route delegates to the shared helper (no inline subscribe/attach block left behind)
+    // definition lives in routes/cdp.ts
     assert.ok(
-      ROUTES_TS.includes("await ensureOverlaySubscription("),
-      "the /chrome/ensure route must call ensureOverlaySubscription(...)",
+      ROUTES_CDP_TS.includes("export async function ensureOverlaySubscription"),
+      "routes/cdp.ts must define export async function ensureOverlaySubscription",
+    );
+    // /chrome/ensure handler in cdp.ts calls the shared helper (no inline subscribe/attach block left behind)
+    assert.ok(
+      ROUTES_CDP_TS.includes("await ensureOverlaySubscription("),
+      "routes/cdp.ts handleChromeEnsure must call await ensureOverlaySubscription(...)",
+    );
+    // definition PLUS the call = ≥2 refs in cdp.ts
+    const ensureRefsInCdp = ROUTES_CDP_TS.split("ensureOverlaySubscription").length - 1;
+    assert.ok(
+      ensureRefsInCdp >= 2,
+      `routes/cdp.ts must both define AND call ensureOverlaySubscription (found ${ensureRefsInCdp} refs; expected ≥2)`,
     );
     // serve.ts wires the lazy-boot hook to the same helper
     assert.ok(SERVE_TS.includes("createLinkedinSession"), "serve.ts must call createLinkedinSession");
