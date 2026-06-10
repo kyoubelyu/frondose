@@ -53,10 +53,10 @@ const SALES_TOOL_NAMES = [
 
 describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier gating", () => {
   // ─── T-SP-A.Wiring.1 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.1: worker power tier returns 53 tools including all 17 sales-kernel tools", async () => {
+  it("T-SP-A.Wiring.1: worker power tier returns 52 tools including all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with a minimal mock session + :memory: salesDbPath + control + tier='power'
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 53; the 17 sales-kernel tool names all present;
+    // Then:  length === 52; the 17 sales-kernel tool names all present;
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
@@ -67,8 +67,8 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      53,
-      `worker+power must have 53 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      52,
+      `worker+power must have 52 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
@@ -142,7 +142,7 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
   it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue, still includes all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with worker mode + tier:'consumer' + :memory: salesDbPath + mock session
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 51 (53 power − 2 operator-output);
+    // Then:  length === 50 (52 power − 2 operator-output);
     //        17 sales-kernel tool names all present; 'telegram_notify'/'gh_issue' absent
     closeSalesDatabase(":memory:");
 
@@ -154,8 +154,8 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      51,
-      `worker+consumer must have 51 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      50,
+      `worker+consumer must have 50 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     // All 17 sales-kernel tools must still be present in consumer tier

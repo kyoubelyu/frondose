@@ -37,10 +37,10 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 53 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 52 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  53 (P-Y3 power-tier count)
+    // Then:  52 (clear_cookies removed from browser registry)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -51,8 +51,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.WORKER.TOOLS: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        52,
+        `T-CONTRACT.WORKER.TOOLS: expected 52 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

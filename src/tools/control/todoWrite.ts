@@ -27,8 +27,10 @@ export const todoWriteTool = tool({
   description:
     "Declare or update your workflow plan for a multi-step task. Call this first for any non-trivial request -- anything beyond a step or two. " +
     "Calling it renders your plan as the operator's live workflow card and is your primary way to show your work; in Manual mode, marking a step in_progress arms the approval gate that pauses before outbound steps. " +
-    "Replace-whole-list: pass the full step list every time. Set requiresApproval:true on outbound communication steps. " +
-    "Set a step state to in_progress when starting it. Call this AGAIN before starting each step -- especially before any requiresApproval/outbound step -- marking that step in_progress; in Manual mode that is what pauses for operator approval.",
+    "Outbound communication (Connect/Invite, DM, post, comment) MUST be a step in this plan with requiresApproval:true AND state:\"in_progress\" BEFORE you click the outbound button -- in Manual mode that single call is the ONE thing that pauses for operator approval; without it the click is blocked. " +
+    "Example: {\"workflowTitle\":\"Send connect note to <person>\",\"steps\":[{\"title\":\"Send note: <first ~100 chars of draft>\",\"requiresApproval\":true,\"state\":\"in_progress\"}]}. " +
+    "Replace-whole-list: pass the full step list every time. " +
+    "Set requiresApproval:true on outbound communication steps. Set a step state to in_progress when starting it. Call this AGAIN before starting each step -- especially before any requiresApproval/outbound step -- marking that step in_progress; in Manual mode that is what pauses for operator approval.",
   parameters: todoWriteSchema,
   execute: async (input) => {
     const steps = input.steps.map((step) => ({

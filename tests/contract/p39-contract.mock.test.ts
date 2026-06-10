@@ -43,9 +43,9 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 
 // Frozen P-39 tool name snapshots — P-38 (29/20) + 3 new memory tools.
 // P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
+// clear_cookies removed from browser registry (no longer LLM-visible).
 const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "analyze_screenshot",
-  "clear_cookies",
   "click",
   "close",
   "echo",
@@ -132,11 +132,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: worker 53 (rebaselined to P-Y3) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 53 tools, including present_summary and current sales tools", () => {
+describe("P-39 tool count: worker 52 (rebaselined) (G-P39.11)", () => {
+  it("T-Count.1: makeAllTools worker mode → exactly 52 tools, including present_summary and current sales tools", () => {
     // Given: makeAllTools called with a fake session + persistence + control in worker mode
     // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools
-    // Then:  53 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-Y3 rebaseline)
+    // Then:  52 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (clear_cookies removed)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -150,8 +150,8 @@ describe("P-39 tool count: worker 53 (rebaselined to P-Y3) (G-P39.11)", () => {
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        52,
+        `worker tool count must be 52; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-Y3 snapshot");
     } finally {

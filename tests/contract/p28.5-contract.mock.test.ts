@@ -54,10 +54,10 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
 describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)", () => {
-  it("T-CONTRACT.WORKER: worker mode → exactly 53 tools; includes 'navigate_to_url' and 'clear_cookies'", () => {
+  it("T-CONTRACT.WORKER: worker mode → exactly 52 tools; includes 'navigate_to_url'", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length + includes check for new tool names
-    // Then:  53 (P-Y3 rebaseline); both P-28.5 names present
+    // Then:  52 (clear_cookies removed from browser registry); navigate_to_url still present
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -70,9 +70,8 @@ describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)",
       });
       const keys = Object.keys(tools);
       const count = keys.length;
-      assert.equal(count, 53, "T-CONTRACT.WORKER: worker mode has exactly 53 tools");
+      assert.equal(count, 52, "T-CONTRACT.WORKER: worker mode has exactly 52 tools");
       assert.ok(keys.includes("navigate_to_url"), "T-CONTRACT.WORKER: navigate_to_url present (P-28.5 new)");
-      assert.ok(keys.includes("clear_cookies"), "T-CONTRACT.WORKER: clear_cookies present (P-28.5 new)");
     } finally {
       cleanup();
     }

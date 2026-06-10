@@ -45,13 +45,12 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Current worker tool name snapshot (53 tools after P-Y3 adds present_summary).
+// Current worker tool name snapshot (52 tools after clear_cookies removed from browser registry).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 // Identical to FROZEN_WORKER_TOOL_KEYS in p33-contract.mock.test.ts (P-36 contract freeze).
 // P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
 const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "analyze_screenshot",
-  "clear_cookies",
   "click",
   "close",
   "echo",
@@ -167,11 +166,11 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 25 rebaselined at P-73 (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 53 / server 25)", () => {
+describe("tool counts: worker 52 / server 25 rebaselined (G-P36.14)", () => {
+  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 52 / server 25)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 53; server count === 25 (P-73: suggest_card/suggest_next_actions worker-only)
+    // Then:  worker count === 52; server count === 25 (clear_cookies removed from browser registry)
     const { dir, cleanup } = makeTmpDir();
     try {
       // Worker mode — 29 tools
@@ -186,8 +185,8 @@ describe("tool counts: worker 53 / server 25 rebaselined at P-73 (G-P36.14)", ()
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 53 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        52,
+        `T-CONTRACT.TOOLS: worker mode must have exactly 52 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
       );
       assert.deepEqual(
         workerKeys,
