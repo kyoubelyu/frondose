@@ -65,13 +65,12 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Current worker tool name snapshot (53 tools after P-Y3 adds present_summary).
+// Current worker tool name snapshot (52 tools after clear_cookies removed from browser registry).
 // P-33 froze counts at 28/19; P-31 supersedes (adds schedule_task); P-39 supersedes (adds 3 memory tools).
 // P-44: updated from 29 to 32 to include P-39's search_memory/set_memory_note/get_memory_note.
 // P-SP-B: +2 scoring tools (score_lead + score_account) → 49 worker tools.
 const FROZEN_WORKER_TOOL_KEYS = [
   "analyze_screenshot",
-  "clear_cookies",
   "click",
   "close",
   "echo",
@@ -210,17 +209,16 @@ describe("P-33 source tree structure (G-P33.1)", () => {
 // ─── T-P33.BROWSER.1 ─────────────────────────────────────────────────────────
 
 describe("makeBrowserTools registry (G-P33.3)", () => {
-  it("T-P33.BROWSER.1: makeBrowserTools(session) returns exactly 11 tools with correct names", () => {
+  it("T-P33.BROWSER.1: makeBrowserTools(session) returns exactly 10 tools with correct names", () => {
     // Given: a fake LinkedinSession (no Chrome required)
     // When:  makeBrowserTools(session) is called
-    // Then:  exactly 11 keys returned, matching the expected browser-tool name set
+    // Then:  exactly 10 keys returned (clear_cookies removed from registry)
 
     const session = makeFakeSession();
     const tools = makeBrowserTools(session);
     const keys = Object.keys(tools).sort();
 
     const expectedKeys = [
-      "clear_cookies",
       "click",
       "close",
       "inspect",
@@ -235,10 +233,10 @@ describe("makeBrowserTools registry (G-P33.3)", () => {
 
     assert.equal(
       keys.length,
-      11,
-      `makeBrowserTools must return exactly 11 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+      10,
+      `makeBrowserTools must return exactly 10 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
     );
-    assert.deepEqual(keys, expectedKeys, "makeBrowserTools must return exactly the 11 browser tool keys");
+    assert.deepEqual(keys, expectedKeys, "makeBrowserTools must return exactly the 10 browser tool keys");
   });
 });
 
@@ -262,10 +260,10 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 53 tool keys (P-Y3)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 52 tool keys (P-Y3)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
-    // When:  worker mode tool set is built (post-P-SP-B which adds score_lead + score_account)
-    // Then:  exactly 53 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    // When:  worker mode tool set is built (clear_cookies removed from browser registry)
+    // Then:  exactly 52 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -282,8 +280,8 @@ describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
 
       assert.equal(
         keys.length,
-        53,
-        `worker mode must have exactly 53 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        52,
+        `worker mode must have exactly 52 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match current P-Y3 snapshot");
     } finally {
@@ -342,15 +340,15 @@ function getZodFieldNames(schema: {
 }
 
 describe("Tool parameter schemas frozen (G-P33.7)", () => {
-  it("T-P33.SCHEMA.1: the 12 browser/LinkedIn tools have parameter schemas with same field names as pre-P-33", () => {
+  it("T-P33.SCHEMA.1: the 11 browser/LinkedIn tools have parameter schemas with same field names as pre-P-33", () => {
     // Given: makeBrowserTools(session) + makeLinkedinTools(session) called post-reorg
-    // When:  enumerating Zod object shape keys for each of the 12 tools
-    // Then:  field names match the pre-P-33 frozen snapshot — no field added/removed/renamed
+    // When:  enumerating Zod object shape keys for each of the 11 tools (clear_cookies removed)
+    // Then:  field names match the frozen snapshot — no field added/removed/renamed
 
     const session = makeFakeSession();
     const allTools = { ...makeBrowserTools(session), ...makeLinkedinTools(session) };
 
-    // Frozen pre-P-33 schema snapshots (field names only — contract per CLAUDE.md §1 "parameter schema is part of the contract")
+    // Frozen schema snapshots (field names only — contract per CLAUDE.md §1 "parameter schema is part of the contract")
     const FROZEN_SCHEMAS: Record<string, string[]> = {
       inspect: ["full", "scope"],
       click: ["label", "ref", "scope"],
@@ -362,11 +360,10 @@ describe("Tool parameter schemas frozen (G-P33.7)", () => {
       scroll: ["amount", "direction"],
       screenshot: ["out"],
       navigate_to_url: ["url", "waitUntil"],
-      clear_cookies: ["origins"],
       launch: ["args", "destination"],
     };
 
-    assert.equal(Object.keys(allTools).length, 12, "must have exactly 12 browser+LinkedIn tools");
+    assert.equal(Object.keys(allTools).length, 11, "must have exactly 11 browser+LinkedIn tools (clear_cookies removed)");
 
     for (const [name, tool] of Object.entries(allTools)) {
       const expected = FROZEN_SCHEMAS[name];
@@ -384,10 +381,10 @@ describe("Tool parameter schemas frozen (G-P33.7)", () => {
 // ─── T-P33.BOUNDARY.1 ────────────────────────────────────────────────────────
 
 describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () => {
-  it("T-P33.BOUNDARY.1: BOUNDARY includes **Web automation scope:** paragraph, 11 browser-tool names, revised opening sentence, and launch carve-out", () => {
+  it("T-P33.BOUNDARY.1: BOUNDARY includes **Web automation scope:** paragraph, browser-tool names, revised opening sentence, and launch carve-out", () => {
     // Given: src/agent/systemPrompt/boundary.ts updated per plan §6.4 (builder Step 4b)
     // When:  BOUNDARY constant is imported
-    // Then:  contains **Web automation scope:** + 11 tool names + revised opener + launch carve-out
+    // Then:  contains **Web automation scope:** + browser tool names + revised opener + launch carve-out
 
     // New paragraph present
     assert.ok(
@@ -395,7 +392,7 @@ describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () =
       "BOUNDARY must include **Web automation scope:** paragraph",
     );
 
-    // All 11 browser tool names listed in the paragraph
+    // Browser tool names listed in the paragraph (clear_cookies removed from browser registry)
     const browserToolNames = [
       "navigate_to_url",
       "inspect",
@@ -406,7 +403,6 @@ describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () =
       "screenshot",
       "reload",
       "close",
-      "clear_cookies",
       "upload",
     ];
     for (const name of browserToolNames) {
@@ -472,6 +468,7 @@ describe("IDEMPOTENT_TOOLS + OUTREACH_TOOL_NAMES name-sets (G-P33.14)", () => {
     //        click/type/press/upload ∈ OUTREACH_TOOL_NAMES
 
     // Retry-wrapped (idempotent) browser tools — these moved but names are unchanged
+    // clear_cookies remains in IDEMPOTENT_TOOLS even though it is no longer registered in makeBrowserTools
     for (const name of ["inspect", "scroll", "screenshot", "reload", "close", "navigate_to_url", "clear_cookies"]) {
       assert.ok(
         IDEMPOTENT_TOOLS.has(name),
@@ -504,7 +501,6 @@ describe("IDEMPOTENT_TOOLS + OUTREACH_TOOL_NAMES name-sets (G-P33.14)", () => {
 
 const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   analyze_screenshot: ["path", "prompt"],
-  clear_cookies: ["origins"],
   click: ["label", "ref", "scope"],
   close: [],
   echo: ["message"],
@@ -559,11 +555,11 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
 };
 
 describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1)", () => {
-  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 53 tools)", () => {
+  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 52 tools)", () => {
     // Given: makeAllTools in worker-power mode (reuses existing p33 harness + MAI_TIER=power above).
     // When:  building {name: sorted field names} for every tool via getZodFieldNames.
     // Then:  the map deep-equals FROZEN_TOOL_SCHEMAS_P72 — every tool present, no unexpected tool,
-    //        no field added/removed/renamed in any of the 53 worker-power tools.
+    //        no field added/removed/renamed in any of the 52 worker-power tools (clear_cookies removed).
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -577,8 +573,8 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
 
       assert.equal(
         Object.keys(tools).length,
-        53,
-        `T-P72.Schema.1: expected 53 worker-power tools; got ${Object.keys(tools).length}`,
+        52,
+        `T-P72.Schema.1: expected 52 worker-power tools; got ${Object.keys(tools).length}`,
       );
 
       const actual: Record<string, string[]> = {};

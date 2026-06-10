@@ -1,5 +1,6 @@
 /**
  * P-Y5 Step 4a scaffold — T-Todo.5 + T-Todo.6 (D-RUN-4: todo_write description + schema guard).
+ * P-75.D6.1 Step 3a scaffold — T-D6.1.M1 (Edit 2 inline-example present in tool description).
  *
  * T-Todo.5 verifies the R3 description re-frame (value framing + drop the "zero side effects"
  * anti-signal). T-Todo.6 is the CONTRACT GUARD proving R3 moved ONLY the description string —
@@ -8,11 +9,16 @@
  * assertion bodies are `assert.fail("TODO Step 5: …")` (intentionally failing until Step 5,
  * since the new description string does not exist until the builder lands R3 at Step 4b).
  *
+ * T-D6.1.M1 is the outside-in TDD scaffold for P-75.D6.1 Edit 2 — asserts that the
+ * description contains the strict-JSON inline arming-example anchors. All assertions are
+ * REAL (not TODO stubs) and INTENTIONALLY FAIL at HEAD until Edit 2 lands at Step 4.
+ *
  * Outside-in TDD + BDD-light per CLAUDE.md § Test Discipline.
  *
  * Gate coverage:
- *   T-Todo.5 — D-RUN-4 / R3 (tool description value-framed, anti-signal removed)
- *   T-Todo.6 — contract guard (todo_write schema + tool name UNCHANGED)
+ *   T-Todo.5    — D-RUN-4 / R3 (tool description value-framed, anti-signal removed)
+ *   T-Todo.6    — contract guard (todo_write schema + tool name UNCHANGED)
+ *   T-D6.1.M1  — P-75.D6.1 Edit 2 inline-example present (D6.1 / Edit 2)
  *
  * Run (mock):
  *   node --import tsx --test --test-force-exit --test-timeout=30000 \
@@ -50,6 +56,51 @@ describe("todoWriteTool.description — value-framed, anti-signal removed (D-RUN
     assert.ok(
       description.includes(VALUE_PHRASE_GATE),
       `description must add value framing ${JSON.stringify(VALUE_PHRASE_GATE)}`,
+    );
+  });
+});
+
+// ─── T-D6.1.M1 — arming JSON example present in description (D6.1 / Edit 2) ────
+
+describe("T-D6.1.M1 — todoWriteTool.description contains strict-JSON arming-example anchors (D6.1 / Edit 2)", () => {
+  // Given: todoWriteTool.description export from src/tools/control/todoWrite.ts.
+  // When:  the rendered (runtime) description string is examined.
+  // Then:  it contains ALL of: "live workflow card", "approval gate",
+  //        "Replace-whole-list:", the outbound-guard sentence fragment,
+  //        and the three strict-JSON inline example anchors.
+  it('T-D6.1.M1: description contains "live workflow card" + "approval gate" (PRESERVE) AND "Replace-whole-list:" AND the outbound-guard sentence AND strict-JSON example anchors "Example: {\\"workflowTitle\\":" + "\\"requiresApproval\\":true" + "\\"state\\":\\"in_progress\\""', () => {
+    const desc = todoWriteTool.description ?? "";
+    // PRESERVE anchors (T-Todo.5 must stay green alongside this new test)
+    assert.ok(
+      desc.includes(VALUE_PHRASE_CARD),
+      `PRESERVE: description must contain ${JSON.stringify(VALUE_PHRASE_CARD)}`,
+    );
+    assert.ok(
+      desc.includes(VALUE_PHRASE_GATE),
+      `PRESERVE: description must contain ${JSON.stringify(VALUE_PHRASE_GATE)}`,
+    );
+    // PRESERVE: Replace-whole-list sentence
+    assert.ok(
+      desc.includes("Replace-whole-list:"),
+      'description must contain "Replace-whole-list:"',
+    );
+    // NEW: outbound-guard sentence fragment (§3.2 — Edit 2 key sentence)
+    assert.ok(
+      desc.includes('requiresApproval:true AND state:"in_progress" BEFORE you click the outbound button'),
+      'description must contain the outbound-guard sentence: requiresApproval:true AND state:"in_progress" BEFORE you click the outbound button',
+    );
+    // NEW: strict-JSON inline example anchors (§3.2 F-1 — rendered forms with literal double-quotes)
+    assert.ok(
+      desc.includes('Example: {"workflowTitle":'),
+      'description must contain strict-JSON example opener: Example: {"workflowTitle":',
+    );
+    assert.ok(
+      desc.includes('"requiresApproval":true'),
+      'description must contain strict-JSON key: "requiresApproval":true',
+    );
+    assert.ok(
+      desc.includes('"state":"in_progress"'),
+      'description must contain strict-JSON key: "state":"in_progress"',
     );
   });
 });

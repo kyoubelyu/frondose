@@ -63,7 +63,7 @@ const SALES_TOOL_NAMES = [
 
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
-test("T-M81: makeAllTools with no session returns 24 keys; with session returns 36 keys [P-SP-F updated]", () => {
+test("T-M81: makeAllTools with no session returns 24 keys; with session returns 35 keys (clear_cookies removed)", () => {
   // No session → 24 base tools (P-SP-F adds get_sales_report; P-SP-E adds start/end_auto_run)
   const echoOnly = makeAllTools();
   const echoKeys = Object.keys(echoOnly).sort();
@@ -111,8 +111,7 @@ test("T-M81: makeAllTools with no session returns 24 keys; with session returns 
     "web_fetch",
     "web_search",
     ...SALES_TOOL_NAMES,
-    // browser (12)
-    "clear_cookies",
+    // browser (11; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
@@ -126,8 +125,8 @@ test("T-M81: makeAllTools with no session returns 24 keys; with session returns 
     "upload",
   ].sort();
 
-  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 36 keys in P-SP-F");
-  assert.equal(allKeys.length, 36, "must have exactly 36 tools with session (P-SP-F: +3 auto-run+analytics)");
+  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 35 keys (clear_cookies removed)");
+  assert.equal(allKeys.length, 35, "must have exactly 35 tools with session (clear_cookies removed)");
 
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in minimal set");
@@ -210,8 +209,8 @@ test("T-M121: makeAllTools(undefined, persistence) returns 32 keys (base 24 + 8 
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
 
-test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-SP-F updated", () => {
-  // P-SP-F update: 24 base + 12 browser + 8 persistence = 44.
+test("T-M122: makeAllTools(session, persistence) returns 43 keys — clear_cookies removed", () => {
+  // 24 base + 11 browser + 8 persistence = 43 (clear_cookies removed from browser registry).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -240,8 +239,7 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-SP-F upda
     "web_fetch",
     "web_search",
     ...SALES_TOOL_NAMES,
-    // browser (12)
-    "clear_cookies",
+    // browser (11; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
@@ -267,19 +265,19 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-SP-F upda
   assert.deepEqual(
     keys,
     expected,
-    `makeAllTools(session, persistence) must yield 44 keys in P-SP-F; got: ${keys.join(", ")}`,
+    `makeAllTools(session, persistence) must yield 43 keys (clear_cookies removed); got: ${keys.join(", ")}`,
   );
   assert.equal(
     keys.length,
-    44,
-    "must have exactly 44 tools with session + persistence (P-SP-F: base 24 + 12 browser + 8 persist)",
+    43,
+    "must have exactly 43 tools with session + persistence (base 24 + 11 browser + 8 persist)",
   );
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
 
-test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'qualify_profile' (P-SP-F updated)", () => {
-  // P-SP-F update: now 44 (base 24 + 12 browser + 8 persistence).
+test("T-M_p5.18: makeAllTools(session, persistence) returns 43 keys including 'qualify_profile' (clear_cookies removed)", () => {
+  // 24 base + 11 browser + 8 persistence = 43 (clear_cookies removed from browser registry).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -310,16 +308,16 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'q
   assert.ok("get_memory_note" in t, "T-M_p5.18: makeAllTools must include 'get_memory_note' tool (P-39)");
   assert.equal(
     keys.length,
-    44,
-    `T-M_p5.18: must have exactly 44 tools in P-SP-F; got ${keys.length}: ${keys.sort().join(", ")}`,
+    43,
+    `T-M_p5.18: must have exactly 43 tools (clear_cookies removed); got ${keys.length}: ${keys.sort().join(", ")}`,
   );
-  console.log("T-M_p5.18: makeAllTools returns 44 tools including qualify_profile + sales kernel tools");
+  console.log("T-M_p5.18: makeAllTools returns 43 tools including qualify_profile + sales kernel tools");
 });
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (P-Y3: base 24 + 12 browser + 8 persist + 9 control)", () => {
-  // P-Y3 update: 24 base + 12 browser + 8 persistence + 9 control = 53 (full worker power count).
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (base 24 + 11 browser + 8 persist + 9 control)", () => {
+  // 24 base + 11 browser + 8 persistence + 9 control = 52 (clear_cookies removed from browser).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -349,8 +347,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (P-
     "query_lead_globally",
     "schedule_task",
     ...SALES_TOOL_NAMES,
-    // browser (12)
-    "clear_cookies",
+    // browser (11; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
@@ -386,12 +383,12 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (P-
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 53 keys in P-Y3; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 52 keys (clear_cookies removed); got ${keys.length}: ${keys.join(", ")}`,
   );
   assert.equal(
     keys.length,
-    53,
-    `T-M_p6.21: must have exactly 53 tools in P-Y3 (full worker power = 53); got ${keys.length}`,
+    52,
+    `T-M_p6.21: must have exactly 52 tools (clear_cookies removed); got ${keys.length}`,
   );
 
   // Spot-check P-6 new tools
@@ -417,7 +414,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (P-
   // Spot-check P-Y3 presentation tool
   assert.ok("present_summary" in t, "T-M_p6.21: present_summary must be registered (P-Y3)");
 
-  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 53 keys (P-Y3: full worker power)");
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 52 keys (clear_cookies removed)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
@@ -494,8 +491,8 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
 
 // ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys — P-Y3 update (base 24 + browser 12 + control 9)", () => {
-  // P-Y3 update: 24 base + 12 browser + 9 control = 45.
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys (base 24 + browser 11 + control 9)", () => {
+  // 24 base + 11 browser + 9 control = 44 (clear_cookies removed from browser registry).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -521,8 +518,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys — P
     "query_lead_globally",
     "schedule_task",
     ...SALES_TOOL_NAMES,
-    // browser (12)
-    "clear_cookies",
+    // browser (11; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
@@ -549,9 +545,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys — P
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 45 keys in P-Y3; got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 44 keys (clear_cookies removed); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 45, `T-M_p6.23: must have exactly 45 tools in P-Y3; got ${keys.length}`);
+  assert.equal(keys.length, 44, `T-M_p6.23: must have exactly 44 tools (clear_cookies removed); got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -569,7 +565,7 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys — P
   // P-Y3 presentation tool is control-backed and tier-neutral.
   assert.ok("present_summary" in t, "T-M_p6.23: present_summary must be present when control given (P-Y3)");
 
-  console.log("T-M_p6.23: makeAllTools(session, undefined, control) -> 45 keys (P-Y3 updated; CONCERN-MR-1 preserved)");
+  console.log("T-M_p6.23: makeAllTools(session, undefined, control) -> 44 keys (clear_cookies removed; CONCERN-MR-1 preserved)");
 });
 
 // ─── T-F.Wire.1 — get_sales_report registered (P-SP-F) ─────────────────────────
@@ -635,12 +631,12 @@ test("T-F.Wire.2: post-P-73 tool count docs — CLAUDE.md contains worker 53/51 
   const repoRoot = join(fileURLToPath(import.meta.url), "../../..");
   const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf-8");
   assert.ok(
-    claudeMd.includes("worker = 53"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 53' in the power-tier paragraph (P-Y3)",
+    claudeMd.includes("worker = 52"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 52' in the power-tier paragraph (clear_cookies de-registered 2026-06-10)",
   );
   assert.ok(
-    claudeMd.includes("worker = 51"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 51' in the consumer-tier paragraph (P-Y3)",
+    claudeMd.includes("worker = 50"),
+    "T-F.Wire.2: CLAUDE.md must contain 'worker = 50' in the consumer-tier paragraph (clear_cookies de-registered 2026-06-10)",
   );
   assert.ok(claudeMd.includes("server = 25"), "T-F.Wire.2: CLAUDE.md must contain 'server = 25' (P-73)");
   assert.ok(claudeMd.includes("server = 23"), "T-F.Wire.2: CLAUDE.md must contain 'server = 23' (P-73)");

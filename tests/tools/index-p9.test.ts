@@ -72,8 +72,8 @@ const SALES_TOOL_NAMES = [
   "update_lead_stage",
 ] as const;
 
-// Complete enumeration — 53 tools (P-Y3: +present_summary and 17 sales-kernel tools).
-const EXPECTED_53_TOOLS = [
+// Complete enumeration — 52 tools (clear_cookies removed from browser registry).
+const EXPECTED_52_TOOLS = [
   // P-1 (1)
   "echo",
   // P-4 memory (2)
@@ -101,9 +101,8 @@ const EXPECTED_53_TOOLS = [
   "close",
   "press",
   "upload",
-  // P-28.5 browser additions (2)
+  // P-28.5 browser additions (navigate_to_url only; clear_cookies removed from registry)
   "navigate_to_url",
-  "clear_cookies",
   // P-6 operatorOutput (2)
   "telegram_notify",
   "gh_issue",
@@ -162,7 +161,7 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 24 tools (base + sales k
 
 // ─── T-MakeAllTools.3: full 4-arg → exactly 53 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P-Y3 rebaseline)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 52 tools (G-P9.14; clear_cookies removed)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -170,8 +169,8 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      53,
-      `must have exactly 53 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      52,
+      `must have exactly 52 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -180,14 +179,14 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P
 
 // ─── T-MakeAllTools.4: all 53 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 53 expected tool names present (enumeration; P-Y3 rebaseline)", () => {
+test("T-MakeAllTools.4: all 52 expected tool names present (enumeration; clear_cookies removed)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
     const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL, runner);
     const keys = Object.keys(t).sort();
 
-    assert.deepEqual(keys, EXPECTED_53_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
+    assert.deepEqual(keys, EXPECTED_52_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
 
     // Spot-check P-9 web tools
     assert.ok("web_fetch" in t, "web_fetch must be in tool set (P-9)");
@@ -308,10 +307,10 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
 
 // ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 53 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 53 tools (P-Y3 rebaseline)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 52 tools (clear_cookies removed)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
-  assert.equal(count, 53, `3-arg makeAllTools must return 53 tools (P-Y3 rebaseline); got ${count}`);
+  assert.equal(count, 52, `3-arg makeAllTools must return 52 tools (clear_cookies removed); got ${count}`);
 });
 
 // ─── T-MakeAllTools.9: HookRunner with ENOENT hooks.json → no-op, tools work ─

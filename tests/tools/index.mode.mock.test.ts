@@ -34,17 +34,17 @@ const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" 
 // ─── T-MODE / T-CONTRACT ──────────────────────────────────────────────────────
 
 describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
-  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 53 tools; no 'list_workers'", () => {
+  it("T-MODE.WORKER.1: makeAllTools with session + persistence + no mode returns 52 tools; no 'list_workers'", () => {
     // Given: full worker startup path — session present, persistence present, mode defaults to "worker"
     // When:  makeAllTools(session, persistence, control, undefined) — no 5th opts arg
-    // Then:  returns ToolSet with 53 keys (P-Y3 power-tier count)
+    // Then:  returns ToolSet with 52 keys (clear_cookies removed from browser registry)
     //        does NOT include "list_workers"
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl, undefined);
       const count = Object.keys(tools).length;
-      assert.equal(count, 53, `worker mode must have 53 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 52, `worker mode must have 52 tools; got ${count}: ${Object.keys(tools).join(", ")}`);
       assert.ok(!("list_workers" in tools), "worker mode must NOT include 'list_workers'");
     } finally {
       cleanup();
@@ -109,16 +109,16 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 53", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker startup tool count is 52", () => {
     // Given: worker startup path — session present, persistence present, mode not set
     // When:  Object.keys(makeAllTools(session, persistence, control)).length checked
-    // Then:  53 (P-Y3 power-tier count)
+    // Then:  52 (clear_cookies removed from browser registry)
     const { cleanup, ...paths } = makeTmpDir();
     try {
       const session = createLinkedinSession({ port: 9999, profileDir: "/tmp/fake-profile" });
       const tools = makeAllTools(session, paths, fakeControl);
       const count = Object.keys(tools).length;
-      assert.equal(count, 53, `worker tool count must be 53; got ${count}: ${Object.keys(tools).join(", ")}`);
+      assert.equal(count, 52, `worker tool count must be 52; got ${count}: ${Object.keys(tools).join(", ")}`);
     } finally {
       cleanup();
     }

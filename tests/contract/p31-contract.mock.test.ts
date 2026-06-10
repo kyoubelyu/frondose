@@ -50,11 +50,11 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
-// Pre-P-31 worker tool snapshot (31 keys) — P-31 adds `schedule_task` to make 32.
+// Pre-P-31 worker tool snapshot (30 keys) — P-31 adds `schedule_task` to make 31.
 // P-44: updated from 28 to 31 to include P-39's search_memory/set_memory_note/get_memory_note.
+// clear_cookies removed from browser registry (no longer LLM-visible).
 const PRE_P31_WORKER_KEYS = [
   "analyze_screenshot",
-  "clear_cookies",
   "click",
   "close",
   "echo",
@@ -86,7 +86,8 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// P-Y3 rebaseline: current worker tool snapshot (53 keys with present_summary + 17 sales tools).
+// P-Y3 rebaseline: current worker tool snapshot (52 keys with present_summary + 17 sales tools).
+// clear_cookies removed from browser registry (no longer LLM-visible).
 const POST_P31_WORKER_KEYS = [
   ...PRE_P31_WORKER_KEYS,
   "end_auto_run",
@@ -151,11 +152,11 @@ const POST_P31_SERVER_KEYS = [
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 53 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 53 keys; set includes present_summary + 17 sales tools", () => {
+describe("makeAllTools worker mode → 52 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 52 keys; set includes present_summary + 17 sales tools", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
-    // Then:   53 keys; deepEqual to POST_P31_WORKER_KEYS.
+    // Then:   52 keys; deepEqual to POST_P31_WORKER_KEYS (clear_cookies removed).
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -176,8 +177,8 @@ describe("makeAllTools worker mode → 53 tool keys (rebaselined to P-Y3) (G-P31
 
       assert.equal(
         keys.length,
-        53,
-        `worker mode must return exactly 53 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        52,
+        `worker mode must return exactly 52 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
