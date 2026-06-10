@@ -3,17 +3,20 @@
 
 import type { AppMode } from "./mode.js";
 import { modeFromState, statusForMode, togglesForMode } from "./mode.js";
-import {
-  buildAutoStage,
-  buildIwfCard,
-  buildSwitcher,
-  type ButtonElementLike,
-  type DocumentLike,
-  type ElementLike,
-  type InputElementLike,
-  type TextElementLike,
+import type {
+  ButtonElementLike,
+  DocumentLike,
+  ElementLike,
+  InputElementLike,
+  TextElementLike,
 } from "./render.js";
+import { buildSwitcher } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
+import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendButton.js";
+import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
+import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
+import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
+import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -232,10 +235,7 @@ function transition(next: AppState): void {
 }
 
 function updateSendButtonLabel(): void {
-  if (appState !== "running") return;
-  const steer = commandEl.value.trim().length > 0;
-  sendEl.setAttribute?.("title", steer ? "Steer" : "Cancel");
-  sendEl.classList.toggle("is-cancel", !steer);
+  updateSendButtonLabelImpl(commandEl, sendEl, appState === "running");
 }
 
 function syncModeUi(mode: AppMode): void {
@@ -354,12 +354,7 @@ async function sendCommand(): Promise<void> {
 }
 
 async function waitForDoneSse(targetTurnId: string, timeoutMs = 3000, intervalMs = 50): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (currentTurnId === null || currentTurnId !== targetTurnId) return true;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return false;
+  return waitForDoneSseImpl(() => currentTurnId, targetTurnId, timeoutMs, intervalMs);
 }
 
 async function performSteer(newPrompt: string): Promise<void> {
@@ -423,41 +418,21 @@ async function performRetry(): Promise<void> {
 }
 
 function bindAutoStageButtons(): void {
-  const pause = windowRef.document.getElementById("auto-pause-btn") as ButtonElementLike | null;
-  pause?.addEventListener("click", () => {
-    void abortTurn();
-  });
-  const takeover = windowRef.document.getElementById("auto-takeover-btn") as ButtonElementLike | null;
-  takeover?.addEventListener("click", () => {
+  bindAutoStageButtonsImpl(windowRef.document, () => {
     void abortTurn();
   });
 }
 
 function renderWorkflowCard(): void {
-  if (appMode === "auto") {
-    workflowCardEl.classList.add("hidden");
-    buildAutoStage(windowRef.document, workflowView);
-    bindAutoStageButtons();
-    return;
-  }
-  autoStageEl.classList.add("hidden");
-  if (workflowView === null) {
-    workflowCardEl.classList.add("hidden");
-    return;
-  }
-  buildIwfCard(windowRef.document, workflowView, workflowExpanded);
+  renderWorkflowCardImpl(
+    { appMode, workflowView, workflowExpanded },
+    { document: windowRef.document, workflowCardEl, autoStageEl, bindAutoStageButtons },
+  );
 }
 
 function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepState, requiresApproval: boolean): void {
   if (workflowView === null) return;
-  const existing = workflowView.steps.find((step) => step.id === stepId);
-  if (existing) {
-    existing.title = title;
-    existing.state = state;
-    existing.requiresApproval = existing.requiresApproval || requiresApproval;
-    return;
-  }
-  workflowView.steps.push({ id: stepId, title, state, requiresApproval });
+  upsertWorkflowStepImpl(workflowView, stepId, title, state, requiresApproval);
 }
 
 async function approveWorkflowStep(): Promise<void> {
