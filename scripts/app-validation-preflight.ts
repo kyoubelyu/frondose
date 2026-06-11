@@ -52,6 +52,11 @@ type SidecarProvenanceInput = {
   routeContents?: Record<string, string>;
 };
 
+type UpdateServerProvenanceInput = {
+  artifactPath: string;
+  contents?: string;
+};
+
 type ClassifyEvidenceInput = {
   route?: string;
   classification?: string;
@@ -359,6 +364,46 @@ export function assertSidecarProvenance(input: SidecarProvenanceInput): Evidence
   );
 }
 
+// P-APP-9 — provenance for the dedicated app update-server entry. Distinct from
+// assertSidecarProvenance: this entry parses --port/--site-dir, calls
+// runUpdateServerSubcommand, and intentionally has NO CLI command framework graph.
+export function assertUpdateServerProvenance(input: UpdateServerProvenanceInput): EvidenceItem {
+  const contents = input.contents ?? (existsSync(input.artifactPath) ? readFileSync(input.artifactPath, "utf8") : "");
+
+  if (contents.length === 0) {
+    return item(
+      "sidecar-implementation-smoke",
+      "fail",
+      `App update-server artifact ${input.artifactPath} is missing or empty.`,
+      { artifactPath: input.artifactPath },
+    );
+  }
+
+  const requiredMarkers = ["--port", "--site-dir", "runUpdateServerSubcommand"];
+  const missing = requiredMarkers.filter((marker) => !contents.includes(marker));
+  const forbidden = ["commander"].filter((marker) => contents.includes(marker));
+
+  if (missing.length > 0 || forbidden.length > 0) {
+    return item(
+      "sidecar-implementation-smoke",
+      "fail",
+      "App update-server entry is missing required markers or imports the CLI command program.",
+      {
+        artifactPath: input.artifactPath,
+        missing,
+        forbidden,
+      },
+    );
+  }
+
+  return item(
+    "sidecar-implementation-smoke",
+    "pass",
+    "App update-server provenance passed; thin entry with no CLI command framework graph.",
+    { artifactPath: input.artifactPath },
+  );
+}
+
 function collectRouteArtifactEvidence(
   input: SidecarProvenanceInput,
 ): Array<{ artifactPath: string; hasHealthRoute: boolean; hasHealthBody: boolean }> {
@@ -480,6 +525,9 @@ async function collectDefaultEvidence(input: RunPreflightOptions): Promise<Evide
         fromRoot("dist/cli/subcommands/serve/routes.js"),
         fromRoot("dist/cli/subcommands/serve/routes/health.js"),
       ],
+    }),
+    assertUpdateServerProvenance({
+      artifactPath: fromRoot("dist/app/updateServerMain.js"),
     }),
     ...detectReleaseDrift({
       packageJsonPath: fromRoot("package.json"),
