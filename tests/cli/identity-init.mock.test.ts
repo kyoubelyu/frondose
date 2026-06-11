@@ -199,8 +199,9 @@ test("T-M126: runIdentityBootstrap exits 1 with chicken-and-egg error when no LL
 
   try {
     assert.equal(result.status, 1, `T-M126: bootstrap must exit 1 on no-key; got status ${result.status}`);
+    // P-APP-11 b1: "mai auth set" guidance removed from production code; "No LLM API key found" is the authoritative signal.
     assert.ok(
-      result.stderr.includes("No LLM API key found") || result.stderr.includes("mai auth set"),
+      result.stderr.includes("No LLM API key found"),
       `T-M126: stderr must include no-key guidance; got: "${result.stderr.slice(0, 300)}"`,
     );
     assert.ok(

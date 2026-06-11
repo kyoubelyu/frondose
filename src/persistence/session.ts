@@ -30,7 +30,7 @@ export function sessionDir(cwd: string): string {
   const dir = join(SESSIONS_ROOT(), cwdHash(cwd));
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
-    // P-7 (F-9): write cwd.txt companion for `mai sessions list` cwd recovery.
+    // P-7 (F-9): write cwd.txt companion for Frondose session cwd recovery.
     // Pre-P-7 hash dirs lack this file — `listAllSessions` falls back to hash.
     writeFileSync(join(dir, "cwd.txt"), cwd, "utf-8");
   }
@@ -111,7 +111,7 @@ export function loadMessages(file: string): CoreMessage[] {
     .map((l) => JSON.parse(l) as CoreMessage);
 }
 
-/** P-7 (F-9): a single session's metadata for `mai sessions list`. */
+/** P-7 (F-9): a single session's metadata for Frondose session recovery. */
 export interface SessionEntry {
   sessionId: string; // basename without .jsonl
   path: string; // absolute path

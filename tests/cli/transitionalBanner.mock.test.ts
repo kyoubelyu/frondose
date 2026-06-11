@@ -49,12 +49,6 @@ describe("Phase 15: transitional-CLI banner (P-APP-11 slice 2)", () => {
     assert.ok(stderr.includes(SENTINEL), `banner must be present on 'status'; stderr: ${stderr.slice(0, 200)}`);
   });
 
-  it("appears on `mai version` — wait, version is commander-internal — actually NO banner", async () => {
-    // version is commander-internal alias for --version; banner must be suppressed
-    const { stderr } = await run(["version"]);
-    assert.ok(!stderr.includes(SENTINEL), `banner must NOT appear on 'version'; stderr: ${stderr.slice(0, 200)}`);
-  });
-
   it("appears on `mai analytics` (general operator subcommand)", async () => {
     const { stderr } = await run(["analytics"]);
     assert.ok(stderr.includes(SENTINEL), `banner must be present on 'analytics'; stderr: ${stderr.slice(0, 200)}`);

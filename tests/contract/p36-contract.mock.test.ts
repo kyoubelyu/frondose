@@ -143,6 +143,7 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
     // Given: P-36's 8 in-scope production files read from src/
     // When:  grep for 'child_process' in each file
     // Then:  zero matches in all 8 files
+    // P-APP-11 stage (b1): auth.ts deleted → removed from this scan (was present since P-36).
     const p36Files = [
       resolve(ROOT, "src/agent/modelResolver.ts"),
       resolve(ROOT, "src/cli/serverRepl.ts"),
@@ -151,7 +152,6 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
       resolve(ROOT, "src/persistence/secrets.ts"),
       resolve(ROOT, "src/persistence/config.ts"),
       resolve(ROOT, "src/cli/main.ts"),
-      resolve(ROOT, "src/cli/subcommands/auth.ts"),
     ];
     for (const filePath of p36Files) {
       const content = readFileSync(filePath, "utf-8");

@@ -1,9 +1,8 @@
 /**
- * P-5 mock tests — T-M_p5.19..T-M_p5.20: `mai soul` subcommand.
+ * P-5 mock tests — T-M_p5.20: `mai soul` subcommand.
  *
- * Tests:
- *   T-M_p5.19 — runSoulSubcommand("show", ...) prints composed Soul to stdout (G-P5.4)
- *   T-M_p5.20 — soul reset core persist path: applyIdentityPatch(freeAxes) + writeIdentity + re-read (G-P5.4, OQ-7)
+ * P-APP-11 stage (b1): T-M_p5.19 (soul show) deleted — 'show' action removed from soul.ts.
+ * T-M_p5.20 — soul reset core persist path: applyIdentityPatch(freeAxes) + writeIdentity + re-read (G-P5.4, OQ-7)
  *
  * T-M_p5.20 tests the persist business logic directly (applyIdentityPatch + writeIdentity).
  * The interactive readline flow is integration-tested by live test L-p5.4 (mai soul reset).
@@ -14,127 +13,15 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path, { join } from "node:path";
+import { rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
-import { runSoulSubcommand } from "../../src/cli/subcommands/soul.js";
 import {
   applyIdentityPatch,
   identityRecordSchema,
   readIdentity,
   writeIdentity,
 } from "../../src/persistence/identity.js";
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-function makeTempPath(suffix: string): string {
-  const dir = join(tmpdir(), `mai-p5-soul-${process.pid}-${suffix}`);
-  mkdirSync(dir, { recursive: true });
-  return join(dir, "identity.json");
-}
-
-function cleanup(filePath: string): void {
-  try {
-    rmSync(join(filePath, ".."), { recursive: true, force: true });
-  } catch {
-    // best-effort
-  }
-}
-
-function makeIdentityFixture(identityPath: string): void {
-  writeFileSync(
-    identityPath,
-    JSON.stringify({
-      fullName: "ShowTestUser",
-      company: "ShowTestCo",
-      role: "BD",
-      persona: "outbound sales",
-      style: "direct",
-      icp: { targetRole: ["CTO"] },
-      freeAxes: {
-        pain_chain_lean: "cause-confirmed-then-up",
-        lead_role: "pain-owner first",
-        discovery_lean: "ratio-disciplined",
-        story_shape: "reference-story led",
-      },
-      updatedAt: new Date().toISOString(),
-    }),
-    "utf-8",
-  );
-}
-
-// ─── T-M_p5.19 — soul show prints composed Soul ──────────────────────────────
-
-test("T-M_p5.19: runSoulSubcommand('show', ...) writes composed Soul to process.stdout", async () => {
-  const identityPath = makeTempPath("show");
-  // P-Z3: readIdentity (P-28 shim) reads config.json.identity at DEFAULT_CONFIG_PATH (getHomeBase)
-  // FIRST, only falling back to identityPath. Under the shared clean-room HOME another test file's
-  // writeIdentity can pre-populate config.json → 'show' would read THAT instead of this fixture
-  // (passes in isolation, fails in the full suite). Point HOME at a fresh dir so config.json is empty
-  // → readIdentity falls back to the test's identityPath. Restored in finally.
-  const savedHome = process.env.HOME;
-  const homeDir = mkdtempSync(join(tmpdir(), "mai-p5-soul-home-"));
-  process.env.HOME = homeDir;
-  try {
-    makeIdentityFixture(identityPath);
-
-    // Capture stdout
-    const capturedChunks: string[] = [];
-    const origWrite = process.stdout.write.bind(process.stdout);
-    // biome-ignore lint/suspicious/noExplicitAny: test mock override
-    (process.stdout as any).write = (chunk: string | Buffer) => {
-      capturedChunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf-8"));
-      return true;
-    };
-
-    try {
-      await runSoulSubcommand("show", { identityPath });
-    } finally {
-      // biome-ignore lint/suspicious/noExplicitAny: restore
-      (process.stdout as any).write = origWrite;
-    }
-
-    const captured = capturedChunks.join("");
-
-    // Must include the Soul band header
-    assert.ok(
-      captured.includes("Soul band"),
-      `T-M_p5.19: stdout must contain "Soul band"; got:\n${captured.slice(0, 300)}`,
-    );
-
-    // Must include operator name from identity.json
-    assert.ok(
-      captured.includes("ShowTestUser"),
-      `T-M_p5.19: stdout must include operator name "ShowTestUser"; got:\n${captured.slice(0, 300)}`,
-    );
-
-    // Must include methodology text
-    assert.ok(
-      captured.includes("R1-open"),
-      `T-M_p5.19: stdout must include methodology text "R1-open"; got:\n${captured.slice(0, 400)}`,
-    );
-
-    // Must include ICP role
-    assert.ok(
-      captured.includes("CTO"),
-      `T-M_p5.19: stdout must include ICP role "CTO"; got:\n${captured.slice(0, 400)}`,
-    );
-
-    // Must include the chosen free axis key
-    assert.ok(
-      captured.includes("cause-confirmed-then-up"),
-      `T-M_p5.19: stdout must include free axis key "cause-confirmed-then-up"; got:\n${captured.slice(0, 400)}`,
-    );
-
-    console.log("T-M_p5.19: soul show prints composed Soul including identity + methodology + axes ✓");
-  } finally {
-    if (savedHome === undefined) delete process.env.HOME;
-    else process.env.HOME = savedHome;
-    rmSync(homeDir, { recursive: true, force: true });
-    cleanup(identityPath);
-  }
-});
 
 // ─── T-M_p5.20 — soul reset business logic (applyIdentityPatch + writeIdentity) ─
 

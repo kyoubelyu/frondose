@@ -23,35 +23,25 @@ const INSTALL_SH_PATH = path.join(REPO_ROOT, "install.sh");
 
 // ─── T-Install.1 ─────────────────────────────────────────────────────────────
 
-describe("install.sh post-install message advises `mai setup` (G-P52.4)", () => {
-  it("T-Install.1: when install.sh is read from disk, the post-install hint contains the substring `mai setup` AND does NOT contain `mai auth set` (the swap at line 91 swaps the old hint for the canonical wizard entry-point)", () => {
+describe("install.sh post-install message advises Frondose Settings (G-P52.4)", () => {
+  it("T-Install.1: when install.sh is read from disk, the post-install hint contains the Frondose Settings onboarding message AND does NOT contain `mai setup` or `mai auth set` (P-APP-11 b1 PINNED: install.sh:132)", () => {
     // Given: the contents of `install.sh` at the repository root.
     // When:  the file is inspected.
-    // Then:  (a) the post-install hint contains the literal substring
-    //            `"mai setup"`;
-    //        (b) the post-install hint does NOT contain `"mai auth set"` (the
-    //            pre-P-52 string at install.sh:91);
-    //        (c) the rest of install.sh (shebang, MAI_PREFIX handling, brew/Node/gh
-    //            checks, tarball download, npm install/build, symlink creation,
-    //            echo "=== Install complete ===" line) is unchanged — verified
-    //            via the presence of the distinctive `"=== Install complete ==="`
-    //            anchor still being present.
-    //
-    // VALIDATOR NOTE (Step 5 fill): read INSTALL_SH_PATH; do the three
-    // substring checks. The Step-4a scaffold just records the file existence
-    // — the actual assertions land at Step 5 once Codex's §6.7 swap is in place.
+    // Then:  (a) the post-install hint contains the PINNED literal
+    //            "open Frondose and use Settings" (install.sh:132);
+    //        (b) the post-install hint does NOT contain `"mai setup"` or `"mai auth set"`
+    //            (the pre-P-APP-11 strings);
+    //        (c) the "=== Install complete ===" anchor is still present.
+    // P-APP-11 b1 PINNED: install.sh:132 = "Next: open Frondose and use Settings to configure..."
     const text = readFileSync(INSTALL_SH_PATH, "utf8");
 
-    // (a) Post-install hint contains the new canonical entry point.
+    // (a) Post-install hint contains the Frondose Settings onboarding message.
     assert.ok(
-      text.includes("mai setup"),
-      "install.sh must advise `mai setup` as the canonical post-install entry point (§6.7 swap)",
+      text.includes("open Frondose and use Settings"),
+      "install.sh must advise 'open Frondose and use Settings' as the canonical post-install entry point (P-APP-11 b1 PINNED)",
     );
 
-    // (b) Pre-P-52 hint substring is gone from the post-install message.
-    // We restrict the "mai auth set" search to the post-install region (after
-    // the "=== Install complete ===" anchor) so any unrelated earlier mention
-    // (e.g. inside a script comment) doesn't false-positive.
+    // (b) Old CLI-wizard hints must be gone from the post-install region.
     const completeAnchor = "=== Install complete ===";
     const anchorIdx = text.indexOf(completeAnchor);
     assert.ok(
@@ -61,7 +51,11 @@ describe("install.sh post-install message advises `mai setup` (G-P52.4)", () => 
     const postInstallRegion = text.slice(anchorIdx);
     assert.ok(
       !postInstallRegion.includes("mai auth set"),
-      "post-install hint region must NOT contain `mai auth set` (the pre-P-52 string was at install.sh:91)",
+      "post-install hint region must NOT contain `mai auth set` (pre-P-52 string)",
+    );
+    assert.ok(
+      !postInstallRegion.includes("mai setup"),
+      "post-install hint region must NOT contain `mai setup` (pre-P-APP-11 string; setup subcommand deleted in b1)",
     );
   });
 });

@@ -1,19 +1,17 @@
 /**
- * `mai soul {show, edit, reset}` subcommand.
+ * `mai soul reset` subcommand + the shared free-axes prompt helper.
  *
- * Lint exemption note (per docs/phase-5-plan.md §2 nuance 4):
- *   The Biome `noRestrictedImports` `child_process` ban is configured under
- *   `**\/src/tools/**` only. This file lives at `src/cli/subcommands/soul.ts`,
- *   OUTSIDE the lint ban scope. `child_process.spawn` is permitted here for
- *   the `mai soul edit` subcommand's `$EDITOR` invocation.
- *   The no-bash boundary is preserved: tool implementations under src/tools/**
- *   still cannot use child_process; CLI subcommands (which the operator
- *   invokes directly, not the LLM) may.
+ * The `mai soul {show,edit}` actions were removed in P-APP-11 stage (b1):
+ *   - `show` (composed Soul band) and `edit` (open identity.json in $EDITOR) are
+ *     app-covered (P-Y6 Settings soul-override field).
+ *   - The operator-approved `$EDITOR` external editor launch site was removed with `edit`.
+ * `reset` is retained: it re-picks the 4 free axes, and Settings exposes no freeAxes
+ * control — it is the only post-bootstrap free-axes reset path.
+ *
+ * `promptFreeAxes` is also load-bearing on the agent first-run boot path:
+ * src/cli/identity-init.ts (promptFreeAxesAndPersist) → src/cli/workerBoot.ts.
  */
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { composeSoulBand } from "../../agent/systemPrompt/soul.js";
 import { FREE_AXES, formatAxisOptionsForPrompt, freeAxesSchema } from "../../methodology/freeAxes.js";
 import type { FreeAxesRecord } from "../../methodology/types.js";
 import { applyIdentityPatch, identityRecordSchema, readIdentity, writeIdentity } from "../../persistence/identity.js";
@@ -22,55 +20,9 @@ export interface SoulSubcommandOpts {
   identityPath: string;
 }
 
-export async function runSoulSubcommand(action: "show" | "edit" | "reset", opts: SoulSubcommandOpts): Promise<void> {
-  if (action === "show") return runSoulShow(opts);
-  if (action === "edit") return runSoulEdit(opts);
+export async function runSoulSubcommand(action: "reset", opts: SoulSubcommandOpts): Promise<void> {
   if (action === "reset") return runSoulReset(opts);
   throw new Error(`Unknown soul action: ${action}`);
-}
-
-function runSoulShow(opts: SoulSubcommandOpts): void {
-  const identity = readIdentity(opts.identityPath);
-  const composed = composeSoulBand(identity);
-  process.stdout.write("\n=== Soul band (composed from identity.json) ===\n\n");
-  process.stdout.write(composed);
-  process.stdout.write("\n\n=== end Soul band ===\n");
-}
-
-async function runSoulEdit(opts: SoulSubcommandOpts): Promise<void> {
-  if (!existsSync(opts.identityPath)) {
-    process.stderr.write(`[mai] identity.json missing at ${opts.identityPath}. Run \`mai\` first to bootstrap.\n`);
-    process.exit(1);
-  }
-  const editor = process.env.EDITOR || process.env.VISUAL || "vi";
-  process.stdout.write(`Opening ${opts.identityPath} in ${editor}...\n`);
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(editor, [opts.identityPath], { stdio: "inherit" });
-    child.once("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${editor} exited with code ${code}`));
-    });
-    child.once("error", reject);
-  });
-
-  // Re-validate after editor exits.
-  try {
-    const reread = readIdentity(opts.identityPath);
-    if (reread === null) {
-      process.stderr.write("[mai] identity.json is invalid after edit. Re-run `mai soul edit` to fix.\n");
-      process.exit(1);
-    }
-    const validation = identityRecordSchema.safeParse(reread);
-    if (!validation.success) {
-      process.stderr.write(`[mai] identity.json schema validation failed:\n${validation.error.message}\n`);
-      process.exit(1);
-    }
-    process.stdout.write("[mai] identity.json saved + validated.\n");
-  } catch (e) {
-    process.stderr.write(`[mai] post-edit validation error: ${e instanceof Error ? e.message : String(e)}\n`);
-    process.exit(1);
-  }
 }
 
 async function runSoulReset(opts: SoulSubcommandOpts): Promise<void> {

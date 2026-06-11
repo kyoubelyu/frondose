@@ -140,39 +140,46 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
 });
 
 // ─── G-P45.10 — CLAUDE.md amendment (E-7 + E-7b) ────────────────────────────
+//
+// P-APP-11 stage (b1) reconciliation: the soul.ts $EDITOR spawn site is deleted (§3.4).
+// CLAUDE.md Hard Rule 8 is amended at Step 7 (orchestrator) to remove the soul.ts approved-site
+// clause. T-DOC.1 is updated to drop the soul.ts check (site no longer exists after b1).
+// T-DOC.4 is updated to remove soul.ts position check (the server.ts clause is the final P-45
+// approved site after the amendment). T-DOC.2/3 are updated in lock-step.
 
 describe("CLAUDE.md Hard Rule 8 amendment (G-P45.10)", () => {
-  it("T-DOC.1: WHEN grep for 'subcommands/soul.ts' in CLAUDE.md, THEN at least one match inside Hard Rule 8 approved-sites paragraph", () => {
-    // Given: builder appended soul.ts clause to Hard Rule 8 per §4 verbatim text
-    // When:  grep -n "subcommands/soul.ts" CLAUDE.md
-    // Then:  at least 1 match; line is inside the approved-sites enumeration
-    const matches = run("grep -n 'subcommands/soul.ts' CLAUDE.md || true");
+  it("T-DOC.1: WHEN grep for 'subcommands/server.ts' in CLAUDE.md, THEN at least one match inside Hard Rule 8 approved-sites paragraph (soul.ts removed by P-APP-11 b1 amendment)", () => {
+    // Given: P-APP-11 stage (b1) removes the soul.ts $EDITOR spawn site;
+    //        CLAUDE.md Hard Rule 8 amendment (Step 7) removes the soul.ts clause;
+    //        the surviving server.ts:231-234 (mai server soul edit) clause STAYS.
+    // When:  grep -n "subcommands/server.ts" CLAUDE.md
+    // Then:  at least 1 match (server.ts clause still present — mai server soul edit stays)
+    const matches = run("grep -n 'subcommands/server.ts' CLAUDE.md || true");
     assert.ok(
       matches.length > 0,
-      `T-DOC.1: CLAUDE.md must mention 'subcommands/soul.ts' (Hard Rule 8); got: ${matches}`,
+      `T-DOC.1: CLAUDE.md must mention 'subcommands/server.ts' (Hard Rule 8 — P-45 server soul edit clause); got: ${matches}`,
     );
   });
 
-  it("T-DOC.2: WHEN grep for '2026-05-20' in CLAUDE.md, THEN MUST include the new approval-date marker for BOTH soul.ts AND server.ts:233 sites", () => {
-    // Given: builder updated the approval-date trailer to include 2026-05-20 for both P-45 sites
+  it("T-DOC.2: WHEN grep for '2026-05-20' in CLAUDE.md, THEN MUST include the approval-date marker for the server.ts:233 site", () => {
+    // Given: CLAUDE.md Hard Rule 8 has the 2026-05-20 retroactive approval for server.ts:233
+    //        (P-APP-11 b1 removes the soul.ts reference from the same line, but server.ts stays)
     // When:  grep -n "2026-05-20" CLAUDE.md
-    // Then:  at least one match; the matched line references both soul.ts and server.ts
+    // Then:  at least one match; the matched line references server.ts
     const result = run("grep -n '2026-05-20' CLAUDE.md || true");
-    assert.ok(result.length > 0, "T-DOC.2: CLAUDE.md must contain '2026-05-20' approval date (P-45 retroactive)");
-    // The approval-date trailer line MUST also mention both P-45 sites.
-    const approvalTrailerMatch = run(
-      "grep -E '2026-05-20.*(soul|server)|soul.*server.*2026-05-20|2026-05-20 \\(P-45' CLAUDE.md || true",
-    );
+    assert.ok(result.length > 0, "T-DOC.2: CLAUDE.md must contain '2026-05-20' approval date (P-45 retroactive for server.ts)");
+    const serverMatch = run("grep -n 'server.ts' CLAUDE.md || true");
     assert.ok(
-      approvalTrailerMatch.length > 0,
-      `T-DOC.2: CLAUDE.md must have a 2026-05-20 trailer line referencing the P-45 sites (soul.ts + server.ts); got: ${approvalTrailerMatch}`,
+      serverMatch.length > 0,
+      `T-DOC.2: CLAUDE.md must mention server.ts in Hard Rule 8 (server.ts:231-234 site stays); got: ${serverMatch}`,
     );
   });
 
   it("T-DOC.3: WHEN grep for 'subcommands/server.ts' in CLAUDE.md, THEN at least one match inside Hard Rule 8 approved-sites paragraph (BLOCKER-2 / E-7b)", () => {
-    // Given: builder also added server.ts:233 clause per BLOCKER-2 amendment (§4)
+    // Given: builder added server.ts:233 clause per BLOCKER-2 amendment (§4);
+    //        P-APP-11 b1 does NOT remove the server.ts clause (server.command is KEPT)
     // When:  grep -n "subcommands/server.ts" CLAUDE.md
-    // Then:  at least 1 match; line is inside the approved-sites enumeration
+    // Then:  at least 1 match
     const matches = run("grep -n 'subcommands/server.ts' CLAUDE.md || true");
     assert.ok(
       matches.length > 0,
@@ -180,16 +187,14 @@ describe("CLAUDE.md Hard Rule 8 amendment (G-P45.10)", () => {
     );
   });
 
-  it("T-DOC.4: WHEN Hard Rule 8 paragraph is read, THEN approved-sites ordering MUST be: update.ts → launchd.ts → autoUpdate.ts → serverLaunchd.ts → install.sh → soul.ts → server.ts:233 (approval-date order; P-45 clauses LAST)", () => {
-    // Given: CLAUDE.md Hard Rule 8 amended by builder per §4 chronological-approval ordering
+  it("T-DOC.4: WHEN Hard Rule 8 paragraph is read, THEN approved-sites ordering includes update.ts → launchd.ts → autoUpdate.ts → serverLaunchd.ts → install.sh → server.ts:233 (soul.ts removed by P-APP-11 b1 amendment)", () => {
+    // Given: CLAUDE.md Hard Rule 8 amended by P-APP-11 b1 to remove soul.ts approved-site clause
+    //        (Step 7 orchestrator); server.ts:233 remains as the last P-45 approved site.
     // When:  paragraph text parsed for clause positions
-    // Then:  soul.ts appears AFTER install.sh; server.ts:233 appears AFTER soul.ts (CONCERN-LR-2)
-    // Parse the Hard Rule 8 paragraph's text and verify the ordering of approved sites.
-    // The paragraph is a single LONG line in CLAUDE.md — we scan for substring positions.
+    // Then:  server.ts appears AFTER install.sh (soul.ts position no longer checked)
     const claudeMd = run("cat CLAUDE.md");
     const hr8Start = claudeMd.indexOf("The no-bash boundary");
     assert.ok(hr8Start > 0, "T-DOC.4: Hard Rule 8 paragraph must be findable via 'The no-bash boundary' anchor");
-    // Find end of HR8 — the next numbered hard rule or section break.
     const hr8End = claudeMd.indexOf("\n9.", hr8Start);
     const hr8 = hr8End > 0 ? claudeMd.slice(hr8Start, hr8End) : claudeMd.slice(hr8Start, hr8Start + 4000);
 
@@ -199,20 +204,15 @@ describe("CLAUDE.md Hard Rule 8 amendment (G-P45.10)", () => {
       autoUpdate: hr8.indexOf("autoUpdate.ts"),
       serverLaunchd: hr8.indexOf("subcommands/serverLaunchd.ts"),
       installSh: hr8.indexOf("install.sh"),
-      soul: hr8.indexOf("subcommands/soul.ts"),
       server: hr8.indexOf("subcommands/server.ts"),
     };
     for (const [k, v] of Object.entries(positions)) {
       assert.ok(v >= 0, `T-DOC.4: Hard Rule 8 paragraph must mention '${k}'; positions=${JSON.stringify(positions)}`);
     }
-    // The P-45 additions (soul + server) MUST appear AFTER install.sh (chronological).
+    // server.ts MUST appear AFTER install.sh (chronological approval order)
     assert.ok(
-      positions.soul > positions.installSh,
-      `T-DOC.4: 'subcommands/soul.ts' must appear AFTER 'install.sh' (chronological order); positions=${JSON.stringify(positions)}`,
-    );
-    assert.ok(
-      positions.server > positions.soul,
-      `T-DOC.4: 'subcommands/server.ts' must appear AFTER 'subcommands/soul.ts' (P-45 clauses last); positions=${JSON.stringify(positions)}`,
+      positions.server > positions.installSh,
+      `T-DOC.4: 'subcommands/server.ts' must appear AFTER 'install.sh' (chronological order); positions=${JSON.stringify(positions)}`,
     );
   });
 });

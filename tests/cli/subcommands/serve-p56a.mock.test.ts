@@ -220,7 +220,7 @@ describe("runServeSubcommand — GET /health auth variants (G-P56a.1)", () => {
 // ─── T-Serve.2 — GET /identity: identity set vs. not set (G-P56a.3) ─────────
 
 describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.3)", () => {
-  it("T-Serve.2: given (A) tmp MAI_HOME_BASE with config.json containing fullName:'Test Operator' and (B) empty tmp MAI_HOME_BASE with no config.json, WHEN GET /identity with valid bearer, THEN (A) 200 {ok:true, fullName:'Test Operator', ...} and (B) 200 {ok:false, reason:'identity not set; run `mai setup`'}", async () => {
+  it("T-Serve.2: given (A) tmp MAI_HOME_BASE with config.json containing fullName:'Test Operator' and (B) empty tmp MAI_HOME_BASE with no config.json, WHEN GET /identity with valid bearer, THEN (A) 200 {ok:true, fullName:'Test Operator', ...} and (B) 200 {ok:false, reason:'identity not set; open Frondose → Settings to complete setup'}", async () => {
     // Given: variant A — tmp dir as MAI_HOME_BASE;
     //          write <tmpDir>/.mai/agent/config.json with {schema_version:2, identity:{fullName:"Test Operator",...}}
     //          (authoritative path per P-28: readConfig returns cfg.identity)
@@ -229,8 +229,9 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
     //          process.env.MAI_HOME_BASE = <tmpDir> before starting server (per OQ-5)
     // When:  GET /identity with Authorization: Bearer tok456
     // Then:  variant A → 200 {ok:true, fullName:"Test Operator"} (200 even with ok:true)
-    //        variant B → 200 {ok:false, reason:"identity not set; run `mai setup`"}
+    //        variant B → 200 {ok:false, reason:"identity not set; open Frondose → Settings to complete setup"}
     //          (200 status — absence of identity is a state, not HTTP error, per plan §6)
+    //          P-APP-11 b1 PINNED: health.ts:12 = "identity not set; open Frondose → Settings to complete setup"
 
     const { runServeSubcommand } = await import("../../../src/cli/subcommands/serve.js");
     const origHome = process.env.MAI_HOME_BASE;
@@ -289,7 +290,7 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
       });
       assert.equal(rB.status, 200, `variant B: expected 200, got ${rB.status}`);
       assert.equal(rB.body.ok, false, "variant B: ok should be false");
-      assert.equal(rB.body.reason, "identity not set; run `mai setup`", "variant B: reason must match exactly");
+      assert.equal(rB.body.reason, "identity not set; open Frondose → Settings to complete setup", "variant B: reason must match exactly (P-APP-11 b1 PINNED)");
     } finally {
       rmSync(sockPathB, { force: true });
       rmSync(homeDirB, { recursive: true, force: true });

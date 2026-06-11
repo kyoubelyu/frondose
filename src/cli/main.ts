@@ -11,25 +11,19 @@ import { loadDotenv } from "./env.js";
 import { handleCronSlash } from "./replCron.js";
 import { isInteractive, printNoninteractiveGuidance } from "./subcommands/_prompts.js";
 import { runAnalyticsSubcommand } from "./subcommands/analytics.js";
-import { runAuthSubcommand } from "./subcommands/auth.js";
 import { runCronRemoveInteractive } from "./subcommands/cronRemove.js";
 import { runGhSubcommand } from "./subcommands/gh.js";
-import { runIdentitySubcommand } from "./subcommands/identity.js";
-import { runSearchSubcommand } from "./subcommands/search.js";
 import { runServerSubcommand } from "./subcommands/server.js";
 import { runServerCredentialSubcommand, type ServerCredentialOpts } from "./subcommands/serverCredential.js";
 import { runServerPersonaSubcommand } from "./subcommands/serverPersona.js";
 import { runServerWebTokenSubcommand } from "./subcommands/serverWebToken.js";
 import { runServerWorkerSubcommand } from "./subcommands/serverWorker.js";
-import { runSessionsSubcommand } from "./subcommands/sessions.js";
-import { runSetupSubcommand } from "./subcommands/setup.js";
 import { runSoulSubcommand } from "./subcommands/soul.js";
 import { runStatusSubcommand } from "./subcommands/status.js";
 import { runTelegramSubcommand } from "./subcommands/telegram.js";
 import { runTelegramDaemon } from "./subcommands/telegramDaemon.js";
 import { runUninstallSubcommand } from "./subcommands/uninstall.js";
 import { runUpdateSubcommand } from "./subcommands/update.js";
-import { runVersionSubcommand } from "./subcommands/version.js";
 import { bootWorker } from "./workerBoot.js";
 
 /**
@@ -80,7 +74,7 @@ function maybePrintTransitionalBanner(): void {
   process.stderr.write(
     "[mai] transitional CLI surface — the product is /Applications/Frondose.app\n" +
       "      This CLI is scheduled for internalization in P-APP-11. Admin commands\n" +
-      "      (telegram, server, update-server, auth) remain supported during the transition.\n\n",
+      "      (telegram, server, update-server) remain supported during the transition.\n\n",
   );
 }
 
@@ -122,7 +116,7 @@ async function main(): Promise<void> {
   const telegramConfigPath =
     process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
 
-  // P-7: dynamic version read so commander's --version + the `version` subcommand stay in sync with package.json.
+  // P-7: dynamic version read so commander's --version flag stays in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
   const pkg = requireFromHere("../../package.json") as { version: string };
 
@@ -142,6 +136,13 @@ async function main(): Promise<void> {
     // any subcommand is registered, otherwise root-level invocations like `mai --prompt "..."`
     // fall through to the usage screen and exit 1. The full REPL / one-shot body lives here.
     .action(async () => {
+      // P-APP-11 b1: commander routes any unrecognized first positional (e.g. a removed
+      // subcommand name like `auth`, or a typo) to this root action. Reject it explicitly
+      // instead of silently starting the REPL.
+      if (program.args.length > 0) {
+        process.stderr.write(`error: unknown command '${program.args[0]}'\n`);
+        process.exit(1);
+      }
       const opts = program.opts<CliOpts>();
       await bootWorker({
         cdpPort,
@@ -155,107 +156,21 @@ async function main(): Promise<void> {
       });
     });
 
-  // P-5: `mai soul <action>` subcommand. Short-circuits via process.exit(0) — never
-  // falls through to REPL/one-shot dispatch.
+  // P-5 / P-APP-11 b1: `mai soul reset` re-prompts the 4 free axes. (`show`/`edit`
+  // were retired in stage (b1) — soul-band show/edit is now app-covered via P-Y6
+  // Settings; freeAxes reset has no Settings control yet, so `reset` is retained.)
+  // Short-circuits via process.exit(0) — never falls through to REPL/one-shot dispatch.
   program
     .command("soul <action>")
-    .description(
-      "Soul-band controls: 'show' prints composed Soul; 'edit' opens identity.json in $EDITOR; 'reset' re-prompts the 4 free axes.",
-    )
+    .description("Soul-band controls: reset re-prompts the 4 free axes.")
     .action(async (action: string) => {
-      if (action !== "show" && action !== "edit" && action !== "reset") {
-        process.stderr.write(`[mai] unknown soul action: ${action}. Use show / edit / reset.\n`);
+      if (action !== "reset") {
+        process.stderr.write(`[mai] unknown soul action: ${action}. Use reset.\n`);
         process.exit(1);
       }
       await runSoulSubcommand(action, { identityPath });
       process.exit(0);
     });
-
-  // P-7 / P-13: `mai auth` — provider key management (~/.mai/auth.json).
-  // P-13 D-10: positional args become optional (`[name]`) so missing args + TTY
-  // trigger the interactive Prompter path inside runAuthSubcommand.
-  const auth = program.command("auth").description("Provider key management (~/.mai/auth.json)");
-  auth
-    .command("set [url]")
-    .option("--key <value>", "API key")
-    .option("--model-id <id>", "Model ID") // P-36 F-E: was --model (collided with the global --model)
-    .option("--name <name>", "Provider name (default: derived from URL hostname)")
-    .option("--default", "Set this provider:model as the new default model spec", false)
-    .action(
-      async (
-        url: string | undefined,
-        cliOpts: { key?: string; modelId?: string; name?: string; default?: boolean },
-      ) => {
-        await runWithExitGuard(async () => {
-          await runAuthSubcommand("set", {
-            url,
-            key: cliOpts.key,
-            model: cliOpts.modelId, // P-36 F-E: --model-id → opts.model (internal field unchanged)
-            name: cliOpts.name,
-            asDefault: cliOpts.default ?? false,
-          });
-        });
-        process.exit(0);
-      },
-    );
-  auth.command("list").action(async () => {
-    await runWithExitGuard(async () => {
-      await runAuthSubcommand("list", {});
-    });
-    process.exit(0);
-  });
-  auth.command("remove [provider]").action(async (provider: string | undefined) => {
-    await runWithExitGuard(async () => {
-      await runAuthSubcommand("remove", { provider });
-    });
-    process.exit(0);
-  });
-  auth.command("default [spec]").action(async (spec: string | undefined) => {
-    await runWithExitGuard(async () => {
-      await runAuthSubcommand("default", { spec });
-    });
-    process.exit(0);
-  });
-
-  // P-7: `mai identity` — operator identity management.
-  const identity = program.command("identity").description("Operator identity management");
-  identity
-    .command("init")
-    .option("--reset", "Re-run from scratch (with confirmation)", false)
-    .action(async (cliOpts: { reset?: boolean }) => {
-      await runIdentitySubcommand("init", { identityPath, reset: cliOpts.reset });
-      process.exit(0);
-    });
-  identity.command("show").action(async () => {
-    await runIdentitySubcommand("show", { identityPath });
-    process.exit(0);
-  });
-
-  // P-7: `mai sessions` — session management.
-  const sessions = program.command("sessions").description("Session management");
-  sessions
-    .command("list")
-    .option("--json", "Output NDJSON instead of table", false)
-    .action(async (cliOpts: { json?: boolean }) => {
-      await runSessionsSubcommand("list", { json: cliOpts.json });
-      process.exit(0);
-    });
-  sessions.command("continue [id]").action(async (id: string | undefined) => {
-    await runWithExitGuard(async () => {
-      await runSessionsSubcommand("continue", { sessionId: id });
-    });
-    process.exit(0);
-  });
-  sessions.command("new").action(async () => {
-    await runSessionsSubcommand("new", {});
-    process.exit(0);
-  });
-
-  // P-7: `mai version` — companion to --version flag; same dynamic source.
-  program.command("version").action(() => {
-    runVersionSubcommand();
-    process.exit(0);
-  });
 
   if (powerTier) {
     // P-11 D-9: `mai telegram` — bidirectional Telegram channel management.
@@ -580,27 +495,6 @@ async function main(): Promise<void> {
     });
   }
 
-  // P-15/P-71: `mai search` — legacy search-key status/removal only.
-  const search = program.command("search").description("Legacy search-key status/removal");
-  search
-    .command("set")
-    .option("--brave <key>", "Legacy Brave key (ignored)")
-    .option("--tavily <key>", "Legacy Tavily key (ignored)")
-    .action(async (cliOpts: { brave?: string; tavily?: string }) => {
-      await runWithExitGuard(async () => {
-        await runSearchSubcommand("set", { braveApiKey: cliOpts.brave, tavilyApiKey: cliOpts.tavily });
-      });
-      process.exit(0);
-    });
-  search.command("status").action(async () => {
-    await runSearchSubcommand("status", {});
-    process.exit(0);
-  });
-  search.command("remove").action(async () => {
-    await runSearchSubcommand("remove", {});
-    process.exit(0);
-  });
-
   // P-56a: `mai serve` — HTTP-over-UDS bridge for the Tauri desktop shell (v0.5 hover pivot).
   program
     .command("serve")
@@ -732,24 +626,6 @@ async function main(): Promise<void> {
     });
     process.exit(0);
   });
-
-  // P-13 D-6: `mai setup` — interactive wizard (auth → identity → telegram → soul).
-  program
-    .command("setup")
-    .description("Interactive wizard: auth + identity + telegram + soul configuration")
-    .action(async () => {
-      await runWithExitGuard(async () => {
-        await runSetupSubcommand({
-          authPath: DEFAULT_AUTH_PATH(),
-          identityPath,
-          tcPath: telegramConfigPath,
-          schedulePath,
-          memoryDbPath,
-          cdpPort,
-        });
-      });
-      process.exit(0);
-    });
 
   await program.parseAsync(process.argv);
   // No code after parseAsync — root + sub actions run themselves.
