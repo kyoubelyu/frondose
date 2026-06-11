@@ -40,33 +40,40 @@ function pkgVersion(): string {
 
 describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
   it("T-CMD.1: WHEN node dist/cli/main.js --help is run, THEN stdout MUST contain all required subcommand names AND root flags", async () => {
-    // Given: built dist/cli/main.js from post-P-45 src (at Step 5; Step 4a uses pre-P-45 dist)
+    // Given: built dist/cli/main.js from post-P-APP-11-b1 src (auth/identity/sessions/version/search/setup deleted)
     // When:  --help invoked
-    // Then:  all 14 subcommand names present; all 6 root flags present in output
+    // Then:  all 11 remaining subcommand names present; 6 removed names absent; all 6 root flags present in output
     assert.ok(existsSync(CLI), `T-CMD.1: dist/cli/main.js must exist at ${CLI}`);
     const { stdout } = await execFileAsync("node", [CLI, "--help"]);
 
-    // All 14 subcommand names must be present in the help output.
+    // All 11 KEPT subcommand names must be present in the help output.
     const SUBCOMMANDS: ReadonlyArray<string> = [
       "soul",
-      "auth",
-      "identity",
-      "sessions",
-      "version",
       "telegram",
       "server",
       "gh",
-      "search",
+      "serve",
       "update",
+      "update-server",
       "uninstall",
       "status",
+      "analytics",
       "cron",
-      "setup",
     ];
     for (const sub of SUBCOMMANDS) {
       assert.ok(
         new RegExp(`(^|\\s)${sub}(\\s|$)`, "m").test(stdout),
         `T-CMD.1: subcommand '${sub}' must appear in --help output; got:\n${stdout}`,
+      );
+    }
+    // P-APP-11 stage (b1): 6 deleted subcommands must NOT appear.
+    const DELETED_SUBCOMMANDS: ReadonlyArray<string> = ["auth", "identity", "sessions", "version", "search", "setup"];
+    for (const sub of DELETED_SUBCOMMANDS) {
+      // Use a word-boundary pattern to avoid false positives inside longer words.
+      const pattern = new RegExp(`^\\s+${sub}\\s`, "m");
+      assert.ok(
+        !pattern.test(stdout),
+        `T-CMD.1: deleted subcommand '${sub}' must NOT appear in --help output; got:\n${stdout}`,
       );
     }
     // All 6 root flags must be present.
@@ -93,19 +100,6 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
       stdout,
       `${pkgVersion()}\n`,
       `T-CMD.2: --version output must equal '${pkgVersion()}\\n'; got ${JSON.stringify(stdout)}`,
-    );
-  });
-
-  it("T-CMD.3: WHEN node dist/cli/main.js version (subcommand) is run, THEN exit 0 AND prints same version as --version", async () => {
-    // Given: built dist/cli/main.js
-    // When:  'version' subcommand invoked
-    // Then:  process exits 0 AND printed version matches package.json
-    assert.ok(existsSync(CLI), "T-CMD.3: dist/cli/main.js must exist");
-    const { stdout } = await execFileAsync("node", [CLI, "version"]);
-    // 'mai version' subcommand prints version with a trailing newline; exit 0 implied by execFile success.
-    assert.ok(
-      stdout.includes(pkgVersion()),
-      `T-CMD.3: 'mai version' subcommand stdout must include '${pkgVersion()}'; got ${JSON.stringify(stdout)}`,
     );
   });
 
@@ -183,23 +177,6 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     void tmpdir;
     void path;
     void os;
-  });
-
-  it("T-CMD.6: GIVEN pre-P-45 auth-set-help baseline fixture, WHEN post-P-45 auth set --help captured, THEN byte-equal to baseline (nested --model-id preserved)", async () => {
-    // Given: tests/fixtures/p45-auth-set-help-baseline.txt committed at Step 4a
-    // When:  node dist/cli/main.js auth set --help run post-build
-    // Then:  output byte-equal to baseline (nested Commander registration unchanged)
-    const baselinePath = new URL("../fixtures/p45-auth-set-help-baseline.txt", import.meta.url).pathname;
-    assert.ok(existsSync(baselinePath), `T-CMD.6: auth-set baseline must exist at ${baselinePath}`);
-    assert.ok(existsSync(CLI), "T-CMD.6: dist/cli/main.js must exist");
-    const { stdout } = await execFileAsync("node", [CLI, "auth", "set", "--help"]);
-    const baseline = readFileSync(baselinePath, "utf-8");
-    // TODO Step 5: G-P45.3 — T-CMD.6: fill byte-equal assertion
-    assert.equal(
-      stdout,
-      baseline,
-      `T-CMD.6: post-P-45 auth set --help byte-diff (len ${stdout.length} vs ${baseline.length})`,
-    );
   });
 
   it("T-CMD.7: GIVEN pre-P-45 server-worker-provision-help baseline fixture, WHEN post-P-45 server worker provision --help captured, THEN byte-equal to baseline (--hostname + --worker-id preserved)", async () => {

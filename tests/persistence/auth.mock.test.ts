@@ -6,10 +6,14 @@
  *   T-Auth1b — writeAuth overwrite: defensive chmodSync enforces 0o600
  *   T-Auth2  — writeAuth with baseUrl: stored in providers[provider]
  *   T-Auth3  — maskKey correctness: last 4 visible, prefix preserved
- *   T-Auth4  — remove round-trip: set then remove, provider absent in JSON
+ *   T-Auth4  — remove round-trip: writeAuth set then manual remove, provider absent in JSON
  *   T-Auth5  — default field written by writeAuth when present
- *   T-Auth6  — runAuthSubcommand("set") with invalid spec throws parseModelSpec error
+ *   T-Auth6  — writeAuth missing provider fields + readAuth: persistence resilience
  *   T-MR1    — readAuthJsonKey: returns key when present; undefined when absent/file missing
+ *
+ * P-APP-11 stage (b1): `auth` subcommand deleted; T-Auth2/4/5/6 re-pointed to
+ * direct writeAuth/readAuth calls (the real persistence subject). runAuthSubcommand
+ * import removed.
  *
  * No Chrome, no LLM required.
  */
@@ -19,7 +23,6 @@ import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, test } from "node:test";
-import { runAuthSubcommand } from "../../src/cli/subcommands/auth.js";
 import {
   authPathToSecretsPath,
   DEFAULT_ANTHROPIC_BASE_URL,
@@ -32,24 +35,7 @@ import {
   writeAuth,
 } from "../../src/persistence/auth.js";
 
-// Tiny helper: mock process.exit to throw instead of killing the test runner.
-// Returns the exit code that was passed, or undefined if not called.
-function mockProcessExit(): { getCode: () => number | undefined; restore: () => void } {
-  let capturedCode: number | undefined;
-  const orig = process.exit.bind(process);
-  // biome-ignore lint/suspicious/noExplicitAny: intentional override for test isolation
-  (process as any).exit = (code?: number) => {
-    capturedCode = code;
-    throw new Error(`process.exit(${code})`);
-  };
-  return {
-    getCode: () => capturedCode,
-    restore: () => {
-      // biome-ignore lint/suspicious/noExplicitAny: restore process.exit
-      (process as any).exit = orig;
-    },
-  };
-}
+// (mockProcessExit helper removed in P-APP-11 stage (b1) — T-Auth6 re-pointed to direct writeAuth)
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -104,23 +90,22 @@ test("T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 sh
 
 // ─── T-Auth2 — set with baseUrl ───────────────────────────────────────────────
 
-test("T-Auth2: runAuthSubcommand set stores baseUrl in providers[provider]", async () => {
-  // P-21: "set" now takes url: instead of spec: + baseUrl:. Update to URL-based API.
+test("T-Auth2: writeAuth stores baseUrl in providers[provider] (re-pointed from runAuthSubcommand to direct writeAuth)", () => {
+  // P-APP-11 stage (b1): runAuthSubcommand("set") removed; re-pointed to direct writeAuth.
+  // The persistence subject (writeAuth storing baseUrl) is unchanged.
   const { dir, authPath } = tmpAuthPath();
   try {
-    await runAuthSubcommand("set", {
-      url: "https://api.deepseek.com/v1",
-      key: "sk-dsk-test",
-      model: "deepseek-chat",
-      name: "deepseek",
-      authPath,
-    });
+    writeAuth({
+      providers: {
+        deepseek: { key: "sk-dsk-test", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+      },
+    }, authPath);
     const auth = readAuth(authPath);
     assert.equal(auth?.providers?.deepseek?.key, "sk-dsk-test", "T-Auth2: key must be stored");
     assert.equal(
       auth?.providers?.deepseek?.baseUrl,
       "https://api.deepseek.com/v1",
-      "T-Auth2: baseUrl must be stored verbatim from url arg",
+      "T-Auth2: baseUrl must be stored verbatim",
     );
     console.log("T-Auth2: baseUrl stored correctly ✓");
   } finally {
@@ -146,26 +131,17 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
   const masked3 = maskKey("abcd");
   assert.equal(masked3, "****", "T-Auth3: key ≤ 4 chars must be all-stars");
 
-  // runAuthSubcommand("list") emits masked output
+  // Masked key must not reveal plaintext when shown in display output (persistence contract)
+  // P-APP-11 stage (b1): runAuthSubcommand("list") removed; test the maskKey persistence contract
+  // directly via writeAuth + readAuth + maskKey (the real subject).
   const { dir, authPath } = tmpAuthPath();
   try {
     writeAuth({ providers: { anthropic: { key: "sk-ant-testkey1234" } } }, authPath);
-    const captured: string[] = [];
-    const origWrite = process.stdout.write.bind(process.stdout);
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    (process.stdout as any).write = (chunk: string | Buffer) => {
-      captured.push(typeof chunk === "string" ? chunk : chunk.toString());
-      return true;
-    };
-    try {
-      await runAuthSubcommand("list", { authPath });
-    } finally {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      (process.stdout as any).write = origWrite;
-    }
-    const output = captured.join("");
-    assert.ok(!output.includes("testkey1234"), "T-Auth3: plain key must NOT appear in list output");
-    assert.ok(output.includes("***"), "T-Auth3: list output must contain *** masked key");
+    const auth = readAuth(authPath);
+    const storedKey = auth?.providers?.anthropic?.key ?? "";
+    const masked = maskKey(storedKey);
+    assert.ok(!masked.includes("testkey1234"), "T-Auth3: plain key must NOT appear in masked output");
+    assert.ok(masked.includes("***"), "T-Auth3: masked key must contain ***");
     console.log(`T-Auth3: maskKey + list output correct ✓ (example: "${masked1}")`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -174,23 +150,25 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
 
 // ─── T-Auth4 — remove deletes provider ───────────────────────────────────────
 
-test("T-Auth4: set then remove leaves provider absent in auth.json", async () => {
+test("T-Auth4: writeAuth set then manual provider remove leaves provider absent in auth.json (re-pointed from runAuthSubcommand)", () => {
+  // P-APP-11 stage (b1): runAuthSubcommand("set"/"remove") removed; re-pointed to direct writeAuth
+  // + manual provider deletion. The persistence subject (writeAuth stores + delete removes) unchanged.
   const { dir, authPath } = tmpAuthPath();
   try {
-    // P-71: direct Anthropic/OpenAI writes are rejected; use an in-scope DeepSeek/custom provider.
-    await runAuthSubcommand("set", {
-      url: "https://api.deepseek.com/v1",
-      key: "sk-dsk-toremove",
-      model: "deepseek-v4-flash",
-      name: "deepseek",
-      authPath,
-    });
+    // Write a provider
+    writeAuth({
+      providers: {
+        deepseek: { key: "sk-dsk-toremove", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+      },
+    }, authPath);
     const before = readAuth(authPath);
     assert.ok(before?.providers?.deepseek, "T-Auth4: pre-condition: provider must exist before remove");
 
-    await runAuthSubcommand("remove", { provider: "deepseek", authPath });
+    // Manually remove the provider by re-writing without it
+    const { deepseek: _removed, ...remaining } = before!.providers ?? {};
+    writeAuth({ ...before, providers: remaining }, authPath);
     const after = readAuth(authPath);
-    assert.ok(!after?.providers?.deepseek, "T-Auth4: provider must be absent after remove");
+    assert.ok(!after?.providers?.deepseek, "T-Auth4: provider must be absent after manual remove");
     console.log("T-Auth4: set-then-remove round-trip ✓");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -199,10 +177,11 @@ test("T-Auth4: set then remove leaves provider absent in auth.json", async () =>
 
 // ─── T-Auth5 — default field written ─────────────────────────────────────────
 
-test("T-Auth5: runAuthSubcommand default writes default field to auth.json", async () => {
+test("T-Auth5: writeAuth default field stores model spec in auth.json (re-pointed from runAuthSubcommand)", () => {
+  // P-APP-11 stage (b1): runAuthSubcommand("default") removed; re-pointed to direct writeAuth.
   const { dir, authPath } = tmpAuthPath();
   try {
-    await runAuthSubcommand("default", { spec: "deepseek:deepseek-v4-flash", authPath });
+    writeAuth({ default: "deepseek:deepseek-v4-flash" }, authPath);
     const auth = readAuth(authPath);
     assert.equal(auth?.default, "deepseek:deepseek-v4-flash", "T-Auth5: default must be written");
     console.log("T-Auth5: default field written ✓");
@@ -211,23 +190,23 @@ test("T-Auth5: runAuthSubcommand default writes default field to auth.json", asy
   }
 });
 
-// ─── T-Auth6 — invalid spec rejected ─────────────────────────────────────────
+// ─── T-Auth6 — missing provider field resilience ─────────────────────────────
 
-test("T-Auth6: runAuthSubcommand set with missing url in non-interactive mode exits 1", async () => {
-  // P-21: "set" requires url: in non-interactive mode; missing url → process.exit(1).
-  // We mock process.exit to throw instead of killing the test runner.
+test("T-Auth6: writeAuth with incomplete provider fields + readAuth: persistence resilience (re-pointed from runAuthSubcommand validation)", () => {
+  // P-APP-11 stage (b1): runAuthSubcommand("set") removed; the persistence subject is writeAuth's
+  // resilience when written with partial/empty data. Validates readAuth returns sane output.
   const { dir, authPath } = tmpAuthPath();
-  const exitMock = mockProcessExit();
   try {
-    await runAuthSubcommand("set", { key: "sk-test", authPath }); // no url
-  } catch {
-    // expected mock exit throw
+    // Write a minimal record (only providers key, no default)
+    writeAuth({ providers: {} }, authPath);
+    const auth = readAuth(authPath);
+    assert.ok(auth !== null, "T-Auth6: readAuth must return non-null for valid (empty) auth.json");
+    assert.deepEqual(auth?.providers ?? {}, {}, "T-Auth6: empty providers must round-trip");
+    assert.equal(auth?.default, undefined, "T-Auth6: default must be undefined when not written");
+    console.log("T-Auth6: persistence resilience with empty data ✓");
   } finally {
-    exitMock.restore();
     rmSync(dir, { recursive: true, force: true });
   }
-  assert.equal(exitMock.getCode(), 1, "T-Auth6: missing url must call process.exit(1)");
-  console.log("T-Auth6: missing url in non-interactive mode exits 1 ✓");
 });
 
 // ─── T-MR1 — readAuthJsonKey ──────────────────────────────────────────────────

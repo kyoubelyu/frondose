@@ -69,14 +69,15 @@ function clearModelEnv(): void {
 
 // ─── T-FA.1 ───────────────────────────────────────────────────────────────────
 
-describe("buildModel error — provider list + pre-P-21 hint + --model-id (G-P36.1/.2)", () => {
+describe("buildModel error — provider list + pre-P-21 hint + Frondose Settings guidance (G-P36.1/.2)", () => {
   it(
     "T-FA.1: when providers={anthropic,deepseek} and spec='openai:deepseek-v4-flash', " +
-      "buildModel throws listing 'anthropic, deepseek', the pre-P-21 hint, and '--model-id'",
+      "buildModel throws listing 'anthropic, deepseek', the pre-P-21 hint, and Frondose Settings guidance",
     () => {
       // Given: auth state with providers {anthropic, deepseek}; spec from factory param
       // When:  resolveModel({factory: "openai:deepseek-v4-flash"}) called
-      // Then:  error lists "anthropic, deepseek" AND pre-P-21 hint AND "--model-id"
+      // Then:  error lists "anthropic, deepseek" AND pre-P-21 hint AND Frondose Settings guidance
+      // P-APP-11 b1: error guidance changed from "--model-id" to "Frondose → Settings"
       const saved = saveEnv(...MODEL_ENV_KEYS);
       const { tmpHome, cleanup } = setupTmpHome({
         anthropic: { key: "sk-fake-ant", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
@@ -102,10 +103,10 @@ describe("buildModel error — provider list + pre-P-21 hint + --model-id (G-P36
               err.message.includes("pre-P-21"),
               `T-FA.1: error must include 'pre-P-21' hint (openai provider); got: ${err.message}`,
             );
-            // --model-id in the configure guidance (F-E)
+            // Frondose Settings guidance (P-APP-11 b1: replaces --model-id CLI guidance)
             assert.ok(
-              err.message.includes("--model-id"),
-              `T-FA.1: error must include '--model-id' in guidance; got: ${err.message}`,
+              err.message.includes("Frondose"),
+              `T-FA.1: error must include 'Frondose' Settings guidance; got: ${err.message}`,
             );
             return true;
           },
@@ -128,7 +129,7 @@ describe("buildModel error — generic provider list (no pre-P-21 hint) (G-P36.1
       // Given: auth state with only {anthropic}; spec provider="together" (not openai)
       // When:  resolveModel({factory: "together:x"}) called
       // Then:  error lists "anthropic" as configured; does NOT contain the pre-P-21 hint;
-      //        does contain "--model-id"
+      //        contains Frondose Settings guidance (P-APP-11 b1: replaces --model-id CLI guidance)
       const saved = saveEnv(...MODEL_ENV_KEYS);
       const { tmpHome, cleanup } = setupTmpHome({
         anthropic: { key: "sk-fake-ant", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
@@ -149,9 +150,10 @@ describe("buildModel error — generic provider list (no pre-P-21 hint) (G-P36.1
               !err.message.includes("pre-P-21"),
               `T-FA.2: error must NOT include pre-P-21 hint for non-openai provider; got: ${err.message}`,
             );
+            // Frondose Settings guidance (P-APP-11 b1: replaces --model-id CLI guidance)
             assert.ok(
-              err.message.includes("--model-id"),
-              `T-FA.2: error must include '--model-id' in guidance; got: ${err.message}`,
+              err.message.includes("Frondose"),
+              `T-FA.2: error must include 'Frondose' Settings guidance; got: ${err.message}`,
             );
             return true;
           },

@@ -57,7 +57,7 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
             matched: [],
             missing: ["role", "industry", "region", "companyNameKeywords"],
             rationale:
-              "No ICP configured (identity.json has no .icp block, no override provided). Run `mai soul edit` to set ICP.",
+              "No ICP configured (identity.json has no .icp block, no override provided). Set your ICP in Frondose → Settings (identity).",
             detail: undefined,
           });
         }

@@ -5,7 +5,8 @@ import { type BootstrapToolsOpts, makeBootstrapTools, readWipFile, writeWipFile 
 
 /** P-52 B-5: thrown when a `streamText` round-trip inside the identity bootstrap
  *  exceeds MAI_BOOTSTRAP_TIMEOUT_MS (default 60s). The operator sees an actionable
- *  message — they can adjust network/proxy and retry `mai identity init`. */
+ *  message — they can adjust network/proxy, verify Frondose → Settings, and retry
+ *  the first-run setup. */
 export class BootstrapTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -206,8 +207,8 @@ export async function runBootstrapAgent(opts: BootstrapAgentOpts): Promise<void>
     const timeoutErrorMessage =
       `Identity bootstrap LLM call stalled (no response in ${Math.round(timeoutMs / 1000)}s). ` +
       "Check your network connection or proxy settings (HTTPS_PROXY, ALL_PROXY, TELEGRAM_PROXY, Clash, etc.) " +
-      "and retry with `mai identity init`. " +
-      "If the problem persists, try a different LLM provider via `mai auth set`.";
+      "and retry. " +
+      "If the problem persists, switch to a different LLM provider in Frondose → Settings.";
     try {
       const streamWork = (async (): Promise<void> => {
         const result = streamText({

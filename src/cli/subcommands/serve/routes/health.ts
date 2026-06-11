@@ -9,7 +9,7 @@ export function handleHealth(res: ServerResponse): void {
 export function handleIdentity(res: ServerResponse): void {
   const id = readIdentity();
   if (id === null) {
-    sendJson(res, 200, { ok: false, reason: "identity not set; run `mai setup`" });
+    sendJson(res, 200, { ok: false, reason: "identity not set; open Frondose → Settings to complete setup" });
     return;
   }
   sendJson(res, 200, { ok: true, ...id });

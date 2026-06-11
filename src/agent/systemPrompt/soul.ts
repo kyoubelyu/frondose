@@ -28,10 +28,10 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
   // Section 1: identity sentence
   const id: Partial<IdentityRecord> = identity ?? {};
   const name = id.fullName ?? "mai-agent operator";
-  const company = id.company ?? "(fill after `mai identity init`)";
+  const company = id.company ?? "(fill in Frondose → Settings → identity)";
   const role = id.role ?? "BD";
   const persona = id.persona ?? "You do outbound sales, methodology is Solution Selling®";
-  const targetRoles = id.icp?.targetRole?.join(", ") ?? "(fill after `mai identity init`)";
+  const targetRoles = id.icp?.targetRole?.join(", ") ?? "(fill in Frondose → Settings → identity)";
   const industries = id.icp?.industry?.join(", ") ?? "";
   const icpSentence = industries ? `Your ICP is ${targetRoles} — in ${industries}.` : `Your ICP is ${targetRoles}.`;
 
