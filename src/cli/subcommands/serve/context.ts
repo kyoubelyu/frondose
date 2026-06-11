@@ -121,7 +121,9 @@ export interface ServeState {
 }
 
 export interface ServeDeps {
-  model: ReturnType<typeof import("../../../agent/modelResolver.js").resolveModel>;
+  // P-APP-8: null means the LLM was not configured at boot. reloadAgentDeps
+  // hydrates this after a successful Settings save; consumers must handle null.
+  model: ReturnType<typeof import("../../../agent/modelResolver.js").resolveModel> | null;
   system: string;
   systemResume: string;
   tools: ReturnType<typeof import("../../../tools/index.js").makeAllTools>;

@@ -18,7 +18,7 @@ import os from "node:os";
 import { dirname, join } from "node:path";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
-import { resolveModel } from "../../agent/modelResolver.js";
+import { resolveModelOrNull } from "../../agent/modelResolver.js";
 import { BOUNDARY, BOUNDARY_RESUME } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
@@ -81,7 +81,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     soul: soulBand,
     checkpoint: CHECKPOINT_RESUME,
   });
-  const model = resolveModel({});
+  // P-APP-8: tolerant boot. A missing or invalid LLM key must not crash the sidecar.
+  // resolveModelOrNull writes one actionable stderr line and returns null; Settings
+  // can hydrate deps.model later through reloadAgentDeps without a restart.
+  const model = resolveModelOrNull({});
   const maxSteps = resolveMaxSteps(undefined);
   const profileDir = process.env.MAI_PROFILE_DIR ?? join(getHomeBase(), ".mai", "agent", "chrome-profile");
   const memoryDbPath = join(getHomeBase(), ".mai", "agent", "memory.sqlite");
