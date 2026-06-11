@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/mai-agent",
-  "version": "0.5.0-alpha.52",
+  "version": "0.5.0-alpha.53",
   "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). Internal-only package; the operator product is the compiled Frondose.app, not this npm package. CLI surface retained as transitional internal sidecar/build entrypoint until P-APP-11 retirement completes.",
   "type": "module",
   "license": "UNLICENSED",
@@ -16,11 +16,11 @@
   "scripts": {
     "install": "true",
     "build:overlay-assets": "node --import tsx scripts/gen-overlay-assets.ts",
-    "build": "npm run build:overlay-assets && tsc -p tsconfig.json && chmod +x dist/cli/main.js dist/app/sidecarMain.js && npm run build:web && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
+    "build": "npm run build:overlay-assets && tsc -p tsconfig.json && chmod +x dist/cli/main.js dist/app/sidecarMain.js dist/app/updateServerMain.js && npm run build:web && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
     "build:web": "esbuild src/web/main.tsx --bundle --minify --jsx=automatic --external:/vendor/* --outfile=dist/web/app.js && tailwindcss -i src/web/style.css -o dist/web/style.css --minify && cp src/web/index.html dist/web/index.html && cp -r src/web/vendor dist/web/vendor",
     "build:native": "node-gyp rebuild || echo '[mai] cgevent native addon build skipped (Xcode CLT missing) — hardware input mode unavailable; cdp mode unaffected'",
     "build:tauri-ui": "tsc -p src/tauri/ui/tsconfig.json",
-    "build:tauri": "npm run build:overlay-assets && tsc -p tsconfig.json && chmod +x dist/cli/main.js dist/app/sidecarMain.js && npm run build:tauri-ui",
+    "build:tauri": "npm run build:overlay-assets && tsc -p tsconfig.json && chmod +x dist/cli/main.js dist/app/sidecarMain.js dist/app/updateServerMain.js && npm run build:tauri-ui",
     "build:release": "bash scripts/build-release.sh",
     "assert-dist": "node --import tsx scripts/assert-dist.ts",
     "check": "tsc -p tsconfig.json --noEmit",
