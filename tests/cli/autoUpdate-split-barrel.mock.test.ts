@@ -272,7 +272,7 @@ describe("autoUpdate split-barrel — LoC budgets", () => {
 
 describe("autoUpdate split-barrel — importer resolution", () => {
   it(
-    "T-autoUpdate.Importer.1: all 5 production import call-sites and 2 test file importers resolve via the barrel; includes main.ts:629 (--bootstrap dynamic import)",
+    "T-autoUpdate.Importer.1: all 5 production import call-sites and 2 test file importers resolve via the barrel; includes main.ts --bootstrap dynamic import (line shifted by P-APP-11 b1)",
     async () => {
       // Given: 5 call sites across 3 production files + 2 test files importing from autoUpdate.js
       //   (a) src/cli/main.ts:103 — startup dynamic import of runStartupAutoUpdate
@@ -296,15 +296,12 @@ describe("autoUpdate split-barrel — importer resolution", () => {
         `[TODO Step 4] src/cli/main.ts must contain at least 2 dynamic import('./autoUpdate.js') call sites (startup + --bootstrap); found: ${dynamicImportMatches.length}`,
       );
 
-      // Confirm line 629 area contains the --bootstrap import (D8 CMR)
-      const mainLines = mainTs.split("\n");
-      // Lines are 0-indexed; line 629 = index 628
-      const bootstrapWindowStart = Math.max(0, 625);
-      const bootstrapWindowEnd = Math.min(mainLines.length, 635);
-      const bootstrapWindow = mainLines.slice(bootstrapWindowStart, bootstrapWindowEnd).join("\n");
+      // Confirm the --bootstrap dynamic import exists in main.ts (D8 CMR).
+      // P-APP-11 b1: line numbers shifted (6 subcommand registration blocks deleted); use content
+      // search instead of line-number window. The "bootstrap" keyword near the import is the anchor.
       assert.ok(
-        bootstrapWindow.includes("autoUpdate.js") || bootstrapWindow.includes("runStartupAutoUpdate"),
-        `[TODO Step 4] src/cli/main.ts near line 629 must reference autoUpdate.js or runStartupAutoUpdate (--bootstrap path); window: ${bootstrapWindow}`,
+        mainTs.includes("bootstrap") && mainTs.includes("autoUpdate.js"),
+        `[TODO Step 4] src/cli/main.ts must contain both 'bootstrap' and 'autoUpdate.js' (--bootstrap dynamic import D8 CMR); main.ts snippet: ${mainTs.slice(Math.max(0, mainTs.indexOf("bootstrap") - 50), mainTs.indexOf("bootstrap") + 150)}`,
       );
 
       // (c) uninstall.ts — static import of derivePackageSymlink + isDevLink

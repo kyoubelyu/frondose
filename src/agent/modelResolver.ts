@@ -182,7 +182,7 @@ function directProviderDisabledMessage(provider: string, auth?: AuthJson | null,
     `Direct provider '${provider}' is scope-disabled in P-71${source}.` +
     `${configured}${preP21Hint} ` +
     "Use 'deepseek:<modelId>' with DEEPSEEK_API_KEY/DEEPSEEK_BASE_URL, or configure a non-official " +
-    "OpenAI-compatible custom provider with: mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default."
+    "OpenAI-compatible custom provider in Frondose → Settings (provider base URL + key + model)."
   );
 }
 
@@ -195,8 +195,7 @@ function notConfiguredMessage(provider: string, auth: AuthJson | null, spec: str
   return (
     `Provider '${provider}' is not configured (model spec came from ${specSource(spec)}). ` +
     `Configured providers: ${configuredProviderList(auth)}.${preP21Hint}\n` +
-    "  Configure DeepSeek/custom OpenAI-compatible routing with: " +
-    "mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default"
+    "  Configure DeepSeek/custom OpenAI-compatible routing in Frondose → Settings (provider base URL + key + model)."
   );
 }
 
@@ -219,7 +218,7 @@ function resolveModelBaseUrl(provider: string, entry: ProviderEntry): string {
       : entry.baseUrl?.trim();
   if (!baseUrl) {
     throw new Error(
-      `Provider '${provider}' is missing baseUrl. P-71 blocks OpenAI-compatible providers without a custom baseUrl because the SDK would otherwise fall back to the official OpenAI endpoint. Configure DeepSeek/custom URL with: mai auth set https://api.deepseek.com/v1 --key <key> --model-id <modelId> --name deepseek --default.`,
+      `Provider '${provider}' is missing baseUrl. P-71 blocks OpenAI-compatible providers without a custom baseUrl because the SDK would otherwise fall back to the official OpenAI endpoint. Configure DeepSeek/custom URL in Frondose → Settings (set the provider base URL alongside the key + model).`,
     );
   }
   const officialVendor = getOfficialDirectProviderBaseUrlVendor(baseUrl);

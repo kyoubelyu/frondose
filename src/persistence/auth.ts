@@ -173,7 +173,7 @@ export function readAuthJsonVisionModel(path: string = DEFAULT_AUTH_PATH()): str
   return auth?.visionModel;
 }
 
-/** Mask an API key for `mai auth list` output: keep last 4 chars; replace middle with stars. */
+/** Mask an API key for Frondose Settings display output: keep last 4 chars; replace middle with stars. */
 export function maskKey(key: string): string {
   if (key.length <= 4) return "****";
   const last4 = key.slice(-4);

@@ -15,14 +15,7 @@ import { promptFreeAxes } from "./subcommands/soul.js";
 const NO_KEY_ERROR = `[mai] No LLM API key found. The identity bootstrap requires an LLM to guide
       the conversation.
 
-To set up a key, run ONE of the following first:
-
-  mai auth set https://api.deepseek.com/v1 --key YOUR_DEEPSEEK_KEY \\
-      --model-id deepseek-v4-flash --name deepseek --default
-  mai auth set https://llm.example/v1 --key YOUR_CUSTOM_KEY \\
-      --model-id your-model --name custom --default
-
-Then re-run \`mai identity init\` (or just \`mai\` for the first-time flow).
+To set up a key, open Frondose → Settings and enter your provider base URL + API key + model (DeepSeek or another OpenAI-compatible custom URL). Then relaunch Frondose to run the first-time setup.
 `;
 
 /**

@@ -185,8 +185,8 @@ export async function runSshProvision(
     hostname: input.hostname,
     nextSteps: [
       llmName
-        ? `LLM provider '${llmName}' configured — no \`mai auth set\` needed.`
-        : "No LLM key was pushed — run `mai auth set` on the worker.",
+        ? `LLM provider '${llmName}' configured from Frondose Settings — no key entry needed on the worker.`
+        : "No LLM key was pushed — configure the worker's provider key in Frondose → Settings.",
       googleEmail
         ? `LinkedIn login: use Google account ${googleEmail} ("Continue with Google" in Chrome).`
         : "Configure the worker's LinkedIn login.",

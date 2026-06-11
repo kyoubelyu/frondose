@@ -286,15 +286,16 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   it("T-BUILD.3: when provider is absent from auth.json, resolveModel throws with 'not configured' message", () => {
     // Given: auth.json has no provider "unknown-prov"
     // When:  resolveModel({ factory: "unknown-prov:some-model" }) is called
-    // Then:  throws Error whose message contains "Provider 'unknown-prov' not configured" and "mai auth set"
+    // Then:  throws Error whose message contains "Provider 'unknown-prov' not configured" and Frondose Settings guidance
+    // P-APP-11 b1: error guidance changed from "mai auth set" to "Frondose → Settings"
     writeFileSync(join(tmpHome, ".mai", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
     assert.throws(
       () => resolveModel({ factory: "unknown-prov:some-model" }),
       (err: Error) => {
         const msg = err.message;
-        return msg.includes("unknown-prov") && msg.includes("not configured") && msg.includes("mai auth set");
+        return msg.includes("unknown-prov") && msg.includes("not configured") && msg.includes("Frondose");
       },
-      "T-BUILD.3: must throw with provider name + 'not configured' + 'mai auth set' guidance",
+      "T-BUILD.3: must throw with provider name + 'not configured' + Frondose Settings guidance",
     );
   });
 

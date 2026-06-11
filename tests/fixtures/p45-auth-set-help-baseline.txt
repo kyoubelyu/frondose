@@ -1,9 +1,0 @@
-Usage: mai auth set [options] [url]
-
-Options:
-  --key <value>    API key
-  --model-id <id>  Model ID
-  --name <name>    Provider name (default: derived from URL hostname)
-  --default        Set this provider:model as the new default model spec
-                   (default: false)
-  -h, --help       display help for command

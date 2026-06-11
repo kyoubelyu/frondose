@@ -156,11 +156,12 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
   });
 
   it("T-Entry.4: when mai_identity fails, boot() lands appState='identity-missing' with composer hidden+disabled and #identity-gate showing the reason", async () => {
-    // Given: a DOM harness whose mai_identity returns { ok:false, reason:"identity not set; run `mai setup`" }
+    // Given: a DOM harness whose mai_identity returns { ok:false, reason:"identity not set; open Frondose → Settings to complete setup" }
     // When:  boot() runs
     // Then:  appState==="identity-missing", #composer/#command-input/#send-btn are hidden + disabled,
     //        #identity-gate is visible (not .hidden), and #name textContent === the reason string
-    const reason = "identity not set; run `mai setup`";
+    // P-APP-11 b1 PINNED: health.ts:12 = "identity not set; open Frondose → Settings to complete setup"
+    const reason = "identity not set; open Frondose → Settings to complete setup";
     await bootWith({ ok: false, reason });
     const snap = await evalIn(`(() => {
       const g = (id) => document.getElementById(id);
