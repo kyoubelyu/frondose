@@ -54,6 +54,17 @@ export interface TurnArgs {
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
   const { turnId, abortController } = args;
+  const disabledModelMessage = "configure your DeepSeek API key in Settings (gear icon)";
+  if (deps.model === null) {
+    deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
+    return;
+  }
+  try {
+    (await import("../../../../agent/pi/model.js")).resolvePiModel();
+  } catch {
+    deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
+    return;
+  }
   // [P-75 P-WEDGE-1] Wire this turn's abort signal into the CDP layer so the D-16
   // cap watcher, the D-27 silent-hang watcher, and operator /agent/abort can
   // interrupt an in-flight (otherwise un-abortable) chrome-remote-interface call.
