@@ -2,7 +2,7 @@ import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 
 /**
  * AgentLoopOpts — the stable contract every caller passes in (kept after the P-PI cutover so
- * the three call sites — src/index.ts, serve/turn.ts, serve/passive.ts — don't have to change).
+ * the two call sites — serve/turn.ts, serve/passive.ts — don't have to change).
  * Pi (runAgentLoopPi) ignores opts.model and resolves DeepSeek from env/secrets; the rest of the
  * shape (system / messages / tools / callbacks / abortSignal) maps 1:1.
  */
@@ -140,7 +140,7 @@ export function stalledContinueMessage(): CoreMessage {
  * [P-PI cutover] runAgentLoop is now a thin delegate to runAgentLoopPi — the Vercel AI SDK
  * `streamText` path has been removed. Pi (DeepSeek via openai-completions) is THE loop;
  * `opts.model` is ignored (Pi resolves DeepSeek from env/secrets). Kept as a function so the
- * three existing callers (src/index.ts SDK wrapper, src/cli/subcommands/serve/turn.ts,
+ * two existing callers (src/cli/subcommands/serve/turn.ts,
  * src/cli/subcommands/serve/passive.ts) don't have to change. The D-12/D-22 retry detectors
  * exported above are shared with runAgentLoopPi. The D-25 finishReason='error' synthetic-throw
  * hack is GONE — Pi natively throws LlmCallError on stopReason='error' (PI-LOOP-1). The D-2
