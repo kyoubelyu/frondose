@@ -174,6 +174,12 @@ export function createPassiveHandlers(
   }
 
   async function triggerPassiveAnalysis(eventType: string, ctx: Record<string, unknown>): Promise<void> {
+    // P-APP-8: passive analysis is opportunistic. When the model is unconfigured,
+    // skip with a diagnostic frame instead of surfacing an operator-facing turn error.
+    if (deps.model === null) {
+      deps.emitFrame({ type: "passive-skipped", ts: Date.now(), reason: "disabled" });
+      return;
+    }
     const passiveMessages: CoreMessage[] = [];
     const prompt = buildPassivePrompt(eventType, ctx);
     if (!prompt) return;
