@@ -9,7 +9,7 @@ export function createSettingsPanel(deps) {
     const $ = (id) => doc.getElementById(id);
     const panel = doc.getElementById("settings-panel");
     async function load() {
-        const r = await deps.invoke("mai_get_settings");
+        const r = await deps.invoke("frondose_get_settings");
         if (!r?.ok)
             return;
         const baseUrlEl = $("settings-baseurl");
@@ -68,14 +68,14 @@ export function createSettingsPanel(deps) {
     }
     async function save() {
         try {
-            await deps.invoke("mai_set_settings", { settings: collectPatch() });
+            await deps.invoke("frondose_set_settings", { settings: collectPatch() });
             await load(); // re-GET → key re-masked, fields reflect saved state
         }
         catch (e) {
             deps.surfaceError("Save settings", e);
         }
     }
-    // P-58d.1-UI: manual updater trigger (OQ-58d.6). Invokes the shipped mai_check_update.
+    // P-58d.1-UI: manual updater trigger (OQ-58d.6). Invokes the shipped frondose_check_update.
     // On a found update the Rust side downloads + restarts (this await may not resolve);
     // otherwise report "Up to date". A reject (no URL / server down) → surfaceError.
     async function checkUpdate() {
@@ -83,7 +83,7 @@ export function createSettingsPanel(deps) {
         if (statusEl)
             statusEl.textContent = "Checking…";
         try {
-            const r = await deps.invoke("mai_check_update");
+            const r = await deps.invoke("frondose_check_update");
             if (statusEl)
                 statusEl.textContent = r?.updateAvailable ? "Updating…" : "Up to date";
         }

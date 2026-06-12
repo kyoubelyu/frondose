@@ -2,8 +2,8 @@
  * P-58d.1-UI Step 5 — T-UI.5–10 — [assertion bodies FILLED]
  *
  * UI layer for the P-58d.1 updater: "Update server URL" input + "Check for updates" button
- * in the Frondose Settings panel, wired to existing `mai_get_settings` / `mai_set_settings` /
- * `mai_check_update` Tauri commands (all shipped in P-58d.1). A-1: gear handler wrapped with
+ * in the Frondose Settings panel, wired to existing `frondose_get_settings` / `frondose_set_settings` /
+ * `frondose_check_update` Tauri commands (all shipped in P-58d.1). A-1: gear handler wrapped with
  * `.catch(→surfaceError)` (app.ts change).
  *
  * ════════════════════════════════════════════════════════════════════════════════════════════
@@ -14,7 +14,7 @@
  * ════════════════════════════════════════════════════════════════════════════════════════════
  *
  * Gate coverage:
- *   G-P58d.1-UI.1 ↦ T-UI.5  (button invokes mai_check_update)
+ *   G-P58d.1-UI.1 ↦ T-UI.5  (button invokes frondose_check_update)
  *   G-P58d.1-UI.2 ↦ T-UI.6 + T-UI.7 (load populates / save sends updateServerUrl)
  *   G-P58d.1-UI.3 ↦ T-UI.8  (invalid-URL rejection surfaced via surfaceError)
  *   G-P58d.1-UI.4 ↦ T-UI.9  (A-1: open() propagates rejection; app.ts gear handler catches)
@@ -171,7 +171,7 @@ function installDomStub(): Record<string, FakeEl> {
 
 /**
  * Mock invoke that records all calls.
- * - `mai_get_settings` returns `getResp`.
+ * - `frondose_get_settings` returns `getResp`.
  * - Other commands return `{ ok: true }` unless `rejectCmd` matches — used for T-UI.8 + T-UI.9a.
  */
 function mockInvoke(getResp: Record<string, unknown>, rejectCmd?: string) {
@@ -179,12 +179,12 @@ function mockInvoke(getResp: Record<string, unknown>, rejectCmd?: string) {
   const invoke = async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args });
     if (rejectCmd && cmd === rejectCmd) throw new Error(`mock: ${cmd} rejected`);
-    return cmd === "mai_get_settings" ? getResp : { ok: true };
+    return cmd === "frondose_get_settings" ? getResp : { ok: true };
   };
   return { invoke, calls };
 }
 
-/** Sample mai_get_settings response including the P-58d.1 updateServerUrl field. */
+/** Sample frondose_get_settings response including the P-58d.1 updateServerUrl field. */
 const SAMPLE_GET_UI = {
   ok: true,
   llm: {
@@ -208,11 +208,11 @@ type Els = Record<string, any>;
 
 // ─── T-UI.5 ─────────────────────────────────────────────────────────────────
 
-describe("settings panel — 'Check for updates' button calls invoke('mai_check_update') (G-P58d.1-UI.1)", () => {
+describe("settings panel — 'Check for updates' button calls invoke('frondose_check_update') (G-P58d.1-UI.1)", () => {
   // Given: createSettingsPanel({invoke: mockInvoke, surfaceError}) with DOM stub including settings-check-update
   // When:  the settings-check-update click listener fires
-  // Then:  invoke was called with cmd === "mai_check_update" (proving the button is wired to the shipped command)
-  it("T-UI.5: clicking the settings-check-update button calls invoke with cmd='mai_check_update'", async () => {
+  // Then:  invoke was called with cmd === "frondose_check_update" (proving the button is wired to the shipped command)
+  it("T-UI.5: clicking the settings-check-update button calls invoke with cmd='frondose_check_update'", async () => {
     if (!createSettingsPanel) assert.fail("createSettingsPanel not loaded — run npm run build:tauri-ui first");
     const els = installDomStub();
     const m = mockInvoke(SAMPLE_GET_UI);
@@ -221,16 +221,16 @@ describe("settings panel — 'Check for updates' button calls invoke('mai_check_
     els["settings-check-update"].listeners.click();
     await tick();
     assert.ok(
-      m.calls.some((c: { cmd: string }) => c.cmd === "mai_check_update"),
-      `expected a mai_check_update call; got: ${JSON.stringify(m.calls.map((c: { cmd: string }) => c.cmd))}`,
+      m.calls.some((c: { cmd: string }) => c.cmd === "frondose_check_update"),
+      `expected a frondose_check_update call; got: ${JSON.stringify(m.calls.map((c: { cmd: string }) => c.cmd))}`,
     );
   });
 });
 
 // ─── T-UI.6 ─────────────────────────────────────────────────────────────────
 
-describe("settings panel — open() populates settings-update-url from mai_get_settings (G-P58d.1-UI.2)", () => {
-  // Given: mock mai_get_settings returning updateServerUrl: "http://192.168.1.50:8765"
+describe("settings panel — open() populates settings-update-url from frondose_get_settings (G-P58d.1-UI.2)", () => {
+  // Given: mock frondose_get_settings returning updateServerUrl: "http://192.168.1.50:8765"
   // When:  panel.open()
   // Then:  els["settings-update-url"].value === "http://192.168.1.50:8765"
   //        AND with null updateServerUrl in response → value === "" (no crash, no undefined)
@@ -267,10 +267,10 @@ describe("settings panel — open() populates settings-update-url from mai_get_s
 
 // ─── T-UI.7 ─────────────────────────────────────────────────────────────────
 
-describe("settings panel — save() sends updateServerUrl in the mai_set_settings patch (G-P58d.1-UI.2)", () => {
+describe("settings panel — save() sends updateServerUrl in the frondose_set_settings patch (G-P58d.1-UI.2)", () => {
   // Given: panel after open(); els["settings-update-url"].value = "http://host:8765"
   // When:  save() fires (settings-save click listener)
-  // Then:  the last mai_set_settings call's args.settings.updateServerUrl === "http://host:8765"
+  // Then:  the last frondose_set_settings call's args.settings.updateServerUrl === "http://host:8765"
   //        AND with the input empty → args.settings.updateServerUrl === null (clear, mirrors soul.override)
   it("T-UI.7: save() includes updateServerUrl in the patch; empty input sends null (clear)", async () => {
     if (!createSettingsPanel) assert.fail("createSettingsPanel not loaded — run npm run build:tauri-ui first");
@@ -284,8 +284,8 @@ describe("settings panel — save() sends updateServerUrl in the mai_set_setting
       els["settings-update-url"].value = "http://host:8765";
       els["settings-save"].listeners.click();
       await tick();
-      const setCall = [...m.calls].reverse().find((c: { cmd: string }) => c.cmd === "mai_set_settings");
-      assert.ok(setCall, "expected a mai_set_settings call after save click");
+      const setCall = [...m.calls].reverse().find((c: { cmd: string }) => c.cmd === "frondose_set_settings");
+      assert.ok(setCall, "expected a frondose_set_settings call after save click");
       assert.equal(
         (setCall.args as { settings: { updateServerUrl: unknown } }).settings.updateServerUrl,
         "http://host:8765",
@@ -302,8 +302,8 @@ describe("settings panel — save() sends updateServerUrl in the mai_set_setting
       els["settings-update-url"].value = "";
       els["settings-save"].listeners.click();
       await tick();
-      const setCall = [...m.calls].reverse().find((c: { cmd: string }) => c.cmd === "mai_set_settings");
-      assert.ok(setCall, "expected a mai_set_settings call after save click (empty input)");
+      const setCall = [...m.calls].reverse().find((c: { cmd: string }) => c.cmd === "frondose_set_settings");
+      assert.ok(setCall, "expected a frondose_set_settings call after save click (empty input)");
       assert.equal(
         (setCall.args as { settings: { updateServerUrl: unknown } }).settings.updateServerUrl,
         null,
@@ -315,16 +315,16 @@ describe("settings panel — save() sends updateServerUrl in the mai_set_setting
 
 // ─── T-UI.8 ─────────────────────────────────────────────────────────────────
 
-describe("settings panel — save() rejection (mai_set_settings rejects) calls surfaceError (G-P58d.1-UI.3)", () => {
-  // Given: mockInvoke whose mai_set_settings REJECTS (simulates the serve settingsPatchSchema .url() 400
+describe("settings panel — save() rejection (frondose_set_settings rejects) calls surfaceError (G-P58d.1-UI.3)", () => {
+  // Given: mockInvoke whose frondose_set_settings REJECTS (simulates the serve settingsPatchSchema .url() 400
   //        from P-58d.1 T-UpdSettings.5 — the serve-side rejection is already proven; here we assert the UI surfaces it)
   // When:  save() fires (settings-save click listener)
   // Then:  surfaceError is called — the rejection is shown to the operator, not swallowed
-  it("T-UI.8: when mai_set_settings rejects, save() calls surfaceError (not swallowed by the try/catch)", async () => {
+  it("T-UI.8: when frondose_set_settings rejects, save() calls surfaceError (not swallowed by the try/catch)", async () => {
     if (!createSettingsPanel) assert.fail("createSettingsPanel not loaded — run npm run build:tauri-ui first");
 
     const els = installDomStub();
-    const m = mockInvoke(SAMPLE_GET_UI, "mai_set_settings"); // mai_set_settings rejects
+    const m = mockInvoke(SAMPLE_GET_UI, "frondose_set_settings"); // frondose_set_settings rejects
     let surfaceErrorCalled = false;
     const panel = createSettingsPanel({
       invoke: m.invoke,
@@ -332,32 +332,32 @@ describe("settings panel — save() rejection (mai_set_settings rejects) calls s
         surfaceErrorCalled = true;
       },
     });
-    await panel.open(); // succeeds (mai_get_settings returns SAMPLE_GET_UI)
+    await panel.open(); // succeeds (frondose_get_settings returns SAMPLE_GET_UI)
     els["settings-save"].listeners.click();
     await tick();
-    assert.equal(surfaceErrorCalled, true, "surfaceError must be called when mai_set_settings rejects (not swallowed)");
+    assert.equal(surfaceErrorCalled, true, "surfaceError must be called when frondose_set_settings rejects (not swallowed)");
   });
 });
 
 // ─── T-UI.9 ─────────────────────────────────────────────────────────────────
 
 describe("settings panel — A-1: open() propagates rejection + app.ts gear handler catches (G-P58d.1-UI.4)", () => {
-  // Given: (9a behavioral) mockInvoke whose mai_get_settings REJECTS
+  // Given: (9a behavioral) mockInvoke whose frondose_get_settings REJECTS
   // When:  panel.open()
   // Then:  open() returns a REJECTED promise (assert.rejects passes);
   //        the rejection is NOT swallowed internally — the caller sees it
   // (A-1 guarantee: the gap is the CALL SITE in app.ts, not inside open() — open() already propagates)
-  it("T-UI.9a: open() propagates a mai_get_settings rejection (does not swallow internally)", async () => {
+  it("T-UI.9a: open() propagates a frondose_get_settings rejection (does not swallow internally)", async () => {
     if (!createSettingsPanel) assert.fail("createSettingsPanel not loaded — run npm run build:tauri-ui first");
 
     installDomStub();
-    const m = mockInvoke(SAMPLE_GET_UI, "mai_get_settings"); // mai_get_settings rejects
+    const m = mockInvoke(SAMPLE_GET_UI, "frondose_get_settings"); // frondose_get_settings rejects
     const panel = createSettingsPanel({ invoke: m.invoke, surfaceError: () => {} });
-    // open() calls load() which awaits invoke("mai_get_settings") → throws → propagates out of open()
+    // open() calls load() which awaits invoke("frondose_get_settings") → throws → propagates out of open()
     await assert.rejects(
       () => panel.open(),
       (err: Error) => {
-        assert.match(err.message, /mock: mai_get_settings rejected/, "rejection message must propagate");
+        assert.match(err.message, /mock: frondose_get_settings rejected/, "rejection message must propagate");
         return true;
       },
     );
@@ -419,16 +419,16 @@ R  src/tauri/ui/settings.js -> src/tauri/ui/settings.js.map
     );
 
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_check_update"'),
-      "settings.ts must reference mai_check_update (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_check_update"'),
+      "settings.ts must reference frondose_check_update (check for rename)",
     );
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_get_settings"'),
-      "settings.ts must reference mai_get_settings (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_get_settings"'),
+      "settings.ts must reference frondose_get_settings (check for rename)",
     );
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_set_settings"'),
-      "settings.ts must reference mai_set_settings (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_set_settings"'),
+      "settings.ts must reference frondose_set_settings (check for rename)",
     );
   });
 });
@@ -440,16 +440,16 @@ describe("scope — deterministic P-58d.1-UI fixture validator (P-69a)", () => {
     // Then: empty status passes and settings.ts still references the shipped updater commands.
     assertP58d1UiScope("");
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_check_update"'),
-      "settings.ts must reference mai_check_update (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_check_update"'),
+      "settings.ts must reference frondose_check_update (check for rename)",
     );
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_get_settings"'),
-      "settings.ts must reference mai_get_settings (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_get_settings"'),
+      "settings.ts must reference frondose_get_settings (check for rename)",
     );
     assert.ok(
-      SETTINGS_TS_SRC.includes('"mai_set_settings"'),
-      "settings.ts must reference mai_set_settings (check for rename)",
+      SETTINGS_TS_SRC.includes('"frondose_set_settings"'),
+      "settings.ts must reference frondose_set_settings (check for rename)",
     );
   });
 

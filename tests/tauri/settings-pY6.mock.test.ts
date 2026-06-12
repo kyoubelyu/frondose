@@ -2,7 +2,7 @@
  * P-Y6 Step 5 — T-UI.1-4 + T-Scope.1 — FILLED.
  *
  * Settings panel UI (plan §6.4-D/F): `createSettingsPanel({invoke, surfaceError})` — open() loads via
- * mai_get_settings (key field shows the MASK as placeholder, never raw), save() collects + POSTs a key ONLY when
+ * frondose_get_settings (key field shows the MASK as placeholder, never raw), save() collects + POSTs a key ONLY when
  * freshly typed, then re-loads (re-masks). Custom-URL-only (P-57d): the LLM form exposes baseUrl + model + key ONLY;
  * Brave MCP search key is allowed, while Anthropic/OpenAI-direct/Tavily presets are not. T-Scope.1 guards
  * config/secrets schemas unchanged + write-range.
@@ -84,12 +84,12 @@ function installDomStub(): Record<string, FakeEl> {
   (globalThis as unknown as { document: unknown }).document = { getElementById: (id: string) => els[id] ?? null };
   return els;
 }
-/** A mock invoke that records calls + returns a canned mai_get_settings response. */
+/** A mock invoke that records calls + returns a canned frondose_get_settings response. */
 function mockInvoke(getResp: Record<string, unknown>) {
   const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
   const invoke = async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args });
-    return cmd === "mai_get_settings" ? getResp : { ok: true };
+    return cmd === "frondose_get_settings" ? getResp : { ok: true };
   };
   return { invoke, calls };
 }
@@ -158,7 +158,7 @@ function assertPY6Scope(statusOut: string): void {
 }
 
 describe("settings panel — load populates; key shows mask, never raw (G-PY6.6, .1)", () => {
-  // Given: mock mai_get_settings → maskedKey "sk-***9999". When: createSettingsPanel(deps).open().
+  // Given: mock frondose_get_settings → maskedKey "sk-***9999". When: createSettingsPanel(deps).open().
   // Then: the key input value is "" and placeholder is the mask (never a raw key); baseUrl/model/fullName/soul populated.
   it("T-UI.1: open() populates fields; key input value='' + placeholder=maskedKey (never the raw key)", async () => {
     assert.ok(createSettingsPanel, "builder 4b must export createSettingsPanel");
@@ -176,7 +176,7 @@ describe("settings panel — load populates; key shows mask, never raw (G-PY6.6,
 
 describe("settings panel — save sends key ONLY when typed (G-PY6.6, .2)", () => {
   // Given: panel after open(), key input empty. When: save() (fire settings-save listener). Then: the
-  //        mai_set_settings body's llm.key is absent. AND with a typed key → body llm.key === the typed value.
+  //        frondose_set_settings body's llm.key is absent. AND with a typed key → body llm.key === the typed value.
   it("T-UI.2: save() omits llm.key when the input is empty; includes it when the operator typed one", async () => {
     assert.ok(createSettingsPanel, "builder 4b must export createSettingsPanel");
     const els: Els = installDomStub();
@@ -184,7 +184,7 @@ describe("settings panel — save sends key ONLY when typed (G-PY6.6, .2)", () =
     const p = createSettingsPanel({ invoke: m.invoke, surfaceError: () => {} });
     await p.open();
     const lastSet = () =>
-      m.calls.filter((c) => c.cmd === "mai_set_settings").pop() as {
+      m.calls.filter((c) => c.cmd === "frondose_set_settings").pop() as {
         args?: { settings: { llm: Record<string, unknown> } };
       };
     // empty key field → no key in the body
@@ -222,9 +222,9 @@ describe("settings panel — custom-URL-only LLM form (structural, P-57d/P-BRAVE
 });
 
 describe("settings panel — save → re-load re-masks (behavioral) (G-PY6.6)", () => {
-  // Given: mock invoke. When: save() resolves. Then: mai_get_settings is invoked AGAIN (re-load) so the key field
+  // Given: mock invoke. When: save() resolves. Then: frondose_get_settings is invoked AGAIN (re-load) so the key field
   //        returns to the masked placeholder.
-  it("T-UI.4: after save() the panel re-invokes mai_get_settings (re-load → key re-masked)", async () => {
+  it("T-UI.4: after save() the panel re-invokes frondose_get_settings (re-load → key re-masked)", async () => {
     assert.ok(createSettingsPanel, "builder 4b must export createSettingsPanel");
     const els: Els = installDomStub();
     const m = mockInvoke(SAMPLE_GET);
@@ -234,11 +234,11 @@ describe("settings panel — save → re-load re-masks (behavioral) (G-PY6.6)", 
     els["settings-save"].listeners.click();
     await tick();
     assert.ok(
-      m.calls.some((c) => c.cmd === "mai_set_settings"),
-      "save POSTs mai_set_settings",
+      m.calls.some((c) => c.cmd === "frondose_set_settings"),
+      "save POSTs frondose_set_settings",
     );
     assert.ok(
-      m.calls.some((c) => c.cmd === "mai_get_settings"),
+      m.calls.some((c) => c.cmd === "frondose_get_settings"),
       "save re-loads (re-GET → key re-masked)",
     );
   });

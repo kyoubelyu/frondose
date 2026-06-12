@@ -5,7 +5,7 @@
  *
  *  (A) DOM-harness (T-Entry.1, T-Entry.4) — loads the REAL src/tauri/ui/index.html + compiled app.js in a
  *      headless Chrome with a MOCKED window.__TAURI__.invoke spy (mirrors button-click-pY2.1.test.ts). It
- *      drives boot() with a chosen mai_identity response and asserts the resulting appState / DOM visibility.
+ *      drives boot() with a chosen frondose_identity response and asserts the resulting appState / DOM visibility.
  *      These EXISTING surfaces compile + run NOW; they FAIL at Step 4a because the current app.js still lands
  *      identity-OK in "chrome-needed" (composer hidden) — they go GREEN after builder's 4b lands identity-OK
  *      directly in "idle".
@@ -42,9 +42,9 @@ const SERVE_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve.ts"
 const SESSION_TS = readFileSync(join(REPO, "src", "linkedin", "session.ts"), "utf-8");
 const PORT = 8782;
 
-// Spy stub injected BEFORE app.js runs. mai_identity returns `window.__mai_identity_resp` when set by a
+// Spy stub injected BEFORE app.js runs. frondose_identity returns `window.__frondose_identity_resp` when set by a
 // per-boot init script (see bootWith), else a default identity-OK. Records every invoke so a test can assert
-// mai_chrome_ensure was NEVER called on the conversation-first boot path.
+// frondose_chrome_ensure was NEVER called on the conversation-first boot path.
 const SPY_STUB = `
   window.__mai_invokes = [];
   window.__mai_eventCb = null;
@@ -52,11 +52,11 @@ const SPY_STUB = `
     core: { invoke: (cmd, args) => {
       window.__mai_invokes.push({ cmd, args: args ?? null });
       let res = { ok: true };
-      if (cmd === "mai_identity") res = window.__mai_identity_resp ?? { ok: true, fullName: "Test Operator" };
-      else if (cmd === "mai_set_cron_mode") res = { ok: true, cronEnabled: !!(args && args.enabled) };
-      else if (cmd === "mai_set_passive_mode") res = { ok: true, passiveEnabled: !!(args && args.enabled) };
-      else if (cmd === "mai_chrome_ensure") res = { ok: true, chromePort: 9222, overlayInstalled: true };
-      else if (cmd === "mai_agent_turn") res = { ok: true, turnId: "t1" };
+      if (cmd === "frondose_identity") res = window.__frondose_identity_resp ?? { ok: true, fullName: "Test Operator" };
+      else if (cmd === "frondose_set_cron_mode") res = { ok: true, cronEnabled: !!(args && args.enabled) };
+      else if (cmd === "frondose_set_passive_mode") res = { ok: true, passiveEnabled: !!(args && args.enabled) };
+      else if (cmd === "frondose_chrome_ensure") res = { ok: true, chromePort: 9222, overlayInstalled: true };
+      else if (cmd === "frondose_agent_turn") res = { ok: true, turnId: "t1" };
       return Promise.resolve(res);
     }},
     event: { listen: (name, cb) => { if (name === "overlay-event") window.__mai_eventCb = cb; return Promise.resolve(() => {}); } },
@@ -79,12 +79,12 @@ async function evalIn(expr: string): Promise<any> {
   return r.result.value;
 }
 
-// Boot the real app.js with a chosen mai_identity response, fresh page each call.
+// Boot the real app.js with a chosen frondose_identity response, fresh page each call.
 // (Used at Step 5 to fill T-Entry.1 / T-Entry.4 assertion bodies.)
 async function bootWith(identityResp: unknown): Promise<void> {
   if (respScriptId) await client.Page.removeScriptToEvaluateOnNewDocument({ identifier: respScriptId });
   const added = await client.Page.addScriptToEvaluateOnNewDocument({
-    source: `window.__mai_identity_resp = ${JSON.stringify(identityResp)};`,
+    source: `window.__frondose_identity_resp = ${JSON.stringify(identityResp)};`,
   });
   respScriptId = added.identifier;
   await client.Page.navigate({ url: `http://127.0.0.1:${PORT}/index.html` });
@@ -119,11 +119,11 @@ after(async () => {
 // ─── (A) DOM-harness: boot state machine (§6.1) ──────────────────────────────
 
 describe("entry-flow — boot state machine (conversation-first, no Start gate)", () => {
-  it("T-Entry.1: when mai_identity is OK, boot() lands appState='idle' with composer enabled and mai_chrome_ensure NEVER invoked", async () => {
-    // Given: a DOM harness whose mai_identity returns { ok:true, fullName:"X" }
+  it("T-Entry.1: when frondose_identity is OK, boot() lands appState='idle' with composer enabled and frondose_chrome_ensure NEVER invoked", async () => {
+    // Given: a DOM harness whose frondose_identity returns { ok:true, fullName:"X" }
     // When:  boot() runs (loadIdentity → applyMode("manual"))
     // Then:  appState==="idle" (NOT "chrome-needed"), #composer/#command-input/#send-btn are visible+enabled,
-    //        and the recorded invokes contain NO "mai_chrome_ensure" (Chrome is agent-driven, not boot-driven)
+    //        and the recorded invokes contain NO "frondose_chrome_ensure" (Chrome is agent-driven, not boot-driven)
     await bootWith({ ok: true, fullName: "Test Operator X" });
     const snap = await evalIn(`(() => {
       const g = (id) => document.getElementById(id);
@@ -147,16 +147,16 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
     // identity-gate hidden once identity loaded OK
     assert.equal(snap.gateHidden, true, "identity-gate must be hidden in idle");
     assert.equal(snap.name, "Test Operator X", "#name shows the loaded fullName");
-    // Chrome is AGENT-driven, never boot-driven: no mai_chrome_ensure on the conversation-first path
-    assert.ok(snap.invokes.includes("mai_identity"), "mai_identity must be invoked at boot");
+    // Chrome is AGENT-driven, never boot-driven: no frondose_chrome_ensure on the conversation-first path
+    assert.ok(snap.invokes.includes("frondose_identity"), "frondose_identity must be invoked at boot");
     assert.ok(
-      !snap.invokes.includes("mai_chrome_ensure"),
-      `mai_chrome_ensure must NEVER be invoked at boot (agent-driven Chrome); invokes=${JSON.stringify(snap.invokes)}`,
+      !snap.invokes.includes("frondose_chrome_ensure"),
+      `frondose_chrome_ensure must NEVER be invoked at boot (agent-driven Chrome); invokes=${JSON.stringify(snap.invokes)}`,
     );
   });
 
-  it("T-Entry.4: when mai_identity fails, boot() lands appState='identity-missing' with composer hidden+disabled and #identity-gate showing the reason", async () => {
-    // Given: a DOM harness whose mai_identity returns { ok:false, reason:"identity not set; open Frondose → Settings to complete setup" }
+  it("T-Entry.4: when frondose_identity fails, boot() lands appState='identity-missing' with composer hidden+disabled and #identity-gate showing the reason", async () => {
+    // Given: a DOM harness whose frondose_identity returns { ok:false, reason:"identity not set; open Frondose → Settings to complete setup" }
     // When:  boot() runs
     // Then:  appState==="identity-missing", #composer/#command-input/#send-btn are hidden + disabled,
     //        #identity-gate is visible (not .hidden), and #name textContent === the reason string
@@ -208,12 +208,12 @@ describe("entry-flow — app.ts state machine collapse (§6.2)", () => {
     assert.ok(APP_TS.includes('transition("idle")'), 'loadIdentity success path must call transition("idle")');
   });
 
-  it("T-Entry.3: index.html has no #start / #start-card / welcome bubble, has the composer + identity-gate + Listening status; app.ts has no startLinkedIn / startEl / mai_chrome_ensure / Chrome* types", () => {
+  it("T-Entry.3: index.html has no #start / #start-card / welcome bubble, has the composer + identity-gate + Listening status; app.ts has no startLinkedIn / startEl / frondose_chrome_ensure / Chrome* types", () => {
     // Given: index.html + app.ts as strings
     // When:  grepped for removed start/welcome surfaces and retained composer/identity-gate surfaces
     // Then:  index.html: NO id="start", NO id="start-card", NO "Hi — I'm Frondose"; HAS id="composer",
     //        id="command-input", id="send-btn", id="identity-gate", id="name", id="status" (Listening).
-    //        app.ts: NO startLinkedIn, NO startEl, NO mai_chrome_ensure, NO ChromeResp/ChromeOk/ChromeErr.
+    //        app.ts: NO startLinkedIn, NO startEl, NO frondose_chrome_ensure, NO ChromeResp/ChromeOk/ChromeErr.
     // index.html: removed start gate + welcome bubble (note: class="start-card" is RETAINED on #identity-gate,
     // so we assert on the id= forms, not the class).
     assert.ok(!INDEX_HTML.includes('id="start"'), 'index.html must NOT contain the removed Start button id="start"');
@@ -224,7 +224,7 @@ describe("entry-flow — app.ts state machine collapse (§6.2)", () => {
     }
     assert.ok(INDEX_HTML.includes(">Listening<"), 'index.html status line must show "Listening"');
     // app.ts: removed the Start machinery + Chrome-ensure types entirely
-    for (const sym of ["startLinkedIn", "startEl", "mai_chrome_ensure", "ChromeResp", "ChromeOk", "ChromeErr"]) {
+    for (const sym of ["startLinkedIn", "startEl", "frondose_chrome_ensure", "ChromeResp", "ChromeOk", "ChromeErr"]) {
       assert.ok(!APP_TS.includes(sym), `app.ts must NOT contain removed symbol ${sym}`);
     }
   });

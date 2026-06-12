@@ -254,15 +254,15 @@ before(async () => {
 
 describe("C-Char.1 — sendCommand idle path sends turn and appends user bubble (G-P72s11.9)", () => {
   it(
-    "T-Char.SendCommand.IdleSendsTurnAndAppendsUserBubble: when sendCommand fires from idle with non-empty input, mai_agent_turn called + .msg-user bubble added + state running",
+    "T-Char.SendCommand.IdleSendsTurnAndAppendsUserBubble: when sendCommand fires from idle with non-empty input, frondose_agent_turn called + .msg-user bubble added + state running",
     async () => {
       // Given: DOM stub + invoke mock returning {ok:true, turnId:"T1"}; appState==="idle"; commandEl.value==="Hi"
       // When:  sendCommand() fires (inline re-implementation of app.ts L310-343)
-      // Then:  mai_agent_turn called with {prompt:"Hi"}; a .msg-user bubble in #conversation-list;
+      // Then:  frondose_agent_turn called with {prompt:"Hi"}; a .msg-user bubble in #conversation-list;
       //        ticker shows "starting..."; appState becomes "running"
       const { els, document } = makeFakeDom();
       const mock = makeInvokeMock();
-      mock.setResponse("mai_agent_turn", { ok: true, turnId: "T1" });
+      mock.setResponse("frondose_agent_turn", { ok: true, turnId: "T1" });
 
       // Simulated state (mirrors app.ts L90-98)
       let appState: AppState = "idle";
@@ -291,7 +291,7 @@ describe("C-Char.1 — sendCommand idle path sends turn and appends user bubble 
         els["retry-btn"].classList.add("hidden");
         els["error-banner"].classList.add("hidden");
         try {
-          const r = await mock.invoke<{ ok: boolean; turnId?: string; reason?: string }>("mai_agent_turn", { prompt });
+          const r = await mock.invoke<{ ok: boolean; turnId?: string; reason?: string }>("frondose_agent_turn", { prompt });
           if (!r.ok) {
             els["error-banner"].textContent = `turn rejected: ${r.reason ?? ""}`;
             appState = "error";
@@ -312,7 +312,7 @@ describe("C-Char.1 — sendCommand idle path sends turn and appends user bubble 
 
       // Assert: invoke called with expected args
       assert.equal(mock.calls.length, 1);
-      assert.equal(mock.calls[0].cmd, "mai_agent_turn");
+      assert.equal(mock.calls[0].cmd, "frondose_agent_turn");
       assert.deepEqual(mock.calls[0].args, { prompt: "Hi" });
 
       // Assert: turnId adopted
@@ -338,14 +338,14 @@ describe("C-Char.1 — sendCommand idle path sends turn and appends user bubble 
 
 describe("C-Char.2 — sendCommand running with empty text aborts the turn (G-P72s11.9)", () => {
   it(
-    "T-Char.SendCommand.RunningEmptyTextAborts: when appState==='running' and commandEl.value==='', sendCommand calls mai_agent_abort and does NOT call mai_agent_turn",
+    "T-Char.SendCommand.RunningEmptyTextAborts: when appState==='running' and commandEl.value==='', sendCommand calls frondose_agent_abort and does NOT call frondose_agent_turn",
     async () => {
       // Given: DOM stub; appState==="running"; currentTurnId==="T1"; commandEl.value===""
       // When:  sendCommand() fires
-      // Then:  mai_agent_abort invoke called; mai_agent_turn NOT called
+      // Then:  frondose_agent_abort invoke called; frondose_agent_turn NOT called
       const { els } = makeFakeDom();
       const mock = makeInvokeMock();
-      mock.setResponse("mai_agent_abort", { ok: true });
+      mock.setResponse("frondose_agent_abort", { ok: true });
 
       let appState: AppState = "running";
       const currentTurnId: string | null = "T1";
@@ -355,7 +355,7 @@ describe("C-Char.2 — sendCommand running with empty text aborts the turn (G-P7
       // Re-implementation of abortTurn (app.ts L300-308)
       async function abortTurn(): Promise<void> {
         if (appState !== "running" || currentTurnId === null) return;
-        await mock.invoke("mai_agent_abort");
+        await mock.invoke("frondose_agent_abort");
       }
 
       // Re-implementation of sendCommand running+empty branch (app.ts L311-318)
@@ -375,12 +375,12 @@ describe("C-Char.2 — sendCommand running with empty text aborts the turn (G-P7
       await sendCommand();
 
       // Assert: abort was called
-      const abortCalls = mock.calls.filter((c) => c.cmd === "mai_agent_abort");
-      assert.equal(abortCalls.length, 1, "mai_agent_abort must be called exactly once");
+      const abortCalls = mock.calls.filter((c) => c.cmd === "frondose_agent_abort");
+      assert.equal(abortCalls.length, 1, "frondose_agent_abort must be called exactly once");
 
       // Assert: no turn was requested
-      const turnCalls = mock.calls.filter((c) => c.cmd === "mai_agent_turn");
-      assert.equal(turnCalls.length, 0, "mai_agent_turn must NOT be called");
+      const turnCalls = mock.calls.filter((c) => c.cmd === "frondose_agent_turn");
+      assert.equal(turnCalls.length, 0, "frondose_agent_turn must NOT be called");
 
       // appState unchanged (abort does not transition state directly in abortTurn)
       assert.equal(appState, "running");
@@ -396,11 +396,11 @@ describe("C-Char.3 — sendCommand running with text steers the turn (G-P72s11.9
     async () => {
       // Given: DOM stub with one existing .msg-user bubble; appState==="running"; commandEl.value==="Steer text"
       // When:  sendCommand() fires (steer branch: abort + new turn)
-      // Then:  mai_agent_abort then mai_agent_turn invoked; a second .msg-user bubble with "Steer text" appears
+      // Then:  frondose_agent_abort then frondose_agent_turn invoked; a second .msg-user bubble with "Steer text" appears
       const { els, document } = makeFakeDom();
       const mock = makeInvokeMock();
-      mock.setResponse("mai_agent_abort", { ok: true });
-      mock.setResponse("mai_agent_turn", { ok: true, turnId: "T2" });
+      mock.setResponse("frondose_agent_abort", { ok: true });
+      mock.setResponse("frondose_agent_turn", { ok: true, turnId: "T2" });
 
       let appState: AppState = "running";
       let currentTurnId: string | null = "T1";
@@ -438,7 +438,7 @@ describe("C-Char.3 — sendCommand running with text steers the turn (G-P72s11.9
         const previousTurnId = currentTurnId;
         try {
           try {
-            await mock.invoke("mai_agent_abort");
+            await mock.invoke("frondose_agent_abort");
           } catch {
             // ignore
           }
@@ -448,7 +448,7 @@ describe("C-Char.3 — sendCommand running with text steers the turn (G-P72s11.9
             appState = "error";
             return;
           }
-          const r = await mock.invoke<{ ok: boolean; turnId?: string; reason?: string }>("mai_agent_turn", { prompt: newPrompt });
+          const r = await mock.invoke<{ ok: boolean; turnId?: string; reason?: string }>("frondose_agent_turn", { prompt: newPrompt });
           if (!r.ok) {
             els["error-banner"].textContent = `steer resubmit rejected: ${r.reason ?? ""}`;
             appState = "error";
@@ -484,9 +484,9 @@ describe("C-Char.3 — sendCommand running with text steers the turn (G-P72s11.9
 
       // Assert: abort then turn called in that order
       assert.ok(mock.calls.length >= 2, `Expected at least 2 invoke calls; got ${mock.calls.length}`);
-      assert.equal(mock.calls[0].cmd, "mai_agent_abort");
-      const turnCall = mock.calls.find((c) => c.cmd === "mai_agent_turn");
-      assert.ok(turnCall !== undefined, "mai_agent_turn must be called");
+      assert.equal(mock.calls[0].cmd, "frondose_agent_abort");
+      const turnCall = mock.calls.find((c) => c.cmd === "frondose_agent_turn");
+      assert.ok(turnCall !== undefined, "frondose_agent_turn must be called");
       assert.deepEqual(turnCall.args, { prompt: "Steer text" });
 
       // Assert: second bubble added with steer text
@@ -679,18 +679,18 @@ describe("C-Char.6 — handleEvent type:'tool-call' sets ticker differently in a
 
 // ─── BUCKET A: C-Char.7 — applyMode manual invokes cron-off + passive-off ────
 
-describe("C-Char.7 — applyMode('manual') invokes mai_set_cron_mode disabled and mai_set_passive_mode disabled (G-P72s11.9)", () => {
+describe("C-Char.7 — applyMode('manual') invokes frondose_set_cron_mode disabled and frondose_set_passive_mode disabled (G-P72s11.9)", () => {
   it(
-    "T-Char.ApplyMode.ManualInvokesCronOffPassiveOff: when applyMode('manual') called, invoke mock receives mai_set_cron_mode {enabled:false} then mai_set_passive_mode {enabled:false}",
+    "T-Char.ApplyMode.ManualInvokesCronOffPassiveOff: when applyMode('manual') called, invoke mock receives frondose_set_cron_mode {enabled:false} then frondose_set_passive_mode {enabled:false}",
     async () => {
       // Given: DOM stub + invoke mock recording calls; mode starting as any value
       // When:  applyMode("manual") is called (inline re-implementation of app.ts L253-278)
-      // Then:  invoke called with "mai_set_cron_mode" {enabled:false};
-      //        invoke called with "mai_set_passive_mode" {enabled:false}; in that order
+      // Then:  invoke called with "frondose_set_cron_mode" {enabled:false};
+      //        invoke called with "frondose_set_passive_mode" {enabled:false}; in that order
       const { els, document } = makeFakeDom();
       const mock = makeInvokeMock();
-      mock.setResponse("mai_set_cron_mode", { ok: true, cronEnabled: false });
-      mock.setResponse("mai_set_passive_mode", { ok: true, passiveEnabled: false });
+      mock.setResponse("frondose_set_cron_mode", { ok: true, cronEnabled: false });
+      mock.setResponse("frondose_set_passive_mode", { ok: true, passiveEnabled: false });
 
       let appMode: AppMode = "auto"; // starting from auto
       let cronEnabled = true;
@@ -729,7 +729,7 @@ describe("C-Char.7 — applyMode('manual') invokes mai_set_cron_mode disabled an
           passiveEnabled: togglesForMode(mode).passiveEnabled,
         };
         try {
-          const cronResp = await mock.invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode", {
+          const cronResp = await mock.invoke<{ ok: boolean; cronEnabled?: boolean }>("frondose_set_cron_mode", {
             enabled: toggles.cronEnabled,
           });
           cronEnabled = cronResp.ok ? (cronResp.cronEnabled ?? toggles.cronEnabled) : toggles.cronEnabled;
@@ -737,7 +737,7 @@ describe("C-Char.7 — applyMode('manual') invokes mai_set_cron_mode disabled an
           cronEnabled = toggles.cronEnabled;
         }
         try {
-          const passiveResp = await mock.invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", {
+          const passiveResp = await mock.invoke<{ ok: boolean; passiveEnabled?: boolean }>("frondose_set_passive_mode", {
             enabled: toggles.passiveEnabled,
           });
           passiveEnabled = passiveResp.ok ? (passiveResp.passiveEnabled ?? toggles.passiveEnabled) : toggles.passiveEnabled;
@@ -750,19 +750,19 @@ describe("C-Char.7 — applyMode('manual') invokes mai_set_cron_mode disabled an
       await applyMode("manual");
 
       // Assert: cron mode called with enabled:false
-      const cronCall = mock.calls.find((c) => c.cmd === "mai_set_cron_mode");
-      assert.ok(cronCall !== undefined, "mai_set_cron_mode must be called");
+      const cronCall = mock.calls.find((c) => c.cmd === "frondose_set_cron_mode");
+      assert.ok(cronCall !== undefined, "frondose_set_cron_mode must be called");
       assert.deepEqual(cronCall.args, { enabled: false });
 
       // Assert: passive mode called with enabled:false
-      const passiveCall = mock.calls.find((c) => c.cmd === "mai_set_passive_mode");
-      assert.ok(passiveCall !== undefined, "mai_set_passive_mode must be called");
+      const passiveCall = mock.calls.find((c) => c.cmd === "frondose_set_passive_mode");
+      assert.ok(passiveCall !== undefined, "frondose_set_passive_mode must be called");
       assert.deepEqual(passiveCall.args, { enabled: false });
 
       // Assert: cron call precedes passive call (order matters)
-      const cronIdx = mock.calls.findIndex((c) => c.cmd === "mai_set_cron_mode");
-      const passiveIdx = mock.calls.findIndex((c) => c.cmd === "mai_set_passive_mode");
-      assert.ok(cronIdx < passiveIdx, "mai_set_cron_mode must be called before mai_set_passive_mode");
+      const cronIdx = mock.calls.findIndex((c) => c.cmd === "frondose_set_cron_mode");
+      const passiveIdx = mock.calls.findIndex((c) => c.cmd === "frondose_set_passive_mode");
+      assert.ok(cronIdx < passiveIdx, "frondose_set_cron_mode must be called before frondose_set_passive_mode");
 
       // Assert: final appMode is manual (server returns cronEnabled:false, passiveEnabled:false)
       assert.equal(appMode, "manual");
