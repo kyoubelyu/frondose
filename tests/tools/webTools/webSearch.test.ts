@@ -1,213 +1,89 @@
-/**
- * P-9 mock tests — T-WebSearch.1..T-WebSearch.8
- *
- * Tests for makeWebSearchTool() in src/tools/webTools/webSearch.ts.
- *
- * T-WebSearch.1 — Both keys unset → fail envelope (neither BRAVE nor TAVILY)
- * T-WebSearch.2 — BRAVE_API_KEY set → Brave URL called; results mapped (description → snippet)
- * T-WebSearch.3 — BRAVE_API_KEY set, Brave 5xx → falls through to Tavily (D-5)
- * T-WebSearch.4 — BRAVE_API_KEY unset, TAVILY_API_KEY set → Tavily POST called
- * T-WebSearch.5 — Brave 4xx (401) → fail envelope with invalid_input (NOT Tavily fallback)
- * T-WebSearch.6 — Both keys set, Brave 5xx → Tavily result returned (fallback)
- * T-WebSearch.7 — Tavily result shape: results[].content → snippet
- * T-WebSearch.8 — maxResults param respected (slices to maxResults)
- *
- * Gate coverage: G-P9.8 (web_search mock paths)
- *
- * No LLM, no Chrome. globalThis.fetch mocked; env vars controlled per test.
- */
-
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { describe, it, mock } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { makeWebSearchTool } from "../../../src/tools/webTools/webSearch.js";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+const FAKE_OPTS: ToolExecutionOptions = {
+  toolCallId: "web-search-contract",
+  messages: [] as CoreMessage[],
+  abortSignal: new AbortController().signal,
+};
 
-const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "ws-1", messages: [] as CoreMessage[] };
-
-/**
- * BUG-2 fix: override HOME to a tmp dir so the tool's default search.json path
- * resolves under the tmp dir (never reading/writing the operator's real ~/.mai/).
- * `homedir()` reads `HOME` at call time — the override fully isolates it.
- */
-async function withCleanSearchJson(fn: () => Promise<void>): Promise<void> {
-  const tmp = mkdtempSync(join(tmpdir(), "mai-p44-search-"));
-  const origHome = process.env.HOME;
-  process.env.HOME = tmp;
+async function withCleanSearchConfig(fn: () => Promise<void>): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), "mai-websearch-contract-"));
+  const saved = {
+    HOME: process.env.HOME,
+    MAI_HOME_BASE: process.env.MAI_HOME_BASE,
+    MCP_SEARCH_URL: process.env.MCP_SEARCH_URL,
+    BRAVE_API_KEY: process.env.BRAVE_API_KEY,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+  };
+  process.env.HOME = home;
+  process.env.MAI_HOME_BASE = home;
+  delete process.env.MCP_SEARCH_URL;
+  delete process.env.BRAVE_API_KEY;
+  delete process.env.TAVILY_API_KEY;
   try {
     await fn();
   } finally {
-    process.env.HOME = origHome;
-    rmSync(tmp, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(home, { recursive: true, force: true });
   }
 }
 
-async function withMockFetch(
-  mockFn: (url: string | URL | Request, init?: RequestInit) => Promise<Response>,
-  fn: () => Promise<void>,
-): Promise<void> {
-  const orig = globalThis.fetch;
-  globalThis.fetch = mockFn as typeof globalThis.fetch;
-  try {
-    await fn();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
+describe("web_search tool contract", () => {
+  it("T-WebSearch.1: missing Brave MCP config returns missing_config and never uses direct HTTP fetch", async () => {
+    await withCleanSearchConfig(async () => {
+      // Given: no persisted Brave key and no BRAVE_API_KEY fallback.
+      // When: web_search runs.
+      // Then: the tool asks for Settings configuration and performs no direct Brave/Tavily fetch.
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = mock.fn(async () => {
+        throw new Error("web_search must not call globalThis.fetch directly");
+      });
+      globalThis.fetch = fetchSpy as unknown as typeof globalThis.fetch;
+      try {
+        const tool = makeWebSearchTool();
+        const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
+          ok: boolean;
+          error: { kind: string; message: string };
+        };
 
-/** Temporarily set env var; restore in finally. */
-function withEnv(key: string, value: string | undefined, fn: () => Promise<void>): Promise<void> {
-  const prev = process.env[key];
-  if (value === undefined) {
-    delete process.env[key];
-  } else {
-    process.env[key] = value;
-  }
-  return fn().finally(() => {
-    if (prev === undefined) delete process.env[key];
-    else process.env[key] = prev;
+        assert.equal(result.ok, false);
+        assert.equal(result.error.kind, "missing_config");
+        assert.match(result.error.message, /Brave Search MCP|Settings/i);
+        assert.equal(fetchSpy.mock.callCount(), 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
-}
 
-function makeBraveResponse(
-  results: Array<{ title: string; url: string; description: string }>,
-  status = 200,
-): Response {
-  return new Response(JSON.stringify({ web: { results } }), {
-    status,
-    headers: { "content-type": "application/json" },
+  it("T-WebSearch.2: tool name, parameter names, validation range, and maxResults default stay stable", () => {
+    // Given: the current web_search tool object.
+    // When: its parameter schema is parsed.
+    // Then: the public query/maxResults contract remains unchanged for callers.
+    const tool = makeWebSearchTool() as {
+      parameters: { safeParse: (input: unknown) => { success: boolean; data?: unknown } };
+    };
+
+    const defaulted = tool.parameters.safeParse({ query: "stable search" });
+    assert.equal(defaulted.success, true);
+    assert.deepEqual(defaulted.data, { query: "stable search", maxResults: 5 });
+
+    const max = tool.parameters.safeParse({ query: "stable search", maxResults: 10 });
+    assert.equal(max.success, true);
+
+    const tooHigh = tool.parameters.safeParse({ query: "stable search", maxResults: 11 });
+    assert.equal(tooHigh.success, false, "maxResults must remain capped at 10");
+
+    const missingQuery = tool.parameters.safeParse({ maxResults: 2 });
+    assert.equal(missingQuery.success, false, "query remains required");
   });
-}
-
-// ─── P-Z3 (cat-9, R-2-approved): rewritten to the P-57d scope-lock contract ───
-// web_search now gates on MCP_SEARCH_URL FIRST (webSearch.ts:38-50): unset → scope_disabled.
-// Brave/Tavily-direct is scope-disabled per the LLM/search scope lock
-// (project_llm_scope_custom_url_only + HR-8). These tests now ASSERT THE BOUNDARY HOLDS —
-// stronger than the old Brave/Tavily endpoint tests. (T-WebSearch.2 keeps the maxResults +
-// snippet-mapping coverage by exercising the Brave path WITH MCP_SEARCH_URL set, so the
-// result-shaping logic stays guarded.)
-
-// ─── T-WebSearch.1: MCP unset → scope_disabled (boundary; keys irrelevant) ───
-
-test("T-WebSearch.1: MCP_SEARCH_URL unset → scope_disabled envelope (P-57d boundary holds)", async () => {
-  const tool = makeWebSearchTool();
-  await withCleanSearchJson(() =>
-    withEnv("MCP_SEARCH_URL", undefined, () =>
-      withEnv("BRAVE_API_KEY", undefined, () =>
-        withEnv("TAVILY_API_KEY", undefined, async () => {
-          const result = (await tool.execute?.({ query: "test query", maxResults: 5 }, FAKE_OPTS)) as {
-            ok: boolean;
-            error: { kind: string; message: string };
-          };
-          assert.equal(result.ok, false, "must fail (scope_disabled) when MCP_SEARCH_URL unset");
-          assert.equal(result.error.kind, "scope_disabled", "kind must be scope_disabled (P-57d search scope lock)");
-        }),
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.1b: keys set but MCP unset → STILL scope_disabled, fetch NOT called ──
-
-test("T-WebSearch.1b: BRAVE/TAVILY keys set but MCP_SEARCH_URL unset → scope_disabled; no fetch (keys do NOT bypass the scope lock)", async () => {
-  const tool = makeWebSearchTool();
-  let fetchCalls = 0;
-  await withCleanSearchJson(() =>
-    withEnv("MCP_SEARCH_URL", undefined, () =>
-      withEnv("BRAVE_API_KEY", "brave-key", () =>
-        withEnv("TAVILY_API_KEY", "tavily-key", () =>
-          withMockFetch(
-            async () => {
-              fetchCalls++;
-              return makeBraveResponse([]);
-            },
-            async () => {
-              const result = (await tool.execute?.({ query: "x", maxResults: 5 }, FAKE_OPTS)) as {
-                ok: boolean;
-                error: { kind: string };
-              };
-              assert.equal(result.ok, false, "scope_disabled even with keys set");
-              assert.equal(
-                result.error.kind,
-                "scope_disabled",
-                "Brave/Tavily keys must NOT bypass the P-57d scope lock",
-              );
-              assert.equal(fetchCalls, 0, "no external search fetch when scope-disabled");
-            },
-          ),
-        ),
-      ),
-    ),
-  );
-});
-
-// ─── T-WebSearch.2: P-71 — even with MCP_SEARCH_URL set, web_search is scope_disabled ──
-// P-71 removed all direct Brave/Tavily API calls from webSearch.ts. Both configured and
-// unconfigured MCP states now return scope_disabled. Zero fetch calls.
-
-test("T-WebSearch.2: P-71 — MCP_SEARCH_URL set + BRAVE_API_KEY set → still scope_disabled; no Brave fetch call", async () => {
-  const tool = makeWebSearchTool();
-  let fetchCallCount = 0;
-
-  await withEnv("MCP_SEARCH_URL", "https://mcp.example/search", () =>
-    withEnv("BRAVE_API_KEY", "brave-test-key", () =>
-      withEnv("TAVILY_API_KEY", undefined, () =>
-        withMockFetch(
-          async () => {
-            fetchCallCount++;
-            return makeBraveResponse([{ title: "X", url: "https://x.com", description: "x" }]);
-          },
-          async () => {
-            const result = (await tool.execute?.({ query: "test", maxResults: 2 }, FAKE_OPTS)) as {
-              ok: boolean;
-              error: { kind: string };
-            };
-            // P-71: web_search is unconditionally scope-disabled; no direct API call made
-            assert.equal(
-              result.ok,
-              false,
-              "P-71: result.ok must be false (scope_disabled) even with MCP_SEARCH_URL set",
-            );
-            assert.equal(result.error.kind, "scope_disabled", "error.kind must be scope_disabled");
-            assert.equal(fetchCallCount, 0, "P-71: zero fetch calls — direct Brave/Tavily calls are removed");
-          },
-        ),
-      ),
-    ),
-  );
-});
-
-// ─── T-ConsumerSearch.1 — search.json fallback (P-15, G-P15.2) ────────────────
-
-test("T-ConsumerSearch.1: when BRAVE_API_KEY unset, webSearch reads braveApiKey from search.json fallback; env var wins", async () => {
-  // Given: BRAVE_API_KEY env var unset; search.json exists with { braveApiKey: "bsa-file-key" }
-  // When:  readSearchConfig returns file key; precedence checked (env > file)
-  // Then:  file key used when env unset; env wins when set
-
-  // Test the precedence logic used by webSearch.ts:
-  // const sCfg = readSearchConfig();
-  // const braveKey = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
-  // const tavilyKey = process.env.TAVILY_API_KEY ?? sCfg.tavilyApiKey;
-
-  const savedBrave = process.env.BRAVE_API_KEY;
-
-  try {
-    // When env is set, env wins
-    process.env.BRAVE_API_KEY = "bsa-env-key";
-    const sCfg = { braveApiKey: "bsa-file-key" };
-    const braveWithEnv = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
-    assert.equal(braveWithEnv, "bsa-env-key", "BRAVE_API_KEY env must win over file key");
-
-    // When env is unset, file value used
-    delete process.env.BRAVE_API_KEY;
-    const braveWithoutEnv = process.env.BRAVE_API_KEY ?? sCfg.braveApiKey;
-    assert.equal(braveWithoutEnv, "bsa-file-key", "file braveApiKey used when BRAVE_API_KEY unset");
-  } finally {
-    if (savedBrave !== undefined) process.env.BRAVE_API_KEY = savedBrave;
-    else delete process.env.BRAVE_API_KEY;
-  }
 });
