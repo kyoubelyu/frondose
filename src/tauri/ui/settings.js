@@ -23,6 +23,11 @@ export function createSettingsPanel(deps) {
             keyEl.value = ""; // never populate the raw key — only the mask as a placeholder
             keyEl.placeholder = r.llm.maskedKey ?? "no key set";
         }
+        const braveKeyEl = $("settings-brave-key");
+        if (braveKeyEl) {
+            braveKeyEl.value = "";
+            braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? "no key set";
+        }
         for (const f of ["fullName", "company", "role", "headline"]) {
             const el = $(`settings-${f.toLowerCase()}`);
             if (el)
@@ -46,8 +51,10 @@ export function createSettingsPanel(deps) {
             .map((s) => s.trim())
             .filter(Boolean);
         const key = v("settings-key"); // sent ONLY if the operator typed one
+        const braveKey = v("settings-brave-key");
         return {
             llm: { baseUrl: v("settings-baseurl"), model: v("settings-model"), ...(key ? { key } : {}) },
+            ...(braveKey ? { search: { brave: { key: braveKey } } } : {}),
             identity: {
                 fullName: v("settings-fullname"),
                 company: v("settings-company"),

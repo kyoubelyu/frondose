@@ -128,10 +128,10 @@ describe("P-71 app settings provider scope", () => {
     });
   });
 
-  it("T-P71.Settings.5: Tauri settings UI remains custom-URL-only", () => {
+  it("T-P71.Settings.5: Tauri settings UI remains custom-URL-only for LLMs and allows only Brave MCP search", () => {
     // Given: src/tauri/ui/index.html and src/tauri/ui/settings.ts.
     // When: the settings UI source is scanned.
-    // Then: it exposes base URL/model/key controls and no direct provider/search preset controls.
+    // Then: it exposes base URL/model/key controls, may expose Brave MCP key storage, and has no Tavily/direct-provider presets.
     const html = readFileSync(join(REPO, "src", "tauri", "ui", "index.html"), "utf8");
     const ts = readFileSync(join(REPO, "src", "tauri", "ui", "settings.ts"), "utf8");
     const combined = `${html}\n${ts}`;
@@ -139,6 +139,6 @@ describe("P-71 app settings provider scope", () => {
     assert.match(combined, /baseUrl|Base URL/i, "settings UI must keep custom URL baseUrl control");
     assert.match(combined, /model/i, "settings UI must keep model control");
     assert.match(combined, /key|API key/i, "settings UI must keep key control");
-    assert.doesNotMatch(combined, /Anthropic preset|OpenAI preset|Brave Search|Tavily/i);
+    assert.doesNotMatch(combined, /Anthropic preset|OpenAI preset|Tavily|api\.search\.brave\.com|api\.tavily\.com/i);
   });
 });
