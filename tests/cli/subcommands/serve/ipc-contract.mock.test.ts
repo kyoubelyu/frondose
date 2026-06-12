@@ -70,23 +70,23 @@ const APP_CONCRETE_PATHS_GOLDEN: ReadonlySet<string> = new Set([
   "GET /agent/events",
 ]);
 
-/** 15 Tauri invoke_handler command identifiers (main.rs:745-761). */
+/** 15 Tauri invoke_handler command identifiers (main.rs:745-761). F-REN-2: mai_* → frondose_*. */
 const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
-  "mai_health",
-  "mai_identity",
-  "mai_get_settings",
-  "mai_set_settings",
-  "mai_chrome_ensure",
-  "mai_agent_turn",
-  "mai_agent_abort",
-  "mai_agent_retry",
-  "mai_set_cron_mode",
-  "mai_set_passive_mode",
-  "mai_workflow_approve",
-  "mai_workflow_decline",
-  "mai_workflow_handoff",
-  "mai_workflow_cancel",
-  "mai_check_update",
+  "frondose_health",
+  "frondose_identity",
+  "frondose_get_settings",
+  "frondose_set_settings",
+  "frondose_chrome_ensure",
+  "frondose_agent_turn",
+  "frondose_agent_abort",
+  "frondose_agent_retry",
+  "frondose_set_cron_mode",
+  "frondose_set_passive_mode",
+  "frondose_workflow_approve",
+  "frondose_workflow_decline",
+  "frondose_workflow_handoff",
+  "frondose_workflow_cancel",
+  "frondose_check_update",
 ]);
 
 /** Workflow subpaths that controller/endpoints.ts:8-12 must accept. */
