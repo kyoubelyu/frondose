@@ -118,7 +118,7 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
   try {
     raw = JSON.parse(readFileSync(path, "utf-8"));
   } catch (e) {
-    process.stderr.write(`[mai] config.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(`[frondose] config.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
   }
 
@@ -133,7 +133,7 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
   try {
     return configJsonSchemaV2.parse(raw);
   } catch (e) {
-    process.stderr.write(`[mai] config.json invalid: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(`[frondose] config.json invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
   }
 }
@@ -242,7 +242,7 @@ export function migrateTelegramIntoConfig(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(
-      `[mai] telegram.json migration parse error: ${msg}; settings not migrated — run \`mai telegram\` to reconfigure.\n`,
+      `[frondose] telegram.json migration parse error: ${msg}; settings not migrated — run \`mai telegram\` to reconfigure.\n`,
     );
     return DEFAULT_CONFIG_V2;
   }

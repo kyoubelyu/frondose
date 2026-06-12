@@ -34,7 +34,7 @@ export function makeAuditWriter(auditPath: string): (step: StepResult<ToolSet>) 
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   } catch (e) {
     process.stderr.write(
-      `[mai] audit writer: failed to ensure directory for ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] audit writer: failed to ensure directory for ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
 
@@ -71,7 +71,7 @@ export function makeAuditWriter(auditPath: string): (step: StepResult<ToolSet>) 
     } catch (e) {
       // Audit failure must NOT crash the agent loop.
       process.stderr.write(
-        `[mai] audit writer: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+        `[frondose] audit writer: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
       );
     }
   };
@@ -93,7 +93,7 @@ export function writeAuditRow(auditPath: string, row: AuditEntry): void {
     appendFileSync(auditPath, `${JSON.stringify(sanitized)}\n`, "utf-8");
   } catch (e) {
     process.stderr.write(
-      `[mai] writeAuditRow: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] writeAuditRow: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
 }
@@ -110,7 +110,7 @@ export function writeWorkflowAudit(auditPath: string, event: WorkflowAuditEntry[
     appendFileSync(auditPath, `${JSON.stringify(row)}\n`, "utf-8");
   } catch (e) {
     process.stderr.write(
-      `[mai] writeWorkflowAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] writeWorkflowAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
 }
@@ -146,7 +146,7 @@ export function writeLlmErrorAudit(auditPath: string, row: Omit<LlmErrorAuditRow
     appendFileSync(auditPath, `${JSON.stringify(full)}\n`, "utf-8");
   } catch (e) {
     process.stderr.write(
-      `[mai] writeLlmErrorAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] writeLlmErrorAudit: failed to append to ${auditPath}: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
 }

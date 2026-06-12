@@ -117,7 +117,7 @@ describe("readPersonaTemplate — malformed JSON (G-P27.28)", () => {
   it("T-PERS.5: given p1.json with invalid JSON, readPersonaTemplate emits stderr warning and returns null", () => {
     // Given: p1.json contains invalid JSON
     // When:  readPersonaTemplate(dir, 'p1')
-    // Then:  returns null; stderr contains [mai] persona template
+    // Then:  returns null; stderr contains [frondose] persona template
     const { dir, cleanup } = makeTmpDir();
     try {
       writeFileSync(join(dir, "p1.json"), "{ not valid json }", "utf-8");
@@ -137,8 +137,8 @@ describe("readPersonaTemplate — malformed JSON (G-P27.28)", () => {
       assert.equal(result, null, "must return null for malformed JSON");
       const stderr = stderrChunks.join("");
       assert.ok(
-        stderr.includes("[mai] persona template"),
-        `stderr must contain [mai] persona template; got: ${stderr}`,
+        stderr.includes("[frondose] persona template"),
+        `stderr must contain [frondose] persona template; got: ${stderr}`,
       );
     } finally {
       cleanup();
@@ -170,7 +170,7 @@ describe("readPersonaTemplate — invalid schema (G-P27.28)", () => {
         process.stderr.write = origWrite;
       }
       assert.equal(result, null, "must return null for schema-invalid file");
-      assert.ok(stderrChunks.join("").includes("[mai]"), "must emit stderr warning");
+      assert.ok(stderrChunks.join("").includes("[frondose]"), "must emit stderr warning");
     } finally {
       cleanup();
     }

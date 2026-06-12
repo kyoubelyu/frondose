@@ -54,7 +54,7 @@ export function makeStopTool(control: ControlSignals | undefined, hookRunner?: H
     control?.requestStop ??
     (() => {
       process.stderr.write(
-        "[mai] stop tool called but control.requestStop is not wired (likely a test environment). No-op.\n",
+        "[frondose] stop tool called but control.requestStop is not wired (likely a test environment). No-op.\n",
       );
     });
   return tool({

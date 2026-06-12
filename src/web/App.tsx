@@ -22,7 +22,7 @@ export function App() {
       <header className="bg-slate-900 text-white">
         <div className="mx-auto flex max-w-6xl items-center gap-8 px-6 py-3">
           <h1 className="text-base font-semibold tracking-tight">
-            mai server <span className="font-normal text-slate-400">— fleet console</span>
+            Frondose server <span className="font-normal text-slate-400">— fleet console</span>
           </h1>
           <nav className="flex gap-1">
             {TABS.map((t) => (

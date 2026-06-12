@@ -64,7 +64,7 @@ export async function bootWorker(inputs: BootWorkerInputs): Promise<void> {
       identity = readIdentity(identityPath);
     } else {
       process.stderr.write(
-        "[mai] freeAxes not yet picked — using methodology defaults. Run `mai soul reset` to set them.\n",
+        "[frondose] freeAxes not yet picked — using methodology defaults. Run `mai soul reset` to set them.\n",
       );
     }
   }
@@ -117,7 +117,7 @@ export async function bootWorker(inputs: BootWorkerInputs): Promise<void> {
       startWorkerHeartbeat(coords, abortController.signal);
       startWorkerServerPoll(coords, WORKER_INBOX_DB_PATH(), abortController.signal, cfg.server.poll_interval_s * 1000);
     } else {
-      process.stderr.write("[mai] config.server.url set but secrets.server.token missing — server features disabled\n");
+      process.stderr.write("[frondose] config.server.url set but secrets.server.token missing — server features disabled\n");
     }
   }
 

@@ -22,7 +22,7 @@ export function readWorkerNodeConfig(dir: string, workerId: string): WorkerNodeC
     return workerNodeConfigSchema.parse(JSON.parse(readFileSync(path, "utf-8")));
   } catch (e) {
     process.stderr.write(
-      `[mai] worker node config ${workerId}.json invalid: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] worker node config ${workerId}.json invalid: ${e instanceof Error ? e.message : String(e)}\n`,
     );
     return null;
   }

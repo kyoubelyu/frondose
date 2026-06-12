@@ -31,7 +31,7 @@ export function readServerIdentity(path: string): ServerIdentity | null {
     return serverIdentitySchema.parse(JSON.parse(readFileSync(path, "utf-8")));
   } catch (e) {
     process.stderr.write(
-      `[mai] server identity.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] server identity.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,
     );
     return null;
   }

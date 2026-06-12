@@ -3,7 +3,12 @@ import type { ServeState } from "../context.js";
 
 export type TimerHolder = { value: ReturnType<typeof setTimeout> | null };
 
-export function handleGetEvents(state: ServeState, timerHolder: TimerHolder, res: ServerResponse, graceMs: number): void {
+export function handleGetEvents(
+  state: ServeState,
+  timerHolder: TimerHolder,
+  res: ServerResponse,
+  graceMs: number,
+): void {
   // D-RUN-1 (safety, belt-and-suspenders): if the controlling UDS client (the Tauri
   // shell's SSE subscriber) disconnects and does NOT reconnect within a short grace
   // window, STOP THE AGENT so an orphaned sidecar can't keep acting on the page even if

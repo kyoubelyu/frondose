@@ -309,7 +309,7 @@ describe("readSchedule — schedule.jsonl reading", () => {
       assert.equal(result.length, 1, "returns 1 valid record");
       assert.deepEqual(result[0], r1);
       const stderrOut = stderrChunks.join("");
-      // Implementation writes: "[mai] schedule.jsonl line 2 malformed (skipped): ..."
+      // Implementation writes: "[frondose] schedule.jsonl line 2 malformed (skipped): ..."
       assert.ok(stderrOut.includes("2") || stderrOut.length > 0, "stderr has warning about malformed line");
     } finally {
       cleanup();

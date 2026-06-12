@@ -43,7 +43,7 @@ export function makeEscalateTool(deps: EscalateDeps) {
     deps.control?.requestStop ??
     (() => {
       process.stderr.write(
-        "[mai] escalate tool called but control.requestStop is not wired (likely a test environment). No-op.\n",
+        "[frondose] escalate tool called but control.requestStop is not wired (likely a test environment). No-op.\n",
       );
     });
   return tool({
@@ -116,7 +116,9 @@ export function makeEscalateTool(deps: EscalateDeps) {
           requestStop();
         } catch (e) {
           // requestStop should never throw; if it does, log + proceed.
-          process.stderr.write(`[mai] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`);
+          process.stderr.write(
+            `[frondose] escalate: requestStop threw: ${e instanceof Error ? e.message : String(e)}\n`,
+          );
         }
       }
 

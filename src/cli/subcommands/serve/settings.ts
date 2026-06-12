@@ -199,7 +199,7 @@ export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "syst
     return { restartRequired: false };
   } catch (e) {
     process.stderr.write(
-      `[mai] settings hot-reload failed (restart to apply): ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] settings hot-reload failed (restart to apply): ${e instanceof Error ? e.message : String(e)}\n`,
     );
     return { restartRequired: true };
   }

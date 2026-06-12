@@ -26,7 +26,7 @@ export function readWipFile(wipPath: string): Record<string, unknown> {
   try {
     return JSON.parse(readFileSync(wipPath, "utf-8")) as Record<string, unknown>;
   } catch {
-    process.stderr.write(`[mai] WIP file ${wipPath} corrupt or unreadable; treating as empty.\n`);
+    process.stderr.write(`[frondose] WIP file ${wipPath} corrupt or unreadable; treating as empty.\n`);
     return {};
   }
 }
@@ -59,7 +59,7 @@ export function buildIdentityFromWip(wip: Record<string, unknown>): IdentityReco
     if (!story_shape) filledDefaults.push("story_shape=reference-story led");
     if (filledDefaults.length > 0) {
       process.stderr.write(
-        `[mai] ${filledDefaults.length} of 4 axes used methodology defaults: ${filledDefaults.join("; ")}. ` +
+        `[frondose] ${filledDefaults.length} of 4 axes used methodology defaults: ${filledDefaults.join("; ")}. ` +
           "Run `mai soul reset` to pick yours.\n",
       );
     }

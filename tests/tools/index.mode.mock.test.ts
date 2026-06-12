@@ -79,7 +79,7 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     // Given: fake session object (non-null) passed with mode="server"
     // When:  makeAllTools(fakeSession, persistence, control, undefined, {mode:"server"})
     // Then:  tool set still excludes LinkedIn tools (mode guard overrides session);
-    //        process.stderr receives "[mai] makeAllTools: ignoring session in server mode" message
+    //        process.stderr receives "[frondose] makeAllTools: ignoring session in server mode" message
     const { cleanup, ...paths } = makeTmpDir();
     const stderrChunks: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -99,7 +99,7 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
       // Warning emitted to stderr
       const stderr = stderrChunks.join("");
       assert.ok(
-        stderr.includes("[mai] makeAllTools: ignoring session in server mode"),
+        stderr.includes("[frondose] makeAllTools: ignoring session in server mode"),
         `stderr must contain warning; got: ${stderr}`,
       );
     } finally {

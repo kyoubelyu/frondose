@@ -93,7 +93,7 @@ test("T-Hooks.2: Invalid JSON in hooks.json → no-op + stderr warning (does not
     const pre = await runner?.runPreToolUse("echo", {}, "c1");
     assert.equal(pre.blocked, false, "must be no-op after JSON parse failure");
     // Stderr should contain a warning
-    assert.ok(capturedStderr.includes("[mai]"), `stderr must contain [mai] warning; got: "${capturedStderr}"`);
+    assert.ok(capturedStderr.includes("[frondose]"), `stderr must contain [frondose] warning; got: "${capturedStderr}"`);
   } finally {
     cleanup();
   }
@@ -123,7 +123,7 @@ test("T-Hooks.3: Invalid schema in hooks.json (Zod fail) → no-op + stderr warn
 
     const pre = await runner?.runPreToolUse("echo", {}, "c1");
     assert.equal(pre.blocked, false, "must be no-op after schema failure");
-    assert.ok(capturedStderr.includes("[mai]"), `stderr must have warning; got: "${capturedStderr}"`);
+    assert.ok(capturedStderr.includes("[frondose]"), `stderr must have warning; got: "${capturedStderr}"`);
   } finally {
     cleanup();
   }
@@ -253,7 +253,7 @@ test("T-Hooks.7: PostToolUse hook fails → LOG+CONTINUE, tool result returned (
     }
 
     // Stderr should have a log entry
-    assert.ok(capturedStderr.includes("[mai]"), `PostToolUse failure must log to stderr; got: "${capturedStderr}"`);
+    assert.ok(capturedStderr.includes("[frondose]"), `PostToolUse failure must log to stderr; got: "${capturedStderr}"`);
   } finally {
     cleanup();
   }

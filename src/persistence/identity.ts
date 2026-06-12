@@ -83,7 +83,7 @@ export function writeIdentity(
     writeConfig({ ...cfg, identity: record }, cfgPath);
   } catch (e) {
     process.stderr.write(
-      `[mai] writeIdentity: could not update config.json: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] writeIdentity: could not update config.json: ${e instanceof Error ? e.message : String(e)}\n`,
     );
   }
   legacyWriteIdentityToFile(record, path);
@@ -101,7 +101,7 @@ function legacyReadIdentityFromFile(path: string): IdentityRecord | null {
   try {
     return identityRecordSchema.parse(JSON.parse(raw));
   } catch (e) {
-    process.stderr.write(`[mai] identity.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(`[frondose] identity.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return null;
   }
 }
