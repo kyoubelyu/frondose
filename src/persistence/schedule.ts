@@ -134,7 +134,7 @@ export function readSchedule(path: string): ScheduleRecord[] {
       out.push(JSON.parse(trimmed) as ScheduleRecord);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[mai] schedule.jsonl line ${i + 1} malformed (skipped): ${msg}\n`);
+      process.stderr.write(`[frondose] schedule.jsonl line ${i + 1} malformed (skipped): ${msg}\n`);
     }
   });
   return out;

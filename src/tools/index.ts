@@ -75,7 +75,7 @@ export interface PersistencePaths {
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 53 tools in power tier, 51 in consumer tier (P-Y3)
+ *   - worker mode: 52 tools in power tier, 50 in consumer tier (P-Y3)
  *   - server  mode: 25 tools in power tier, 23 in consumer tier (P-73: suggest_card/suggest_next_actions worker-only)
  *
  * Layer order applied across BOTH modes (outermost → innermost):
@@ -135,7 +135,7 @@ export function makeAllTools(
     Object.assign(out, makeBrowserTools(session)); // P-33: 11 generic browser tools
     Object.assign(out, makeLinkedinTools(session)); // launch (LinkedIn destinations)
   } else if (mode === "server" && session) {
-    process.stderr.write("[mai] makeAllTools: ignoring session in server mode\n");
+    process.stderr.write("[frondose] makeAllTools: ignoring session in server mode\n");
   }
 
   // P-6: operator-output + control tools. Registered when `control` is given.
@@ -181,7 +181,7 @@ export function makeAllTools(
       try {
         credentialsDb = openCredentialsDb(persistence.credentialsDbPath);
       } catch (e) {
-        process.stderr.write(`[mai] cannot open credentials.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
+        process.stderr.write(`[frondose] cannot open credentials.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
       }
     }
     Object.assign(out, {

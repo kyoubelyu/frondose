@@ -137,7 +137,7 @@ function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promi
 // defect: a button that errors is diagnosable; a button that does nothing looks dead.
 function surfaceError(label: string, e: unknown): void {
   const msg = e instanceof Error ? e.message : String(e);
-  console.error(`[mai] ${label} failed:`, e);
+  console.error(`[frondose] ${label} failed:`, e);
   errorBannerEl.textContent = `${label} failed: ${msg}`;
   errorBannerEl.classList.remove("hidden");
 }

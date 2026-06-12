@@ -181,7 +181,9 @@ export async function runBootstrapAgent(opts: BootstrapAgentOpts): Promise<void>
 
   const committedSet = new Set<string>(Object.keys(wip));
   if (committedSet.size === TOTAL_FIELDS) {
-    process.stdout.write("[mai] Identity already complete. Use --reset to re-run or `mai identity show` to inspect.\n");
+    process.stdout.write(
+      "[frondose] Identity already complete. Use --reset to re-run or `mai identity show` to inspect.\n",
+    );
     return;
   }
 

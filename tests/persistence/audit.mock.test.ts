@@ -141,7 +141,7 @@ test("T-M_p6.19: makeAuditWriter with bad path logs stderr warning and does NOT 
   const captured = stderrChunks.join("");
   // Must emit some kind of warning (either dir creation failure OR append failure)
   assert.ok(
-    captured.includes("[mai]") || captured.includes("audit") || captured.includes("failed"),
+    captured.includes("[frondose]") || captured.includes("audit") || captured.includes("failed"),
     `T-M_p6.19: stderr must contain a warning about audit failure; got: "${captured.slice(0, 300)}"`,
   );
 

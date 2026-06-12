@@ -334,7 +334,7 @@ describe("autoUpdate — skip conditions", () => {
     // Given: fetchImpl returns { tag_name: 'v1.0.0' }; local version is '0.4.15'
     // When:  runStartupAutoUpdate called; stderr captured
     // Then:  returns {action:'skipped',reason:'major_bump',latestTag:'v1.0.0'};
-    //        process.stderr received "[mai] Major version available..." one-liner
+    //        process.stderr received "[frondose] Major version available..." one-liner
     const origMai = process.env.MAI_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
     delete process.env.MAI_AUTOUPDATE;
@@ -358,7 +358,7 @@ describe("autoUpdate — skip conditions", () => {
     assert.equal(result.reason, "major_bump", "reason must be major_bump for major version bump");
     assert.equal(result.latestTag, "v1.0.0", "latestTag must be v1.0.0");
     assert.ok(
-      stderr.includes("[mai] Major version available"),
+      stderr.includes("[frondose] Major version available"),
       `stderr must contain major-bump advisory; got: "${stderr}"`,
     );
   });

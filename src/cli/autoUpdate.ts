@@ -103,7 +103,7 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
     const localMajor = parseInt(localVersion.split(".")[0] ?? "0", 10);
     const latestMajor = parseInt(latestVersion.split(".")[0] ?? "0", 10);
     if (latestMajor > localMajor) {
-      process.stderr.write(`[mai] Major version available: v${latestVersion} — review with \`mai update\`.\n`);
+      process.stderr.write(`[frondose] Major version available: v${latestVersion} — review with \`mai update\`.\n`);
       logAttempt(source, `skip:major_bump v${latestVersion}`);
       return { action: "skipped", reason: "major_bump", latestTag: release.tag_name };
     }
@@ -111,20 +111,20 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
     const argv1 = di.argv1Override ?? process.argv[1] ?? "";
     const pkgSymlink = derivePackageSymlink(argv1);
     if (pkgSymlink === null) {
-      process.stderr.write("[mai] running from a non-global install; skipping auto-update.\n");
+      process.stderr.write("[frondose] running from a non-global install; skipping auto-update.\n");
       logAttempt(source, "skip:not_global_install");
       return { action: "skipped", reason: "not_global_install" };
     }
     if (!force && isDevLink(pkgSymlink)) {
       process.stderr.write(
-        "[mai] Currently running from dev source (npm link); auto-update disabled. " +
+        "[frondose] Currently running from dev source (npm link); auto-update disabled. " +
           "Run `mai update --bootstrap` to switch to auto-update mode.\n",
       );
       logAttempt(source, "skip:dev_link");
       return { action: "skipped", reason: "dev_link" };
     }
 
-    process.stderr.write(`[mai] downloading v${latestVersion}...\n`);
+    process.stderr.write(`[frondose] downloading v${latestVersion}...\n`);
     const releaseDir = join(RELEASES_DIR(), `v${latestVersion}`);
     const tgzPath = `${releaseDir}.tar.gz`;
     mkdirSync(RELEASES_DIR(), { recursive: true });
@@ -132,32 +132,32 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
 
     try {
       await downloadTarball(release.tarball_url, tgzPath, fetchFn, token);
-      process.stderr.write("[mai] extracting...\n");
+      process.stderr.write("[frondose] extracting...\n");
       const xr = extractTarball(tgzPath, releaseDir, spawn);
       if (xr.status !== 0) {
         cleanupPartial(releaseDir, tgzPath);
         logAttempt(source, `fail:extract status=${xr.status} ${xr.stderr?.toString() ?? ""}`);
-        process.stderr.write("[mai] update failed (extract). Continuing with current version.\n");
+        process.stderr.write("[frondose] update failed (extract). Continuing with current version.\n");
         return { action: "failed", reason: "extract", latestTag: release.tag_name };
       }
-      process.stderr.write("[mai] installing dependencies (may take a moment)...\n");
+      process.stderr.write("[frondose] installing dependencies (may take a moment)...\n");
       const ir = buildRelease(releaseDir, spawn, "install");
       if (ir.status !== 0) {
         cleanupPartial(releaseDir, tgzPath);
         logAttempt(source, `fail:install status=${ir.status}`);
-        process.stderr.write("[mai] update failed (install). Continuing with current version.\n");
+        process.stderr.write("[frondose] update failed (install). Continuing with current version.\n");
         return { action: "failed", reason: "install", latestTag: release.tag_name };
       }
-      process.stderr.write("[mai] building...\n");
+      process.stderr.write("[frondose] building...\n");
       const br = buildRelease(releaseDir, spawn, "build");
       if (br.status !== 0) {
         cleanupPartial(releaseDir, tgzPath);
         logAttempt(source, `fail:build status=${br.status}`);
-        process.stderr.write("[mai] update failed (build). Continuing with current version.\n");
+        process.stderr.write("[frondose] update failed (build). Continuing with current version.\n");
         return { action: "failed", reason: "build", latestTag: release.tag_name };
       }
 
-      process.stderr.write(`[mai] installing v${latestVersion}...\n`);
+      process.stderr.write(`[frondose] installing v${latestVersion}...\n`);
       try {
         swapPackageSymlink(pkgSymlink, releaseDir);
       } catch (e) {
@@ -173,7 +173,7 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
       }
       gcOldReleases(RELEASES_DIR(), 2);
 
-      process.stderr.write("[mai] restarting.\n\n");
+      process.stderr.write("[frondose] restarting.\n\n");
       releaseUpdateLock(lockFd);
       const child = spawn(process.execPath, [argv1, ...process.argv.slice(2)], {
         stdio: "inherit",

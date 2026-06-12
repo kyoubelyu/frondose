@@ -82,7 +82,7 @@ describe("serverIdentity persistence (G-P25.11)", () => {
   it("T-SRV.IDENT.3: readServerIdentity returns null + writes stderr warning when file is malformed JSON", () => {
     // Given: identity.json with invalid JSON content
     // When:  readServerIdentity(path)
-    // Then:  returns null; stderr contains "[mai] server identity.json corrupt or invalid:"
+    // Then:  returns null; stderr contains "[frondose] server identity.json corrupt or invalid:"
     const { dir, cleanup } = makeTmpDir();
     try {
       const identPath = join(dir, "identity.json");
@@ -105,7 +105,7 @@ describe("serverIdentity persistence (G-P25.11)", () => {
 
       assert.equal(result, null, "must return null for malformed JSON");
       assert.ok(
-        stderrChunks.join("").includes("[mai] server identity.json corrupt or invalid:"),
+        stderrChunks.join("").includes("[frondose] server identity.json corrupt or invalid:"),
         `stderr must contain warning message; got: ${stderrChunks.join("")}`,
       );
     } finally {

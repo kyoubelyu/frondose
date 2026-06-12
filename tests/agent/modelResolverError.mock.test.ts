@@ -310,7 +310,7 @@ describe("resolveModelOrNull — returns null + stderr on resolution failure (G-
     assert.equal(result, null, "T-FB.1: resolveModelOrNull must return null on failure");
     const stderr = stderrChunks.join("");
     assert.ok(stderrChunks.length > 0, "T-FB.1: at least one stderr chunk must be written");
-    assert.ok(stderr.includes("[mai]"), `T-FB.1: stderr must contain '[mai]' prefix; got: ${stderr}`);
+    assert.ok(stderr.includes("[frondose]"), `T-FB.1: stderr must contain '[frondose]' prefix; got: ${stderr}`);
   });
 });
 

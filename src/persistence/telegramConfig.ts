@@ -58,7 +58,7 @@ function readRuntime(tcPath: string): TelegramRuntime {
     return telegramRuntimeSchema.parse(JSON.parse(readFileSync(tcPath, "utf-8")));
   } catch (e) {
     process.stderr.write(
-      `[mai] telegram.json (runtime) invalid at ${tcPath}: ${e instanceof Error ? e.message : String(e)}; using defaults.\n`,
+      `[frondose] telegram.json (runtime) invalid at ${tcPath}: ${e instanceof Error ? e.message : String(e)}; using defaults.\n`,
     );
     return { ...DEFAULT_RUNTIME };
   }
