@@ -1,3 +1,5 @@
+import { frondoseEnv } from "../env.js";
+
 /**
  * P-46 D-1 / D-1b: agent-loop step-budget default + resolver.
  *
@@ -31,5 +33,5 @@ export function parseMaxSteps(raw: string | undefined): number | null {
  * Precedence: CLI flag > MAI_MAX_STEPS env var > DEFAULT_MAX_STEPS.
  */
 export function resolveMaxSteps(cliFlag?: string): number {
-  return parseMaxSteps(cliFlag) ?? parseMaxSteps(process.env.MAI_MAX_STEPS) ?? DEFAULT_MAX_STEPS;
+  return parseMaxSteps(cliFlag) ?? parseMaxSteps(frondoseEnv("MAX_STEPS")) ?? DEFAULT_MAX_STEPS;
 }

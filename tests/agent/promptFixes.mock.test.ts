@@ -283,32 +283,30 @@ describe("T-Type.1 — D-RUN-3: type.ts CDP arm must use Cmd+A (modifiers:4) + e
 
 // ─── T-Profile.1 — F-MAI_PROFILE_DIR: serve.ts must honor process.env.MAI_PROFILE_DIR ──────────────
 
-describe("T-Profile.1 — F-MAI_PROFILE_DIR: serve.ts profileDir must source process.env.MAI_PROFILE_DIR (§6.4(B))", () => {
-  it("T-Profile.1: serve.ts profileDir must contain 'process.env.MAI_PROFILE_DIR' — FAILS pre-builder: L74 hardcodes the path without env var check", () => {
+describe("T-Profile.1 — F-FRONDOSE_PROFILE_DIR: serve.ts profileDir must source frondoseEnv(\"PROFILE_DIR\") (§6.4(B) + F-REN-3)", () => {
+  it("T-Profile.1: serve.ts profileDir must use frondoseEnv(\"PROFILE_DIR\") — F-REN-3 renamed from process.env.MAI_PROFILE_DIR", () => {
     // Given: src/cli/subcommands/serve.ts source
     // When:  the profileDir variable assignment is inspected
-    // Then:  it reads process.env.MAI_PROFILE_DIR (with nullish coalesce to default)
+    // Then:  it reads via frondoseEnv("PROFILE_DIR") (with nullish coalesce to default)
+    //        F-REN-3 flip: process.env.MAI_PROFILE_DIR → frondoseEnv("PROFILE_DIR")
 
-    // ── Assertion 1: MAI_PROFILE_DIR env var reference present ──────────────────────────────────
+    // ── Assertion 1: frondoseEnv("PROFILE_DIR") reference present ──────────────────────────────
     assert.ok(
-      SERVE_SRC.includes("MAI_PROFILE_DIR"),
-      "T-Profile.1: serve.ts must reference 'MAI_PROFILE_DIR' env var (§6.4(B)). " +
-        "Pre-builder: L74 = `const profileDir = join(getHomeBase(), '.mai', 'agent', 'chrome-profile');` — hardcoded, no env var. FAILS pre-builder.",
+      SERVE_SRC.includes('frondoseEnv("PROFILE_DIR")'),
+      "T-Profile.1: serve.ts must reference frondoseEnv(\"PROFILE_DIR\") after F-REN-3 rename (§6.4(B)). " +
+        "F-REN-3: serve.ts:90 now reads `frondoseEnv(\"PROFILE_DIR\")` with ?? default.",
     );
 
-    // ── Assertion 2: process.env.MAI_PROFILE_DIR specifically ───────────────────────────────────
+    // ── Assertion 2: no raw process.env.MAI_PROFILE_DIR remains ─────────────────────────────────
     assert.ok(
-      SERVE_SRC.includes("process.env.MAI_PROFILE_DIR"),
-      "T-Profile.1: serve.ts must use `process.env.MAI_PROFILE_DIR` (the §6.4(B) exact pattern). " +
-        "Pre-builder: not present. FAILS pre-builder.",
+      !SERVE_SRC.includes("process.env.MAI_PROFILE_DIR"),
+      "T-Profile.1: serve.ts must NOT have raw process.env.MAI_PROFILE_DIR after F-REN-3 rename.",
     );
 
-    // ── Assertion 3: nullish coalesce fallback to default path ───────────────────────────────────
-    // The §6.4(B) sketch: `process.env.MAI_PROFILE_DIR ?? join(...)`
+    // ── Assertion 3: nullish coalesce fallback to default path still present ───────────────────
     assert.ok(
-      SERVE_SRC.includes("MAI_PROFILE_DIR ?? ") || SERVE_SRC.includes("MAI_PROFILE_DIR ??"),
-      "T-Profile.1: serve.ts MAI_PROFILE_DIR must use nullish coalesce (??) to fall back to the default path. " +
-        "Pre-builder: not present. FAILS pre-builder.",
+      SERVE_SRC.includes('frondoseEnv("PROFILE_DIR") ??') || SERVE_SRC.includes("frondoseEnv(\"PROFILE_DIR\") ??"),
+      "T-Profile.1: serve.ts frondoseEnv(\"PROFILE_DIR\") must still use nullish coalesce (??) to fall back to the default path.",
     );
   });
 });

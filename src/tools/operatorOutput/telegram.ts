@@ -44,7 +44,7 @@ const telegramParams = z.object({
   mediaPath: z
     .string()
     .optional()
-    .describe("Local file path (multipart upload; must be MAI_UPLOAD_ALLOWLIST-readable)."),
+    .describe("Local file path (multipart upload; must be FRONDOSE_UPLOAD_ALLOWLIST-readable)."),
   mediaFileId: z.string().optional().describe("Reuse a previously-uploaded Telegram file_id."),
   mediaUrl: z.string().url().optional().describe("Public HTTPS URL Telegram fetches directly."),
   mediaGroup: z

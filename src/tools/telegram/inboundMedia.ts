@@ -1,5 +1,5 @@
 /**
- * P-11 / D-6 / D-21: download Telegram inbound media to MAI_UPLOAD_ALLOWLIST.
+ * P-11 / D-6 / D-21: download Telegram inbound media to FRONDOSE_UPLOAD_ALLOWLIST.
  * Two-step flow (getFile → binary). 20 MB hard cap. Filename collision policy:
  *   {YYYYMMDD_HHmmss}_{file_unique_id_last8}.{ext}
  *

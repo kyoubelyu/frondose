@@ -1,5 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
+import { frondoseEnv } from "../env.js";
 import type { AuthJson, ProviderEntry } from "../persistence/auth.js";
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
@@ -33,11 +34,11 @@ export interface ResolveModelOpts {
 
 /**
  * Resolve the model SPEC from precedence chain:
- *   factory > cli > MAI_MODEL env > ~/.mai/auth.json default > DEFAULT_MODEL_SPEC
+ *   factory > cli > FRONDOSE_MODEL env > ~/.mai/auth.json default > DEFAULT_MODEL_SPEC
  * Pure function (no SDK calls). Tested independently in T-M1..T-M3.
  */
 export function resolveModelSpec(opts: ResolveModelOpts = {}): string {
-  return opts.factory ?? opts.cli ?? process.env.MAI_MODEL ?? readAuthJsonDefault() ?? DEFAULT_MODEL_SPEC;
+  return opts.factory ?? opts.cli ?? frondoseEnv("MODEL") ?? readAuthJsonDefault() ?? DEFAULT_MODEL_SPEC;
 }
 
 /** Resolve the model object via the precedence chain + provider dispatch. */
@@ -163,8 +164,8 @@ function configuredProviderList(auth: AuthJson | null): string {
 }
 
 function specSource(spec: string): string {
-  return spec === process.env.MAI_MODEL
-    ? "the MAI_MODEL env var"
+  return spec === frondoseEnv("MODEL")
+    ? "the FRONDOSE_MODEL env var (or legacy MAI_MODEL)"
     : spec === readAuthJsonDefault()
       ? "the auth.json / secrets.json default"
       : "a CLI flag or the built-in default";

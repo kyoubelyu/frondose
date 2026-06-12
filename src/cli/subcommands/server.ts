@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { frondoseEnv } from "../../env.js";
 import { type ConfigJson, readConfig } from "../../persistence/config.js";
 import { getHomeBase } from "../../persistence/paths.js";
 import { isAlive, readPid } from "../../persistence/processLock.js";
@@ -117,11 +118,11 @@ async function runServerStatus(opts: ServerSubcommandOpts): Promise<void> {
 // ─── Bind ──────────────────────────────────────────────────────────────────────
 
 async function runServerBind(opts: ServerSubcommandOpts): Promise<void> {
-  const token = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+  const token = frondoseEnv("SERVER_TELEGRAM_TOKEN");
   if (!token) {
     process.stderr.write(
-      "[server bind] MAI_SERVER_TELEGRAM_TOKEN env var is unset. " +
-        "Set it to your server bot token before running `mai server bind`.\n",
+      "[server bind] FRONDOSE_SERVER_TELEGRAM_TOKEN env var is unset. " +
+        "Set it (or legacy MAI_SERVER_TELEGRAM_TOKEN) to your server bot token before running `mai server bind`.\n",
     );
     process.exit(1);
   }
@@ -157,9 +158,11 @@ async function runServerInstall(opts: ServerSubcommandOpts): Promise<void> {
     process.stderr.write("[server install] macOS-only — launchd unavailable elsewhere\n");
     process.exit(1);
   }
-  const token = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+  const token = frondoseEnv("SERVER_TELEGRAM_TOKEN");
   if (!token) {
-    process.stderr.write("[server install] MAI_SERVER_TELEGRAM_TOKEN env var must be set\n");
+    process.stderr.write(
+      "[server install] FRONDOSE_SERVER_TELEGRAM_TOKEN env var must be set (legacy MAI_SERVER_TELEGRAM_TOKEN still accepted)\n",
+    );
     process.exit(1);
   }
   const configPath = opts.serverConfigPath ?? SERVER_CONFIG_PATH();
@@ -178,7 +181,7 @@ async function runServerInstall(opts: ServerSubcommandOpts): Promise<void> {
     nodeBin: process.execPath,
     maiEntry: realpathSync(process.argv[1] ?? process.execPath),
     home: os.homedir(),
-    env: { TELEGRAM_TOKEN: token, MAI_MODEL: process.env.MAI_MODEL },
+    env: { TELEGRAM_TOKEN: token, FRONDOSE_MODEL: frondoseEnv("MODEL") },
   };
   const prompter = opts.prompter ?? realPrompter;
   const result = await installServerLaunchAgent(args, {

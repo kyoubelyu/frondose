@@ -13,6 +13,7 @@
  */
 import { existsSync } from "node:fs";
 import { checkbox, input, confirm as inquirerConfirm, password, select } from "@inquirer/prompts";
+import { frondoseEnv } from "../../env.js";
 import { readAuth } from "../../persistence/auth.js";
 import { DEFAULT_GITHUB_CONFIG_PATH, readGithubConfig } from "../../persistence/github.js";
 import { readIdentity } from "../../persistence/identity.js";
@@ -23,7 +24,7 @@ import { readTelegramConfig } from "../../persistence/telegramConfig.js";
 
 /** D-4: canonical TTY + env-flag gate. Strict `=== true` matches scout F-3. */
 export function isInteractive(): boolean {
-  return process.stdin.isTTY === true && process.env.MAI_NO_INTERACTIVE !== "1";
+  return process.stdin.isTTY === true && frondoseEnv("NO_INTERACTIVE") !== "1";
 }
 
 /** D-9: strip ANSI bracketed-paste markers from any input/password return value.

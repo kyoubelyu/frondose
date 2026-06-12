@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { frondoseEnv } from "../env.js";
 
 /**
  * Inline .env reader — populates process.env from <cwd>/.env without clobbering
@@ -10,7 +11,7 @@ import { resolve } from "node:path";
  * NO quote stripping; NO ${VAR} interpolation; NO multi-line values.
  */
 export function loadDotenv(cwd: string): void {
-  if (process.env.MAI_DOTENV === "skip") return;
+  if (frondoseEnv("DOTENV") === "skip") return;
   const envPath = resolve(cwd, ".env");
   let content: string;
   try {

@@ -161,10 +161,10 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
     }
   });
 
-  it("T-SRV.BIND.2: when MAI_SERVER_TELEGRAM_TOKEN is unset, exits 1 with stderr naming MAI_SERVER_TELEGRAM_TOKEN", async () => {
-    // Given: MAI_SERVER_TELEGRAM_TOKEN unset
+  it("T-SRV.BIND.2: when MAI_SERVER_TELEGRAM_TOKEN is unset, exits 1 with stderr naming FRONDOSE_SERVER_TELEGRAM_TOKEN", async () => {
+    // Given: MAI_SERVER_TELEGRAM_TOKEN unset (legacy name; FRONDOSE_ also unset)
     // When:  runServerSubcommand("bind", {userId:42, ...})
-    // Then:  process.exit(1) called; stderr mentions "MAI_SERVER_TELEGRAM_TOKEN"
+    // Then:  process.exit(1) called; stderr mentions "FRONDOSE_SERVER_TELEGRAM_TOKEN" (F-REN-3 flip)
     const { dir, cleanup } = makeTmpDir();
     const savedToken = process.env.MAI_SERVER_TELEGRAM_TOKEN;
     const { captured, restore } = mockProcessExit();
@@ -177,8 +177,8 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
       );
       assert.equal(captured.value, 1, "process.exit(1) must be called");
       assert.ok(
-        stderr.includes("MAI_SERVER_TELEGRAM_TOKEN"),
-        `stderr must mention MAI_SERVER_TELEGRAM_TOKEN; got: ${stderr}`,
+        stderr.includes("FRONDOSE_SERVER_TELEGRAM_TOKEN"),
+        `stderr must mention FRONDOSE_SERVER_TELEGRAM_TOKEN (F-REN-3 flip); got: ${stderr}`,
       );
     } finally {
       restore();

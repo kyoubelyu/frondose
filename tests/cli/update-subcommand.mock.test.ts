@@ -541,10 +541,10 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
     }
   });
 
-  it("T-MSG.2: when MAI_AUTOUPDATE='skip' and update available, stdout mentions MAI_AUTOUPDATE=skip opt-out hint", async () => {
-    // Given: MAI_AUTOUPDATE='skip'; fetchImpl returns tag_name 'v0.4.20' (newer); localVersion '0.4.15'
+  it("T-MSG.2: when MAI_AUTOUPDATE='skip' (legacy setter via shim) and update available, stdout mentions FRONDOSE_AUTOUPDATE=skip opt-out hint", async () => {
+    // Given: MAI_AUTOUPDATE='skip' (legacy env var; read via shim fallback); fetchImpl returns tag_name 'v0.4.20' (newer); localVersion '0.4.15'
     // When:  runUpdateSubcommand({ fetchImpl, cfgPath, localVersion: '0.4.15' }) called
-    // Then:  stdout contains "MAI_AUTOUPDATE=skip";
+    // Then:  stdout contains "FRONDOSE_AUTOUPDATE=skip" (F-REN-3 flip: update.ts:192 updated to canonical name);
     //        stdout does NOT contain "npm install -g @kyoube/mai-agent"
     const { cfgPath, cleanup } = makeTmpDir();
     writeTokenConfig(cfgPath);
@@ -563,8 +563,8 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
           runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.15" }),
         );
         assert.ok(
-          out.includes("MAI_AUTOUPDATE=skip"),
-          `expected 'MAI_AUTOUPDATE=skip' hint in stdout, got: ${JSON.stringify(out)}`,
+          out.includes("FRONDOSE_AUTOUPDATE=skip"),
+          `expected 'FRONDOSE_AUTOUPDATE=skip' hint in stdout (F-REN-3 flip), got: ${JSON.stringify(out)}`,
         );
         assert.ok(
           !out.includes("npm install -g @kyoube/mai-agent"),
