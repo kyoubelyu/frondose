@@ -6,6 +6,7 @@ import { runAgentLoop } from "../agent/loop.js";
 import { DEFAULT_MAX_STEPS } from "../agent/maxSteps.js";
 import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
+import { frondoseEnv } from "../env.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { getHomeBase } from "../persistence/paths.js";
 import {
@@ -175,7 +176,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     onStepFinish: composedStepFinish,
     out,
     configPath: effectiveTelegramConfigPath,
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
   };
   // P-46 D-1b: `/maxsteps` retunes the operator turn budget AND the background
   // cron / telegram turn budgets (cronDeps + telegramDeps are mutated in place,
@@ -245,7 +246,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   }
 
   out.write("mai-agent ready. type a prompt; Ctrl-C exits.\n> ");
-  if (opts.linkedinSession && process.env.MAI_NO_EAGER_CHROME !== "1") {
+  if (opts.linkedinSession && frondoseEnv("NO_EAGER_CHROME") !== "1") {
     opts.linkedinSession.getOrInitClient().catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       process.stderr.write(`[frondose] eager Chrome init failed (will retry on first tool call): ${msg}\n`);

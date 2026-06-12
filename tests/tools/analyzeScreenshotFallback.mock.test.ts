@@ -150,11 +150,11 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
     );
   });
 
-  it("T-B5.2: when vision generateText throws AND main modelId is 'deepseek-v4-flash' (not vision-capable), NO retry; fail envelope names MAI_VISION_MODEL", async () => {
+  it("T-B5.2: when vision generateText throws AND main modelId is 'deepseek-v4-flash' (not vision-capable), NO retry; fail envelope names FRONDOSE_VISION_MODEL", async () => {
     // Given: MAI_VISION_MODEL='anthropic:claude-sonnet-4-5'; MAI_MODEL='deepseek:deepseek-v4-flash' (not vision-capable);
     //        all fetch calls throw
     // When:  analyze_screenshot.execute is called
-    // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"; no second fetch (deepseek not vision-capable)
+    // Then:  result.ok === false; result.error.message contains "FRONDOSE_VISION_MODEL" (F-REN-3 flip); no second fetch
 
     const tool = makeAnalyzeScreenshotTool();
 
@@ -179,8 +179,8 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
 
             assert.equal(result.ok, false, "result must be ok:false (no retry for non-vision-capable main)");
             assert.ok(
-              result.error?.message.includes("MAI_VISION_MODEL"),
-              `error message must name MAI_VISION_MODEL; got: "${result.error?.message}"`,
+              result.error?.message.includes("FRONDOSE_VISION_MODEL"),
+              `error message must name FRONDOSE_VISION_MODEL (F-REN-3 flip); got: "${result.error?.message}"`,
             );
             assert.ok(
               result.error?.message.includes("vis:deepseek-v4-flash") ||
@@ -196,10 +196,10 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
 // ─── T-B5.3 ──────────────────────────────────────────────────────────────────
 
 describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () => {
-  it("T-B5.3: when resolveModel throws (no provider key configured for vision spec), the pre-generateText fail envelope message names MAI_VISION_MODEL", async () => {
+  it("T-B5.3: when resolveModel throws (no provider key configured for vision spec), the pre-generateText fail envelope message names FRONDOSE_VISION_MODEL", async () => {
     // Given: MAI_VISION_MODEL='unknown_provider_b53:some-model'; no key for that provider
     // When:  analyze_screenshot.execute is called (resolveModel fails before generateText)
-    // Then:  result.ok === false; result.error.message contains "MAI_VISION_MODEL"
+    // Then:  result.ok === false; result.error.message contains "FRONDOSE_VISION_MODEL" (F-REN-3 flip)
 
     const tool = makeAnalyzeScreenshotTool();
 
@@ -218,8 +218,8 @@ describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () =>
 
         assert.equal(result.ok, false, "result must be ok:false when resolveModel throws");
         assert.ok(
-          result.error?.message.includes("MAI_VISION_MODEL"),
-          `error message must name MAI_VISION_MODEL; got: "${result.error?.message}"`,
+          result.error?.message.includes("FRONDOSE_VISION_MODEL"),
+          `error message must name FRONDOSE_VISION_MODEL (F-REN-3 flip); got: "${result.error?.message}"`,
         );
       },
     );
@@ -228,19 +228,20 @@ describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () =>
 
 // ─── T-B5.4 ──────────────────────────────────────────────────────────────────
 
-describe("B5: analyze_screenshot — tool description mentions MAI_VISION_MODEL (G-P37.7)", () => {
-  it("T-B5.4: the analyze_screenshot tool description string contains 'MAI_VISION_MODEL' (operator override path documented in description)", () => {
+describe("B5: analyze_screenshot — tool description mentions FRONDOSE_VISION_MODEL (G-P37.7 + F-REN-3 flip)", () => {
+  it("T-B5.4: the analyze_screenshot tool description string contains 'FRONDOSE_VISION_MODEL' (operator override path documented in description)", () => {
     // Given: makeAnalyzeScreenshotTool() called with no arguments
     // When:  tool.description string is read
-    // Then:  the description contains "MAI_VISION_MODEL" — operator is informed of the override env var
+    // Then:  the description contains "FRONDOSE_VISION_MODEL" — operator is informed of the canonical env var
+    //        F-REN-3 flip: analyzeScreenshot.ts:47 updated to FRONDOSE_VISION_MODEL
 
     const tool = makeAnalyzeScreenshotTool();
     const description = tool.description ?? "";
 
     assert.ok(description.length > 0, "analyze_screenshot tool must have a non-empty description");
     assert.ok(
-      description.includes("MAI_VISION_MODEL"),
-      "tool description must contain 'MAI_VISION_MODEL' (operator needs to know about the override env var)",
+      description.includes("FRONDOSE_VISION_MODEL"),
+      "tool description must contain 'FRONDOSE_VISION_MODEL' (F-REN-3 flip; operator needs the canonical env var name)",
     );
   });
 });
@@ -248,11 +249,11 @@ describe("B5: analyze_screenshot — tool description mentions MAI_VISION_MODEL 
 // ─── T-B5.5 (edge case) ──────────────────────────────────────────────────────
 
 describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.8 double-fail)", () => {
-  it("T-B5.5: when both the vision call AND the fallback main-model call throw, the fail envelope names MAI_VISION_MODEL and both specs", async () => {
+  it("T-B5.5: when both the vision call AND the fallback main-model call throw, the fail envelope names FRONDOSE_VISION_MODEL and both specs", async () => {
     // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7'; MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable);
     //        ALL fetch calls throw (vision fails AND fallback fails)
     // When:  analyze_screenshot.execute is called
-    // Then:  result.ok === false; error message references both specs and MAI_VISION_MODEL
+    // Then:  result.ok === false; error message references both specs and FRONDOSE_VISION_MODEL (F-REN-3 flip)
 
     const tool = makeAnalyzeScreenshotTool();
 
@@ -273,8 +274,8 @@ describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.
 
           assert.equal(result.ok, false, "result must be ok:false when both vision and fallback fail");
           assert.ok(
-            result.error?.message.includes("MAI_VISION_MODEL"),
-            `error must reference MAI_VISION_MODEL; got: "${result.error?.message}"`,
+            result.error?.message.includes("FRONDOSE_VISION_MODEL"),
+            `error must reference FRONDOSE_VISION_MODEL (F-REN-3 flip); got: "${result.error?.message}"`,
           );
           // Either the visionSpec or the fallback MAI_VISION_MODEL guidance must be present
           const msg = result.error?.message ?? "";

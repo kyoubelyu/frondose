@@ -18,18 +18,19 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // ─── T-P73.Profile.1 ─────────────────────────────────────────────────────────
 
-describe("P-73 F-MAI_PROFILE_DIR: serve.ts resolves Chrome profile dir from env (regression-guard)", () => {
-  it("T-P73.Profile.1: serve.ts reads MAI_PROFILE_DIR ?? <default chrome-profile> and passes profileDir to createLinkedinSession", () => {
-    // Given: src/cli/subcommands/serve.ts source (F-MAI_PROFILE_DIR fixed in b40013f 2026-05-26).
+describe("P-73 F-FRONDOSE_PROFILE_DIR: serve.ts resolves Chrome profile dir from env (regression-guard + F-REN-3 flip)", () => {
+  it("T-P73.Profile.1: serve.ts reads frondoseEnv(\"PROFILE_DIR\") ?? <default chrome-profile> and passes profileDir to createLinkedinSession", () => {
+    // Given: src/cli/subcommands/serve.ts source (F-MAI_PROFILE_DIR fixed in b40013f 2026-05-26; renamed F-REN-3).
     // When: the source text is scanned for the profile-dir resolution pattern and its consumer.
-    // Then: MAI_PROFILE_DIR env-var is read with a chrome-profile default; the resolved value
+    // Then: frondoseEnv("PROFILE_DIR") is read with a chrome-profile default; the resolved value
     //       is passed into createLinkedinSession({...}) — locking the parity fix against regression.
+    //       F-REN-3 flip: process.env.MAI_PROFILE_DIR → frondoseEnv("PROFILE_DIR")
     const src = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf8");
 
     assert.match(
       src,
-      /process\.env\.MAI_PROFILE_DIR\s*\?\?\s*join\([^\n]*chrome-profile/,
-      "T-P73.Profile.1: serve.ts must resolve profileDir as MAI_PROFILE_DIR ?? join(...chrome-profile)",
+      /frondoseEnv\("PROFILE_DIR"\)\s*\?\?\s*join\([^\n]*chrome-profile/,
+      "T-P73.Profile.1: serve.ts must resolve profileDir as frondoseEnv(\"PROFILE_DIR\") ?? join(...chrome-profile)",
     );
     assert.match(
       src,

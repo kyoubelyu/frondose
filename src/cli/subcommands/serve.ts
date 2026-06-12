@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
 import { resolveModelOrNull } from "../../agent/modelResolver.js";
+import { frondoseEnv } from "../../env.js";
 import { BOUNDARY, BOUNDARY_RESUME } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
@@ -72,7 +73,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // NOT recompose the system prompt; the per-turn passive prompt carries the
   // Magical directives for the turn that fires.
   const cronEnabledAtBoot = readMode() === "auto";
-  const passiveEnabledAtBoot = (process.env.MAI_PASSIVE_SUGGEST ?? "off").toLowerCase() === "on";
+  const passiveEnabledAtBoot = (frondoseEnv("PASSIVE_SUGGEST") ?? "off").toLowerCase() === "on";
   const bootMode = modeFromState({ cronEnabled: cronEnabledAtBoot, passiveEnabled: passiveEnabledAtBoot });
   const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment(bootMode)}`;
   const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
@@ -86,7 +87,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // can hydrate deps.model later through reloadAgentDeps without a restart.
   const model = resolveModelOrNull({});
   const maxSteps = resolveMaxSteps(undefined);
-  const profileDir = process.env.MAI_PROFILE_DIR ?? join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? join(getHomeBase(), ".mai", "agent", "chrome-profile");
   const memoryDbPath = join(getHomeBase(), ".mai", "agent", "memory.sqlite");
   const identityPath = DEFAULT_IDENTITY_PATH();
   const schedulePath = join(getHomeBase(), ".mai", "agent", "schedule.jsonl");

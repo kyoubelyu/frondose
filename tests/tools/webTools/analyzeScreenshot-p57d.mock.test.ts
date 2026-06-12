@@ -34,8 +34,8 @@ import { makeAnalyzeScreenshotTool } from "../../../src/tools/webTools/analyzeSc
 
 // ─── T-Vision.1 — analyze_screenshot graceful vision_unavailable envelope ────
 
-describe("analyze_screenshot tool — graceful vision_unavailable envelope when MAI_VISION_MODEL unset (G-P57d.1)", () => {
-  it("T-Vision.1: given process.env.MAI_VISION_MODEL cleared + MAI_HOME_BASE pointed at tmp dir (no auth.json, so readAuth returns null + auth.visionModel undefined) + tmp PNG fixture in os.tmpdir() (passes assertFileReadable allowlist), WHEN analyze_screenshot.execute({path:<tmp-png>, prompt:'describe'}) is called, THEN result is {ok:false, error:{kind:'vision_unavailable', message: contains 'Vision unavailable' + 'MAI_VISION_MODEL' + 'inspect' + 'operator scope'}}; tool.description contains 'operator scope', 'inspect', 'vision-capable' substrings (P-57d scope-lock messaging per plan §5.1.3)", async () => {
+describe("analyze_screenshot tool — graceful vision_unavailable envelope when FRONDOSE_VISION_MODEL unset (G-P57d.1 + F-REN-3 flip)", () => {
+  it("T-Vision.1: given process.env.MAI_VISION_MODEL cleared + MAI_HOME_BASE pointed at tmp dir (no auth.json, so readAuth returns null + auth.visionModel undefined) + tmp PNG fixture in os.tmpdir() (passes assertFileReadable allowlist), WHEN analyze_screenshot.execute({path:<tmp-png>, prompt:'describe'}) is called, THEN result is {ok:false, error:{kind:'vision_unavailable', message: contains 'Vision unavailable' + 'FRONDOSE_VISION_MODEL' + 'inspect' + 'operator scope'}}; tool.description contains 'operator scope', 'inspect', 'vision-capable' substrings (P-57d scope-lock messaging per plan §5.1.3; F-REN-3: MAI_VISION_MODEL → FRONDOSE_VISION_MODEL)", async () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-vision-"));
     const origHome = process.env.MAI_HOME_BASE;
     const origVisionModel = process.env.MAI_VISION_MODEL;
@@ -82,7 +82,7 @@ describe("analyze_screenshot tool — graceful vision_unavailable envelope when 
         message.includes("Vision unavailable"),
         `error message must contain 'Vision unavailable'; got: ${message}`,
       );
-      assert.ok(message.includes("MAI_VISION_MODEL"), `error message must contain 'MAI_VISION_MODEL'; got: ${message}`);
+      assert.ok(message.includes("FRONDOSE_VISION_MODEL"), `error message must contain 'FRONDOSE_VISION_MODEL' (F-REN-3 flip); got: ${message}`);
       assert.ok(message.includes("inspect"), `error message must reference 'inspect' fallback; got: ${message}`);
       assert.ok(
         message.includes("operator scope") || message.includes("Operator scope"),

@@ -24,6 +24,7 @@
 // import order [CONCERN-MR-1].
 import { pathToFileURL } from "node:url";
 import { registerCrashHandlers } from "../cli/crashLogger.js";
+import { frondoseEnv } from "../env.js";
 
 export function parseArgs(argv: string[]): { sockPath: string; bearerToken: string } {
   let sockPath: string | undefined;
@@ -47,11 +48,11 @@ export function parseArgs(argv: string[]): { sockPath: string; bearerToken: stri
       continue;
     }
   }
-  sockPath ??= process.env.MAI_SOCK;
-  bearerToken ??= process.env.MAI_TOKEN;
+  sockPath ??= frondoseEnv("SOCK");
+  bearerToken ??= frondoseEnv("TOKEN");
   if (!sockPath || !bearerToken) {
     process.stderr.write(
-      "[frondose-sidecar] FATAL: --sock and --token required (or MAI_SOCK + MAI_TOKEN env).\n" +
+      "[frondose-sidecar] FATAL: --sock and --token required (or FRONDOSE_SOCK + FRONDOSE_TOKEN env; legacy MAI_SOCK + MAI_TOKEN still accepted).\n" +
         `  argv: ${JSON.stringify(argv)}\n`,
     );
     process.exit(2);

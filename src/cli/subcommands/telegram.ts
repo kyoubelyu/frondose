@@ -6,6 +6,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseModelSpec, resolveModelSpec } from "../../agent/modelResolver.js";
+import { frondoseEnv } from "../../env.js";
 import { getHomeBase } from "../../persistence/paths.js";
 import { isPidAlive, readPid } from "../../persistence/processLock.js";
 import {
@@ -45,7 +46,8 @@ function buildEnvSnapshot(): EnvSnapshot {
     TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN!,
   };
   if (process.env.TELEGRAM_PROXY) env.TELEGRAM_PROXY = process.env.TELEGRAM_PROXY;
-  if (process.env.MAI_MODEL) env.MAI_MODEL = process.env.MAI_MODEL;
+  const model = frondoseEnv("MODEL");
+  if (model) env.FRONDOSE_MODEL = model;
   // Resolve the model spec to determine which provider key to snapshot.
   try {
     const spec = resolveModelSpec({});

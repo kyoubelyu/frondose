@@ -12,6 +12,7 @@ import type { CoreMessage } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import { resolveMaxSteps } from "../agent/maxSteps.js";
 import { resolveModelOrNull } from "../agent/modelResolver.js";
+import { frondoseEnv } from "../env.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
 import { SERVER_BOUNDARY } from "../agent/systemPrompt/serverBoundary.js";
@@ -177,7 +178,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai/agent/uploads"),
     };
     // startDaemonPoller runs fire-and-forget; does not block readline.
     void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);

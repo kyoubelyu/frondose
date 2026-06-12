@@ -30,7 +30,9 @@ export function renderServerPlist(args: PlistArgs): string {
     `    <key>HOME</key><string>${escapeXml(args.home)}</string>`,
     `    <key>TELEGRAM_TOKEN</key><string>${escapeXml(e.TELEGRAM_TOKEN)}</string>`,
   ];
-  if (e.MAI_MODEL) envEntries.push(`    <key>MAI_MODEL</key><string>${escapeXml(e.MAI_MODEL)}</string>`);
+  if (e.FRONDOSE_MODEL) {
+    envEntries.push(`    <key>FRONDOSE_MODEL</key><string>${escapeXml(e.FRONDOSE_MODEL)}</string>`);
+  }
   if (e.providerKeyName && e.providerKeyValue) {
     envEntries.push(`    <key>${e.providerKeyName}</key><string>${escapeXml(e.providerKeyValue)}</string>`);
   }

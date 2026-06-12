@@ -11,7 +11,7 @@ import path from "node:path";
 export interface EnvSnapshot {
   TELEGRAM_TOKEN: string; // required
   TELEGRAM_PROXY?: string;
-  MAI_MODEL?: string;
+  FRONDOSE_MODEL?: string;
   providerKeyName?: "DEEPSEEK_API_KEY";
   providerKeyValue?: string;
 }
@@ -51,8 +51,8 @@ export function renderPlist(args: PlistArgs): string {
   if (e.TELEGRAM_PROXY) {
     envEntries.push(`    <key>TELEGRAM_PROXY</key><string>${escapeXml(e.TELEGRAM_PROXY)}</string>`);
   }
-  if (e.MAI_MODEL) {
-    envEntries.push(`    <key>MAI_MODEL</key><string>${escapeXml(e.MAI_MODEL)}</string>`);
+  if (e.FRONDOSE_MODEL) {
+    envEntries.push(`    <key>FRONDOSE_MODEL</key><string>${escapeXml(e.FRONDOSE_MODEL)}</string>`);
   }
   if (e.providerKeyName && e.providerKeyValue) {
     envEntries.push(`    <key>${e.providerKeyName}</key><string>${escapeXml(e.providerKeyValue)}</string>`);

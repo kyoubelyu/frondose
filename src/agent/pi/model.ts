@@ -1,9 +1,10 @@
 import type { Model } from "@earendil-works/pi-ai";
+import { frondoseEnv } from "../../env.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../../persistence/secrets.js";
 
 /**
  * [P-PI Gate 2] Resolve the DeepSeek Pi model from the SAME config sources the Vercel
- * path uses — env first (DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / MAI_MODEL), then
+   * path uses — env first (DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / FRONDOSE_MODEL), then
  * secrets.json `providers.deepseek`. Stays within the P-57d single-custom-URL lock:
  * one OpenAI-compatible endpoint (DeepSeek), driven through Pi's `openai-completions`
  * provider instead of @ai-sdk/openai.
@@ -47,7 +48,7 @@ export function resolvePiModel(secretsPath: string = DEFAULT_SECRETS_PATH()): Pi
       "resolvePiModel: no DeepSeek API key (DEEPSEEK_API_KEY env or secrets.json providers.deepseek.key)",
     );
   }
-  const id = modelIdFromSpec(process.env.MAI_MODEL);
+  const id = modelIdFromSpec(frondoseEnv("MODEL"));
 
   const model: Model<"openai-completions"> = {
     id,

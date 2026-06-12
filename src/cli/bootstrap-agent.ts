@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import { type CoreMessage, type LanguageModel, streamText } from "ai";
+import { frondoseEnv } from "../env.js";
 import { readIdentity } from "../persistence/identity.js";
 import { type BootstrapToolsOpts, makeBootstrapTools, readWipFile, writeWipFile } from "./bootstrap-tools.js";
 
@@ -18,7 +19,7 @@ export class BootstrapTimeoutError extends Error {
  *  Exported (CONCERN-1, Step-3b) so the validator can unit-test the default
  *  + invalid-env fallback paths without spinning a real 60s wall-clock test. */
 export function bootstrapTimeoutMs(): number {
-  const raw = process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+  const raw = frondoseEnv("BOOTSTRAP_TIMEOUT_MS");
   if (raw === undefined) return 60_000;
   const n = Number(raw.trim());
   if (!Number.isInteger(n) || n < 1000) return 60_000;

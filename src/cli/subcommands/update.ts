@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { frondoseEnv } from "../../env.js";
 import { readGithubConfig } from "../../persistence/github.js";
 
 const require = createRequire(import.meta.url);
@@ -185,10 +186,10 @@ export async function runUpdateSubcommand(opts: UpdateSubcommandOpts = {}): Prom
   if (cmp === -1) {
     process.stdout.write("\n");
     // P-22 §3.3: context-aware message — auto-update is the default path; only
-    // when MAI_AUTOUPDATE=skip do we point the operator at manual recovery.
-    if (process.env.MAI_AUTOUPDATE === "skip") {
+    // when FRONDOSE_AUTOUPDATE=skip do we point the operator at manual recovery.
+    if (frondoseEnv("AUTOUPDATE") === "skip") {
       process.stdout.write(
-        `Update available: ${latestWithV} — auto-update is disabled (MAI_AUTOUPDATE=skip). Run \`mai\` to apply, or unset MAI_AUTOUPDATE.\n`,
+        `Update available: ${latestWithV} — auto-update is disabled (FRONDOSE_AUTOUPDATE=skip). Run \`mai\` to apply, or unset FRONDOSE_AUTOUPDATE (or legacy MAI_AUTOUPDATE).\n`,
       );
     } else {
       process.stdout.write(`Update available: ${latestWithV} — mai will auto-update on next startup.\n`);
