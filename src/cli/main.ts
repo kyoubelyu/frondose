@@ -61,18 +61,11 @@ function maybePrintTransitionalBanner(): void {
   // Skip on Tauri sidecar spawn + legit operator-internal commands
   if (sub === "serve" || sub === "update-server" || sub === "update") return;
   // Skip on commander --help/--version short-circuit (would clobber the standard output)
-  if (
-    sub === "--help" ||
-    sub === "-h" ||
-    sub === "--version" ||
-    sub === "-V" ||
-    sub === "help" ||
-    sub === "version"
-  ) {
+  if (sub === "--help" || sub === "-h" || sub === "--version" || sub === "-V" || sub === "help" || sub === "version") {
     return;
   }
   process.stderr.write(
-    "[mai] transitional CLI surface — the product is /Applications/Frondose.app\n" +
+    "[frondose] transitional CLI surface — the product is /Applications/Frondose.app\n" +
       "      This CLI is scheduled for internalization in P-APP-11. Admin commands\n" +
       "      (telegram, server, update-server) remain supported during the transition.\n\n",
   );
@@ -165,7 +158,7 @@ async function main(): Promise<void> {
     .description("Soul-band controls: reset re-prompts the 4 free axes.")
     .action(async (action: string) => {
       if (action !== "reset") {
-        process.stderr.write(`[mai] unknown soul action: ${action}. Use reset.\n`);
+        process.stderr.write(`[frondose] unknown soul action: ${action}. Use reset.\n`);
         process.exit(1);
       }
       await runSoulSubcommand(action, { identityPath });

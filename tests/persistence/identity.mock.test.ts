@@ -76,8 +76,8 @@ test("T-M92: readIdentity returns null and writes to stderr when JSON is corrupt
 
     assert.equal(result, null, "corrupt JSON must return null");
     assert.ok(
-      stderrChunks.some((c) => c.includes("[mai]")),
-      "corrupt JSON must log a [mai] warning to stderr",
+      stderrChunks.some((c) => c.includes("[frondose]")),
+      "corrupt JSON must log a [frondose] warning to stderr",
     );
   } finally {
     cleanup(path);

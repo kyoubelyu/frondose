@@ -69,7 +69,7 @@ function tryReadJson<T>(path: string, schema: z.ZodType<T>, label: string): T | 
     return schema.parse(JSON.parse(readFileSync(path, "utf-8")));
   } catch (e) {
     process.stderr.write(
-      `[mai] ${label} at ${path} corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n` +
+      `[frondose] ${label} at ${path} corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n` +
         '  Expected: {"schema_version":1,"providers":{"<name>":{"key":"...","type":"anthropic|openai"}}}\n',
     );
     return null;

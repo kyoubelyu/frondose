@@ -78,8 +78,7 @@ export async function main(): Promise<void> {
 
 // ESM entrypoint guard — importing this module from a unit test must NOT auto-run
 // main(). Only run when invoked as the node entrypoint.
-const invokedAsEntrypoint =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedAsEntrypoint = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedAsEntrypoint) {
   main().catch((err: unknown) => {
     process.stderr.write(

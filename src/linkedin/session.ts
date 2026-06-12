@@ -59,7 +59,7 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
   try {
     await client.handle.Target.setDiscoverTargets({ discover: true });
   } catch (e) {
-    console.error("[mai] Target.setDiscoverTargets failed (OQ-5):", e);
+    console.error("[frondose] Target.setDiscoverTargets failed (OQ-5):", e);
     return;
   }
   client.handle.on(
@@ -69,7 +69,7 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
       const url = params.targetInfo.url ?? "";
       if (SPURIOUS_LINKEDIN_TAB_RE.test(url)) {
         void client.handle.Target.closeTarget({ targetId: params.targetInfo.targetId }).catch((err: unknown) => {
-          console.error("[mai] P-65: failed to close Campaign Manager tab", err);
+          console.error("[frondose] P-65: failed to close Campaign Manager tab", err);
         });
         return;
       }
@@ -87,7 +87,7 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
           sessionId,
         );
       } catch (e) {
-        console.error(`[mai] OQ-5 auto-inject failed for target ${params.targetInfo.targetId}:`, e);
+        console.error(`[frondose] OQ-5 auto-inject failed for target ${params.targetInfo.targetId}:`, e);
       }
     },
   );
@@ -98,7 +98,7 @@ async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void>
       const url = params.targetInfo.url ?? "";
       if (!SPURIOUS_LINKEDIN_TAB_RE.test(url)) return;
       void client.handle.Target.closeTarget({ targetId: params.targetInfo.targetId }).catch((err: unknown) => {
-        console.error("[mai] P-65: failed to close Campaign Manager tab", err);
+        console.error("[frondose] P-65: failed to close Campaign Manager tab", err);
       });
     },
   );
@@ -169,7 +169,7 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
           } catch (err) {
             // Best-effort overlay wiring: a subscribe failure must NOT break the browser
             // tool that triggered this boot. POST /chrome/ensure remains a manual re-trigger.
-            console.error("[mai] onClientBooted hook failed:", err);
+            console.error("[frondose] onClientBooted hook failed:", err);
           }
         }
         return client;

@@ -61,7 +61,7 @@ export class HookRunner {
         }
         if (result.exitCode !== 0) {
           // Non-blocking error → log + continue to next hook.
-          process.stderr.write(`[mai] PreToolUse '${toolName}' hook exit ${result.exitCode}: ${result.stderr}\n`);
+          process.stderr.write(`[frondose] PreToolUse '${toolName}' hook exit ${result.exitCode}: ${result.stderr}\n`);
         }
       }
     }
@@ -79,9 +79,9 @@ export class HookRunner {
         );
         // D-4: PostToolUse spawn failure / non-zero = LOG + CONTINUE.
         if (r.kind !== "ok") {
-          process.stderr.write(`[mai] PostToolUse '${toolName}' hook ${r.kind}: ${r.message}\n`);
+          process.stderr.write(`[frondose] PostToolUse '${toolName}' hook ${r.kind}: ${r.message}\n`);
         } else if (r.exitCode !== 0) {
-          process.stderr.write(`[mai] PostToolUse '${toolName}' hook exit ${r.exitCode}: ${r.stderr}\n`);
+          process.stderr.write(`[frondose] PostToolUse '${toolName}' hook exit ${r.exitCode}: ${r.stderr}\n`);
         }
       }
     }
@@ -93,9 +93,9 @@ export class HookRunner {
       for (const cmd of entry.hooks) {
         const r = await spawnHook(cmd.command, { event: "Stop", ...payload }, cmd.timeout ?? DEFAULT_TIMEOUT_MS);
         if (r.kind !== "ok") {
-          process.stderr.write(`[mai] Stop hook ${r.kind}: ${r.message}\n`);
+          process.stderr.write(`[frondose] Stop hook ${r.kind}: ${r.message}\n`);
         } else if (r.exitCode !== 0) {
-          process.stderr.write(`[mai] Stop hook exit ${r.exitCode}: ${r.stderr}\n`);
+          process.stderr.write(`[frondose] Stop hook exit ${r.exitCode}: ${r.stderr}\n`);
         }
       }
     }
@@ -179,7 +179,7 @@ function loadHooksJson(filePath: string): HooksJson | null {
     const result = hooksJsonSchema.safeParse(parsed);
     if (!result.success) {
       process.stderr.write(
-        `[mai] hooks.json schema invalid (${result.error.issues[0]?.path.join(".")} — ${result.error.issues[0]?.message}); hooks disabled.\n`,
+        `[frondose] hooks.json schema invalid (${result.error.issues[0]?.path.join(".")} — ${result.error.issues[0]?.message}); hooks disabled.\n`,
       );
       return null;
     }
@@ -187,7 +187,7 @@ function loadHooksJson(filePath: string): HooksJson | null {
   } catch (e) {
     if (e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT") return null;
     process.stderr.write(
-      `[mai] failed to load hooks.json (${e instanceof Error ? e.message : String(e)}); hooks disabled.\n`,
+      `[frondose] failed to load hooks.json (${e instanceof Error ? e.message : String(e)}); hooks disabled.\n`,
     );
     return null;
   }

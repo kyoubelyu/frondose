@@ -12,7 +12,7 @@ import {
 import { runBootstrapAgent } from "./bootstrap-agent.js";
 import { promptFreeAxes } from "./subcommands/soul.js";
 
-const NO_KEY_ERROR = `[mai] No LLM API key found. The identity bootstrap requires an LLM to guide
+const NO_KEY_ERROR = `[frondose] No LLM API key found. The identity bootstrap requires an LLM to guide
       the conversation.
 
 To set up a key, open Frondose → Settings and enter your provider base URL + API key + model (DeepSeek or another OpenAI-compatible custom URL). Then relaunch Frondose to run the first-time setup.
@@ -64,7 +64,9 @@ export async function runIdentityBootstrap(
 export async function promptFreeAxesAndPersist(identityPath: string): Promise<void> {
   const existing = readIdentity(identityPath);
   if (!existing) {
-    process.stderr.write("[mai] identity.json missing during axes-prompt — skipping (operator must re-run mai).\n");
+    process.stderr.write(
+      "[frondose] identity.json missing during axes-prompt — skipping (operator must re-run mai).\n",
+    );
     return;
   }
   process.stdout.write(
@@ -77,5 +79,5 @@ export async function promptFreeAxesAndPersist(identityPath: string): Promise<vo
     updatedAt: new Date().toISOString(),
   });
   writeIdentity(merged, identityPath);
-  process.stdout.write("[mai] freeAxes saved.\n");
+  process.stdout.write("[frondose] freeAxes saved.\n");
 }

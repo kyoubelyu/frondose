@@ -37,7 +37,7 @@ export function readPersonaTemplate(personasDir: string, personaId: string): Per
     return personaTemplateSchema.parse(JSON.parse(readFileSync(path, "utf-8")));
   } catch (e) {
     process.stderr.write(
-      `[mai] persona template ${personaId}.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[frondose] persona template ${personaId}.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,
     );
     return null;
   }

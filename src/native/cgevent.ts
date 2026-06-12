@@ -31,7 +31,7 @@ export function loadCgEvent(): CgEvent {
   const found = candidates.find((p) => existsSync(p));
   if (!found) {
     throw new Error(
-      "[mai] cgevent native addon not built — run `npm run build:native` (Xcode CLT required). " +
+      "[frondose] cgevent native addon not built — run `npm run build:native` (Xcode CLT required). " +
         "Hardware input mode is unavailable; falling back to CDP.",
     );
   }

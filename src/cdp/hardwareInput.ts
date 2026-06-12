@@ -191,12 +191,14 @@ export function resolveInputMode(
   try {
     cg = load();
   } catch (e) {
-    process.stderr.write(`[mai] input_mode=hardware unavailable (${e instanceof Error ? e.message : e}); using cdp\n`);
+    process.stderr.write(
+      `[frondose] input_mode=hardware unavailable (${e instanceof Error ? e.message : e}); using cdp\n`,
+    );
     return "cdp";
   }
   if (!cg.isAccessibilityTrusted()) {
     process.stderr.write(
-      "[mai] input_mode=hardware: Accessibility permission not granted (System Settings → Privacy & " +
+      "[frondose] input_mode=hardware: Accessibility permission not granted (System Settings → Privacy & " +
         "Security → Accessibility); using cdp\n",
     );
     return "cdp";

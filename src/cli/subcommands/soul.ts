@@ -28,7 +28,7 @@ export async function runSoulSubcommand(action: "reset", opts: SoulSubcommandOpt
 async function runSoulReset(opts: SoulSubcommandOpts): Promise<void> {
   const existing = readIdentity(opts.identityPath);
   if (!existing) {
-    process.stderr.write(`[mai] identity.json missing at ${opts.identityPath}. Run \`mai\` first to bootstrap.\n`);
+    process.stderr.write(`[frondose] identity.json missing at ${opts.identityPath}. Run \`mai\` first to bootstrap.\n`);
     process.exit(1);
   }
 
@@ -40,7 +40,7 @@ async function runSoulReset(opts: SoulSubcommandOpts): Promise<void> {
     updatedAt: new Date().toISOString(),
   });
   writeIdentity(merged, opts.identityPath);
-  process.stdout.write("[mai] freeAxes saved.\n");
+  process.stdout.write("[frondose] freeAxes saved.\n");
 }
 
 /**

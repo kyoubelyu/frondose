@@ -54,8 +54,8 @@ export function resolveModelOrNull(opts: ResolveModelOpts = {}): LanguageModel |
     return resolveModel(opts);
   } catch (e) {
     process.stderr.write(
-      `[mai] LLM model resolution failed: ${e instanceof Error ? e.message : String(e)}\n` +
-        "[mai] orchestrator agent is DISABLED until this is fixed; REST + web listeners stay up.\n",
+      `[frondose] LLM model resolution failed: ${e instanceof Error ? e.message : String(e)}\n` +
+        "[frondose] orchestrator agent is DISABLED until this is fixed; REST + web listeners stay up.\n",
     );
     return null;
   }

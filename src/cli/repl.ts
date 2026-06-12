@@ -207,7 +207,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
         await drainWorkerInbox(workerInboxDbPath, opts.abortController?.signal, cronDeps);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        out.write(`[mai] drainWorkerInbox failed: ${msg}; continuing\n`);
+        out.write(`[frondose] drainWorkerInbox failed: ${msg}; continuing\n`);
       }
     });
   };
@@ -248,7 +248,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   if (opts.linkedinSession && process.env.MAI_NO_EAGER_CHROME !== "1") {
     opts.linkedinSession.getOrInitClient().catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
-      process.stderr.write(`[mai] eager Chrome init failed (will retry on first tool call): ${msg}\n`);
+      process.stderr.write(`[frondose] eager Chrome init failed (will retry on first tool call): ${msg}\n`);
     });
   }
   for await (const rawLine of rl) {

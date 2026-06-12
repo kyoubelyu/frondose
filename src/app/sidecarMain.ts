@@ -51,7 +51,7 @@ export function parseArgs(argv: string[]): { sockPath: string; bearerToken: stri
   bearerToken ??= process.env.MAI_TOKEN;
   if (!sockPath || !bearerToken) {
     process.stderr.write(
-      "[mai-sidecar] FATAL: --sock and --token required (or MAI_SOCK + MAI_TOKEN env).\n" +
+      "[frondose-sidecar] FATAL: --sock and --token required (or MAI_SOCK + MAI_TOKEN env).\n" +
         `  argv: ${JSON.stringify(argv)}\n`,
     );
     process.exit(2);
@@ -75,11 +75,12 @@ export async function main(): Promise<void> {
 
 // ESM entrypoint guard [2a, CONCERN-MR-3] — importing this module from a unit
 // test must NOT auto-run main(). Only run when invoked as the node entrypoint.
-const invokedAsEntrypoint =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedAsEntrypoint = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedAsEntrypoint) {
   main().catch((err: unknown) => {
-    process.stderr.write(`[mai-sidecar] fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+    process.stderr.write(
+      `[frondose-sidecar] fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+    );
     process.exit(1);
   });
 }
