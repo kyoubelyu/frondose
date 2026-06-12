@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { frondoseEnv } from "../env.js";
 import { readUpdateChannel, type UpdateChannel } from "../persistence/channel.js";
 import { readGithubConfig } from "../persistence/github.js";
 import { getHomeBase } from "../persistence/paths.js";
@@ -24,7 +25,6 @@ const RELEASES_DIR = (): string => join(getHomeBase(), ".mai", "agent", "release
 const UPDATE_LOG = (): string => join(getHomeBase(), ".mai", "agent", "logs", "update.log");
 
 export type AutoUpdateAction = "skipped" | "updated" | "failed";
-
 export interface AutoUpdateResult {
   action: AutoUpdateAction;
   reason?:
@@ -65,7 +65,7 @@ export async function runStartupAutoUpdate(di: AutoUpdateDI = {}): Promise<AutoU
   const force = di.force === true;
   const source = di.source ?? "startup";
 
-  if (!force && process.env.MAI_AUTOUPDATE === "skip") {
+  if (!force && frondoseEnv("AUTOUPDATE") === "skip") {
     return { action: "skipped", reason: "opt_out" };
   }
 

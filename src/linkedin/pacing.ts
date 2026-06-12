@@ -1,3 +1,4 @@
+import { frondoseEnv } from "../env.js";
 import type { PacingResult } from "./types.js";
 
 /** @internal — test-only DI hook; consumers should not call. */
@@ -31,8 +32,8 @@ export function parsePaceMs(raw: string | undefined): number | null {
  * A min>max misconfiguration is normalized (lo/hi swapped).
  */
 export function resolvePaceBand(): { minMs: number; maxMs: number; disabled: boolean } {
-  const min = parsePaceMs(process.env.MAI_PACE_MIN_MS) ?? DEFAULT_PACE_MIN_MS;
-  const max = parsePaceMs(process.env.MAI_PACE_MAX_MS) ?? DEFAULT_PACE_MAX_MS;
+  const min = parsePaceMs(frondoseEnv("PACE_MIN_MS")) ?? DEFAULT_PACE_MIN_MS;
+  const max = parsePaceMs(frondoseEnv("PACE_MAX_MS")) ?? DEFAULT_PACE_MAX_MS;
   if (min <= 0 || max <= 0) return { minMs: 0, maxMs: 0, disabled: true };
   return { minMs: Math.min(min, max), maxMs: Math.max(min, max), disabled: false };
 }

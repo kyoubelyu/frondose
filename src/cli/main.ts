@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { ExitPromptError } from "@inquirer/core";
 import { Command } from "commander";
+import { frondoseEnv } from "../env.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
 import { getHomeBase } from "../persistence/paths.js";
 import { resolveTier } from "../tier.js";
@@ -86,28 +87,28 @@ async function main(): Promise<void> {
   // (the manual subcommand IS the explicit refresh). The success path inside
   // `runStartupAutoUpdate` calls `process.exit` after a successful re-exec; if we
   // reach the line below, the update was skipped, completed without re-exec, or failed.
-  if (process.env.MAI_AUTOUPDATE !== "skip" && process.argv[2] !== "update") {
+  if (frondoseEnv("AUTOUPDATE") !== "skip" && process.argv[2] !== "update") {
     const { runStartupAutoUpdate } = await import("./autoUpdate.js");
     await runStartupAutoUpdate();
   }
 
   // P-3 env reads (CDP layer): port + profile dir.
-  const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
-  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const cdpPort = frondoseEnv("CDP_PORT") ? parseInt(frondoseEnv("CDP_PORT") ?? "", 10) : 9222;
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
 
   // P-4 env reads (persistence layer): memory DB + identity JSON paths.
-  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
-  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
+  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
+  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
 
   // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
-  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
 
   // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
-  const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+  const schedulePath = frondoseEnv("SCHEDULE_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
 
   // P-11 (D-9 / D-13) env read: telegram.json path for /telegram persistence.
   const telegramConfigPath =
-    process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
+    frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
 
   // P-7: dynamic version read so commander's --version flag stays in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
@@ -119,12 +120,15 @@ async function main(): Promise<void> {
     .name("mai")
     .description("LinkedIn autonomous agent")
     .version(pkg.version)
-    .option("--model <spec>", "LLM model spec (provider:modelId); overrides MAI_MODEL")
+    .option("--model <spec>", "LLM model spec (provider:modelId); overrides FRONDOSE_MODEL (legacy MAI_MODEL still accepted)")
     .option("--prompt <text>", "one-shot prompt; exits after response")
     .option("--new-session", "start a fresh session (discard prior context)", false)
     .option("--cwd <dir>", "working directory for session storage", process.cwd())
     .option("--reset-identity", "delete identity.json and re-run first-run bootstrap", false)
-    .option("--max-steps <n>", "max agent-loop tool-call steps per turn (overrides MAI_MAX_STEPS; default 200)")
+    .option(
+      "--max-steps <n>",
+      "max agent-loop tool-call steps per turn (overrides FRONDOSE_MAX_STEPS [legacy MAI_MAX_STEPS still accepted]; default 200)",
+    )
     // P-5 Step 5a (FAILURE-1 fix): Commander v12 requires a root .action() handler whenever
     // any subcommand is registered, otherwise root-level invocations like `mai --prompt "..."`
     // fall through to the usage screen and exit 1. The full REPL / one-shot body lives here.
@@ -214,15 +218,15 @@ async function main(): Promise<void> {
   if (powerTier) {
     // P-25: `mai server` — orchestrator agent (chief-of-staff). Independent
     // directory tree at ~/.mai/server/, distinct Telegram bot via
-    // MAI_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
+    // FRONDOSE_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
     const server = program.command("server").description("Operator's orchestrator agent");
     server.action(async () => {
-      // P-25 §6.11: propagate MAI_SERVER_TELEGRAM_TOKEN → TELEGRAM_TOKEN in-process
+      // P-25 §6.11: propagate FRONDOSE_SERVER_TELEGRAM_TOKEN → TELEGRAM_TOKEN in-process
       // so replTelegram.ts (which reads process.env.TELEGRAM_TOKEN) sees the
       // operator's server-bot token. Guard prevents clobbering an explicitly-set
       // TELEGRAM_TOKEN (per GQ-3 + plan §6.11).
-      if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
-        process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      if (frondoseEnv("SERVER_TELEGRAM_TOKEN") && !process.env.TELEGRAM_TOKEN) {
+        process.env.TELEGRAM_TOKEN = frondoseEnv("SERVER_TELEGRAM_TOKEN");
       }
       await runServerSubcommand("repl", {});
       process.exit(0);
@@ -457,10 +461,10 @@ async function main(): Promise<void> {
       // Same env propagation as the foreground `server` action so the daemon
       // (which is launchd-spawned) sees the server-bot token under
       // process.env.TELEGRAM_TOKEN (the plist's EnvironmentVariables already
-      // sets TELEGRAM_TOKEN to the snapshot of MAI_SERVER_TELEGRAM_TOKEN, but
+      // sets TELEGRAM_TOKEN to the snapshot of FRONDOSE_SERVER_TELEGRAM_TOKEN, but
       // this guard keeps the dev-mode `mai server daemon` invocation correct).
-      if (process.env.MAI_SERVER_TELEGRAM_TOKEN && !process.env.TELEGRAM_TOKEN) {
-        process.env.TELEGRAM_TOKEN = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      if (frondoseEnv("SERVER_TELEGRAM_TOKEN") && !process.env.TELEGRAM_TOKEN) {
+        process.env.TELEGRAM_TOKEN = frondoseEnv("SERVER_TELEGRAM_TOKEN");
       }
       await runServerSubcommand("daemon", {});
       process.exit(0);

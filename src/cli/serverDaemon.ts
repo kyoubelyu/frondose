@@ -5,6 +5,7 @@ import type { Server } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
+import { frondoseEnv } from "../env.js";
 import { resolveModelOrNull } from "../agent/modelResolver.js";
 import { CHECKPOINT } from "../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../agent/systemPrompt/compose.js";
@@ -86,7 +87,7 @@ export async function runServerDaemon(): Promise<void> {
 
   if (!process.env.TELEGRAM_TOKEN) {
     process.stderr.write(
-      "[server daemon] TELEGRAM_TOKEN unset (did MAI_SERVER_TELEGRAM_TOKEN propagate via plist?); exit\n",
+      "[server daemon] TELEGRAM_TOKEN unset (did FRONDOSE_SERVER_TELEGRAM_TOKEN propagate via plist?); exit\n",
     );
     cleanup();
     process.exit(1);
@@ -209,7 +210,7 @@ export async function runServerDaemon(): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai/agent/uploads"),
       // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
       // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
       inboxPrefix: () => drainServerInbox(serverInboxDb),

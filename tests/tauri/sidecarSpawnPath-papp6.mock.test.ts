@@ -78,22 +78,22 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     );
   });
 
-  it("T-Sidecar.Spawn.2: spawn_mai_serve preserves MAI_AUTOUPDATE=skip and MAI_SIDECAR_OWNER=frondose-app", () => {
-    // Given: main.rs spawn_mai_serve body after P-APP-6 edit
+  it("T-Sidecar.Spawn.2: spawn_mai_serve preserves FRONDOSE_AUTOUPDATE=skip and FRONDOSE_SIDECAR_OWNER=frondose-app (F-REN-3 Group B flip)", () => {
+    // Given: main.rs spawn_mai_serve body after F-REN-3 Group B Rust SET rename
     // When:  validator greps spawn_mai_serve body
-    // Then:  .env("MAI_AUTOUPDATE", "skip") present (defense in depth)
-    //        .env("MAI_SIDECAR_OWNER", "frondose-app") present (marker for overlay)
+    // Then:  .env("FRONDOSE_AUTOUPDATE", "skip") present (defense in depth; F-REN-3 renamed)
+    //        .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") present (marker for overlay; F-REN-3 renamed)
     const spawnSrc = spawnMaiServeSource();
 
     assert.match(
       spawnSrc,
-      /\.env\s*\(\s*"MAI_AUTOUPDATE"\s*,\s*"skip"\s*\)/,
-      'spawn_mai_serve must set .env("MAI_AUTOUPDATE", "skip")',
+      /\.env\s*\(\s*"FRONDOSE_AUTOUPDATE"\s*,\s*"skip"\s*\)/,
+      'spawn_mai_serve must set .env("FRONDOSE_AUTOUPDATE", "skip") (F-REN-3 Group B rename)',
     );
     assert.match(
       spawnSrc,
-      /\.env\s*\(\s*"MAI_SIDECAR_OWNER"\s*,\s*"frondose-app"\s*\)/,
-      'spawn_mai_serve must set .env("MAI_SIDECAR_OWNER", "frondose-app")',
+      /\.env\s*\(\s*"FRONDOSE_SIDECAR_OWNER"\s*,\s*"frondose-app"\s*\)/,
+      'spawn_mai_serve must set .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") (F-REN-3 Group B rename)',
     );
   });
 

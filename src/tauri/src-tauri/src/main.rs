@@ -336,13 +336,16 @@ fn bundled_resource_dir() -> Option<PathBuf> {
 /// Finder (BLOCKER-RISK #1). Probe an ordered candidate list; fall back to bare
 /// "node" for the `cargo tauri dev` shell-PATH case.
 fn resolve_node() -> String {
-    if let Ok(p) = std::env::var("MAI_NODE_PATH") {
+    if let Ok(p) = std::env::var("FRONDOSE_NODE_PATH").or_else(|_| std::env::var("MAI_NODE_PATH")) {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
-            eprintln!("[mai-tauri] ignoring MAI_NODE_PATH={} (not a file)", p);
+            eprintln!(
+                "[mai-tauri] ignoring FRONDOSE_NODE_PATH/MAI_NODE_PATH={} (not a file)",
+                p
+            );
         }
     }
     if let Some(dir) = bundled_resource_dir() {
@@ -364,18 +367,23 @@ fn resolve_node() -> String {
 }
 
 /// [P-APP-6] Resolve the app sidecar entrypoint (dist/app/sidecarMain.js).
-/// Replaces the CLI-routed sidecar boot. MAI_SIDECAR_BIN_PATH overrides
+/// Replaces the CLI-routed sidecar boot. FRONDOSE_SIDECAR_BIN_PATH overrides
 /// (dev / sibling installs). Bundled path is the .app's
 /// Contents/Resources/runtime/dist/app/sidecarMain.js. CLI `serve` stays in
 /// parallel during P-APP-11 migration; it is not the spawn target.
 fn resolve_sidecar_bin() -> String {
-    if let Ok(p) = std::env::var("MAI_SIDECAR_BIN_PATH") {
+    if let Ok(p) =
+        std::env::var("FRONDOSE_SIDECAR_BIN_PATH").or_else(|_| std::env::var("MAI_SIDECAR_BIN_PATH"))
+    {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
-            eprintln!("[mai-tauri] ignoring MAI_SIDECAR_BIN_PATH={} (not a file)", p);
+            eprintln!(
+                "[mai-tauri] ignoring FRONDOSE_SIDECAR_BIN_PATH/MAI_SIDECAR_BIN_PATH={} (not a file)",
+                p
+            );
         }
     }
     if let Some(dir) = bundled_resource_dir() {
@@ -398,7 +406,7 @@ fn resolve_sidecar_bin() -> String {
 /// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
 /// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/mai-agent` →
 /// `~/.mai/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
-/// `MAI_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
+/// `FRONDOSE_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
 /// relative path so `cargo tauri dev` (CWD = src-tauri) keeps working.
 /// NOTE: a fresh Mac with ONLY the `.app` (no prior install.sh) hits the dev
 /// fallback, fails to resolve, and exits via the existing `await_serve_ready`
@@ -406,13 +414,16 @@ fn resolve_sidecar_bin() -> String {
 // Kept for the P-APP-11 transition; delete with the CLI entrypoint.
 #[allow(dead_code)]
 fn resolve_mai_bin() -> String {
-    if let Ok(p) = std::env::var("MAI_BIN_PATH") {
+    if let Ok(p) = std::env::var("FRONDOSE_BIN_PATH").or_else(|_| std::env::var("MAI_BIN_PATH")) {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
-            eprintln!("[mai-tauri] ignoring MAI_BIN_PATH={} (not a file)", p);
+            eprintln!(
+                "[mai-tauri] ignoring FRONDOSE_BIN_PATH/MAI_BIN_PATH={} (not a file)",
+                p
+            );
         }
     }
     if let Some(dir) = bundled_resource_dir() {
@@ -537,8 +548,8 @@ async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
         .arg(sock.to_str().ok_or("invalid sock path utf-8")?)
         .arg("--token")
         .arg(token)
-        .env("MAI_AUTOUPDATE", "skip")
-        .env("MAI_SIDECAR_OWNER", "frondose-app")
+        .env("FRONDOSE_AUTOUPDATE", "skip")
+        .env("FRONDOSE_SIDECAR_OWNER", "frondose-app")
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .spawn()

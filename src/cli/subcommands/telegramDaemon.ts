@@ -8,6 +8,7 @@
 import path from "node:path";
 import type { CoreMessage } from "ai";
 import { resolveModel } from "../../agent/modelResolver.js";
+import { frondoseEnv } from "../../env.js";
 import { BOUNDARY } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
@@ -54,7 +55,7 @@ export async function runTelegramDaemon(): Promise<void> {
     cleanup();
     process.exit(1);
   }
-  const tcPath = process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
+  const tcPath = frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
   const cfg = readTelegramConfig(tcPath);
   if (cfg.boundUserId === null) {
     process.stderr.write("[telegram daemon] boundUserId null; run `mai telegram bind` first\n");
@@ -63,11 +64,11 @@ export async function runTelegramDaemon(): Promise<void> {
   }
 
   // (4) Build agent stack — identical signature to runRepl setup.
-  const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
-  const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
-  const auditPath = process.env.MAI_AUDIT_PATH ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
-  const cdpPort = process.env.MAI_CDP_PORT ? parseInt(process.env.MAI_CDP_PORT, 10) : 9222;
-  const profileDir = process.env.MAI_PROFILE_DIR ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
+  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
+  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+  const cdpPort = frondoseEnv("CDP_PORT") ? parseInt(frondoseEnv("CDP_PORT") ?? "", 10) : 9222;
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
 
   const identity = readIdentity(identityPath);
   const model = resolveModel({});
@@ -103,7 +104,7 @@ export async function runTelegramDaemon(): Promise<void> {
     onStepFinish: auditWriter,
     out: process.stdout,
     configPath: tcPath,
-    uploadAllowlistRoot: process.env.MAI_UPLOAD_ALLOWLIST ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
     // P-23 §6.7: daemon always uses the shared-session writer.
     appendMessages: appendMessagesShared,
   };

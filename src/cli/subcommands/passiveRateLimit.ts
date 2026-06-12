@@ -1,3 +1,5 @@
+import { frondoseEnv } from "../../env.js";
+
 export interface PassiveRateLimiterOpts {
   shortS: number;
   longN: number;
@@ -63,8 +65,8 @@ export class PassiveRateLimiter {
 
 export function passiveRateLimiterOptsFromEnv(): PassiveRateLimiterOpts {
   return {
-    shortS: positiveInteger(process.env.MAI_PASSIVE_RATE_SHORT_S, 30),
-    longN: positiveInteger(process.env.MAI_PASSIVE_RATE_LONG_N, 5),
-    longS: positiveInteger(process.env.MAI_PASSIVE_RATE_LONG_S, 60),
+    shortS: positiveInteger(frondoseEnv("PASSIVE_RATE_SHORT_S"), 30),
+    longN: positiveInteger(frondoseEnv("PASSIVE_RATE_LONG_N"), 5),
+    longS: positiveInteger(frondoseEnv("PASSIVE_RATE_LONG_S"), 60),
   };
 }

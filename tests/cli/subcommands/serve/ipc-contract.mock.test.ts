@@ -29,7 +29,7 @@ import ts from "typescript";
 
 const BEARER_HEADER_NAME = "Authorization";
 const BEARER_PREFIX = "Bearer ";
-const MAI_SIDECAR_OWNER_VALUE = "frondose-app";
+const FRONDOSE_SIDECAR_OWNER_VALUE = "frondose-app";
 
 // ─── §B Goldens ──────────────────────────────────────────────────────────────
 
@@ -354,21 +354,21 @@ describe("IPC.Transport — bearer header, owner constant, boot flags, chmod", (
     );
   });
 
-  it("T-IPC.Transport.2: when main.rs and host.ts are read, both sides carry the same MAI_SIDECAR_OWNER value", () => {
-    // Given: main.rs sets env MAI_SIDECAR_OWNER="frondose-app" for the sidecar process
+  it("T-IPC.Transport.2: when main.rs and host.ts are read, both sides carry the same FRONDOSE_SIDECAR_OWNER value (F-REN-3 flip)", () => {
+    // Given: main.rs sets env FRONDOSE_SIDECAR_OWNER="frondose-app" for the sidecar process (F-REN-3 Group B rename)
     // When: both files are read as text
-    // Then: both contain the literal "frondose-app"; a rename on either side fails
+    // Then: main.rs contains "FRONDOSE_SIDECAR_OWNER" + the value; host.ts still has the value
 
     const mainRs = readFileSync(MAIN_RS,  "utf-8");
     const hostTs = readFileSync(HOST_TS,  "utf-8");
 
     assert.ok(
-      mainRs.includes("MAI_SIDECAR_OWNER") && mainRs.includes(`"${MAI_SIDECAR_OWNER_VALUE}"`),
-      `main.rs must set MAI_SIDECAR_OWNER to "${MAI_SIDECAR_OWNER_VALUE}"`,
+      mainRs.includes("FRONDOSE_SIDECAR_OWNER") && mainRs.includes(`"${FRONDOSE_SIDECAR_OWNER_VALUE}"`),
+      `main.rs must set FRONDOSE_SIDECAR_OWNER to "${FRONDOSE_SIDECAR_OWNER_VALUE}" (F-REN-3 Group B rename)`,
     );
     assert.ok(
-      hostTs.includes(`"${MAI_SIDECAR_OWNER_VALUE}"`),
-      `host.ts must contain the literal "${MAI_SIDECAR_OWNER_VALUE}" (APP_SIDECAR_OWNER constant)`,
+      hostTs.includes(`"${FRONDOSE_SIDECAR_OWNER_VALUE}"`),
+      `host.ts must contain the literal "${FRONDOSE_SIDECAR_OWNER_VALUE}" (APP_SIDECAR_OWNER constant)`,
     );
   });
 

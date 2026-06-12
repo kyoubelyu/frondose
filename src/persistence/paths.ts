@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
+import { frondoseEnv } from "../env.js";
 
 export function getHomeBase(): string {
-  const raw = process.env.MAI_HOME_BASE;
+  const raw = frondoseEnv("HOME_BASE");
   return raw && raw.trim() !== "" ? raw : homedir();
 }

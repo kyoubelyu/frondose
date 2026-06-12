@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { frondoseEnv } from "../env.js";
 import { getHomeBase } from "../persistence/paths.js";
 
 /**
@@ -7,13 +8,13 @@ import { getHomeBase } from "../persistence/paths.js";
  * defaults `[~/Downloads, ~/Desktop, ~/Documents]` to scout's research recommendation
  * + dispatch instruction: a single quarantine dir under mai-agent's namespace, minimizing
  * blast radius if a path-traversal bug surfaces. Operator can override via
- * `MAI_UPLOAD_ALLOWLIST=/path1:/path2` for ad-hoc allowlists.
+ * `FRONDOSE_UPLOAD_ALLOWLIST=/path1:/path2` for ad-hoc allowlists.
  */
 const DEFAULTS = (): string[] => [path.join(getHomeBase(), ".mai", "agent", "uploads")];
 
 /** Resolve the upload allowlist from env (colon-separated) or defaults. */
 export function resolveUploadAllowlist(): string[] {
-  const env = process.env.MAI_UPLOAD_ALLOWLIST;
+  const env = frondoseEnv("UPLOAD_ALLOWLIST");
   if (env && env.length > 0) {
     return env
       .split(":")
@@ -32,14 +33,14 @@ export function assertUploadPathAllowed(filePath: string): void {
   if (!ok) {
     throw new Error(
       `Upload path '${canonical}' is outside the allowed directories. ` +
-        `Allowed: ${allowed.join(", ")}. Set MAI_UPLOAD_ALLOWLIST=path1:path2 to override.`,
+        `Allowed: ${allowed.join(", ")}. Set FRONDOSE_UPLOAD_ALLOWLIST=path1:path2 to override (legacy MAI_UPLOAD_ALLOWLIST still accepted).`,
     );
   }
 }
 
 /**
  * P-9 D-7: read-side file sandbox. Allowed sources:
- *   (a) MAI_UPLOAD_ALLOWLIST dirs (operator-controlled)
+ *   (a) FRONDOSE_UPLOAD_ALLOWLIST dirs (operator-controlled)
  *   (b) os.tmpdir() subtree (where screenshot tool writes)
  *   (c) ~/.mai/agent/** subtree (own state files)
  *   (d) <cwd>/tests/fixtures/** subtree (validator's mock fixtures; only when

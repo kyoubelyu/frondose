@@ -168,7 +168,7 @@ describe("buildModel error — generic provider list (no pre-P-21 hint) (G-P36.1
 
 // ─── T-FA.3 ───────────────────────────────────────────────────────────────────
 
-describe("buildModel error — spec-source naming: MAI_MODEL env var (G-P36.3)", () => {
+describe("buildModel error — spec-source naming: FRONDOSE_MODEL env var (G-P36.3 + F-REN-3 flip)", () => {
   let saved: Record<string, string | undefined>;
   beforeEach(() => {
     saved = saveEnv(...MODEL_ENV_KEYS);
@@ -179,11 +179,11 @@ describe("buildModel error — spec-source naming: MAI_MODEL env var (G-P36.3)",
 
   it(
     "T-FA.3: when process.env.MAI_MODEL='openai:bad' and spec equals that env value, " +
-      "buildModel error names 'the MAI_MODEL env var' as the source",
+      "buildModel error names 'the FRONDOSE_MODEL env var' as the source",
     () => {
-      // Given: MAI_MODEL env var set to failing spec; no matching provider configured
-      // When:  resolveModel({}) → resolveModelSpec picks up MAI_MODEL → buildModel throws
-      // Then:  error message contains "MAI_MODEL"
+      // Given: MAI_MODEL env var set to failing spec (legacy setter); no matching provider configured
+      // When:  resolveModel({}) → resolveModelSpec picks up MAI_MODEL via shim → buildModel throws
+      // Then:  error message contains "FRONDOSE_MODEL" (F-REN-3: modelResolver.ts:167 updated)
       const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fa3-"));
       // Empty HOME → no secrets.json → no providers
       process.env.HOME = tmpHome;
@@ -197,8 +197,8 @@ describe("buildModel error — spec-source naming: MAI_MODEL env var (G-P36.3)",
           (err: unknown) => {
             assert.ok(err instanceof Error, "T-FA.3: must throw an Error instance");
             assert.ok(
-              err.message.includes("MAI_MODEL"),
-              `T-FA.3: error must name 'MAI_MODEL' as the spec source; got: ${err.message}`,
+              err.message.includes("FRONDOSE_MODEL"),
+              `T-FA.3: error must name 'FRONDOSE_MODEL' as the spec source (F-REN-3 flip); got: ${err.message}`,
             );
             return true;
           },

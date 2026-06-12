@@ -3,11 +3,12 @@ import path from "node:path";
 import { generateText, type LanguageModel, tool } from "ai";
 import { z } from "zod";
 import { resolveModel, resolveModelSpec } from "../../agent/modelResolver.js";
+import { frondoseEnv } from "../../env.js";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { assertFileReadable } from "../../linkedin/uploadAllowlist.js";
 import { readAuth } from "../../persistence/auth.js";
 
-// P-57d (item b): default unset. Operator must configure MAI_VISION_MODEL to a
+// P-57d (item b): default unset. Operator must configure FRONDOSE_VISION_MODEL to a
 // custom-URL vision-capable provider per project_llm_scope_custom_url_only.
 const DEFAULT_VISION_MODEL = "";
 
@@ -25,11 +26,11 @@ const analyzeScreenshotParams = z.object({
 
 /**
  * P-9 F-4 / D-6: analyze_screenshot tool. Secondary generateText call to a
- * vision-capable model via MAI_VISION_MODEL. Main streamText session model
+ * vision-capable model via FRONDOSE_VISION_MODEL. Main streamText session model
  * UNCHANGED — vision call is fully isolated.
  *
  * D-7 file sandbox: assertFileReadable() called on the supplied path BEFORE
- * readFileSync. Allowed: ~/.mai/agent/**, MAI_UPLOAD_ALLOWLIST, os.tmpdir(),
+ * readFileSync. Allowed: ~/.mai/agent/**, FRONDOSE_UPLOAD_ALLOWLIST, os.tmpdir(),
  * tests/fixtures/** (when cwd is repo root).
  *
  * D-13: NOT in IDEMPOTENT_TOOLS (vision tokens cost; retry could double-bill).
@@ -43,11 +44,12 @@ export function makeAnalyzeScreenshotTool() {
     description:
       "Analyze a screenshot file via a vision-capable LLM. " +
       "Pass an absolute path to a PNG/JPEG file (typically the path returned by the screenshot tool). " +
-      "Returns a text description. P-57d: default unset — operator must set `MAI_VISION_MODEL` " +
+      "Returns a text description. P-57d: default unset — operator must set `FRONDOSE_VISION_MODEL` " +
+      "(legacy `MAI_VISION_MODEL` still accepted) " +
       "to a custom-URL vision-capable provider to enable this tool. Otherwise prefer `inspect` " +
       "(accessibility tree primitive). External vision APIs (anthropic-direct/openai-direct) " +
       "are scope-disabled per `project_llm_scope_custom_url_only`. " +
-      'Returns {ok:false, error:{kind:"vision_unavailable"}} when MAI_VISION_MODEL is unset (operator scope lock).',
+      'Returns {ok:false, error:{kind:"vision_unavailable"}} when FRONDOSE_VISION_MODEL is unset (operator scope lock).',
     parameters: analyzeScreenshotParams,
     execute: async ({ path: filePath, prompt }, opts) => {
       try {
@@ -56,16 +58,16 @@ export function makeAnalyzeScreenshotTool() {
         const ext = path.extname(filePath).toLowerCase();
         const mimeType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
         const auth = readAuth();
-        const visionSpec = process.env.MAI_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL;
+        const visionSpec = frondoseEnv("VISION_MODEL") ?? auth?.visionModel ?? DEFAULT_VISION_MODEL;
         if (visionSpec === "") {
           return {
             ok: false,
             error: {
               kind: "vision_unavailable",
               message:
-                "Vision unavailable — current MAI_MODEL doesn't support vision. " +
-                "Set MAI_VISION_MODEL to a custom-URL vision-capable provider OR use the inspect tool instead. " +
-                "operator scope: MAI_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled.",
+                "Vision unavailable — current FRONDOSE_MODEL doesn't support vision. " +
+                "Set FRONDOSE_VISION_MODEL to a custom-URL vision-capable provider (legacy MAI_VISION_MODEL still accepted) OR use the inspect tool instead. " +
+                "operator scope: FRONDOSE_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled.",
             },
           };
         }
@@ -77,7 +79,7 @@ export function makeAnalyzeScreenshotTool() {
             "analyze_screenshot",
             "runtime_error",
             `Vision model resolution failed for '${visionSpec}': ${e instanceof Error ? e.message : String(e)}. ` +
-              "Use MAI_VISION_MODEL=<provider>:<modelId> with a configured DeepSeek/custom OpenAI-compatible provider; direct Anthropic/OpenAI vision providers are scope-disabled.",
+              "Use FRONDOSE_VISION_MODEL=<provider>:<modelId> with a configured DeepSeek/custom OpenAI-compatible provider; direct Anthropic/OpenAI vision providers are scope-disabled.",
           );
         }
         const runVision = (m: LanguageModel) =>
@@ -111,7 +113,7 @@ export function makeAnalyzeScreenshotTool() {
               "analyze_screenshot",
               "runtime_error",
               `Vision call failed for '${visionSpec}': ${visionErr instanceof Error ? visionErr.message : String(visionErr)}. ` +
-                `Set MAI_VISION_MODEL=<provider>:<modelId> to a reachable vision-capable provider ` +
+                `Set FRONDOSE_VISION_MODEL=<provider>:<modelId> to a reachable vision-capable provider ` +
                 `(the main model '${mainSpec}' is not recognized as vision-capable, so no fallback was attempted).`,
             );
           }
@@ -125,7 +127,7 @@ export function makeAnalyzeScreenshotTool() {
               "runtime_error",
               `Vision call failed on '${visionSpec}' and the fallback model '${mainSpec}' could not be resolved: ` +
                 `${resolveErr instanceof Error ? resolveErr.message : String(resolveErr)}. ` +
-                `Set MAI_VISION_MODEL to a reachable vision-capable provider.`,
+                `Set FRONDOSE_VISION_MODEL to a reachable vision-capable provider.`,
             );
           }
           try {
@@ -141,7 +143,7 @@ export function makeAnalyzeScreenshotTool() {
               "analyze_screenshot",
               "runtime_error",
               `Vision call failed on '${visionSpec}' and the fallback '${mainSpec}'. ` +
-                `Set MAI_VISION_MODEL to a reachable vision-capable provider.`,
+                `Set FRONDOSE_VISION_MODEL to a reachable vision-capable provider.`,
             );
           }
         }

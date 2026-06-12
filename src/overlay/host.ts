@@ -1,4 +1,5 @@
 import type { CdpHandle } from "../cdp/types.js";
+import { frondoseEnv } from "../env.js";
 import { OVERLAY_BOOTSTRAP_JS } from "./bootstrap.js";
 
 const APP_SIDECAR_OWNER = "frondose-app";
@@ -9,8 +10,8 @@ export async function installOverlay(client: CdpHandle): Promise<string> {
   await client.Runtime.enable();
   await client.Page.enable();
   await client.Runtime.addBinding({ name: "__maiPost" });
-  const passiveEnabled = (process.env.MAI_PASSIVE_SUGGEST ?? "on").toLowerCase() !== "off";
-  const overlayOwner = process.env.MAI_SIDECAR_OWNER === APP_SIDECAR_OWNER ? APP_SIDECAR_OWNER : DEFAULT_OVERLAY_OWNER;
+  const passiveEnabled = (frondoseEnv("PASSIVE_SUGGEST") ?? "on").toLowerCase() !== "off";
+  const overlayOwner = frondoseEnv("SIDECAR_OWNER") === APP_SIDECAR_OWNER ? APP_SIDECAR_OWNER : DEFAULT_OVERLAY_OWNER;
   const substituted = OVERLAY_BOOTSTRAP_JS.replace(/__MAI_PASSIVE_ENABLED__/g, JSON.stringify(passiveEnabled))
     .replace(/__MAI_OVERLAY_OWNER__/g, JSON.stringify(overlayOwner))
     .replace(/__MAI_OVERLAY_VERSION__/g, JSON.stringify(OVERLAY_VERSION));
