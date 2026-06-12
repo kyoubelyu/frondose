@@ -22,6 +22,7 @@ import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../persisten
 import { applyIdentityPatch, readIdentity } from "../../../persistence/identity.js";
 import { type IdentityPatch, identityPatchSchema } from "../../../persistence/identitySchema.js";
 import { readMode } from "../../../persistence/mode.js";
+import { readSearchConfig, writeSearchConfig } from "../../../persistence/search.js";
 import type { ServeDeps } from "./context.js";
 
 export interface SettingsView {
@@ -35,6 +36,7 @@ export interface SettingsView {
   };
   identity: IdentityPatch;
   soul: { override: string | null };
+  search: { brave: { hasKey: boolean; maskedKey: string | null } };
   updateServerUrl: string | null; // P-58d.1: plaintext, NOT masked (contrast llm.maskedKey)
 }
 
@@ -63,6 +65,7 @@ const settingsPatchSchema = z.object({
       key: z.string().optional(), // write-only; isFreshKey gates it
     })
     .optional(),
+  search: z.object({ brave: z.object({ key: z.string().optional() }).optional() }).optional(),
   identity: identityPatchSchema.optional(), // EXISTING schema (identitySchema.ts:44)
   soul: z.object({ override: z.string().max(3000).nullable() }).optional(), // EXISTING ≤3000 constraint
   updateServerUrl: z.string().url().nullable().optional(), // P-58d.1: omit=unchanged, null=clear, url=set
@@ -94,9 +97,11 @@ function chooseSettingsProvider(patch: SettingsPatch["llm"], currentProvider: st
 export function readSettings(): SettingsView {
   const cfg = readConfig();
   const auth = readAuth();
+  const search = readSearchConfig();
   const { provider, model } = splitSpec(auth?.default);
   const entry = provider ? auth?.providers?.[provider] : undefined;
   const key = entry?.key;
+  const braveKey = search.braveApiKey?.trim();
   const { updatedAt, ...identity } = cfg.identity ?? ({} as Record<string, unknown>);
   void updatedAt; // intentionally stripped from the view (no updatedAt leak)
   return {
@@ -110,6 +115,7 @@ export function readSettings(): SettingsView {
     },
     identity: identity as IdentityPatch,
     soul: { override: cfg.soul.override },
+    search: { brave: { hasKey: Boolean(braveKey), maskedKey: braveKey ? maskKey(braveKey) : null } },
     updateServerUrl: cfg.updateServerUrl, // P-58d.1: plaintext
   };
 }
@@ -145,6 +151,13 @@ export function applySettings(patch: SettingsPatch): void {
         visionModel: auth.visionModel,
         providers: { ...(auth.providers ?? {}), [provider]: { key, baseUrl, type: "openai" } }, // P-57d
       });
+    }
+  }
+  if (patch.search?.brave) {
+    const existingSearch = readSearchConfig();
+    const submitted = patch.search.brave.key?.trim();
+    if (submitted && isFreshKey(submitted, existingSearch.braveApiKey)) {
+      writeSearchConfig({ ...existingSearch, braveApiKey: submitted });
     }
   }
   if (patch.identity || patch.soul || patch.updateServerUrl !== undefined) {

@@ -107,6 +107,15 @@ if [ "$NODE_ABI" != "${SQLITE_ABI#v}" ]; then
   exit 1
 fi
 ( cd "$RUNTIME" && ./node -e "require('better-sqlite3'); require('ssh2')" )
+BRAVE_MCP_SERVER_SCRIPT="$RUNTIME/node_modules/@brave/brave-search-mcp-server/dist/index.js"
+if [ ! -f "$BRAVE_MCP_SERVER_SCRIPT" ]; then
+  echo "[build-release] FAILED: Brave Search MCP server script missing at $BRAVE_MCP_SERVER_SCRIPT" >&2
+  exit 1
+fi
+(
+  cd "$RUNTIME"
+  "$RUNTIME/node" --input-type=module -e "await import('@modelcontextprotocol/sdk/client/index.js'); await import('@modelcontextprotocol/sdk/client/stdio.js')"
+)
 
 echo "[build-release] Phase 0 OK: runtime assembled ($(du -sh "$RUNTIME" | cut -f1))"
 # ── end Phase 0 ──

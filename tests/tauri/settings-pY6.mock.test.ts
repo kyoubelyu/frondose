@@ -3,8 +3,9 @@
  *
  * Settings panel UI (plan §6.4-D/F): `createSettingsPanel({invoke, surfaceError})` — open() loads via
  * mai_get_settings (key field shows the MASK as placeholder, never raw), save() collects + POSTs a key ONLY when
- * freshly typed, then re-loads (re-masks). Custom-URL-only (P-57d): the form exposes baseUrl + model + key ONLY —
- * NO Anthropic/OpenAI-direct/Brave/Tavily preset. T-Scope.1 guards config/secrets schemas unchanged + write-range.
+ * freshly typed, then re-loads (re-masks). Custom-URL-only (P-57d): the LLM form exposes baseUrl + model + key ONLY;
+ * Brave MCP search key is allowed, while Anthropic/OpenAI-direct/Tavily presets are not. T-Scope.1 guards
+ * config/secrets schemas unchanged + write-range.
  *
  * LOAD: MIXED. `src/tauri/ui/settings.ts` is NEW (builder 4b B4) → GATE-ON-BUILDER (dynamic import of
  * createSettingsPanel; a DOM stub + mock invoke drive it at Step 5). T-UI.3 (form) + T-Scope.1 are STRUCTURAL —
@@ -12,7 +13,7 @@
  * jsdom is NOT a project dep — a minimal getElementById stub is used.
  *
  * Gate coverage: G-PY6.6 (mask placeholder + key-only-when-typed + re-mask), G-PY6.1 (UI never shows raw),
- *   G-PY6.5 (custom-URL-only form), G-PY6.7 (schemas unchanged + write-range).
+ *   G-PY6.5 (custom-URL-only LLM form; Brave MCP search key is allowed), G-PY6.7 (schemas unchanged + write-range).
  *
  * Run (mock): node --import tsx --test --test-force-exit --test-timeout=30000 \
  *   tests/tauri/settings-pY6.mock.test.ts
@@ -198,10 +199,10 @@ describe("settings panel — save sends key ONLY when typed (G-PY6.6, .2)", () =
   });
 });
 
-describe("settings panel — custom-URL-only form (structural, P-57d) (G-PY6.5)", () => {
-  // Given: index.html + settings.ts. When: inspected. Then: the panel exposes baseUrl + model + key ONLY;
-  //        NO anthropic / openai-direct / brave / tavily preset/control token.
-  it("T-UI.3: the settings form is custom-URL-only — baseUrl/model/key, NO anthropic/brave/tavily preset", () => {
+describe("settings panel — custom-URL-only LLM form (structural, P-57d/P-BRAVE-MCP) (G-PY6.5)", () => {
+  // Given: index.html + settings.ts. When: inspected. Then: the LLM controls stay baseUrl/model/key only,
+  //        with NO anthropic / openai-direct / tavily preset/control token. Brave MCP search key is allowed.
+  it("T-UI.3: the settings form keeps custom-URL-only LLM controls and no direct-provider/Tavily preset", () => {
     const start = INDEX_HTML.indexOf('id="settings-panel"');
     assert.ok(start > 0, "the #settings-panel section exists in index.html");
     const panel = INDEX_HTML.slice(start, INDEX_HTML.indexOf("</section>", start));
@@ -209,10 +210,14 @@ describe("settings panel — custom-URL-only form (structural, P-57d) (G-PY6.5)"
       assert.ok(panel.includes(id), `panel has the ${id} input`);
     }
     const settingsTs = existsSync(SETTINGS_TS_PATH) ? readFileSync(SETTINGS_TS_PATH, "utf8") : "";
-    for (const tok of ["anthropic", "brave", "tavily", "api.openai.com", "api.anthropic.com"]) {
+    for (const tok of ["anthropic", "tavily", "api.openai.com", "api.anthropic.com"]) {
       assert.ok(!panel.toLowerCase().includes(tok), `index.html panel must not mention ${tok} (custom-URL-only)`);
       assert.ok(!settingsTs.toLowerCase().includes(tok), `settings.ts must not mention ${tok} (custom-URL-only)`);
     }
+    assert.ok(
+      !panel.toLowerCase().includes("api.search.brave.com") && !settingsTs.toLowerCase().includes("api.search.brave.com"),
+      "Brave MCP settings must not guide a direct Brave HTTP adapter",
+    );
   });
 });
 
