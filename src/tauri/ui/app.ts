@@ -268,7 +268,7 @@ async function applyMode(mode: AppMode): Promise<void> {
     passiveEnabled: togglesForMode(mode).passiveEnabled,
   };
   try {
-    const cronResp = await invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode", {
+    const cronResp = await invoke<{ ok: boolean; cronEnabled?: boolean }>("frondose_set_cron_mode", {
       enabled: toggles.cronEnabled,
     });
     cronEnabled = cronResp.ok ? (cronResp.cronEnabled ?? toggles.cronEnabled) : toggles.cronEnabled;
@@ -277,7 +277,7 @@ async function applyMode(mode: AppMode): Promise<void> {
     surfaceError("Set mode (cron)", e);
   }
   try {
-    const passiveResp = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("mai_set_passive_mode", {
+    const passiveResp = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("frondose_set_passive_mode", {
       enabled: toggles.passiveEnabled,
     });
     passiveEnabled = passiveResp.ok ? (passiveResp.passiveEnabled ?? toggles.passiveEnabled) : toggles.passiveEnabled;
@@ -290,7 +290,7 @@ async function applyMode(mode: AppMode): Promise<void> {
 
 async function loadIdentity(): Promise<void> {
   try {
-    const r = await invoke<IdentityResp>("mai_identity");
+    const r = await invoke<IdentityResp>("frondose_identity");
     if (r.ok === false) {
       nameEl.classList.add("error");
       nameEl.textContent = r.reason;
@@ -311,7 +311,7 @@ async function loadIdentity(): Promise<void> {
 async function abortTurn(): Promise<void> {
   if (appState !== "running" || currentTurnId === null) return;
   try {
-    await invoke("mai_agent_abort");
+    await invoke("frondose_agent_abort");
   } catch (e) {
     // SSE error/done event owns UI recovery, but surface the failure too.
     surfaceError("Pause/abort", e);
@@ -335,7 +335,7 @@ async function sendCommand(): Promise<void> {
   retryBtnEl.classList.add("hidden");
   errorBannerEl.classList.add("hidden");
   try {
-    const r = await invoke<TurnResp>("mai_agent_turn", { prompt });
+    const r = await invoke<TurnResp>("frondose_agent_turn", { prompt });
     if (r.ok === false) {
       errorBannerEl.textContent = `turn rejected: ${r.reason}`;
       transition("error");
@@ -364,7 +364,7 @@ async function performSteer(newPrompt: string): Promise<void> {
   const previousTurnId = currentTurnId;
   try {
     try {
-      await invoke("mai_agent_abort");
+      await invoke("frondose_agent_abort");
     } catch {
       // The follow-up turn response owns the visible error if abort fails.
     }
@@ -374,7 +374,7 @@ async function performSteer(newPrompt: string): Promise<void> {
       transition("error");
       return;
     }
-    const r = await invoke<TurnResp>("mai_agent_turn", { prompt: newPrompt });
+    const r = await invoke<TurnResp>("frondose_agent_turn", { prompt: newPrompt });
     if (r.ok === false) {
       errorBannerEl.textContent = `steer resubmit rejected: ${r.reason}`;
       transition("error");
@@ -398,7 +398,7 @@ async function performRetry(): Promise<void> {
   retryBtnEl.classList.add("hidden");
   errorBannerEl.classList.add("hidden");
   try {
-    const r = await invoke<TurnResp>("mai_agent_retry");
+    const r = await invoke<TurnResp>("frondose_agent_retry");
     if (r.ok === false) {
       errorBannerEl.textContent = `retry rejected: ${r.reason}`;
       errorBannerEl.classList.remove("hidden");
@@ -438,7 +438,7 @@ function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepSt
 async function approveWorkflowStep(): Promise<void> {
   if (workflowView?.pendingStepId === null || workflowView === null) return;
   try {
-    await invoke("mai_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
+    await invoke("frondose_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
   } catch (e) {
     surfaceError("Approve", e);
   }
@@ -447,7 +447,7 @@ async function approveWorkflowStep(): Promise<void> {
 async function declineWorkflowStep(): Promise<void> {
   if (workflowView?.pendingStepId === null || workflowView === null) return;
   try {
-    await invoke("mai_workflow_decline", {
+    await invoke("frondose_workflow_decline", {
       workflowId: workflowView.workflowId,
       stepId: workflowView.pendingStepId,
       reason: "operator_declined",
@@ -460,7 +460,7 @@ async function declineWorkflowStep(): Promise<void> {
 async function handoffWorkflow(): Promise<void> {
   if (workflowView === null) return;
   try {
-    await invoke("mai_workflow_handoff", { workflowId: workflowView.workflowId });
+    await invoke("frondose_workflow_handoff", { workflowId: workflowView.workflowId });
   } catch (e) {
     surfaceError("Hand off to Auto", e);
   }
@@ -490,7 +490,7 @@ function handleEvent(payload: SseFrame): void {
       break;
     case "turn-started":
       // [P-59 FIX-2/3b] Server-initiated turns (resume/card/profile-activate/cron) have no
-      // mai_agent_turn invoke to set currentTurnId, so adopt the announced turn here.
+      // frondose_agent_turn invoke to set currentTurnId, so adopt the announced turn here.
       // P-Y2-MA G1: every turn-started opens a NEW agent bubble; cron/resume turns get one too.
       currentTurnId = payload.turnId;
       beginAgentBubble();

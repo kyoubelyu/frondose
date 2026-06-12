@@ -141,7 +141,7 @@ describe("real-sidecar integration — sidecar booted (G-PY2.1.9)", () => {
 });
 
 describe("real-sidecar integration — switcher flips cronEnabled (G-PY2.1.9, G-PY2.1.3)", () => {
-  it("T-Integ.1: Auto switcher invoke (mai_set_cron_mode{enabled:true}) → POST /agent/cron-mode flips cronEnabled TRUE", async () => {
+  it("T-Integ.1: Auto switcher invoke (frondose_set_cron_mode{enabled:true}) → POST /agent/cron-mode flips cronEnabled TRUE", async () => {
     // Given: the running sidecar
     // When:  the Auto switcher's invoke is replayed to its mapped endpoint /agent/cron-mode {enabled:true}
     // Then:  the sidecar STATE changes — response {ok:true, cronEnabled:true}
@@ -151,7 +151,7 @@ describe("real-sidecar integration — switcher flips cronEnabled (G-PY2.1.9, G-
     assert.equal(r.body.cronEnabled, true, "Auto switcher must flip sidecar cronEnabled TRUE");
   });
 
-  it("T-Integ.2: Manual switcher invoke (mai_set_cron_mode{enabled:false}) → POST /agent/cron-mode flips cronEnabled FALSE", async () => {
+  it("T-Integ.2: Manual switcher invoke (frondose_set_cron_mode{enabled:false}) → POST /agent/cron-mode flips cronEnabled FALSE", async () => {
     // Given: cronEnabled currently true (from T-Integ.1)
     // When:  the Manual switcher's invoke is replayed {enabled:false}
     // Then:  the sidecar state flips back — {ok:true, cronEnabled:false} (proves the flip is real + bidirectional)
@@ -160,7 +160,7 @@ describe("real-sidecar integration — switcher flips cronEnabled (G-PY2.1.9, G-
     assert.equal(r.body.cronEnabled, false, "Manual switcher must flip sidecar cronEnabled FALSE");
   });
 
-  it("T-Integ.3: passive invoke (mai_set_passive_mode{enabled:false}) → POST /agent/passive-mode handled, passiveEnabled:false", async () => {
+  it("T-Integ.3: passive invoke (frondose_set_passive_mode{enabled:false}) → POST /agent/passive-mode handled, passiveEnabled:false", async () => {
     // Given: the running sidecar
     // When:  the switcher's passive invoke is replayed {enabled:false} (R-3 Option II: passive OFF both modes)
     // Then:  {ok:true, passiveEnabled:false}
@@ -182,21 +182,21 @@ describe("real-sidecar integration — turn/workflow routes are handled, not cra
     );
   };
 
-  it("T-Integ.4: takeover/pause invoke (mai_agent_abort) → POST /agent/abort is handled (no running turn ⇒ ok:false, not a crash)", async () => {
+  it("T-Integ.4: takeover/pause invoke (frondose_agent_abort) → POST /agent/abort is handled (no running turn ⇒ ok:false, not a crash)", async () => {
     // Given: no running turn
     // When:  the abort invoke is replayed to /agent/abort
     // Then:  a structured handled response (route + handler exist; sidecar does not crash)
     handled(await uds("POST", "/agent/abort", {}), "abort");
   });
 
-  it("T-Integ.5: retry invoke (mai_agent_retry) → POST /agent/retry is handled (no last turn ⇒ ok:false, not a crash)", async () => {
+  it("T-Integ.5: retry invoke (frondose_agent_retry) → POST /agent/retry is handled (no last turn ⇒ ok:false, not a crash)", async () => {
     // Given: no prior turn
     // When:  the retry invoke is replayed to /agent/retry
     // Then:  a structured handled response
     handled(await uds("POST", "/agent/retry", {}), "retry");
   });
 
-  it("T-Integ.6: handoff invoke (mai_workflow_handoff) → POST /workflow/handoff is handled (no active workflow ⇒ ok:false, not a crash)", async () => {
+  it("T-Integ.6: handoff invoke (frondose_workflow_handoff) → POST /workflow/handoff is handled (no active workflow ⇒ ok:false, not a crash)", async () => {
     // Given: no active workflow
     // When:  the handoff invoke is replayed to /workflow/handoff {workflowId}
     // Then:  a structured handled response (route exists; handler doesn't throw)

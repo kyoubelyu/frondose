@@ -87,7 +87,7 @@ function mockInvoke(getResp: Record<string, unknown>) {
   const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
   const invoke = async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args });
-    return cmd === "mai_get_settings" ? getResp : { ok: true };
+    return cmd === "frondose_get_settings" ? getResp : { ok: true };
   };
   return { invoke, calls };
 }
@@ -110,7 +110,7 @@ describe("P-BRAVE-MCP Tauri Settings UI", () => {
     const els = installDomStub();
     const m = mockInvoke(SAMPLE_GET);
 
-    // Given: mai_get_settings returns search.brave.maskedKey.
+    // Given: frondose_get_settings returns search.brave.maskedKey.
     // When: the Settings panel opens.
     // Then: settings-brave-key.value is empty and placeholder is the mask.
     await createSettingsPanel({ invoke: m.invoke, surfaceError: () => {} }).open();
@@ -133,7 +133,7 @@ describe("P-BRAVE-MCP Tauri Settings UI", () => {
     // Then: the settings patch omits search.brave.key.
     els["settings-save"].listeners.click();
     await tick();
-    const firstSet = m.calls.find((call) => call.cmd === "mai_set_settings") as {
+    const firstSet = m.calls.find((call) => call.cmd === "frondose_set_settings") as {
       args?: { settings?: { search?: { brave?: { key?: string } } } };
     };
     assert.ok(!firstSet.args?.settings?.search?.brave?.key, "empty Brave key input must not send a key");
@@ -145,7 +145,7 @@ describe("P-BRAVE-MCP Tauri Settings UI", () => {
     els["settings-brave-key"].value = "typed-brave-key";
     els["settings-save"].listeners.click();
     await tick();
-    const secondSet = m.calls.find((call) => call.cmd === "mai_set_settings") as {
+    const secondSet = m.calls.find((call) => call.cmd === "frondose_set_settings") as {
       args?: { settings?: { search?: { brave?: { key?: string } } } };
     };
     assert.equal(secondSet.args?.settings?.search?.brave?.key, "typed-brave-key");

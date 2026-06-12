@@ -79,29 +79,29 @@ async fn uds_request(
 }
 
 #[tauri::command]
-async fn mai_health(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_health(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/health", None).await
 }
 
 #[tauri::command]
-async fn mai_identity(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_identity(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/identity", None).await
 }
 
 #[tauri::command]
-async fn mai_chrome_ensure(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_chrome_ensure(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/chrome/ensure", Some(json!({}))).await
 }
 
-// P-Y6 — in-app settings (auth/identity/soul). Mirror mai_identity → GET /settings;
-// mai_set_settings POSTs the masked-safe patch. The serve handler returns a masked view.
+// P-Y6 — in-app settings (auth/identity/soul). Mirror frondose_identity → GET /settings;
+// frondose_set_settings POSTs the masked-safe patch. The serve handler returns a masked view.
 #[tauri::command]
-async fn mai_get_settings(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_get_settings(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/settings", None).await
 }
 
 #[tauri::command]
-async fn mai_set_settings(
+async fn frondose_set_settings(
     state: tauri::State<'_, MaiServeState>,
     settings: Value,
 ) -> Result<Value, String> {
@@ -112,7 +112,7 @@ async fn mai_set_settings(
 // plugin command exposed to JS → no capability change). The Settings-panel
 // button that calls this ships in P-58d.1-UI.
 #[tauri::command]
-async fn mai_check_update(app: tauri::AppHandle) -> Result<Value, String> {
+async fn frondose_check_update(app: tauri::AppHandle) -> Result<Value, String> {
     let url = read_update_server_url().ok_or("no update server URL configured")?;
     let endpoint = format!("{}/latest.json", url.trim_end_matches('/'));
     let parsed = endpoint
@@ -137,7 +137,7 @@ async fn mai_check_update(app: tauri::AppHandle) -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn mai_agent_turn(
+async fn frondose_agent_turn(
     state: tauri::State<'_, MaiServeState>,
     prompt: String,
 ) -> Result<Value, String> {
@@ -145,17 +145,17 @@ async fn mai_agent_turn(
 }
 
 #[tauri::command]
-async fn mai_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
 }
 
 #[tauri::command]
-async fn mai_agent_retry(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_agent_retry(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/retry", Some(json!({}))).await
 }
 
 #[tauri::command]
-async fn mai_set_cron_mode(
+async fn frondose_set_cron_mode(
     state: tauri::State<'_, MaiServeState>,
     enabled: bool,
 ) -> Result<Value, String> {
@@ -168,9 +168,9 @@ async fn mai_set_cron_mode(
     .await
 }
 
-// P-57g — passive auto-react toggle (mirrors mai_set_cron_mode).
+// P-57g — passive auto-react toggle (mirrors frondose_set_cron_mode).
 #[tauri::command]
-async fn mai_set_passive_mode(
+async fn frondose_set_passive_mode(
     state: tauri::State<'_, MaiServeState>,
     enabled: bool,
 ) -> Result<Value, String> {
@@ -184,7 +184,7 @@ async fn mai_set_passive_mode(
 }
 
 #[tauri::command]
-async fn mai_workflow_approve(
+async fn frondose_workflow_approve(
     state: tauri::State<'_, MaiServeState>,
     workflow_id: String,
     step_id: String,
@@ -199,7 +199,7 @@ async fn mai_workflow_approve(
 }
 
 #[tauri::command]
-async fn mai_workflow_decline(
+async fn frondose_workflow_decline(
     state: tauri::State<'_, MaiServeState>,
     workflow_id: String,
     step_id: String,
@@ -215,7 +215,7 @@ async fn mai_workflow_decline(
 }
 
 #[tauri::command]
-async fn mai_workflow_handoff(
+async fn frondose_workflow_handoff(
     state: tauri::State<'_, MaiServeState>,
     workflow_id: String,
 ) -> Result<Value, String> {
@@ -229,7 +229,7 @@ async fn mai_workflow_handoff(
 }
 
 #[tauri::command]
-async fn mai_workflow_cancel(
+async fn frondose_workflow_cancel(
     state: tauri::State<'_, MaiServeState>,
     workflow_id: String,
 ) -> Result<Value, String> {
@@ -743,21 +743,21 @@ async fn main() {
         })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            mai_health,
-            mai_identity,
-            mai_get_settings,
-            mai_set_settings,
-            mai_chrome_ensure,
-            mai_agent_turn,
-            mai_agent_abort,
-            mai_agent_retry,
-            mai_set_cron_mode,
-            mai_set_passive_mode,
-            mai_workflow_approve,
-            mai_workflow_decline,
-            mai_workflow_handoff,
-            mai_workflow_cancel,
-            mai_check_update
+            frondose_health,
+            frondose_identity,
+            frondose_get_settings,
+            frondose_set_settings,
+            frondose_chrome_ensure,
+            frondose_agent_turn,
+            frondose_agent_abort,
+            frondose_agent_retry,
+            frondose_set_cron_mode,
+            frondose_set_passive_mode,
+            frondose_workflow_approve,
+            frondose_workflow_decline,
+            frondose_workflow_handoff,
+            frondose_workflow_cancel,
+            frondose_check_update
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");

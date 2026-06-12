@@ -130,7 +130,7 @@ describe("two-mode-ui — theme + brand reskin in index.html (G-PY2.1.1, G-PY2.1
     assert.ok(/>\s*Frondose\s*</.test(INDEX_HTML), "the 'Frondose' wordmark text must be present");
     assert.ok(!INDEX_HTML.includes("com.kyoube.frondose"), "bundle-id must NOT be renamed (no com.kyoube.frondose)");
     assert.ok(
-      APP_TS.includes("mai_set_cron_mode") && APP_TS.includes("mai_set_passive_mode"),
+      APP_TS.includes("frondose_set_cron_mode") && APP_TS.includes("frondose_set_passive_mode"),
       "mai_* invoke names unchanged",
     );
   });
@@ -157,14 +157,14 @@ describe("two-mode-ui — switcher wiring in app.ts (G-PY2.1.3, G-PY2.1.2, G-PY2
   it("T-Switcher.1: applyMode invokes BOTH existing handlers from togglesForMode(mode); tab listeners call applyMode; NO new mai_set_mode", () => {
     // Given: app.ts
     // When:  inspected
-    // Then:  applyMode invokes mai_set_cron_mode + mai_set_passive_mode (from togglesForMode); tabs → applyMode('manual')/('auto'); no mai_set_mode
+    // Then:  applyMode invokes frondose_set_cron_mode + frondose_set_passive_mode (from togglesForMode); tabs → applyMode('manual')/('auto'); no mai_set_mode
     assert.ok(/async function applyMode/.test(APP_TS), "applyMode must be defined");
     assert.ok(
-      APP_TS.includes('invoke<{ ok: boolean; cronEnabled?: boolean }>("mai_set_cron_mode"') ||
-        /invoke[^\n]*"mai_set_cron_mode"/.test(APP_TS),
-      "applyMode must invoke mai_set_cron_mode",
+      APP_TS.includes('invoke<{ ok: boolean; cronEnabled?: boolean }>("frondose_set_cron_mode"') ||
+        /invoke[^\n]*"frondose_set_cron_mode"/.test(APP_TS),
+      "applyMode must invoke frondose_set_cron_mode",
     );
-    assert.ok(/invoke[^\n]*"mai_set_passive_mode"/.test(APP_TS), "applyMode must invoke mai_set_passive_mode");
+    assert.ok(/invoke[^\n]*"frondose_set_passive_mode"/.test(APP_TS), "applyMode must invoke frondose_set_passive_mode");
     assert.ok(APP_TS.includes("togglesForMode(mode)"), "the invokes must derive from togglesForMode(mode)");
     assert.ok(
       APP_TS.includes('applyMode("manual")') && APP_TS.includes('applyMode("auto")'),
