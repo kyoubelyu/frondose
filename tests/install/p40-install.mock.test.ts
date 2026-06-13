@@ -186,11 +186,11 @@ describe("install.sh — Xcode CLT: WARNING not exit (G-P40.6)", () => {
 
 // ─── T-Grep.7 ────────────────────────────────────────────────────────────────
 
-describe("install.sh — every gh release command carries --repo kyoubelyu/mai-agent (G-P40.8)", () => {
-  it("T-Grep.7: every line in install.sh that contains 'gh release' also contains '--repo' with 'kyoubelyu/mai-agent' (or the $REPO variable bound to it)", () => {
-    // Given: install.sh with D-4 --repo flag on all gh commands
+describe("install.sh — every gh release command carries --repo kyoubelyu/frondose (G-P40.8 — F-REN-4b flip)", () => {
+  it("T-Grep.7: every line in install.sh that contains 'gh release' also contains '--repo' with 'kyoubelyu/frondose' (or the $REPO variable bound to it)", () => {
+    // Given: install.sh with D-4 --repo flag on all gh commands; F-REN-4b flipped REPO to kyoubelyu/frondose
     // When:  filter lines containing 'gh release' (skip comments); check each for '--repo'
-    // Then:  no 'gh release' line is missing '--repo'; 'kyoubelyu/mai-agent' present in REPO var
+    // Then:  no 'gh release' line is missing '--repo'; 'kyoubelyu/frondose' present in REPO var
     const content = readFileSync(INSTALL_SH, "utf8");
     const ghReleaseLines = content
       .split("\n")
@@ -200,8 +200,8 @@ describe("install.sh — every gh release command carries --repo kyoubelyu/mai-a
       assert.ok(line.includes("--repo"), `'gh release' line missing '--repo': ${line.trim()}`);
     }
     assert.ok(
-      content.includes("kyoubelyu/mai-agent"),
-      "'kyoubelyu/mai-agent' must appear in install.sh (REPO variable)",
+      content.includes("kyoubelyu/frondose"),
+      "'kyoubelyu/frondose' must appear in install.sh (REPO variable) after F-REN-4b rename",
     );
   });
 });

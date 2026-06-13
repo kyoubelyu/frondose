@@ -95,9 +95,9 @@ function makeDueRecord(id: string, createdAt: string, task?: string): ScheduleRe
 describe("REPL boot-time drain — drainDueJobs fires before first prompt", () => {
   it.skip("T-Drain.1: given schedule.jsonl with 2 due oneshot records at REPL boot, runCronTurn is called exactly twice BEFORE first '> ' prompt, in createdAt-ascending order", async () => {
     // Given: 2 due oneshot records; abortController is aborted inside the 2nd doStream call
-    // When: runRepl starts; boot drain fires both records; abort exits REPL before "mai-agent ready"
+    // When: runRepl starts; boot drain fires both records; abort exits REPL before "frondose ready"
     // Then: output contains exactly 2 "[cron-fired]" lines; A fires before B (createdAt-asc);
-    //       "mai-agent ready" does NOT appear (abort exits before greeting → confirms boot-drain timing)
+    //       "frondose ready" does NOT appear (abort exits before greeting → confirms boot-drain timing)
     //
     // ─── Timing note ─────────────────────────────────────────────────────────────
     // setImmediate() inside doStream fires DURING boot-drain stream processing
@@ -169,10 +169,10 @@ describe("REPL boot-time drain — drainDueJobs fires before first prompt", () =
       assert.ok(idxB >= 0, "record B id must appear in output");
       assert.ok(idxA < idxB, "record A (earlier createdAt) must fire before record B");
 
-      // Abort exits before "mai-agent ready" — confirms both turns were in the boot drain
+      // Abort exits before "frondose ready" — confirms both turns were in the boot drain
       // (if they'd happened after the greeting, the greeting would appear first)
       assert.ok(
-        !output.includes("mai-agent ready"),
+        !output.includes("frondose ready"),
         "abort exits before greeting; confirms both cron turns were in boot drain (pre-prompt)",
       );
     } finally {
@@ -183,7 +183,7 @@ describe("REPL boot-time drain — drainDueJobs fires before first prompt", () =
   it("T-Drain.2: given schedule.jsonl with 0 records at REPL boot, runCronTurn is NOT called; standard greeting appears unchanged", async () => {
     // Given: empty or missing schedule.jsonl
     // When: runRepl starts
-    // Then: output contains "mai-agent ready" greeting; no "[cron-fired]" lines
+    // Then: output contains "frondose ready" greeting; no "[cron-fired]" lines
     const { dir, cleanup } = makeTempDir();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
@@ -219,17 +219,17 @@ describe("REPL boot-time drain — drainDueJobs fires before first prompt", () =
       await replPromise;
 
       const output = lines.join("");
-      assert.ok(output.includes("mai-agent ready"), '"mai-agent ready" must appear when schedule is empty');
+      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear when schedule is empty');
       assert.ok(!output.includes("[cron-fired]"), 'no "[cron-fired]" must appear when schedule is empty');
     } finally {
       cleanup();
     }
   });
 
-  it.skip("T-Drain.3: given 2 due records and abortController is aborted during cron turn 1, only 1 cron turn fires; REPL exits before 'mai-agent ready' (D-16 abort propagation)", async () => {
+  it.skip("T-Drain.3: given 2 due records and abortController is aborted during cron turn 1, only 1 cron turn fires; REPL exits before 'frondose ready' (D-16 abort propagation)", async () => {
     // Given: 2 due oneshot records; model aborts AbortController during first doStream call
     // When: runRepl boot-drain processes first record then detects abort
-    // Then: output contains exactly 1 "[cron-fired]" line; "mai-agent ready" does NOT appear
+    // Then: output contains exactly 1 "[cron-fired]" line; "frondose ready" does NOT appear
     const { dir, cleanup } = makeTempDir();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
@@ -282,8 +282,8 @@ describe("REPL boot-time drain — drainDueJobs fires before first prompt", () =
         `exactly 1 cron turn must fire before abort; got ${cronFiredMatches.length}`,
       );
       assert.ok(
-        !output.includes("mai-agent ready"),
-        '"mai-agent ready" must NOT appear when REPL aborted before greeting',
+        !output.includes("frondose ready"),
+        '"frondose ready" must NOT appear when REPL aborted before greeting',
       );
     } finally {
       cleanup();
@@ -326,7 +326,7 @@ describe("REPL boot-time drain — drainDueJobs fires before first prompt", () =
       await replPromise;
 
       const output = lines.join("");
-      assert.ok(output.includes("mai-agent ready"), '"mai-agent ready" must appear when schedule file is missing');
+      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear when schedule file is missing');
       assert.ok(!output.includes("[cron-fired]"), 'no "[cron-fired]" when schedule file is missing');
     } finally {
       cleanup();
@@ -439,7 +439,7 @@ describe("REPL after-turn poll — drainDueJobs fires after appendMessages, befo
 
       const output = lines.join("");
       assert.ok(!output.includes("[cron-fired]"), "no [cron-fired] must appear when schedule is empty during poll");
-      assert.ok(output.includes("mai-agent ready"), '"mai-agent ready" must appear normally');
+      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear normally');
     } finally {
       cleanup();
     }

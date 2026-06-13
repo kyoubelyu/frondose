@@ -507,11 +507,11 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
-  // P-20: `mai update` — check GitHub Releases for newer mai-agent version.
+  // P-20: `mai update` — check GitHub Releases for newer frondose version.
   // P-22 §3.2: `--bootstrap` triggers a forced auto-update (bypasses dev-link guard).
   program
     .command("update")
-    .description("Check for mai-agent updates on GitHub Releases")
+    .description("Check for frondose updates on GitHub Releases")
     .option("--json", "Output machine-readable JSON")
     .option(
       "--bootstrap",

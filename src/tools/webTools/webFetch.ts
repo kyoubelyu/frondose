@@ -46,7 +46,7 @@ export function makeWebFetchTool() {
         const response = await globalThis.fetch(url, {
           method: "GET",
           redirect: "follow",
-          headers: { "User-Agent": "mai-agent/1.0 (+https://github.com/kyoubelyu/mai-agent)" },
+          headers: { "User-Agent": "frondose/1.0 (+https://github.com/kyoubelyu/frondose)" },
         });
         if (!response.ok) {
           return fail("web_fetch", "runtime_error", `HTTP ${response.status} ${response.statusText} for ${url}`);

@@ -81,7 +81,7 @@ export function makeEscalateTool(deps: EscalateDeps) {
         telegramFailure = e instanceof Error ? e.message : String(e);
       }
 
-      const issueTitle = `[mai-agent escalation] ${params.neededCapability}`;
+      const issueTitle = `[frondose escalation] ${params.neededCapability}`;
       const issueBody =
         `**Capability gap:** ${params.neededCapability}\n\n` +
         `**Why existing tools insufficient:** ${params.whyExistingToolsInsufficient}\n\n` +
