@@ -1,6 +1,6 @@
 /** P-58d.2 — local Frondose update/download portal server.
  *
- *  Serves ~/.mai/site/ over plain HTTP (read-only static files): the landing
+ *  Serves ~/.frondose/site/ over plain HTTP (read-only static files): the landing
  *  page (index.html), the Tauri updater manifest (latest.json, server root),
  *  the signed universal .app.tar.gz + .sig, and the .dmg installer.
  *
@@ -14,7 +14,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 
 export const UPDATE_SERVER_PORT = 4875;
 
@@ -103,7 +103,7 @@ export function startUpdateServer(opts: UpdateServerOpts): Server {
 
 /** CLI wrapper: starts the server and blocks until SIGINT/SIGTERM. */
 export async function runUpdateServerSubcommand(opts: { port?: string; siteDir?: string }): Promise<void> {
-  const siteDir = opts.siteDir ?? path.join(getHomeBase(), ".mai", "site");
+  const siteDir = opts.siteDir ?? path.join(getHomeBase(), DATA_DIR_NAME, "site");
   // [3b CLR-4] strict port parse: Number (not parseInt — rejects "4875abc"), integer 1-65535.
   const port = opts.port === undefined ? UPDATE_SERVER_PORT : Number(opts.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

@@ -267,7 +267,7 @@ function makeSpy<T extends unknown[]>(): ((...args: T) => void) & { calls: T[] }
 
 function makeTempHome(): string {
   const home = mkdtempSync(join(tmpdir(), "p-app-7-"));
-  mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
   return home;
 }
 
@@ -683,7 +683,7 @@ let _tempHome: string;
 function setupTempHome(): void {
   _savedHome = process.env.MAI_HOME_BASE;
   _tempHome  = mkdtempSync(join(tmpdir(), "p-app-7-mask-"));
-  mkdirSync(join(_tempHome, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(_tempHome, ".frondose", "agent"), { recursive: true });
 
   // Write auth.json with toy key — "abc12345" → mask "***2345" (verified against auth.ts:177-187)
   const authJson = JSON.stringify({
@@ -695,7 +695,7 @@ function setupTempHome(): void {
       },
     },
   });
-  writeFileSync(join(_tempHome, ".mai", "auth.json"), authJson, "utf-8");
+  writeFileSync(join(_tempHome, ".frondose", "auth.json"), authJson, "utf-8");
   process.env.MAI_HOME_BASE = _tempHome;
 }
 

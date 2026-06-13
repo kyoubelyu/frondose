@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DATA_DIR_NAME } from "../../persistence/paths.js";
 
 export interface EnvSnapshot {
   TELEGRAM_TOKEN: string; // required
@@ -28,7 +29,8 @@ export interface InstallOpts {
   yes?: boolean; // bypass consent
 }
 
-export const LABEL = "com.kyoube.mai.telegram";
+const LEGACY_LABEL_NAMESPACE = "mai";
+export const LABEL = `com.kyoube.${LEGACY_LABEL_NAMESPACE}.telegram`;
 
 export const plistPath = (home = os.homedir()): string => path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
 
@@ -77,8 +79,8 @@ export function renderPlist(args: PlistArgs): string {
   </dict>
   <key>ThrottleInterval</key><integer>30</integer>
   <key>WorkingDirectory</key><string>${escapeXml(args.home)}</string>
-  <key>StandardOutPath</key><string>${escapeXml(path.join(args.home, ".mai/agent/logs/telegram-daemon.out.log"))}</string>
-  <key>StandardErrorPath</key><string>${escapeXml(path.join(args.home, ".mai/agent/logs/telegram-daemon.err.log"))}</string>
+  <key>StandardOutPath</key><string>${escapeXml(path.join(args.home, DATA_DIR_NAME, "agent", "logs", "telegram-daemon.out.log"))}</string>
+  <key>StandardErrorPath</key><string>${escapeXml(path.join(args.home, DATA_DIR_NAME, "agent", "logs", "telegram-daemon.err.log"))}</string>
   <key>EnvironmentVariables</key>
   <dict>
 ${envEntries.join("\n")}
@@ -99,7 +101,7 @@ export async function installLaunchAgent(args: PlistArgs, opts: InstallOpts): Pr
   }
   const plPath = plistPath(args.home);
   mkdirSync(path.dirname(plPath), { recursive: true });
-  mkdirSync(path.join(args.home, ".mai/agent/logs"), { recursive: true });
+  mkdirSync(path.join(args.home, DATA_DIR_NAME, "agent", "logs"), { recursive: true });
   const tmp = `${plPath}.tmp`;
   writeFileSync(tmp, renderPlist(args), { encoding: "utf-8", mode: 0o600 });
   renameSync(tmp, plPath);

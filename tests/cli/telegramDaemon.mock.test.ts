@@ -75,7 +75,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
       process.env.HOME = home;
       delete process.env.TELEGRAM_TOKEN;
       // Create the .mai/agent dir so daemon can write PID
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       // NO telegram.pid → daemon should proceed past mutex check
       const stderr = await captureStderr(() => runTelegramDaemon());
       assert.ok(stderr.includes("TELEGRAM_TOKEN unset"), `expected 'TELEGRAM_TOKEN unset' in stderr, got: ${stderr}`);
@@ -99,8 +99,8 @@ describe("telegramDaemon: PID mutex on boot", () => {
     try {
       process.env.HOME = home;
       // Write live PID (current test process is alive)
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
-      writeFileSync(join(home, ".mai", "agent", "telegram.pid"), String(process.pid), "utf-8");
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
+      writeFileSync(join(home, ".frondose", "agent", "telegram.pid"), String(process.pid), "utf-8");
       const stderr = await captureStderr(() => runTelegramDaemon());
       assert.ok(stderr.includes("already running"), `expected 'already running' in stderr, got: ${stderr}`);
       assert.ok(stderr.includes(String(process.pid)), "stderr must include the live PID");
@@ -122,8 +122,8 @@ describe("telegramDaemon: PID mutex on boot", () => {
     try {
       process.env.HOME = home;
       delete process.env.TELEGRAM_TOKEN;
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
-      writeFileSync(join(home, ".mai", "agent", "telegram.pid"), "-999999", "utf-8");
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
+      writeFileSync(join(home, ".frondose", "agent", "telegram.pid"), "-999999", "utf-8");
       const stderr = await captureStderr(() => runTelegramDaemon());
       assert.ok(
         stderr.includes("TELEGRAM_TOKEN unset"),
@@ -156,11 +156,11 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
     try {
       process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "test-tg-token";
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       // Write live repl.pid — Gate 1 will defer all updates
-      writePid(join(home, ".mai", "agent", "repl.pid"));
+      writePid(join(home, ".frondose", "agent", "repl.pid"));
 
-      const cfgPath = join(home, ".mai", "agent", "telegram.json");
+      const cfgPath = join(home, ".frondose", "agent", "telegram.json");
       const initialOffset = 42;
       writeFileSync(
         cfgPath,
@@ -283,10 +283,10 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
     try {
       process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "test-tg-token";
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       // NO repl.pid — Gate 1 passes
 
-      const cfgPath = join(home, ".mai", "agent", "telegram.json");
+      const cfgPath = join(home, ".frondose", "agent", "telegram.json");
       writeFileSync(
         cfgPath,
         JSON.stringify({
@@ -334,7 +334,7 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
         uploadAllowlistRoot: home,
       };
       const turnLock = new TurnLock();
-      const turnLockPath = join(home, ".mai", "agent", "turn.lock");
+      const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
 
       let getUpdatesCallCount = 0;
       // biome-ignore lint/suspicious/noExplicitAny: fetch mock
@@ -393,8 +393,8 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
     //         This test verifies the constituent LockBusy throw that startDaemonPoller catches.
     const { home, cleanup } = makeTmpHome();
     try {
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
-      const turnLockPath = join(home, ".mai", "agent", "turn.lock");
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
+      const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
       const { writeFileSync: wf } = await import("node:fs");
       wf(turnLockPath, JSON.stringify({ owner: "repl-op", pid: process.pid, ts: new Date().toISOString() }), "utf-8");
       // acquireTurnLock with short timeout should throw LockBusy
@@ -418,8 +418,8 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
     // NOTE:   Cannot send SIGTERM to test process (would kill runner). Tests cleanup logic directly.
     const { home, cleanup } = makeTmpHome();
     try {
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
-      const tgPidPath = join(home, ".mai", "agent", "telegram.pid");
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
+      const tgPidPath = join(home, ".frondose", "agent", "telegram.pid");
       // Write a PID file
       writePid(tgPidPath);
       assert.ok(existsSync(tgPidPath), "PID file must exist before cleanup");

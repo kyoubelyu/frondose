@@ -51,7 +51,7 @@ test("T-Sandbox.1: path in os.tmpdir() subtree → assertFileReadable does not t
 
 test("T-Sandbox.2: path in ~/.mai/agent/ subtree → assertFileReadable does not throw", () => {
   withEnv("MAI_UPLOAD_ALLOWLIST", undefined, () => {
-    const agentPath = join(homedir(), ".mai", "agent", "screenshots", "capture.png");
+    const agentPath = join(homedir(), ".frondose", "agent", "screenshots", "capture.png");
     assert.doesNotThrow(() => assertFileReadable(agentPath), `~/.mai/agent/ path must be allowed`);
   });
 });
@@ -137,7 +137,7 @@ test("T-Sandbox.7: exact boundary — home dir itself is NOT allowed; ~/.mai/age
       );
 
       // ~/.mai/agent/ subtree IS allowed
-      const agentPath = join(SYNTH_HOME, ".mai", "agent", "memory.sqlite");
+      const agentPath = join(SYNTH_HOME, ".frondose", "agent", "memory.sqlite");
       assert.doesNotThrow(() => assertFileReadable(agentPath), "~/.mai/agent/ path must be allowed");
     }),
   );

@@ -45,7 +45,7 @@ describe("SERVER_SCHEDULE_PATH resolves correctly (G-P31.9)", () => {
     // Then:   result ends with '/.mai/server/schedule.jsonl' relative to homedir
 
     const p = SERVER_SCHEDULE_PATH();
-    const expected = join(homedir(), ".mai", "server", "schedule.jsonl");
+    const expected = join(homedir(), ".frondose", "server", "schedule.jsonl");
     assert.equal(p, expected, `SERVER_SCHEDULE_PATH() must equal '${expected}'; got '${p}'`);
   });
 });

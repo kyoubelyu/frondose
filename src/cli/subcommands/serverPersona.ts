@@ -1,6 +1,6 @@
 /** P-27: `mai server persona add/list/show/remove` action dispatcher.
  *
- *  Persona templates are JSON files under ~/.mai/server/personas/<id>.json.
+ *  Persona templates are JSON files under ~/.frondose/server/personas/<id>.json.
  *  `add` accepts `--from-template` as EITHER a persona ID (copy an existing
  *  template) OR an inline JSON string (scripted create). When a template is
  *  supplied and the session is non-interactive, the template is written

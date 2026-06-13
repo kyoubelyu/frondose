@@ -85,7 +85,7 @@ describe("bootWorker config-read coalescing (G-P45.4)", () => {
     //        NOTE: readIdentity's internal readConfig calls are not counted (only direct calls)
     const { dir, cleanup } = makeSandbox("boot1");
     try {
-      const agentDir = join(dir, ".mai", "agent");
+      const agentDir = join(dir, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writeMinimalIdentity(join(agentDir, "identity.json"), true);
       writeMinimalConfig(join(agentDir, "config.json"));
@@ -126,7 +126,7 @@ describe("bootWorker identity-read coalescing (G-P45.5)", () => {
     // Then:  readIdentity call count is AT MOST 1 (A-7 coalescing; no conditional re-read)
     const { dir, cleanup } = makeSandbox("boot2");
     try {
-      const agentDir = join(dir, ".mai", "agent");
+      const agentDir = join(dir, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writeMinimalIdentity(join(agentDir, "identity.json"), true /* withFreeAxes */);
       writeMinimalConfig(join(agentDir, "config.json"));
@@ -163,7 +163,7 @@ describe("bootWorker identity-read coalescing (G-P45.5)", () => {
     const { dir, cleanup } = makeSandbox("boot3");
     const savedIsTTY = process.stdin.isTTY;
     try {
-      const agentDir = join(dir, ".mai", "agent");
+      const agentDir = join(dir, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writeMinimalIdentity(join(agentDir, "identity.json"), false /* no freeAxes */);
       writeMinimalConfig(join(agentDir, "config.json"));

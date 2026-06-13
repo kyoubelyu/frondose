@@ -142,7 +142,7 @@ echo "[build-release]   $SIG"
 # [5a-fix DEFECT-1] The binary inside Contents/MacOS/ is named after the Cargo package
 # `name = "mai-tauri"` (Cargo.toml), NOT the Tauri productName ("Frondose").
 BIN="$BUNDLE_DIR/Frondose.app/Contents/MacOS/mai-tauri"
-SITE_DIR="${MAI_SITE_DIR:-$HOME/.mai/site}"
+SITE_DIR="${FRONDOSE_SITE_DIR:-${MAI_SITE_DIR:-$HOME/.frondose/site}}"
 UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-http://localhost:4875}"
 
 DMG_OUT="$BUNDLE_DIR/Frondose-universal.dmg"

@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export type UpdateChannel = "stable" | "prerelease";
 
-export const DEFAULT_CHANNEL_PATH = (): string => join(getHomeBase(), ".mai", "agent", "channel");
+export const DEFAULT_CHANNEL_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "channel");
 
 /** Read the persisted update channel. Default "stable" (preserves today's
  *  /releases/latest behavior). Plain text "stable" | "prerelease" written by

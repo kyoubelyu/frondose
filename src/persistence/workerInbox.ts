@@ -1,4 +1,4 @@
-/** P-26: worker-side inbox (~/.mai/agent/inbox.sqlite).
+/** P-26: worker-side inbox (~/.frondose/agent/inbox.sqlite).
  *
  *  PERSISTENCE LAYER — DB CRUD ONLY (Step-3b B-1 split). No `runAgentLoop`
  *  import, no message injection. The orchestrator (`drainWorkerInbox`) lives
@@ -11,9 +11,9 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Database as DB } from "better-sqlite3";
 import Database from "better-sqlite3";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
-export const WORKER_INBOX_DB_PATH = (): string => join(getHomeBase(), ".mai", "agent", "inbox.sqlite");
+export const WORKER_INBOX_DB_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "inbox.sqlite");
 
 export function openWorkerInboxDb(path: string): DB {
   mkdirSync(dirname(path), { recursive: true });

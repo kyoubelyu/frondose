@@ -94,7 +94,7 @@ describe("serverDaemon DI hook for test teardown (G-P45.9)", () => {
     try {
       process.env.HOME = dir;
       process.env.TELEGRAM_TOKEN = "test-token-p45-d2";
-      writeMinimalServerDirs(join(dir, ".mai", "server"), join(dir, ".mai", "agent"));
+      writeMinimalServerDirs(join(dir, ".frondose", "server"), join(dir, ".frondose", "agent"));
 
       // biome-ignore lint/suspicious/noExplicitAny: dynamic-import escape for new exports
       const mod = (await import("../../src/cli/serverDaemon.js")) as any;
@@ -137,7 +137,7 @@ describe("serverDaemon DI hook for test teardown (G-P45.9)", () => {
     try {
       process.env.HOME = dir;
       process.env.TELEGRAM_TOKEN = "test-token-p45-d3";
-      writeMinimalServerDirs(join(dir, ".mai", "server"), join(dir, ".mai", "agent"));
+      writeMinimalServerDirs(join(dir, ".frondose", "server"), join(dir, ".frondose", "agent"));
 
       // VALIDATOR NOTE (Step 5): the full daemon spawn requires binding ports
       // 3031 + 8090 + a valid server identity + telegram token + LLM auth.

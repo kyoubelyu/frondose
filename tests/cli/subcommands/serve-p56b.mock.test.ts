@@ -236,7 +236,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     const origHome = process.env.MAI_HOME_BASE;
 
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // 2s sleep gives us plenty of time for (2)→(3) overlap
     mockTurnSleepMs = 2000;
@@ -327,7 +327,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
     const origHome = process.env.MAI_HOME_BASE;
 
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 200; // quick turn so done frame arrives within 800ms collect window
     mockTurnRespectAbort = false;
@@ -405,7 +405,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     const origHome = process.env.MAI_HOME_BASE;
 
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 5000; // long sleep so abort fires before turn completes
     mockTurnRespectAbort = true;
@@ -464,7 +464,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
 
 describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed skipped (CONCERN-MR-1 fix, G-P56b.8)", () => {
   it("T-Serve.8: given tmp audit.jsonl with 4 lines [r1 AuditEntry, r2 OverlayEvent, r3 malformed, r4 AuditEntry], WHEN GET /audit/tail?n=10 AND GET /audit/tail?n=2, THEN ?n=10→{ok:true,rows:[r1,r2,r4],total:3}; ?n=2→{ok:true,rows:[r2,r4],total:2} (last 2 VALID — proves filter-before-slice)", async () => {
-    // Given: baseDir = mkdtempSync; agentDir = join(baseDir, ".mai", "agent");
+    // Given: baseDir = mkdtempSync; agentDir = join(baseDir, ".frondose", "agent");
     //        audit.jsonl written with 4 lines:
     //          r1: valid AuditEntry (toolCallId:"a", toolName:"echo", ...)
     //          r2: valid OverlayEvent (kind:"overlay-event", ts:<number>, ...)
@@ -483,7 +483,7 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     const origHome = process.env.MAI_HOME_BASE;
 
     process.env.MAI_HOME_BASE = tmpDir;
-    const agentDir = join(tmpDir, ".mai", "agent");
+    const agentDir = join(tmpDir, ".frondose", "agent");
     mkdirSync(agentDir, { recursive: true });
 
     // Write the audit.jsonl test fixture

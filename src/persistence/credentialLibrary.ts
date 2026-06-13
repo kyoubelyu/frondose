@@ -1,4 +1,4 @@
-/** P-28: server credential library at ~/.mai/server/credentials.sqlite.
+/** P-28: server credential library at ~/.frondose/server/credentials.sqlite.
  *  ONE DB file, two tables (llm_keys, google_accounts). FIRST credential-bearing
  *  SQLite store in the codebase → file is chmod 600 (mirrors secrets.json).
  *

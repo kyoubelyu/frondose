@@ -15,10 +15,10 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { CoreMessage } from "ai";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export function sharedSessionPath(): string {
-  const dir = path.join(getHomeBase(), ".mai", "agent", "sessions", "shared");
+  const dir = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "sessions", "shared");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return path.join(dir, "active.jsonl");
 }

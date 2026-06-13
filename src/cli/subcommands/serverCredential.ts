@@ -1,5 +1,5 @@
 /** P-28: `mai server llm-key …` + `mai server google-account …` action dispatcher.
- *  Credentials live in ~/.mai/server/credentials.sqlite (chmod 600).
+ *  Credentials live in ~/.frondose/server/credentials.sqlite (chmod 600).
  *  Error conditions THROW (caller maps to exit 1) — unit-testable.
  *
  *  CREDENTIAL PLACEHOLDER POLICY (C-5): All test fixtures containing credentials

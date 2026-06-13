@@ -22,7 +22,7 @@ import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { isAlive, readPid } from "../persistence/processLock.js";
 import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
@@ -166,7 +166,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
 
     // Start Telegram poller if bound.
     // Step-5a D-SRV.DAEMON.CONFIGPATH: pass SERVER_CONFIG_PATH() so boundUserId is
-    // read from ~/.mai/server/config.json (not the worker's ~/.mai/agent/config.json).
+    // read from ~/.frondose/server/config.json (not the worker's ~/.frondose/agent/config.json).
     const cfg = readTelegramConfig(SERVER_TELEGRAM_CONFIG_PATH(), SERVER_CONFIG_PATH());
     const telegramDeps: TelegramTurnDeps = {
       model,
@@ -178,7 +178,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent/uploads"),
     };
     // startDaemonPoller runs fire-and-forget; does not block readline.
     void startDaemonPoller(cfg, telegramDeps, turnLock, abortController);

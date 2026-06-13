@@ -15,7 +15,7 @@ import { test } from "node:test";
 import { assertUploadPathAllowed, resolveUploadAllowlist } from "../../src/linkedin/uploadAllowlist.js";
 
 const HOME = os.homedir();
-const DEFAULT_UPLOAD_DIR = path.join(HOME, ".mai", "agent", "uploads");
+const DEFAULT_UPLOAD_DIR = path.join(HOME, ".frondose", "agent", "uploads");
 
 // ─── T-M41 ─────────────────────────────────────────────────────────────────────
 

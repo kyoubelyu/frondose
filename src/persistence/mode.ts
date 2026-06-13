@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export type AgentMode = "manual" | "auto";
 
-export const DEFAULT_MODE_PATH = (): string => join(getHomeBase(), ".mai", "agent", "mode.json");
+export const DEFAULT_MODE_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "mode.json");
 
 export function readMode(path: string = DEFAULT_MODE_PATH()): AgentMode {
   try {

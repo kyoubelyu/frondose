@@ -1,6 +1,6 @@
 /**
  * F-REN-3 back-compat env shim. Reads FRONDOSE_<name> first, then legacy
- * MAI_<name>, so pre-existing operator setups (.env / ~/.mai / launchd plists
+ * MAI_<name>, so pre-existing operator setups (.env / ~/.frondose / launchd plists
  * that set MAI_*) keep working while production code + new installs use
  * FRONDOSE_*. `name` is the BARE suffix (no MAI_/FRONDOSE_ prefix).
  *

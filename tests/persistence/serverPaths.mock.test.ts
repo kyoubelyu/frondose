@@ -32,8 +32,8 @@ describe("serverPaths constants (G-P25.1)", () => {
   it("T-SRV.PATHS.1: SERVER_ROOT() returns ~/.mai/server", () => {
     // Given: default HOME
     // When:  SERVER_ROOT() called
-    // Then:  returns join(homedir(), ".mai", "server")
-    assert.equal(SERVER_ROOT(), join(homedir(), ".mai", "server"));
+    // Then:  returns join(homedir(), ".frondose", "server")
+    assert.equal(SERVER_ROOT(), join(homedir(), ".frondose", "server"));
   });
 
   it("T-SRV.PATHS.2: all sub-paths are under SERVER_ROOT() and have correct file names", () => {

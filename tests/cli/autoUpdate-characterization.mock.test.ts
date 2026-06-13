@@ -50,7 +50,7 @@ afterEach(() => {
 
 // Helper: resolve the update.lock path the same way production code does.
 function updateLockPath(): string {
-  return join(process.env.MAI_HOME_BASE!, ".mai", "agent", "update.lock");
+  return join(process.env.MAI_HOME_BASE!, ".frondose", "agent", "update.lock");
 }
 
 // ─── T-autoUpdate.Lock.1 ─────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ describe("autoUpdate — lock primitives", () => {
       // Edge:  44 min (< 45 min LOCK_STALE_MS) must throw EEXIST
 
       const lockPath = updateLockPath();
-      mkdirSync(join(process.env.MAI_HOME_BASE!, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(process.env.MAI_HOME_BASE!, ".frondose", "agent"), { recursive: true });
 
       // Create the stale lock file (its mtime is "now" but nowMs will be 50 min in the future)
       writeFileSync(lockPath, "stale-marker");

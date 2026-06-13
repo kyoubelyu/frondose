@@ -133,14 +133,14 @@ test("T-Cli.1: MAI_MAX_STEPS env + --max-steps flag wiring — resolveMaxSteps p
 
 test("T-M127: MAI_MEMORY_DB_PATH env var: defaults to ~/.mai/agent/memory.sqlite; custom value used verbatim", () => {
   // Simulate the main.ts logic:
-  //   const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
+  //   const memoryDbPath = process.env.MAI_MEMORY_DB_PATH ?? path.join(os.homedir(), ".frondose", "agent", "memory.sqlite");
 
   const defaultPath = ((): string => {
     const raw = process.env.MAI_MEMORY_DB_PATH;
-    return raw ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
+    return raw ?? path.join(os.homedir(), ".frondose", "agent", "memory.sqlite");
   })();
 
-  const expectedDefault = path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
+  const expectedDefault = path.join(os.homedir(), ".frondose", "agent", "memory.sqlite");
   assert.equal(defaultPath, expectedDefault, "MAI_MEMORY_DB_PATH must default to ~/.mai/agent/memory.sqlite");
 
   // Custom override
@@ -149,7 +149,7 @@ test("T-M127: MAI_MEMORY_DB_PATH env var: defaults to ~/.mai/agent/memory.sqlite
   try {
     const customPath = ((): string => {
       const raw = process.env.MAI_MEMORY_DB_PATH;
-      return raw ?? path.join(os.homedir(), ".mai", "agent", "memory.sqlite");
+      return raw ?? path.join(os.homedir(), ".frondose", "agent", "memory.sqlite");
     })();
     assert.equal(customPath, "/tmp/custom-memory.sqlite", "MAI_MEMORY_DB_PATH custom value must be used verbatim");
   } finally {
@@ -165,14 +165,14 @@ test("T-M127: MAI_MEMORY_DB_PATH env var: defaults to ~/.mai/agent/memory.sqlite
 
 test("T-M128: MAI_IDENTITY_PATH env var: defaults to ~/.mai/agent/identity.json; custom value used verbatim", () => {
   // Simulate the main.ts logic:
-  //   const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
+  //   const identityPath = process.env.MAI_IDENTITY_PATH ?? path.join(os.homedir(), ".frondose", "agent", "identity.json");
 
   const defaultPath = ((): string => {
     const raw = process.env.MAI_IDENTITY_PATH;
-    return raw ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
+    return raw ?? path.join(os.homedir(), ".frondose", "agent", "identity.json");
   })();
 
-  const expectedDefault = path.join(os.homedir(), ".mai", "agent", "identity.json");
+  const expectedDefault = path.join(os.homedir(), ".frondose", "agent", "identity.json");
   assert.equal(defaultPath, expectedDefault, "MAI_IDENTITY_PATH must default to ~/.mai/agent/identity.json");
 
   // Custom override
@@ -181,7 +181,7 @@ test("T-M128: MAI_IDENTITY_PATH env var: defaults to ~/.mai/agent/identity.json;
   try {
     const customPath = ((): string => {
       const raw = process.env.MAI_IDENTITY_PATH;
-      return raw ?? path.join(os.homedir(), ".mai", "agent", "identity.json");
+      return raw ?? path.join(os.homedir(), ".frondose", "agent", "identity.json");
     })();
     assert.equal(customPath, "/tmp/custom-identity.json", "MAI_IDENTITY_PATH custom value must be used verbatim");
   } finally {

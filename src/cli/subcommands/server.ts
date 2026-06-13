@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { frondoseEnv } from "../../env.js";
 import { type ConfigJson, readConfig } from "../../persistence/config.js";
-import { getHomeBase } from "../../persistence/paths.js";
+import { bootMigrateOrExit } from "../../persistence/dataDirMigration.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { isAlive, readPid } from "../../persistence/processLock.js";
 import { readServerIdentity, writeServerIdentity } from "../../persistence/serverIdentity.js";
 import {
@@ -56,6 +57,8 @@ export interface ServerSubcommandOpts {
 // ─── Dispatcher ────────────────────────────────────────────────────────────────
 
 export async function runServerSubcommand(action: ServerAction, opts: ServerSubcommandOpts): Promise<void> {
+  bootMigrateOrExit(getHomeBase());
+
   switch (action) {
     case "repl":
       return runServerRepl();
@@ -210,7 +213,7 @@ async function runServerIdentityInitAction(opts: ServerSubcommandOpts): Promise<
   await runServerIdentityInit(
     {
       serverIdentityPath: opts.serverIdentityPath ?? SERVER_IDENTITY_PATH(),
-      workerIdentityPath: opts.workerIdentityPath ?? path.join(getHomeBase(), ".mai", "agent", "identity.json"),
+      workerIdentityPath: opts.workerIdentityPath ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json"),
       reset: opts.reset ?? false,
     },
     prompter,

@@ -104,7 +104,7 @@ describe("runServerSubcommand: status (G-P25.9)", () => {
       process.env.HOME = dir;
 
       // Create server.pid
-      const maiServerDir = join(dir, ".mai", "server");
+      const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       const pidPath = join(maiServerDir, "server.pid");
       writeFileSync(pidPath, String(process.pid), "utf-8");
