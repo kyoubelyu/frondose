@@ -79,10 +79,10 @@ function pZ2HomeBase(): string {
   return process.env.MAI_HOME_BASE ?? homedir();
 }
 function updateLockPath(): string {
-  return join(pZ2HomeBase(), ".mai", "agent", "update.lock");
+  return join(pZ2HomeBase(), ".frondose", "agent", "update.lock");
 }
 function releasesDirPath(): string {
-  return join(pZ2HomeBase(), ".mai", "agent", "releases");
+  return join(pZ2HomeBase(), ".frondose", "agent", "releases");
 }
 
 // ─── mock helpers ──────────────────────────────────────────────────────────────

@@ -405,7 +405,7 @@ fn resolve_sidecar_bin() -> String {
 
 /// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
 /// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/mai-agent` →
-/// `~/.mai/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
+/// `~/.frondose/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
 /// `FRONDOSE_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
 /// relative path so `cargo tauri dev` (CWD = src-tauri) keeps working.
 /// NOTE: a fresh Mac with ONLY the `.app` (no prior install.sh) hits the dev
@@ -444,13 +444,20 @@ fn resolve_mai_bin() -> String {
 }
 
 /// P-58d.1: read the operator-set `updateServerUrl` directly from
-/// ~/.mai/agent/config.json (independent of the sidecar; the updater runs
-/// around it). None when absent/null/empty → the updater is a clean no-op.
-/// Uses $HOME — no new crate dep (serde_json is already present).
+/// ~/.frondose/agent/config.json (independent of the sidecar; the updater runs
+/// around it). Falls back to ~/.mai/agent/config.json for the first-launch window
+/// where Tauri boots before the sidecar migrates the data dir. None when
+/// absent/null/empty → the updater is a clean no-op. Uses $HOME — no new crate dep
+/// (serde_json is already present).
 fn read_update_server_url() -> Option<String> {
     let home = std::env::var("HOME").ok()?;
-    let path = std::path::Path::new(&home).join(".mai/agent/config.json");
-    let raw = std::fs::read_to_string(path).ok()?;
+    let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
+    let raw = std::fs::read_to_string(&new_path)
+        .or_else(|_| {
+            let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
+            std::fs::read_to_string(legacy)
+        })
+        .ok()?;
     let v: Value = serde_json::from_str(&raw).ok()?;
     let url = v.get("updateServerUrl")?.as_str()?.trim().to_string();
     if url.is_empty() {
@@ -461,8 +468,9 @@ fn read_update_server_url() -> Option<String> {
 }
 
 /// P-58d.3 — Periodic update-check interval in seconds. Reads
-/// `updateCheckIntervalSec` from ~/.mai/agent/config.json. Defaults to 3600
-/// (1 hour) — early-release operator directive 2026-06-09: "发布初期会经常更新".
+/// `updateCheckIntervalSec` from ~/.frondose/agent/config.json, with the same
+/// first-launch fallback to ~/.mai/agent/config.json. Defaults to 3600 (1 hour)
+/// — early-release operator directive 2026-06-09: "发布初期会经常更新".
 /// Floor of 60s (sanity guard against a config typo that hammers the server).
 /// Returning 0 disables periodic polling (operator opt-out without removing
 /// updateServerUrl).
@@ -471,8 +479,11 @@ fn read_update_check_interval_sec() -> u64 {
     let Some(home) = std::env::var("HOME").ok() else {
         return default_sec;
     };
-    let path = std::path::Path::new(&home).join(".mai/agent/config.json");
-    let Ok(raw) = std::fs::read_to_string(path) else {
+    let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
+    let Ok(raw) = std::fs::read_to_string(&new_path).or_else(|_| {
+        let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
+        std::fs::read_to_string(legacy)
+    }) else {
         return default_sec;
     };
     let Ok(v) = serde_json::from_str::<Value>(&raw) else {

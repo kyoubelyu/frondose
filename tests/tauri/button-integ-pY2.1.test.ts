@@ -89,9 +89,9 @@ before(async () => {
   sockDir = mkdtempSync(join(tmpdir(), "frondose-integ-sock-"));
   SOCK = join(sockDir, "mai.sock");
   // Seed a DUMMY provider so serve boots (resolveModel needs a provider entry); never exercised.
-  mkdirSync(join(homeDir, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(homeDir, ".frondose", "agent"), { recursive: true });
   writeFileSync(
-    join(homeDir, ".mai", "agent", "secrets.json"),
+    join(homeDir, ".frondose", "agent", "secrets.json"),
     JSON.stringify({
       schema_version: 1,
       default: "deepseek:deepseek-chat",

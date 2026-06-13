@@ -1,4 +1,4 @@
-/** P-26: server-side event inbox (~/.mai/server/inbox.sqlite).
+/** P-26: server-side event inbox (~/.frondose/server/inbox.sqlite).
  *  Two tables: server_inbox (worker→server events) + worker_pending
  *  (server→worker push queue, keyed by worker_id).
  *

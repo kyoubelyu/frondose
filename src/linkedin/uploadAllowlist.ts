@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { frondoseEnv } from "../env.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 
 /**
  * Default upload allowlist (per guardian critic CONCERN-MR-1 path (a) — reverts plan §6.4
@@ -10,7 +10,7 @@ import { getHomeBase } from "../persistence/paths.js";
  * blast radius if a path-traversal bug surfaces. Operator can override via
  * `FRONDOSE_UPLOAD_ALLOWLIST=/path1:/path2` for ad-hoc allowlists.
  */
-const DEFAULTS = (): string[] => [path.join(getHomeBase(), ".mai", "agent", "uploads")];
+const DEFAULTS = (): string[] => [path.join(getHomeBase(), DATA_DIR_NAME, "agent", "uploads")];
 
 /** Resolve the upload allowlist from env (colon-separated) or defaults. */
 export function resolveUploadAllowlist(): string[] {
@@ -42,7 +42,7 @@ export function assertUploadPathAllowed(filePath: string): void {
  * P-9 D-7: read-side file sandbox. Allowed sources:
  *   (a) FRONDOSE_UPLOAD_ALLOWLIST dirs (operator-controlled)
  *   (b) os.tmpdir() subtree (where screenshot tool writes)
- *   (c) ~/.mai/agent/** subtree (own state files)
+ *   (c) ~/.frondose/agent/** subtree (own state files)
  *   (d) <cwd>/tests/fixtures/** subtree (validator's mock fixtures; only when
  *       cwd is the repo root — best-effort, fails closed if not)
  *
@@ -55,7 +55,7 @@ export function assertFileReadable(filePath: string): void {
   const allowed = [
     ...resolveUploadAllowlist(),
     path.resolve(os.tmpdir()),
-    path.join(getHomeBase(), ".mai", "agent"),
+    path.join(getHomeBase(), DATA_DIR_NAME, "agent"),
     path.join(process.cwd(), "tests", "fixtures"),
   ];
   const ok = allowed.some((dir) => canonical === dir || canonical.startsWith(dir + path.sep));

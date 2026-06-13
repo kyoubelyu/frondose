@@ -2,7 +2,7 @@
  *
  *  Token mint: `crypto.randomBytes(32).toString("hex")`. Plaintext printed in
  *  a clear boxed advisory ONCE — operator captures via terminal. SHA-256 hash
- *  stored in `~/.mai/server/workers.sqlite`. */
+ *  stored in `~/.frondose/server/workers.sqlite`. */
 import { randomBytes } from "node:crypto";
 import { readConfig } from "../../persistence/config.js";
 import { openCredentialsDb } from "../../persistence/credentialLibrary.js";
@@ -172,8 +172,8 @@ function printBoxedToken(workerId: string, token: string, rotated: boolean): voi
   w(`worker_id: ${workerId}\n`);
   w(`token:     ${token}\n`);
   w("═════════════════════════════════════════════\n\n");
-  w("Distribute via SSH to the worker VM. Edit ~/.mai/agent/secrets.json:\n");
+  w("Distribute via SSH to the worker VM. Edit ~/.frondose/agent/secrets.json:\n");
   w(`  "server": { "token": "${token}" }\n\n`);
-  w("And set the server URL in ~/.mai/agent/config.json:\n");
+  w("And set the server URL in ~/.frondose/agent/config.json:\n");
   w('  "server": { "url": "http://<tailscale-server-address>:3031" }\n');
 }

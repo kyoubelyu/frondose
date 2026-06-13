@@ -34,7 +34,7 @@ export interface ResolveModelOpts {
 
 /**
  * Resolve the model SPEC from precedence chain:
- *   factory > cli > FRONDOSE_MODEL env > ~/.mai/auth.json default > DEFAULT_MODEL_SPEC
+ *   factory > cli > FRONDOSE_MODEL env > ~/.frondose/auth.json default > DEFAULT_MODEL_SPEC
  * Pure function (no SDK calls). Tested independently in T-M1..T-M3.
  */
 export function resolveModelSpec(opts: ResolveModelOpts = {}): string {

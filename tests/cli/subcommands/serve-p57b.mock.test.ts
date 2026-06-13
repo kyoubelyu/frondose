@@ -266,7 +266,7 @@ async function spinHarness(
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
-  mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
   // Write a legacy identity.json (readConfig fallback path picks it up when config.json missing)
   // Schema requirement: identityRecordSchema has `updatedAt: z.string().min(1)` REQUIRED;
@@ -278,7 +278,7 @@ async function spinHarness(
       updatedAt: new Date().toISOString(),
       ...opts.identityOverride,
     };
-    writeFileSync(join(tmpDir, ".mai", "agent", "identity.json"), JSON.stringify(identityRecord, null, 2), "utf-8");
+    writeFileSync(join(tmpDir, ".frondose", "agent", "identity.json"), JSON.stringify(identityRecord, null, 2), "utf-8");
   }
 
   // Reset per-test mock state

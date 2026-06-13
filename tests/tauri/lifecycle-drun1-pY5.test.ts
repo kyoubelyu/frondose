@@ -53,8 +53,8 @@ async function spawnSidecar(secrets: object): Promise<Sidecar> {
   const sockDir = mkdtempSync(join(tmpdir(), "frondose-life-sock-"));
   const sock = join(sockDir, "mai.sock");
   const token = randomBytes(16).toString("hex");
-  mkdirSync(join(homeDir, ".mai", "agent"), { recursive: true });
-  writeFileSync(join(homeDir, ".mai", "agent", "secrets.json"), JSON.stringify(secrets));
+  mkdirSync(join(homeDir, ".frondose", "agent"), { recursive: true });
+  writeFileSync(join(homeDir, ".frondose", "agent", "secrets.json"), JSON.stringify(secrets));
   const env = { ...process.env, HOME: homeDir, MAI_AUTOUPDATE: "skip", MAI_DOTENV: "skip" } as Record<string, string>;
   delete env.MAI_MODEL;
   delete env.DEEPSEEK_API_KEY;

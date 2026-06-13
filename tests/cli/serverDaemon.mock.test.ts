@@ -108,8 +108,8 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
       process.env.TELEGRAM_TOKEN = "test-daemon-token-123";
 
       // Create required dirs
-      const maiServerDir = join(dir, ".mai", "server");
-      const maiAgentDir = join(dir, ".mai", "agent");
+      const maiServerDir = join(dir, ".frondose", "server");
+      const maiAgentDir = join(dir, ".frondose", "agent");
       mkdirSync(maiServerDir, { recursive: true });
       mkdirSync(maiAgentDir, { recursive: true });
 
@@ -196,7 +196,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     const savedHome = process.env.HOME;
     try {
       process.env.HOME = dir;
-      const maiServerDir = join(dir, ".mai", "server");
+      const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       // Write live PID (current test process)
       writePid(join(maiServerDir, "server.pid"));
@@ -226,7 +226,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     try {
       process.env.HOME = dir;
       delete process.env.TELEGRAM_TOKEN;
-      mkdirSync(join(dir, ".mai", "server"), { recursive: true });
+      mkdirSync(join(dir, ".frondose", "server"), { recursive: true });
       // No server.pid → PID mutex passes
 
       const { runServerDaemon } = await import("../../src/cli/serverDaemon.js");
@@ -253,7 +253,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     // is exactly what the SIGTERM handler calls (via cleanup = () => removePid(pidPath)).
     const { dir, cleanup } = makeTmpDir();
     try {
-      const maiServerDir = join(dir, ".mai", "server");
+      const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       const pidPath = join(maiServerDir, "server.pid");
 

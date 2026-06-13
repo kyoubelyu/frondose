@@ -7,9 +7,11 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DATA_DIR_NAME } from "../../persistence/paths.js";
 import type { EnvSnapshot, InstallOpts, PlistArgs } from "./launchd.js";
 
-export const SERVER_LABEL = "com.kyoube.mai.server";
+const LEGACY_LABEL_NAMESPACE = "mai";
+export const SERVER_LABEL = `com.kyoube.${LEGACY_LABEL_NAMESPACE}.server`;
 
 export const serverPlistPath = (home = os.homedir()): string =>
   path.join(home, "Library", "LaunchAgents", `${SERVER_LABEL}.plist`);
@@ -56,8 +58,8 @@ export function renderServerPlist(args: PlistArgs): string {
   </dict>
   <key>ThrottleInterval</key><integer>30</integer>
   <key>WorkingDirectory</key><string>${escapeXml(args.home)}</string>
-  <key>StandardOutPath</key><string>${escapeXml(path.join(args.home, ".mai/server/logs/server-daemon.out.log"))}</string>
-  <key>StandardErrorPath</key><string>${escapeXml(path.join(args.home, ".mai/server/logs/server-daemon.err.log"))}</string>
+  <key>StandardOutPath</key><string>${escapeXml(path.join(args.home, DATA_DIR_NAME, "server", "logs", "server-daemon.out.log"))}</string>
+  <key>StandardErrorPath</key><string>${escapeXml(path.join(args.home, DATA_DIR_NAME, "server", "logs", "server-daemon.err.log"))}</string>
   <key>EnvironmentVariables</key>
   <dict>
 ${envEntries.join("\n")}
@@ -78,7 +80,7 @@ export async function installServerLaunchAgent(args: PlistArgs, opts: InstallOpt
   }
   const plPath = serverPlistPath(args.home);
   mkdirSync(path.dirname(plPath), { recursive: true });
-  mkdirSync(path.join(args.home, ".mai/server/logs"), { recursive: true });
+  mkdirSync(path.join(args.home, DATA_DIR_NAME, "server", "logs"), { recursive: true });
   const tmp = `${plPath}.tmp`;
   writeFileSync(tmp, renderServerPlist(args), { encoding: "utf-8", mode: 0o600 });
   renameSync(tmp, plPath);

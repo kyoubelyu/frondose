@@ -111,7 +111,7 @@ describe("runSshProvision — happy path (G-P41.2, G-P41.6)", () => {
     // When:  runSshProvision(ctx, { personaId:"p1", hostname:"worker.local" }, deps)
     // Then:  resolves { ok:true, workerId, personaId:"p1", hostname:"worker.local", nextSteps:[...] };
     //        workers.sqlite has 1 row; execImpl called 3x; calls[0].stdinData === install.sh content;
-    //        calls[1].command includes "cat > ~/.mai/agent/config.json";
+    //        calls[1].command includes "cat > ~/.frondose/agent/config.json";
     //        calls[2].command includes "secrets.json && chmod 600"
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -139,7 +139,7 @@ describe("runSshProvision — happy path (G-P41.2, G-P41.6)", () => {
       assert.equal(calls.length, 3, "T-Prov.1: execImpl must be called exactly 3 times");
       assert.equal(calls[0].stdinData, installShContent, "T-Prov.1: call-1 stdinData must equal install.sh content");
       assert.ok(
-        calls[1].command.includes("cat > ~/.mai/agent/config.json"),
+        calls[1].command.includes("cat > ~/.frondose/agent/config.json"),
         `T-Prov.1: call-2 command must include config.json write; got: ${calls[1].command}`,
       );
       assert.ok(
@@ -341,7 +341,7 @@ describe("runSshProvision — payload + assigned_count increment on success (G-P
     // Then:  { ok:true };
     //        calls[1].stdinData parses as valid configJsonSchemaV2 with server.url=ctx.serverUrl;
     //        calls[2].stdinData parses as secrets JSON with server.token present;
-    //        calls[2].command includes "chmod 600 ~/.mai/agent/secrets.json";
+    //        calls[2].command includes "chmod 600 ~/.frondose/agent/secrets.json";
     //        credentialsDb key assigned_count === 1 (incremented exactly once — CONCERN-MR-1)
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -395,8 +395,8 @@ describe("runSshProvision — payload + assigned_count increment on success (G-P
 
       // Verify call-3 command includes chmod 600
       assert.ok(
-        calls[2].command.includes("chmod 600 ~/.mai/agent/secrets.json"),
-        `T-Prov.7: call-3 command must include 'chmod 600 ~/.mai/agent/secrets.json'; got: ${calls[2].command}`,
+        calls[2].command.includes("chmod 600 ~/.frondose/agent/secrets.json"),
+        `T-Prov.7: call-3 command must include 'chmod 600 ~/.frondose/agent/secrets.json'; got: ${calls[2].command}`,
       );
 
       // CONCERN-MR-1: assigned_count incremented by exactly 1 on success (NOT on failure path)

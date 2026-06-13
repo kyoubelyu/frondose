@@ -58,7 +58,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       // at src/tools/index.ts uses `join(getHomeBase(), ...)` for the schedulePath fallback.
       const { getHomeBase } = await import("../../src/persistence/paths.js");
       assert.equal(getHomeBase(), dir, "getHomeBase() must return MAI_HOME_BASE sandbox value");
-      const expectedSchedulePath = join(dir, ".mai", "agent", "schedule.jsonl");
+      const expectedSchedulePath = join(dir, ".frondose", "agent", "schedule.jsonl");
 
       // Source-grep — the migrated line in src/tools/index.ts must use getHomeBase().
       const src = readFileSync(join(REPO_ROOT, "src/tools/index.ts"), "utf-8");
@@ -69,7 +69,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       // The fallback path is what getHomeBase() + join would compute — verifiable as
       // a static composition (not requiring a runtime makeAllTools probe).
       assert.equal(
-        join(getHomeBase(), ".mai", "agent", "schedule.jsonl"),
+        join(getHomeBase(), ".frondose", "agent", "schedule.jsonl"),
         expectedSchedulePath,
         `schedulePath fallback under MAI_HOME_BASE=${dir} must equal ${expectedSchedulePath}`,
       );
@@ -92,14 +92,14 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
     try {
       const { resolveUploadAllowlist } = await import("../../src/linkedin/uploadAllowlist.js");
       const allowlist = resolveUploadAllowlist();
-      const expected = join(dir, ".mai", "agent", "uploads");
+      const expected = join(dir, ".frondose", "agent", "uploads");
       assert.equal(
         allowlist[0],
         expected,
         `T-HB.2: allowlist[0] must equal ${expected} (sandbox-rooted), got: ${allowlist[0]}`,
       );
       // Sanity: real-home path must NOT appear in the allowlist (cache-of-getHomeBase-at-module-load defence).
-      const realHomeUploads = join(homedir(), ".mai", "agent", "uploads");
+      const realHomeUploads = join(homedir(), ".frondose", "agent", "uploads");
       if (dir !== homedir()) {
         assert.ok(
           !allowlist.includes(realHomeUploads),
@@ -123,7 +123,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
     const savedAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
     delete process.env.MAI_UPLOAD_ALLOWLIST;
     try {
-      const agentUploadsDir = join(dir, ".mai", "agent", "uploads");
+      const agentUploadsDir = join(dir, ".frondose", "agent", "uploads");
       mkdirSync(agentUploadsDir, { recursive: true });
       const sandboxFile = join(agentUploadsDir, "test-screenshot.png");
       writeFileSync(sandboxFile, "fake-png", "utf-8");
@@ -131,7 +131,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       // join(homedir(), …) path is allowed via the tmpdir rule — masking this test's intent. Use a
       // synthetic path OUTSIDE the sandbox AND outside os.tmpdir() to represent "a path the redirected
       // allowlist excludes" (assertFileReadable is prefix-only — the dir need not exist).
-      const outsideFile = join("/mai-z3-real-home", ".mai", "agent", "screenshot.png");
+      const outsideFile = join("/mai-z3-real-home", ".frondose", "agent", "screenshot.png");
       const { assertFileReadable } = await import("../../src/linkedin/uploadAllowlist.js");
       // (a) Sandbox file must pass (it's under the allowlist root).
       assertFileReadable(sandboxFile);
@@ -175,7 +175,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
         // typically binds 9222). The launcher probes via CDP.Version first; if the
         // port is unused, the probe fails and the launch fn is invoked.
         await launcherMod.ensureChrome({ port: 19999 }).catch(() => {});
-        const expected = join(dir, ".mai", "agent", "chrome-profile");
+        const expected = join(dir, ".frondose", "agent", "chrome-profile");
         assert.equal(
           capturedProfileDir,
           expected,
@@ -200,7 +200,7 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
     const { dir, cleanup } = makeSandbox("5");
     const prior = setHomeBase(dir);
     try {
-      const agentDir = join(dir, ".mai", "agent");
+      const agentDir = join(dir, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       const hooksJsonPath = join(agentDir, "hooks.json");
       writeFileSync(

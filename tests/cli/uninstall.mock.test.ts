@@ -69,8 +69,8 @@ function makeTmpInstall(opts: { pkgAsRealDir?: boolean } = {}): TmpInstall {
   const binDir = join(tmpDir, "bin");
   const libDir = join(tmpDir, "lib", "node_modules", "@kyoube");
   const pkgSymlinkPath = join(tmpDir, "lib", "node_modules", PKG_NAME);
-  const releasesDir = join(homeDir, ".mai", "agent", "releases");
-  const maiDir = join(homeDir, ".mai");
+  const releasesDir = join(homeDir, ".frondose", "agent", "releases");
+  const maiDir = join(homeDir, ".frondose");
 
   // Create directory scaffolding
   mkdirSync(binDir, { recursive: true });

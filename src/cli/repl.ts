@@ -8,7 +8,7 @@ import { TokenBudget } from "../agent/tokenBudget.js";
 import { TurnLock } from "../agent/turnSemaphore.js";
 import { frondoseEnv } from "../env.js";
 import type { LinkedinSession } from "../linkedin/types.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import {
   acquireTurnLock,
   isPidAlive,
@@ -52,11 +52,11 @@ export interface ReplOpts {
   abortSignal?: AbortSignal;
   /** P-6: Vercel onStepFinish hook (e.g. audit writer). */
   onStepFinish?: (step: StepResult<ToolSet>) => Promise<void> | void;
-  /** P-10 (D-9): schedule.jsonl path; default ~/.mai/agent/schedule.jsonl. */
+  /** P-10 (D-9): schedule.jsonl path; default ~/.frondose/agent/schedule.jsonl. */
   schedulePath?: string;
   /** P-11 (D-19): shared mutex for operator + cron + telegram turns. Default: fresh instance. */
   turnLock?: TurnLock;
-  /** P-11 (D-7): telegram.json path. Default: ~/.mai/agent/telegram.json. */
+  /** P-11 (D-7): telegram.json path. Default: ~/.frondose/agent/telegram.json. */
   telegramConfigPath?: string;
   /** P-46 D-1b: resolved agent-loop step budget. Default DEFAULT_MAX_STEPS. */
   maxSteps?: number;
@@ -87,15 +87,15 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
 
   // P-23 §6.7: repl.pid lifecycle + cross-process turn-lock path. Written here
   // so daemon's §6.4 gate observes REPL liveness on subsequent poll iterations.
-  const replPidPath = path.join(getHomeBase(), ".mai", "agent", "repl.pid");
-  const turnLockPath = path.join(getHomeBase(), ".mai", "agent", "turn.lock");
+  const replPidPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "repl.pid");
+  const turnLockPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "turn.lock");
   writePid(replPidPath);
   const cleanupReplPid = (): void => removePid(replPidPath);
   process.once("exit", cleanupReplPid);
 
   // P-23 §6.7: when daemon is alive, REPL switches its session file to the
   // shared JSONL so operator turns + daemon-deferred turns coexist on one log.
-  const telegramPidPath = path.join(getHomeBase(), ".mai", "agent", "telegram.pid");
+  const telegramPidPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.pid");
   const daemonAliveAtBoot = isPidAlive(telegramPidPath);
   const sessionFileRef = { path: opts.sessionFile };
   const isTtyOut = out === process.stdout && process.stdout.isTTY === true;
@@ -141,10 +141,10 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
   let pending: string[] | null = null;
 
   // P-10 (D-9): schedule path for /cron persistence + drain/poll.
-  const effectiveSchedulePath = opts.schedulePath ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+  const effectiveSchedulePath = opts.schedulePath ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
   // P-11 (D-7): telegram config path.
   const effectiveTelegramConfigPath =
-    opts.telegramConfigPath ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
+    opts.telegramConfigPath ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.json");
   // P-11 (D-19): shared TurnLock — default-construct when absent (preserves test-stub compat).
   const turnLock = opts.turnLock ?? new TurnLock();
   // P-46 D-1b: effective step budget for this REPL session. Mutable — the
@@ -176,7 +176,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     onStepFinish: composedStepFinish,
     out,
     configPath: effectiveTelegramConfigPath,
-    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "uploads"),
   };
   // P-46 D-1b: `/maxsteps` retunes the operator turn budget AND the background
   // cron / telegram turn budgets (cronDeps + telegramDeps are mutated in place,

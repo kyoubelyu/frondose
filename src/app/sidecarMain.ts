@@ -8,13 +8,15 @@
 // for the dependency trace justifying each include/exclude. In particular:
 //   - NO CLI command framework, NO 30-subcommand import graph (the win).
 //   - NO loadDotenv (the .app has no relevant cwd; provider keys flow via
-//     ~/.mai/auth.json / secrets — see §2.1 [2a, CONCERN-1] for trace).
+//     ~/.frondose/auth.json / secrets — see §2.1 [2a, CONCERN-1] for trace).
 //   - NO maybePrintTransitionalBanner (banner already short-circuits on `serve`).
 //   - NO runStartupAutoUpdate (the Tauri updater owns app updates).
 // What we DO need:
-//   - registerCrashHandlers() FIRST (static import) so any throw — including a
+//   - bootMigrateOrExit() FIRST (F-REN-4a B-1) — the data-dir migration runs
+//     before registerCrashHandlers (which mkdirs the log dir) and any data read.
+//   - registerCrashHandlers() (static import) so any throw — including a
 //     subsequent import-time throw inside the serve graph — hits
-//     ~/.mai/agent/logs/crash.log [CONCERN-MR-1].
+//     ~/.frondose/agent/logs/crash.log [CONCERN-MR-1].
 //   - argv/env parse for --sock / --token (parseArgs exported for unit tests
 //     [CONCERN-MR-3]).
 //   - DYNAMIC import + call runServeSubcommand({sockPath, bearerToken}).
@@ -25,6 +27,8 @@
 import { pathToFileURL } from "node:url";
 import { registerCrashHandlers } from "../cli/crashLogger.js";
 import { frondoseEnv } from "../env.js";
+import { bootMigrateOrExit } from "../persistence/dataDirMigration.js";
+import { getHomeBase } from "../persistence/paths.js";
 
 export function parseArgs(argv: string[]): { sockPath: string; bearerToken: string } {
   let sockPath: string | undefined;
@@ -67,6 +71,7 @@ export async function main(): Promise<void> {
   // 3) DYNAMIC import of the serve graph (any import-time throw now hits
   //    the registered handlers + the unhandled-rejection sink).
   const { sockPath, bearerToken } = parseArgs(process.argv.slice(2));
+  bootMigrateOrExit(getHomeBase());
   registerCrashHandlers();
   const { runServeSubcommand } = await import("../cli/subcommands/serve.js");
   await runServeSubcommand({ sockPath, bearerToken });

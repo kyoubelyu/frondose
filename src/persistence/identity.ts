@@ -18,7 +18,7 @@ import {
   identityPatchSchema,
   identityRecordSchema,
 } from "./identitySchema.js";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 // P-28 re-export: keep `from "./identity.js"` imports of the schema names working.
 export {
@@ -32,7 +32,7 @@ export {
   type IdentityPatch,
 };
 
-export const DEFAULT_IDENTITY_PATH = (): string => join(getHomeBase(), ".mai", "agent", "identity.json");
+export const DEFAULT_IDENTITY_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json");
 
 /** Lists which of the 7 required-field-names are missing/empty in a record. */
 export function missingIdentityFields(identity: Partial<IdentityRecord>): IdentityFieldName[] {

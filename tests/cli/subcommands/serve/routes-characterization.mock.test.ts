@@ -103,7 +103,7 @@ class MockIncomingMessage extends EventEmitter {
 
 function makeTempHome(): string {
   const home = mkdtempSync(join(tmpdir(), "p72s6-"));
-  mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
   return home;
 }
 

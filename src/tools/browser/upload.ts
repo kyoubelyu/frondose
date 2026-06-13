@@ -31,7 +31,7 @@ export function makeUploadTool(session: LinkedinSession) {
   return tool({
     description:
       "Upload a file to a file input on the current page (e.g. a LinkedIn composer or messaging thread). " +
-      "File path must be within FRONDOSE_UPLOAD_ALLOWLIST (default: ~/.mai/agent/uploads/).",
+      "File path must be within FRONDOSE_UPLOAD_ALLOWLIST (default: ~/.frondose/agent/uploads/).",
     parameters: uploadParams,
     execute: async ({ file, scope }) => {
       try {

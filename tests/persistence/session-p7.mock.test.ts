@@ -22,7 +22,7 @@ import { cwdHash, listAllSessions, sessionDir } from "../../src/persistence/sess
 function withTmpSessionsRoot(): { tmpRoot: string; restore: () => void } {
   const tmpRoot = mkdtempSync(join(tmpdir(), "mai-p7-sessions-"));
   const prevHome = process.env.HOME;
-  // SESSIONS_ROOT() = join(homedir(), ".mai", "agent", "sessions")
+  // SESSIONS_ROOT() = join(homedir(), ".frondose", "agent", "sessions")
   // We can't easily override it without patching the module, so we point
   // process.env.HOME at a tmp dir that mirrors the structure.
   // The actual sessions root will be: tmpRoot/.mai/agent/sessions
@@ -71,7 +71,7 @@ test("T-Sessions7: listAllSessions reads cwd.txt for post-P-7 dirs; hash-only fa
   const { tmpRoot, restore } = withTmpSessionsRoot();
   try {
     // Build the sessions root under the fake home.
-    const sessionsRoot = join(tmpRoot, ".mai", "agent", "sessions");
+    const sessionsRoot = join(tmpRoot, ".frondose", "agent", "sessions");
     mkdirSync(sessionsRoot, { recursive: true });
 
     const testCwd = "/home/operator/my-project";

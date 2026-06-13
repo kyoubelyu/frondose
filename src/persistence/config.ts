@@ -1,7 +1,7 @@
-/** P-24: non-secret operator config at ~/.mai/agent/config.json (plan §6.2).
+/** P-24: non-secret operator config at ~/.frondose/agent/config.json (plan §6.2).
  *
  * Migration: on first read where config.json is absent, reads
- * ~/.mai/agent/telegram.json for {enabled, boundUserId, proxyUrl} and writes
+ * ~/.frondose/agent/telegram.json for {enabled, boundUserId, proxyUrl} and writes
  * config.json with those values (only if any of the three is non-default).
  * Legacy telegram.json is NOT deleted (P-25 GC).
  *
@@ -14,9 +14,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
-export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "config.json");
+export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "config.json");
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
@@ -140,7 +140,7 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
 
 /** v1 → v2: fold sibling identity.json + soul_band_override.txt into the config.
  *  Legacy files are NOT deleted (P-29 GC). Identity/soul paths are derived from
- *  the config's OWN directory so worker (~/.mai/agent) and server (~/.mai/server)
+ *  the config's OWN directory so worker (~/.frondose/agent) and server (~/.frondose/server)
  *  configs migrate against their own siblings (G-P28.7). */
 function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
   // Parse v1 leniently — on failure fall back to a hardcoded default (C-1: do NOT
@@ -217,7 +217,7 @@ export function writeConfig(cfg: ConfigJsonV2, path: string = DEFAULT_CONFIG_PAT
   // No chmod — config.json carries no secrets (server.token lives in secrets.json).
 }
 
-/** Read legacy ~/.mai/agent/telegram.json and extract {enabled, boundUserId, proxyUrl}.
+/** Read legacy ~/.frondose/agent/telegram.json and extract {enabled, boundUserId, proxyUrl}.
  *
  * Step-3b C-2 fix: emit stderr warning on parse error (was silent). Mirrors
  * `tryReadJson` in secrets.ts so operators see why their telegram settings
@@ -226,7 +226,7 @@ export function writeConfig(cfg: ConfigJsonV2, path: string = DEFAULT_CONFIG_PAT
  * P-28: returns ConfigJsonV2 (spreads DEFAULT_CONFIG_V2).
  */
 export function migrateTelegramIntoConfig(
-  tcPath: string = join(getHomeBase(), ".mai", "agent", "telegram.json"),
+  tcPath: string = join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.json"),
 ): ConfigJsonV2 {
   if (!existsSync(tcPath)) return DEFAULT_CONFIG_V2;
   try {

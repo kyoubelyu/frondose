@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import type { CdpHandle } from "../cdp/types.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 
 /** P-55 + P-56b: overlay -> host event envelope. Runtime shape stays open.
  *
@@ -28,7 +28,7 @@ type RawOverlayPayload = OverlayEventPayload & {
 
 export function appendOverlayEventRow(
   event: OverlayEvent,
-  auditPath: string = path.join(getHomeBase(), ".mai", "agent", "audit.jsonl"),
+  auditPath: string = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl"),
 ): void {
   const auditEvent: Omit<OverlayEvent, "payload"> = {
     kind: event.kind,

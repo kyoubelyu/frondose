@@ -142,8 +142,8 @@ describe("runServerPersonaSubcommand add: fromTemplate path writes llmKeyRef + g
         "T-PERS.CRED.3: runServerPersonaSubcommand add must not throw",
       );
 
-      // SERVER_PERSONAS_DIR() = join(homedir(), ".mai", "server", "personas") → join(dir, ".mai", "server", "personas")
-      const personasDir = join(dir, ".mai", "server", "personas");
+      // SERVER_PERSONAS_DIR() = join(homedir(), ".frondose", "server", "personas") → join(dir, ".frondose", "server", "personas")
+      const personasDir = join(dir, ".frondose", "server", "personas");
       const readBack = readPersonaTemplate(personasDir, "p1");
       assert.ok(
         readBack !== null,

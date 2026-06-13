@@ -30,7 +30,7 @@ import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js"
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { countAutoLedgerByAction, DEFAULT_SALES_DB_PATH, getAutoRun } from "../../persistence/salesDb.js";
 import { modeFromState } from "../../tauri/ui/mode.js";
 import type { ControlSignals } from "../../tools/index.js";
@@ -52,7 +52,7 @@ export interface ServeOpts {
   bearerToken: string;
 }
 
-const AUDIT_PATH = (): string => join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+const AUDIT_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
 export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const parentDir = dirname(opts.sockPath);
   mkdirSync(parentDir, { recursive: true });
@@ -87,10 +87,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // can hydrate deps.model later through reloadAgentDeps without a restart.
   const model = resolveModelOrNull({});
   const maxSteps = resolveMaxSteps(undefined);
-  const profileDir = frondoseEnv("PROFILE_DIR") ?? join(getHomeBase(), ".mai", "agent", "chrome-profile");
-  const memoryDbPath = join(getHomeBase(), ".mai", "agent", "memory.sqlite");
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
+  const memoryDbPath = join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
   const identityPath = DEFAULT_IDENTITY_PATH();
-  const schedulePath = join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+  const schedulePath = join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
   const salesDbPath = DEFAULT_SALES_DB_PATH();
   const auditPath = AUDIT_PATH();
   const auditWriter = makeAuditWriter(auditPath);

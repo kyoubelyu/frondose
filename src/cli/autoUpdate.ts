@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { frondoseEnv } from "../env.js";
 import { readUpdateChannel, type UpdateChannel } from "../persistence/channel.js";
 import { readGithubConfig } from "../persistence/github.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { buildRelease, extractTarball } from "./autoUpdate/extract.js";
 import { downloadTarball, fetchLatestPrerelease, fetchLatestTag } from "./autoUpdate/fetch.js";
 import { gcOldReleases } from "./autoUpdate/gc.js";
@@ -21,8 +21,8 @@ export * from "./autoUpdate/symlink.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
-const RELEASES_DIR = (): string => join(getHomeBase(), ".mai", "agent", "releases");
-const UPDATE_LOG = (): string => join(getHomeBase(), ".mai", "agent", "logs", "update.log");
+const RELEASES_DIR = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "releases");
+const UPDATE_LOG = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "logs", "update.log");
 
 export type AutoUpdateAction = "skipped" | "updated" | "failed";
 export interface AutoUpdateResult {

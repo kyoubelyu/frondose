@@ -1,9 +1,9 @@
 /** P-38: `mai uninstall` — remove the global mai install. fs-only (no child_process).
- *  --purge also removes ~/.mai/ (credentials, sessions, the Chrome-profile symlink). */
+ *  --purge also removes ~/.frondose/ (credentials, sessions, the Chrome-profile symlink). */
 import { existsSync, lstatSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { confirm } from "@inquirer/prompts";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { derivePackageSymlink, isDevLink } from "../autoUpdate.js";
 
 export interface UninstallOpts {
@@ -49,14 +49,14 @@ export async function runUninstallSubcommand(opts: UninstallOpts): Promise<void>
     );
     return;
   }
-  const releasesDir = join(home, ".mai", "agent", "releases");
-  const maiDir = join(home, ".mai");
+  const releasesDir = join(home, DATA_DIR_NAME, "agent", "releases");
+  const maiDir = join(home, DATA_DIR_NAME);
   const devLink = isDevLink(pkgSymlink);
 
   if (!opts.yes) {
     process.stdout.write(
       "[uninstall] This removes the `mai` bin symlink, the package symlink, and the release dirs " +
-        `(${releasesDir}).\n  Your ~/.mai/ state (credentials, sessions, Chrome profile) is PRESERVED ` +
+        `(${releasesDir}).\n  Your ~/.frondose/ state (credentials, sessions, Chrome profile) is PRESERVED ` +
         "unless you also pass --purge.\n" +
         "  If a launchd `mai server` or Telegram daemon is running, run `mai server uninstall` " +
         "and/or `mai telegram off` FIRST — uninstall removes the binary out from under them.\n" +
@@ -72,21 +72,21 @@ export async function runUninstallSubcommand(opts: UninstallOpts): Promise<void>
 
   removePathSafe(argv1); // the bin symlink (e.g. /opt/homebrew/bin/mai)
   removePathSafe(pkgSymlink); // the @kyoube/mai-agent package symlink (dev-link: symlink only)
-  removePathSafe(releasesDir); // ~/.mai/agent/releases/
+  removePathSafe(releasesDir); // ~/.frondose/agent/releases/
   process.stdout.write("[uninstall] Removed the mai binary + release dirs.\n");
 
   if (opts.purge) {
     if (!opts.yes) {
       process.stdout.write(
         `[uninstall] --purge will DELETE ${maiDir} IN FULL and IRREVERSIBLY:\n` +
-          "  • all credentials — ~/.mai/agent/secrets.json (LLM keys, GitHub PAT, tokens)\n" +
+          "  • all credentials — ~/.frondose/agent/secrets.json (LLM keys, GitHub PAT, tokens)\n" +
           "  • all sessions, identity, soul, memory.sqlite, audit logs\n" +
-          "  • the ~/.mai/agent/chrome-profile SYMLINK → the SHARED mai-browser Chrome profile.\n" +
+          "  • the ~/.frondose/agent/chrome-profile SYMLINK → the SHARED mai-browser Chrome profile.\n" +
           "    (The symlink is removed; the underlying mai-browser profile dir is NOT deleted —\n" +
           "     but `mai` loses its logged-in LinkedIn/Chrome session.)\n",
       );
       if (!(await ask(`Permanently delete ${maiDir}?`))) {
-        process.stdout.write("[uninstall] --purge aborted — ~/.mai/ kept.\n");
+        process.stdout.write("[uninstall] --purge aborted — ~/.frondose/ kept.\n");
         return;
       }
     }

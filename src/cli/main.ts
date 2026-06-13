@@ -5,7 +5,8 @@ import { ExitPromptError } from "@inquirer/core";
 import { Command } from "commander";
 import { frondoseEnv } from "../env.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { bootMigrateOrExit } from "../persistence/dataDirMigration.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { resolveTier } from "../tier.js";
 import { registerCrashHandlers } from "./crashLogger.js";
 import { loadDotenv } from "./env.js";
@@ -75,6 +76,7 @@ function maybePrintTransitionalBanner(): void {
 async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
+  bootMigrateOrExit(getHomeBase());
 
   // [Phase 15] Surface the transitional-CLI banner before any further work.
   maybePrintTransitionalBanner();
@@ -94,21 +96,21 @@ async function main(): Promise<void> {
 
   // P-3 env reads (CDP layer): port + profile dir.
   const cdpPort = frondoseEnv("CDP_PORT") ? parseInt(frondoseEnv("CDP_PORT") ?? "", 10) : 9222;
-  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
 
   // P-4 env reads (persistence layer): memory DB + identity JSON paths.
-  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
-  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
+  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
+  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json");
 
-  // P-6 env read (audit layer): JSONL audit log path; default ~/.mai/agent/audit.jsonl.
-  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+  // P-6 env read (audit layer): JSONL audit log path; default ~/.frondose/agent/audit.jsonl.
+  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
 
   // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
-  const schedulePath = frondoseEnv("SCHEDULE_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+  const schedulePath = frondoseEnv("SCHEDULE_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
 
   // P-11 (D-9 / D-13) env read: telegram.json path for /telegram persistence.
   const telegramConfigPath =
-    frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
+    frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.json");
 
   // P-7: dynamic version read so commander's --version flag stays in sync with package.json.
   const requireFromHere = createRequire(import.meta.url);
@@ -217,7 +219,7 @@ async function main(): Promise<void> {
 
   if (powerTier) {
     // P-25: `mai server` — orchestrator agent (chief-of-staff). Independent
-    // directory tree at ~/.mai/server/, distinct Telegram bot via
+    // directory tree at ~/.frondose/server/, distinct Telegram bot via
     // FRONDOSE_SERVER_TELEGRAM_TOKEN, 14-tool inventory (no LinkedIn).
     const server = program.command("server").description("Operator's orchestrator agent");
     server.action(async () => {
@@ -513,7 +515,7 @@ async function main(): Promise<void> {
     .option("--json", "Output machine-readable JSON")
     .option(
       "--bootstrap",
-      "One-time migration: install latest release to ~/.mai/agent/releases/ and swap the global symlink (use when running from a dev-link npm-link setup)",
+      "One-time migration: install latest release to ~/.frondose/agent/releases/ and swap the global symlink (use when running from a dev-link npm-link setup)",
     )
     .action(async (cliOpts: { json?: boolean; bootstrap?: boolean }) => {
       if (cliOpts.bootstrap === true) {
@@ -525,25 +527,25 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
-  // P-58d.2: `mai update-server` — serve ~/.mai/site/ (download portal + Tauri
+  // P-58d.2: `mai update-server` — serve ~/.frondose/site/ (download portal + Tauri
   // updater manifest) over LAN HTTP. Operator-internal infra command (not gated
   // by tier — like `mai update`). Blocks until SIGINT/SIGTERM.
   program
     .command("update-server")
-    .description("Serve the local Frondose download portal + updater manifest (~/.mai/site/) over LAN HTTP")
+    .description("Serve the local Frondose download portal + updater manifest (~/.frondose/site/) over LAN HTTP")
     .option("--port <n>", "TCP port to bind (default 4875)")
-    .option("--site-dir <dir>", "Site directory to serve (default ~/.mai/site)")
+    .option("--site-dir <dir>", "Site directory to serve (default ~/.frondose/site)")
     .action(async (cliOpts: { port?: string; siteDir?: string }) => {
       const { runUpdateServerSubcommand } = await import("./subcommands/updateServer.js");
       await runUpdateServerSubcommand({ port: cliOpts.port, siteDir: cliOpts.siteDir });
       process.exit(0);
     });
 
-  // P-38: `mai uninstall` — remove the global install. fs-only; --purge wipes ~/.mai/.
+  // P-38: `mai uninstall` — remove the global install. fs-only; --purge wipes ~/.frondose/.
   program
     .command("uninstall")
-    .description("Remove the global mai install (bin + package symlink + release dirs); --purge also removes ~/.mai/")
-    .option("--purge", "Also remove ~/.mai/ — credentials, sessions, Chrome-profile symlink (irreversible)", false)
+    .description("Remove the global mai install (bin + package symlink + release dirs); --purge also removes ~/.frondose/")
+    .option("--purge", "Also remove ~/.frondose/ — credentials, sessions, Chrome-profile symlink (irreversible)", false)
     .option("--yes", "Skip the interactive confirmation prompts", false)
     .action(async (cliOpts: { purge?: boolean; yes?: boolean }) => {
       await runWithExitGuard(async () => {

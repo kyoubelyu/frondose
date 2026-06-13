@@ -236,7 +236,7 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 1500;
     void runServeSubcommand({ sockPath, bearerToken: bearer });
@@ -295,7 +295,7 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // mockRunAgentLoop captures onStepFinish + then resolves after 500ms (so we have
     // a window to invoke the captured callback before the server cleans up currentTurn).
@@ -393,7 +393,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // 500ms sleep gives time for #2→#3 overlap
     mockTurnSleepMs = 500;
@@ -483,7 +483,7 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
-    mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+    mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     void runServeSubcommand({ sockPath, bearerToken: bearer });
     const sockReady = await pollForSock(sockPath, 5000);

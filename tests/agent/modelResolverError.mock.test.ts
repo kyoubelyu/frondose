@@ -47,7 +47,7 @@ function setupTmpHome(
   extra?: Record<string, unknown>,
 ): { tmpHome: string; cleanup: () => void } {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fa-"));
-  const secretsDir = join(tmpHome, ".mai", "agent");
+  const secretsDir = join(tmpHome, ".frondose", "agent");
   mkdirSync(secretsDir, { recursive: true });
   writeFileSync(join(secretsDir, "secrets.json"), JSON.stringify({ schema_version: 1, providers, ...extra }), "utf-8");
   return {

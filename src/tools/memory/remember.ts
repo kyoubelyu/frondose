@@ -32,7 +32,7 @@ const rememberToolParams = z.object({
 export function makeRememberTool(memoryDbPath: string, serverCoords?: { serverUrl: string; token: string }) {
   return tool({
     description:
-      "Record an interaction with a LinkedIn person. Persisted to ~/.mai/agent/memory.sqlite. " +
+      "Record an interaction with a LinkedIn person. Persisted to ~/.frondose/agent/memory.sqlite. " +
       "Use this whenever the operator says they want to remember a person, message, or interaction.",
     parameters: rememberToolParams,
     execute: async (input) => {

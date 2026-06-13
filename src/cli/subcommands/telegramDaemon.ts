@@ -16,18 +16,21 @@ import { composeSoulBand } from "../../agent/systemPrompt/soul.js";
 import { TurnLock } from "../../agent/turnSemaphore.js";
 import { createLinkedinSession } from "../../linkedin/index.js";
 import { makeAuditWriter } from "../../persistence/audit.js";
+import { bootMigrateOrExit } from "../../persistence/dataDirMigration.js";
 import { readIdentity } from "../../persistence/identity.js";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { isAlive, isPidAlive, readPid, removePid, writePid } from "../../persistence/processLock.js";
 import { appendMessagesShared, sharedSessionPath } from "../../persistence/sharedSession.js";
 import { readTelegramConfig } from "../../persistence/telegramConfig.js";
 import { makeAllTools } from "../../tools/index.js";
 import { type PollerHandle, startDaemonPoller, type TelegramTurnDeps } from "../replTelegram.js";
 
-const TELEGRAM_PID = (): string => path.join(getHomeBase(), ".mai", "agent", "telegram.pid");
-const REPL_PID = (): string => path.join(getHomeBase(), ".mai", "agent", "repl.pid");
+const TELEGRAM_PID = (): string => path.join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.pid");
+const REPL_PID = (): string => path.join(getHomeBase(), DATA_DIR_NAME, "agent", "repl.pid");
 
 export async function runTelegramDaemon(): Promise<void> {
+  bootMigrateOrExit(getHomeBase());
+
   // (1) PID mutex — refuse if another daemon is alive; reap stale otherwise.
   const ourPidPath = TELEGRAM_PID();
   const existing = readPid(ourPidPath);
@@ -55,7 +58,7 @@ export async function runTelegramDaemon(): Promise<void> {
     cleanup();
     process.exit(1);
   }
-  const tcPath = frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "telegram.json");
+  const tcPath = frondoseEnv("TELEGRAM_CONFIG_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.json");
   const cfg = readTelegramConfig(tcPath);
   if (cfg.boundUserId === null) {
     process.stderr.write("[telegram daemon] boundUserId null; run `mai telegram bind` first\n");
@@ -64,11 +67,11 @@ export async function runTelegramDaemon(): Promise<void> {
   }
 
   // (4) Build agent stack — identical signature to runRepl setup.
-  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "identity.json");
-  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "memory.sqlite");
-  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), ".mai", "agent", "audit.jsonl");
+  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json");
+  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
+  const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
   const cdpPort = frondoseEnv("CDP_PORT") ? parseInt(frondoseEnv("CDP_PORT") ?? "", 10) : 9222;
-  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), ".mai", "agent", "chrome-profile");
+  const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
 
   const identity = readIdentity(identityPath);
   const model = resolveModel({});
@@ -104,7 +107,7 @@ export async function runTelegramDaemon(): Promise<void> {
     onStepFinish: auditWriter,
     out: process.stdout,
     configPath: tcPath,
-    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai", "agent", "uploads"),
+    uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "uploads"),
     // P-23 §6.7: daemon always uses the shared-session writer.
     appendMessages: appendMessagesShared,
   };

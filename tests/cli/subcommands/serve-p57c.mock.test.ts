@@ -275,10 +275,10 @@ async function spinHarness(
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
-  mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
   // Write minimal identity.json with updatedAt (required by schema)
   writeFileSync(
-    join(tmpDir, ".mai", "agent", "identity.json"),
+    join(tmpDir, ".frondose", "agent", "identity.json"),
     JSON.stringify({ icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() }, null, 2),
     "utf-8",
   );
@@ -286,9 +286,9 @@ async function spinHarness(
   // The cron tests exercise the Auto path, so persist mode.json=auto (the realistic "operator enabled Auto")
   // BEFORE runServeSubcommand boots → cronEnabled=true → the cron driver ticks. (Production: Manual default
   // means cron is OFF — the supervised default; this harness opts into Auto.)
-  writeFileSync(join(tmpDir, ".mai", "agent", "mode.json"), JSON.stringify({ mode: "auto" }), "utf-8");
+  writeFileSync(join(tmpDir, ".frondose", "agent", "mode.json"), JSON.stringify({ mode: "auto" }), "utf-8");
   if (opts.writeScheduleJsonl !== undefined) {
-    writeFileSync(join(tmpDir, ".mai", "agent", "schedule.jsonl"), opts.writeScheduleJsonl, "utf-8");
+    writeFileSync(join(tmpDir, ".frondose", "agent", "schedule.jsonl"), opts.writeScheduleJsonl, "utf-8");
   }
 
   mockBindingCalledHandler = null;
@@ -641,7 +641,7 @@ describe("Cron driver — cron-fired turns are NOT retryable (G-P57c.6, rev-1 MR
         lastRunAt: null,
         nextRunAt: dueAt,
       });
-      fs.writeFileSync(join(h.tmpDir, ".mai", "agent", "schedule.jsonl"), `${scheduleEntry}\n`, "utf-8");
+      fs.writeFileSync(join(h.tmpDir, ".frondose", "agent", "schedule.jsonl"), `${scheduleEntry}\n`, "utf-8");
 
       // (3) Subscribe SSE + wait for cron tick (every 100ms accelerated)
       const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2000 });

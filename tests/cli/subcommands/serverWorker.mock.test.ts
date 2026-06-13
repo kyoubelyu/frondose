@@ -81,7 +81,7 @@ function mockProcessExit(): { restore: () => void; getCode: () => number | undef
 
 // Get workers.sqlite path as runServerWorkerSubcommand would open it
 function workersDbPath(homeDir: string): string {
-  return join(homeDir, ".mai", "server", "workers.sqlite");
+  return join(homeDir, ".frondose", "server", "workers.sqlite");
 }
 
 describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", () => {

@@ -1,4 +1,4 @@
-/** P-24: consolidated secrets store at ~/.mai/agent/secrets.json (plan §6.1).
+/** P-24: consolidated secrets store at ~/.frondose/agent/secrets.json (plan §6.1).
  *
  * Atomicity invariant: every write goes through tmp+rename+chmod 600.
  * tmp file is also created with mode 0o600 to minimize the visibility window
@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { type AuthJson, DEFAULT_AUTH_PATH, migrateProviderEntry } from "./auth.js";
 import { DEFAULT_GITHUB_CONFIG_PATH } from "./github.js";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SEARCH_CONFIG_PATH } from "./search.js";
 
 // Inline provider schema — duplicated from auth.ts to break the secrets.ts ↔
@@ -27,7 +27,7 @@ const providerEntrySchema = z.object({
   type: z.enum(["openai", "anthropic"]).optional(),
 });
 
-export const DEFAULT_SECRETS_PATH = (): string => join(getHomeBase(), ".mai", "agent", "secrets.json");
+export const DEFAULT_SECRETS_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "secrets.json");
 
 const githubSubSchema = z.object({
   token: z.string().min(1).optional(),
@@ -80,7 +80,7 @@ function tryReadJson<T>(path: string, schema: z.ZodType<T>, label: string): T | 
  *  Used by the auth/github/search shims to thread test-injected legacy paths
  *  through to the migration step — without this, tests that call
  *  `readAuth(tmpDir/auth.json)` would have `legacyMerged` reach back to the
- *  operator's real `~/.mai/auth.json` (test pollution). */
+ *  operator's real `~/.frondose/auth.json` (test pollution). */
 export interface LegacyPathOverrides {
   authPath?: string;
   githubPath?: string;

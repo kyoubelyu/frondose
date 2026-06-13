@@ -102,13 +102,14 @@ function makeExecStub(results: Array<{ stdout: string; stderr: string; code: num
 
 // ─── T-Prefix.1 ───────────────────────────────────────────────────────────────
 
-describe("runSshProvision — maiPrefix UNDEFINED → P-41 byte-identical commands (G-P42.1)", () => {
-  it("T-Prefix.1: when deps has NO maiPrefix, the 3 execImpl commands are byte-identical to P-41: 'bash -s', 'mkdir -p ~/.mai/agent && cat > ~/.mai/agent/config.json', 'cat > ~/.mai/agent/secrets.json && chmod 600 ~/.mai/agent/secrets.json'", async () => {
+describe("runSshProvision — maiPrefix UNDEFINED → commands use ~/.frondose/agent (G-P42.1, updated F-REN-4a)", () => {
+  it("T-Prefix.1: when deps has NO maiPrefix, the 3 execImpl commands are: 'bash -s', 'mkdir -p ~/.frondose/agent && cat > ~/.frondose/agent/config.json', 'cat > ~/.frondose/agent/secrets.json && chmod 600 ~/.frondose/agent/secrets.json' (F-REN-4a: .mai→.frondose)", async () => {
     // Given: deps = { execImpl, installShPath } — NO maiPrefix field (undefined)
     // When:  runSshProvision(ctx, { personaId:"p1", hostname:"h1" }, deps)
     // Then:  calls.length === 3; calls[0].command === "bash -s" (exact);
-    //        calls[1].command === "mkdir -p ~/.mai/agent && cat > ~/.mai/agent/config.json" (exact);
-    //        calls[2].command === "cat > ~/.mai/agent/secrets.json && chmod 600 ~/.mai/agent/secrets.json" (exact)
+    //        calls[1].command === "mkdir -p ~/.frondose/agent && cat > ~/.frondose/agent/config.json" (exact);
+    //        calls[2].command === "cat > ~/.frondose/agent/secrets.json && chmod 600 ~/.frondose/agent/secrets.json" (exact)
+    //        (F-REN-4a: data dir renamed .mai → .frondose in provisionWorker.ts line 153)
     const { dir, cleanup } = makeTmpDir();
     try {
       const installShPath = writeInstallShFixture(dir);
@@ -125,17 +126,17 @@ describe("runSshProvision — maiPrefix UNDEFINED → P-41 byte-identical comman
 
       assert.ok(result.ok, `T-Prefix.1: expected ok:true; got: ${JSON.stringify(result)}`);
       assert.equal(calls.length, 3, "T-Prefix.1: execImpl must be called exactly 3 times");
-      // G-P42.1: exact byte-identity with P-41 commands when maiPrefix is undefined
+      // G-P42.1 (updated F-REN-4a): default dir is ~/.frondose/agent when maiPrefix is undefined
       assert.equal(calls[0].command, "bash -s", "T-Prefix.1: call-1 command must be 'bash -s' (no prefix)");
       assert.equal(
         calls[1].command,
-        "mkdir -p ~/.mai/agent && cat > ~/.mai/agent/config.json",
-        "T-Prefix.1: call-2 command must use ~/.mai/agent (no prefix)",
+        "mkdir -p ~/.frondose/agent && cat > ~/.frondose/agent/config.json",
+        "T-Prefix.1: call-2 command must use ~/.frondose/agent (no prefix, F-REN-4a)",
       );
       assert.equal(
         calls[2].command,
-        "cat > ~/.mai/agent/secrets.json && chmod 600 ~/.mai/agent/secrets.json",
-        "T-Prefix.1: call-3 command must use ~/.mai/agent (no prefix)",
+        "cat > ~/.frondose/agent/secrets.json && chmod 600 ~/.frondose/agent/secrets.json",
+        "T-Prefix.1: call-3 command must use ~/.frondose/agent (no prefix, F-REN-4a)",
       );
     } finally {
       cleanup();
@@ -179,12 +180,13 @@ describe("runSshProvision — maiPrefix set → install command prefixed (G-P42.
 
 // ─── T-Prefix.3 ───────────────────────────────────────────────────────────────
 
-describe("runSshProvision — maiPrefix set → config/secrets paths redirected (G-P42.3)", () => {
-  it("T-Prefix.3: when deps.maiPrefix='/tmp/mai-p42-x', command 2 targets /tmp/mai-p42-x/.mai/agent/config.json and command 3 targets /tmp/mai-p42-x/.mai/agent/secrets.json", async () => {
+describe("runSshProvision — maiPrefix set → config/secrets paths redirected (G-P42.3, updated F-REN-4a)", () => {
+  it("T-Prefix.3: when deps.maiPrefix='/tmp/mai-p42-x', command 2 targets /tmp/mai-p42-x/.frondose/agent/config.json and command 3 targets /tmp/mai-p42-x/.frondose/agent/secrets.json (F-REN-4a: .mai→.frondose)", async () => {
     // Given: deps = { execImpl, installShPath, maiPrefix: "/tmp/mai-p42-x" }
     // When:  runSshProvision(ctx, { personaId:"p1", hostname:"h1" }, deps)
-    // Then:  calls[1].command === "mkdir -p /tmp/mai-p42-x/.mai/agent && cat > /tmp/mai-p42-x/.mai/agent/config.json" (exact);
-    //        calls[2].command === "cat > /tmp/mai-p42-x/.mai/agent/secrets.json && chmod 600 /tmp/mai-p42-x/.mai/agent/secrets.json" (exact)
+    // Then:  calls[1].command === "mkdir -p /tmp/mai-p42-x/.frondose/agent && cat > /tmp/mai-p42-x/.frondose/agent/config.json" (exact);
+    //        calls[2].command === "cat > /tmp/mai-p42-x/.frondose/agent/secrets.json && chmod 600 /tmp/mai-p42-x/.frondose/agent/secrets.json" (exact)
+    //        (F-REN-4a: data dir renamed .mai → .frondose in provisionWorker.ts)
     const { dir, cleanup } = makeTmpDir();
     try {
       const installShPath = writeInstallShFixture(dir);
@@ -203,13 +205,13 @@ describe("runSshProvision — maiPrefix set → config/secrets paths redirected 
       assert.equal(calls.length, 3, "T-Prefix.3: execImpl must be called exactly 3 times");
       assert.equal(
         calls[1].command,
-        "mkdir -p /tmp/mai-p42-x/.mai/agent && cat > /tmp/mai-p42-x/.mai/agent/config.json",
-        `T-Prefix.3: call-2 command must target /tmp/mai-p42-x/.mai/agent/config.json; got: ${calls[1]?.command}`,
+        "mkdir -p /tmp/mai-p42-x/.frondose/agent && cat > /tmp/mai-p42-x/.frondose/agent/config.json",
+        `T-Prefix.3: call-2 command must target /tmp/mai-p42-x/.frondose/agent/config.json (F-REN-4a); got: ${calls[1]?.command}`,
       );
       assert.equal(
         calls[2].command,
-        "cat > /tmp/mai-p42-x/.mai/agent/secrets.json && chmod 600 /tmp/mai-p42-x/.mai/agent/secrets.json",
-        `T-Prefix.3: call-3 command must target /tmp/mai-p42-x/.mai/agent/secrets.json; got: ${calls[2]?.command}`,
+        "cat > /tmp/mai-p42-x/.frondose/agent/secrets.json && chmod 600 /tmp/mai-p42-x/.frondose/agent/secrets.json",
+        `T-Prefix.3: call-3 command must target /tmp/mai-p42-x/.frondose/agent/secrets.json (F-REN-4a); got: ${calls[2]?.command}`,
       );
     } finally {
       cleanup();

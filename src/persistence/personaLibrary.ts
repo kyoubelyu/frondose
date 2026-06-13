@@ -1,4 +1,4 @@
-/** P-27: persona templates at ~/.mai/server/personas/<id>.json. Filesystem CRUD. */
+/** P-27: persona templates at ~/.frondose/server/personas/<id>.json. Filesystem CRUD. */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";

@@ -7,10 +7,10 @@
  */
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
-export const DEFAULT_SEARCH_CONFIG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "search.json");
+export const DEFAULT_SEARCH_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "search.json");
 
 export const searchConfigSchema = z.object({
   braveApiKey: z.string().min(1).optional(),

@@ -68,7 +68,7 @@ export interface ScreenshotOptions {
 export interface ChromeLaunchOptions {
   /** CDP port. Default 9222. */
   port?: number;
-  /** Persistent user-data-dir. Default ~/.mai/agent/chrome-profile. */
+  /** Persistent user-data-dir. Default ~/.frondose/agent/chrome-profile. */
   profileDir?: string;
   /** Extra flags appended to chrome-launcher's defaults. */
   chromeFlags?: string[];

@@ -1,8 +1,8 @@
 import { closeSync, existsSync, mkdirSync, openSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 
-const UPDATE_LOCK = (): string => join(getHomeBase(), ".mai", "agent", "update.lock");
+const UPDATE_LOCK = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "update.lock");
 // Step-3b C3: 45 min provides ~24.5 min margin over worst-case 20-min cold-cache
 // `npm install` + 15s build. Eliminates false-takeover-then-duplicate-build.
 const LOCK_STALE_MS = 45 * 60 * 1000;
