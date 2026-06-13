@@ -310,7 +310,7 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
         .collect::<String>();
 
     let tmp = std::env::temp_dir();
-    let parent_dir = tmp.join(format!("mai-com.kyoube.mai-{}", suffix_hex));
+    let parent_dir = tmp.join(format!("frondose-com.kyoube.frondose-{}", suffix_hex));
     std::fs::create_dir(&parent_dir).map_err(|e| format!("mkdir {}: {}", parent_dir.display(), e))?;
     // Restrict parent dir to owner. The socket is also chmod'd by the Node sidecar.
     #[cfg(unix)]
@@ -319,7 +319,7 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
         std::fs::set_permissions(&parent_dir, std::fs::Permissions::from_mode(0o700))
             .map_err(|e| format!("chmod 0700: {}", e))?;
     }
-    let sock_path = parent_dir.join("mai.sock");
+    let sock_path = parent_dir.join("frondose.sock");
     Ok((token, sock_path, parent_dir))
 }
 
