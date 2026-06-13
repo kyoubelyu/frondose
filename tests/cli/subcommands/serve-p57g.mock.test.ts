@@ -18,7 +18,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -31,7 +31,7 @@ const SERVE_TS_PATH = join(__dirname, "..", "..", "..", "src", "cli", "subcomman
 let mockBindingCalledHandler: ((arg: { name: string; payload: string }) => void) | null = null;
 let mockRunAgentLoopCallCount = 0;
 const sseFramesSeen: string[] = [];
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 before(async () => {
   // Default-off: ensure env unset so passiveEnabled defaults false at module load.
@@ -133,7 +133,7 @@ before(async () => {
 });
 
 async function udsReq(opts: {
-  socketPath: string;
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
@@ -144,7 +144,7 @@ async function udsReq(opts: {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
@@ -161,11 +161,12 @@ async function udsReq(opts: {
   });
 }
 
-function collectSse(socketPath: string, bearer: string, collectMs: number): Promise<void> {
+function collectSse(port: number, bearer: string, collectMs: number): Promise<void> {
   return new Promise((resolveP) => {
     const r = httpReq(
       {
-        socketPath,
+        host: "127.0.0.1",
+        port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", Authorization: `Bearer ${bearer}` },
@@ -189,19 +190,26 @@ function collectSse(socketPath: string, bearer: string, collectMs: number): Prom
   });
 }
 
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
-    const { existsSync } = await import("node:fs");
-    if (existsSync(sockPath)) return true;
+    try {
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
+    } catch {
+      /* ignore transient read errors */
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
-async function spinHarness(testName: string): Promise<{ sockPath: string; bearer: string; restoreEnv: () => void }> {
+async function spinHarness(testName: string): Promise<{ port: number; bearer: string; restoreEnv: () => void }> {
   const tmpDir = mkdtempSync(join(tmpdir(), `p57g-${testName}-`));
-  const sockPath = join(tmpDir, "mai.sock");
+  const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
@@ -216,18 +224,18 @@ async function spinHarness(testName: string): Promise<{ sockPath: string; bearer
   mockRunAgentLoopCallCount = 0;
   sseFramesSeen.length = 0;
 
-  void runServeSubcommand({ sockPath, bearerToken: bearer });
-  const ready = await pollForSock(sockPath, 5000);
-  assert.ok(ready, `${testName}: server socket must be ready`);
+  void runServeSubcommand({ portFile, bearerToken: bearer });
+  const port = await pollForPort(portFile, 5000);
+  assert.ok(port !== null, `${testName}: server port file must appear within 5000ms`);
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/chrome/ensure",
     headers: { Authorization: `Bearer ${bearer}` },
   });
 
   return {
-    sockPath,
+    port,
     bearer,
     restoreEnv: () => {
       if (origHome === undefined) delete process.env.MAI_HOME_BASE;
@@ -283,12 +291,12 @@ describe("POST /agent/passive-mode — flips passiveEnabled + emits passive-mode
   it("T-PassiveToggle.1: given serve.ts harness + SSE collector, WHEN POST /agent/passive-mode {enabled:true}, THEN 200 {ok:true, passiveEnabled:true} + SSE {type:'passive-mode', passiveEnabled:true}; {enabled:false} flips back + emits; {} → 400 {ok:false, reason:'missing_enabled'}", async () => {
     const h = await spinHarness("ptoggle");
     try {
-      const ssePromise = collectSse(h.sockPath, h.bearer, 1200);
+      const ssePromise = collectSse(h.port, h.bearer, 1200);
       await new Promise((r) => setTimeout(r, 100));
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
 
       const rOn = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/passive-mode",
         headers: authHeader,
@@ -299,7 +307,7 @@ describe("POST /agent/passive-mode — flips passiveEnabled + emits passive-mode
       assert.equal(rOn.body.passiveEnabled, true, "enabled:true → passiveEnabled:true");
 
       const rOff = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/passive-mode",
         headers: authHeader,
@@ -308,7 +316,7 @@ describe("POST /agent/passive-mode — flips passiveEnabled + emits passive-mode
       assert.equal(rOff.body.passiveEnabled, false, "enabled:false → passiveEnabled:false (flips back)");
 
       const rMissing = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/passive-mode",
         headers: authHeader,
@@ -346,7 +354,7 @@ describe("handlePassiveObservation — drops passive event when off; processes a
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       // Ensure OFF (order-independent — a prior test may have toggled the module-level flag).
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/passive-mode",
         headers: authHeader,
@@ -364,7 +372,7 @@ describe("handlePassiveObservation — drops passive event when off; processes a
 
       // Toggle ON.
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/passive-mode",
         headers: authHeader,

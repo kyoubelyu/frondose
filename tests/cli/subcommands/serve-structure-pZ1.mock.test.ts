@@ -97,21 +97,23 @@ describe("serve.ts public export contract — exactly ServeOpts + runServeSubcom
   // Given: src/cli/subcommands/serve.ts + src/cli/main.ts source.
   // When:  serve.ts top-level `export` statements are enumerated AND main.ts's
   //        `mai serve` dynamic-import + call site is inspected.
-  // Then:  serve.ts exports EXACTLY `interface ServeOpts {sockPath; bearerToken}` +
+  // Then:  serve.ts exports EXACTLY `interface ServeOpts {portFile; bearerToken}` +
   //        `async function runServeSubcommand(opts: ServeOpts): Promise<void>` and
   //        nothing else (no runOneTurn / SseFrame / createX / ServeState leaks); AND
   //        main.ts still does import("./subcommands/serve.js") →
-  //        runServeSubcommand({ sockPath, bearerToken }). PASSES at 4a (guard);
+  //        runServeSubcommand({ portFile, bearerToken }). PASSES at 4a (guard);
   //        must stay green through the refactor.
+  //        WIN-1: sockPath field replaced by portFile (TCP loopback port-file).
   it("T-Struct.2: given serve.ts + main.ts, WHEN the export surface + consumer wiring are inspected, THEN serve.ts exports only ServeOpts + runServeSubcommand and main.ts's serve import/call is unchanged", () => {
     const src = readFileSync(SERVE_TS_PATH, "utf-8");
     const exportLines = src.split("\n").filter((l) => /^export\b/.test(l));
 
     // (1) ServeOpts interface present with both fields.
+    // WIN-1: sockPath replaced by portFile (TCP loopback port-file, cross-platform).
     assert.ok(/^export interface ServeOpts\b/m.test(src), "serve.ts must export `interface ServeOpts`");
     assert.ok(
-      /export interface ServeOpts\s*\{[^}]*\bsockPath\b[^}]*\bbearerToken\b[^}]*\}/s.test(src),
-      "ServeOpts must declare sockPath + bearerToken",
+      /export interface ServeOpts\s*\{[^}]*\bportFile\b[^}]*\bbearerToken\b[^}]*\}/s.test(src),
+      "ServeOpts must declare portFile + bearerToken (WIN-1: sockPath removed)",
     );
 
     // (2) runServeSubcommand signature byte-stable.
@@ -153,9 +155,10 @@ describe("serve.ts public export contract — exactly ServeOpts + runServeSubcom
       /import\(["']\.\/subcommands\/serve\.js["']\)/.test(main),
       "main.ts must dynamically import ./subcommands/serve.js",
     );
+    // WIN-1: main.ts call site now uses portFile (not sockPath).
     assert.ok(
-      /runServeSubcommand\(\{\s*sockPath:[^}]*bearerToken:[^}]*\}\)/s.test(main),
-      "main.ts must call runServeSubcommand({ sockPath, bearerToken })",
+      /runServeSubcommand\(\{\s*portFile:[^}]*bearerToken:[^}]*\}\)/s.test(main),
+      "main.ts must call runServeSubcommand({ portFile, bearerToken }) (WIN-1: sockPath removed)",
     );
   });
 });

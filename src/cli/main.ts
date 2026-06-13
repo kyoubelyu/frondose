@@ -494,15 +494,15 @@ async function main(): Promise<void> {
     });
   }
 
-  // P-56a: `mai serve` — HTTP-over-UDS bridge for the Tauri desktop shell (v0.5 hover pivot).
+  // P-56a / WIN-1: `mai serve` — HTTP-over-loopback-TCP bridge for the Tauri desktop shell.
   program
     .command("serve")
-    .description("HTTP-over-UDS bridge for the v0.5 Tauri desktop shell")
-    .requiredOption("--sock <path>", "Unix Domain Socket path (provided by parent Tauri process)")
+    .description("HTTP-over-loopback-TCP bridge for the Tauri desktop shell")
+    .requiredOption("--port-file <path>", "Path to write the chosen 127.0.0.1 port to (read by parent Tauri process)")
     .requiredOption("--token <token>", "Bearer token (provided by parent Tauri process)")
-    .action(async (cliOpts: { sock: string; token: string }) => {
+    .action(async (cliOpts: { portFile: string; token: string }) => {
       const { runServeSubcommand } = await import("./subcommands/serve.js");
-      await runServeSubcommand({ sockPath: cliOpts.sock, bearerToken: cliOpts.token });
+      await runServeSubcommand({ portFile: cliOpts.portFile, bearerToken: cliOpts.token });
       // runServeSubcommand returns when the server exits (SIGTERM/SIGINT).
       process.exit(0);
     });

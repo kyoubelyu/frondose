@@ -12,8 +12,9 @@
 //   GET  /audit/tail
 
 import { EventEmitter } from "node:events";
-import { chmodSync, mkdirSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import { HookRunner } from "../../agent/hooks.js";
@@ -40,7 +41,7 @@ import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRate
 import type { ServeDeps, ServeEmitter, ServeState, SseFrame } from "./serve/context.js";
 import { createCronDriver } from "./serve/cron.js";
 import { createOverlayDispatcher } from "./serve/dispatch.js";
-import { removeSocket } from "./serve/http.js";
+import { removeFile } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
 import { makeTakeoverVisualDriver } from "./serve/takeover.js";
@@ -48,21 +49,16 @@ import { createTurnRunner } from "./serve/turn.js";
 import { pushWorkflowToOverlay } from "./serve/workflowOverlay.js";
 
 export interface ServeOpts {
-  sockPath: string;
+  /** WIN-1: path the sidecar writes its chosen loopback TCP port to (parent Tauri polls it). */
+  portFile: string;
   bearerToken: string;
 }
 
 const AUDIT_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
 export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
-  const parentDir = dirname(opts.sockPath);
-  mkdirSync(parentDir, { recursive: true });
-  try {
-    chmodSync(parentDir, 0o700);
-  } catch (e) {
-    process.stderr.write(
-      `[mai serve] warn: chmod 0o700 on ${parentDir} failed: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
-  }
+  // WIN-1: the port-file's parent dir holds only the chosen port (not a secret); the
+  // bearer token + 127.0.0.1 bind are the guard — no chmod (cross-platform).
+  mkdirSync(dirname(opts.portFile), { recursive: true });
 
   const cfg = readConfig(DEFAULT_CONFIG_PATH());
   const identity = readIdentity(DEFAULT_IDENTITY_PATH());
@@ -217,11 +213,11 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     }
     state.sseClients.clear();
     server.close(() => {
-      removeSocket(opts.sockPath);
+      removeFile(opts.portFile);
       process.exit(0);
     });
     setTimeout(() => {
-      removeSocket(opts.sockPath);
+      removeFile(opts.portFile);
       process.exit(0);
     }, 2000).unref();
   };
@@ -230,10 +226,15 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(opts.sockPath, () => {
+    // WIN-1: bind an OS-assigned ephemeral port on loopback; write the chosen port to
+    // the port-file ATOMICALLY (.tmp + rename) so the parent Tauri can read it.
+    server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
-      chmodSync(opts.sockPath, 0o600);
-      process.stdout.write(`[mai serve] listening on ${opts.sockPath}\n`);
+      const port = (server.address() as AddressInfo).port;
+      const tmp = `${opts.portFile}.tmp`;
+      writeFileSync(tmp, String(port), "utf-8");
+      renameSync(tmp, opts.portFile);
+      process.stdout.write(`[mai serve] listening on 127.0.0.1:${port}\n`);
       resolve();
     });
   });

@@ -30,21 +30,21 @@ import { frondoseEnv } from "../env.js";
 import { bootMigrateOrExit } from "../persistence/dataDirMigration.js";
 import { getHomeBase } from "../persistence/paths.js";
 
-export function parseArgs(argv: string[]): { sockPath: string; bearerToken: string } {
-  let sockPath: string | undefined;
+export function parseArgs(argv: string[]): { portFile: string; bearerToken: string } {
+  let portFile: string | undefined;
   let bearerToken: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--sock" && i + 1 < argv.length) {
-      sockPath = argv[++i];
+    if (a === "--port-file" && i + 1 < argv.length) {
+      portFile = argv[++i];
       continue;
     }
     if (a === "--token" && i + 1 < argv.length) {
       bearerToken = argv[++i];
       continue;
     }
-    if (a !== undefined && a.startsWith("--sock=")) {
-      sockPath = a.slice("--sock=".length);
+    if (a !== undefined && a.startsWith("--port-file=")) {
+      portFile = a.slice("--port-file=".length);
       continue;
     }
     if (a !== undefined && a.startsWith("--token=")) {
@@ -52,16 +52,16 @@ export function parseArgs(argv: string[]): { sockPath: string; bearerToken: stri
       continue;
     }
   }
-  sockPath ??= frondoseEnv("SOCK");
+  portFile ??= frondoseEnv("PORT_FILE");
   bearerToken ??= frondoseEnv("TOKEN");
-  if (!sockPath || !bearerToken) {
+  if (!portFile || !bearerToken) {
     process.stderr.write(
-      "[frondose-sidecar] FATAL: --sock and --token required (or FRONDOSE_SOCK + FRONDOSE_TOKEN env; legacy MAI_SOCK + MAI_TOKEN still accepted).\n" +
+      "[frondose-sidecar] FATAL: --port-file and --token required (or FRONDOSE_PORT_FILE + FRONDOSE_TOKEN env).\n" +
         `  argv: ${JSON.stringify(argv)}\n`,
     );
     process.exit(2);
   }
-  return { sockPath, bearerToken };
+  return { portFile, bearerToken };
 }
 
 export async function main(): Promise<void> {
@@ -70,11 +70,11 @@ export async function main(): Promise<void> {
   // 2) registerCrashHandlers() — installed BEFORE the serve graph is loaded,
   // 3) DYNAMIC import of the serve graph (any import-time throw now hits
   //    the registered handlers + the unhandled-rejection sink).
-  const { sockPath, bearerToken } = parseArgs(process.argv.slice(2));
+  const { portFile, bearerToken } = parseArgs(process.argv.slice(2));
   bootMigrateOrExit(getHomeBase());
   registerCrashHandlers();
   const { runServeSubcommand } = await import("../cli/subcommands/serve.js");
-  await runServeSubcommand({ sockPath, bearerToken });
+  await runServeSubcommand({ portFile, bearerToken });
   // runServeSubcommand returns when the server exits (SIGTERM/SIGINT).
   process.exit(0);
 }

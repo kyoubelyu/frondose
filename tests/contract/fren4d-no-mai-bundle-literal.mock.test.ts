@@ -164,16 +164,18 @@ describe("bundle identifier — com.kyoube.frondose (T-FREN4d.Identifier)", () =
 // T-FREN4d.Socket.1 — socket-dir identity (main.rs text scan)
 // ---------------------------------------------------------------------------
 
-describe("socket-dir identity — frondose-com.kyoube.frondose-* / frondose.sock (T-FREN4d.Socket)", () => {
+describe("port-file identity — frondose-com.kyoube.frondose-* / frondose.port (T-FREN4d.Socket)", () => {
   it(
-    "T-FREN4d.Socket.1: when main.rs text is read, it contains 'frondose-com.kyoube.frondose-' AND 'frondose.sock'; does NOT contain 'mai-com.kyoube.mai-' or 'mai.sock'",
+    "T-FREN4d.Socket.1: when main.rs text is read, it contains 'frondose-com.kyoube.frondose-' AND 'frondose.port'; does NOT contain 'mai-com.kyoube.mai-' or 'mai.sock' or 'frondose.sock'",
     () => {
-      // Given: src/tauri/src-tauri/src/main.rs (post-Step-4 — socket dir + filename renamed)
-      // When:  file text is read and searched for socket identity substrings
-      // Then:  frondose-com.kyoube.frondose- present (new socket dir prefix);
-      //        frondose.sock present (new socket filename);
+      // Given: src/tauri/src-tauri/src/main.rs (post-WIN-1 — UDS transport replaced with
+      //        TCP loopback + port-file; frondose.sock replaced by frondose.port)
+      // When:  file text is read and searched for identity substrings
+      // Then:  frondose-com.kyoube.frondose- present (temp dir prefix, unchanged);
+      //        frondose.port present (new port-file name replacing frondose.sock);
       //        mai-com.kyoube.mai- absent (old dir prefix gone);
-      //        mai.sock absent (old socket filename gone — literal string check)
+      //        frondose.sock absent (replaced by frondose.port in WIN-1);
+      //        "mai.sock" literal absent
       //
       // NOTE: This is a Rust source text-assertion mirroring T-FREN4b.MainRs.1 pattern.
       // main.rs is not unit-testable from Node; the text scan is the correct approach.
@@ -185,19 +187,20 @@ describe("socket-dir identity — frondose-com.kyoube.frondose-* / frondose.sock
 
       assert.ok(
         mainRs.includes("frondose-com.kyoube.frondose-"),
-        `T-FREN4d.Socket.1: main.rs must contain "frondose-com.kyoube.frondose-" (new socket dir prefix)`,
+        `T-FREN4d.Socket.1: main.rs must contain "frondose-com.kyoube.frondose-" (temp dir prefix)`,
       );
       assert.ok(
-        mainRs.includes("frondose.sock"),
-        `T-FREN4d.Socket.1: main.rs must contain "frondose.sock" (new socket filename)`,
+        mainRs.includes("frondose.port"),
+        `T-FREN4d.Socket.1: main.rs must contain "frondose.port" (WIN-1 port-file replacing frondose.sock)`,
       );
       assert.ok(
         !mainRs.includes("mai-com.kyoube.mai-"),
         `T-FREN4d.Socket.1: main.rs must NOT contain "mai-com.kyoube.mai-" (old socket dir prefix)`,
       );
-      // Literal string check for "mai.sock" — the string inside the join() call.
-      // Note: "frondose.sock" contains the substring "sock" but NOT "mai.sock", so this
-      // check is safe after Step 4.
+      assert.ok(
+        !mainRs.includes("frondose.sock"),
+        `T-FREN4d.Socket.1: main.rs must NOT contain "frondose.sock" (replaced by frondose.port in WIN-1)`,
+      );
       assert.ok(
         !mainRs.includes('"mai.sock"'),
         `T-FREN4d.Socket.1: main.rs must NOT contain the literal "mai.sock" string`,

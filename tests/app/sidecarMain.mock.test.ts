@@ -1,17 +1,17 @@
 /**
  * P-APP-6 Step 3a — Test scaffold for src/app/sidecarMain.ts
  *
+ * WIN-1 migrated: --sock/sockPath/MAI_SOCK → --port-file/portFile/FRONDOSE_PORT_FILE
+ *
  * Covers:
- *   T-Sidecar.Args.1  — flag parse: --sock <p> --token <t>
- *   T-Sidecar.Args.2  — flag parse: --sock=<p> --token=<t> form
- *   T-Sidecar.Args.3  — env fallback when flags absent (MAI_SOCK + MAI_TOKEN)
+ *   T-Sidecar.Args.1  — flag parse: --port-file <p> --token <t>
+ *   T-Sidecar.Args.2  — flag parse: --port-file=<p> --token=<t> form
+ *   T-Sidecar.Args.3  — env fallback when flags absent (FRONDOSE_PORT_FILE + FRONDOSE_TOKEN)
  *   T-Sidecar.Args.4  — flag wins over env when both set
  *   T-Sidecar.Args.5  — missing both flags + env → exit(2) + stderr FATAL message
  *   T-Sidecar.Main.1  — main() registers crash handlers + calls runServeSubcommand
  *   T-Sidecar.Main.2  — importing module does NOT auto-run main() (entrypoint guard)
  *   T-Sidecar.Main.3  — crash-handler registered BEFORE serve graph dynamic-import
- *
- * All assertion bodies are TODO — this scaffold is intentionally red pre-impl.
  *
  * Run:
  *   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
@@ -35,7 +35,7 @@ const sourceExists = existsSync(SIDECAR_SRC);
 // Module-level dynamic import — resolved in before() after mocks are wired.
 // ---------------------------------------------------------------------------
 
-type ParseArgs = (argv: string[]) => { sockPath: string; bearerToken: string };
+type ParseArgs = (argv: string[]) => { portFile: string; bearerToken: string };
 type Main = () => Promise<void>;
 type SidecarModule = { parseArgs: ParseArgs; main: Main };
 
@@ -55,108 +55,106 @@ describe("T-Sidecar.Args — parseArgs flag and env resolution", () => {
     }
   });
 
-  it("T-Sidecar.Args.1: when --sock and --token flags are present, parseArgs returns both values", () => {
-    // Given: argv = ["--sock", "/tmp/x.sock", "--token", "abc"]
+  it("T-Sidecar.Args.1: when --port-file and --token flags are present, parseArgs returns both values", () => {
+    // Given: argv = ["--port-file", "/tmp/frondose.port", "--token", "abc"]
     // When:  parseArgs(argv) runs
-    // Then:  returns { sockPath: "/tmp/x.sock", bearerToken: "abc" }
+    // Then:  returns { portFile: "/tmp/frondose.port", bearerToken: "abc" }
     assert.ok(sourceExists, "src/app/sidecarMain.ts must exist (pre-impl: intentional scaffold failure)");
     assert.ok(sidecarModule, "sidecarMain module must load");
-    const result = sidecarModule.parseArgs(["--sock", "/tmp/x.sock", "--token", "abc"]);
-    assert.deepEqual(result, { sockPath: "/tmp/x.sock", bearerToken: "abc" });
+    const result = sidecarModule.parseArgs(["--port-file", "/tmp/frondose.port", "--token", "abc"]);
+    assert.deepEqual(result, { portFile: "/tmp/frondose.port", bearerToken: "abc" });
   });
 
-  it("T-Sidecar.Args.2: when --sock=<p> and --token=<t> forms are used, parseArgs returns both values", () => {
-    // Given: argv = ["--sock=/tmp/y.sock", "--token=xyz"]
+  it("T-Sidecar.Args.2: when --port-file=<p> and --token=<t> forms are used, parseArgs returns both values", () => {
+    // Given: argv = ["--port-file=/tmp/y.port", "--token=xyz"]
     // When:  parseArgs(argv) runs
-    // Then:  returns { sockPath: "/tmp/y.sock", bearerToken: "xyz" }
+    // Then:  returns { portFile: "/tmp/y.port", bearerToken: "xyz" }
     assert.ok(sourceExists, "src/app/sidecarMain.ts must exist (pre-impl: intentional scaffold failure)");
     assert.ok(sidecarModule, "sidecarMain module must load");
-    const result = sidecarModule.parseArgs(["--sock=/tmp/y.sock", "--token=xyz"]);
-    assert.deepEqual(result, { sockPath: "/tmp/y.sock", bearerToken: "xyz" });
+    const result = sidecarModule.parseArgs(["--port-file=/tmp/y.port", "--token=xyz"]);
+    assert.deepEqual(result, { portFile: "/tmp/y.port", bearerToken: "xyz" });
   });
 
-  it("T-Sidecar.Args.3: when argv is empty, parseArgs falls back to MAI_SOCK + MAI_TOKEN env", () => {
-    // Given: argv = [], process.env.MAI_SOCK = "/tmp/z.sock", process.env.MAI_TOKEN = "tok"
+  it("T-Sidecar.Args.3: when argv is empty, parseArgs falls back to FRONDOSE_PORT_FILE + FRONDOSE_TOKEN env", () => {
+    // Given: argv = [], process.env.FRONDOSE_PORT_FILE = "/tmp/z.port", process.env.FRONDOSE_TOKEN = "tok"
     // When:  parseArgs(argv) runs
-    // Then:  returns { sockPath: "/tmp/z.sock", bearerToken: "tok" }
+    // Then:  returns { portFile: "/tmp/z.port", bearerToken: "tok" }
     assert.ok(sourceExists, "src/app/sidecarMain.ts must exist (pre-impl: intentional scaffold failure)");
     assert.ok(sidecarModule, "sidecarMain module must load");
-    const prevSock = process.env.MAI_SOCK;
-    const prevToken = process.env.MAI_TOKEN;
+    const prevPortFile = process.env.FRONDOSE_PORT_FILE;
+    const prevToken = process.env.FRONDOSE_TOKEN;
     try {
-      process.env.MAI_SOCK = "/tmp/z.sock";
-      process.env.MAI_TOKEN = "tok";
+      process.env.FRONDOSE_PORT_FILE = "/tmp/z.port";
+      process.env.FRONDOSE_TOKEN = "tok";
       const result = sidecarModule.parseArgs([]);
-      assert.deepEqual(result, { sockPath: "/tmp/z.sock", bearerToken: "tok" });
+      assert.deepEqual(result, { portFile: "/tmp/z.port", bearerToken: "tok" });
     } finally {
-      if (prevSock === undefined) {
-        delete process.env.MAI_SOCK;
+      if (prevPortFile === undefined) {
+        delete process.env.FRONDOSE_PORT_FILE;
       } else {
-        process.env.MAI_SOCK = prevSock;
+        process.env.FRONDOSE_PORT_FILE = prevPortFile;
       }
       if (prevToken === undefined) {
-        delete process.env.MAI_TOKEN;
+        delete process.env.FRONDOSE_TOKEN;
       } else {
-        process.env.MAI_TOKEN = prevToken;
+        process.env.FRONDOSE_TOKEN = prevToken;
       }
     }
   });
 
   it("T-Sidecar.Args.4: when flags and env are both set, flags win over env", () => {
-    // Given: argv = ["--sock", "/tmp/flag.sock", "--token", "flag-tok"], MAI_SOCK + MAI_TOKEN also set
+    // Given: argv = ["--port-file", "/tmp/flag.port", "--token", "flag-tok"], FRONDOSE_PORT_FILE + FRONDOSE_TOKEN also set
     // When:  parseArgs(argv) runs
     // Then:  returns the flag values, not the env values
     assert.ok(sourceExists, "src/app/sidecarMain.ts must exist (pre-impl: intentional scaffold failure)");
     assert.ok(sidecarModule, "sidecarMain module must load");
-    const prevSock = process.env.MAI_SOCK;
-    const prevToken = process.env.MAI_TOKEN;
+    const prevPortFile = process.env.FRONDOSE_PORT_FILE;
+    const prevToken = process.env.FRONDOSE_TOKEN;
     try {
-      process.env.MAI_SOCK = "/tmp/env.sock";
-      process.env.MAI_TOKEN = "env-tok";
-      const result = sidecarModule.parseArgs(["--sock", "/tmp/flag.sock", "--token", "flag-tok"]);
-      assert.deepEqual(result, { sockPath: "/tmp/flag.sock", bearerToken: "flag-tok" });
+      process.env.FRONDOSE_PORT_FILE = "/tmp/env.port";
+      process.env.FRONDOSE_TOKEN = "env-tok";
+      const result = sidecarModule.parseArgs(["--port-file", "/tmp/flag.port", "--token", "flag-tok"]);
+      assert.deepEqual(result, { portFile: "/tmp/flag.port", bearerToken: "flag-tok" });
     } finally {
-      if (prevSock === undefined) {
-        delete process.env.MAI_SOCK;
+      if (prevPortFile === undefined) {
+        delete process.env.FRONDOSE_PORT_FILE;
       } else {
-        process.env.MAI_SOCK = prevSock;
+        process.env.FRONDOSE_PORT_FILE = prevPortFile;
       }
       if (prevToken === undefined) {
-        delete process.env.MAI_TOKEN;
+        delete process.env.FRONDOSE_TOKEN;
       } else {
-        process.env.MAI_TOKEN = prevToken;
+        process.env.FRONDOSE_TOKEN = prevToken;
       }
     }
   });
 
   it("T-Sidecar.Args.5: when both flags and env are absent, parseArgs writes FATAL to stderr and calls process.exit(2)", () => {
-    // Given: argv = [], MAI_SOCK and MAI_TOKEN unset
+    // Given: argv = [], FRONDOSE_PORT_FILE and FRONDOSE_TOKEN unset
     // When:  parseArgs(argv) runs
-    // Then:  process.stderr receives line containing "FATAL: --sock and --token required";
+    // Then:  process.stderr receives line containing "FATAL: --port-file and --token required";
     //        process.exit(2) is invoked (stubbed to avoid aborting the test)
     assert.ok(sourceExists, "src/app/sidecarMain.ts must exist (pre-impl: intentional scaffold failure)");
     assert.ok(sidecarModule, "sidecarMain module must load");
 
     // Stub process.exit to capture the call without killing the process
     const exitCalls: number[] = [];
-    const originalExit = process.exit.bind(process);
     const exitStub = mock.method(process, "exit", (code?: number | string | null | undefined) => {
       exitCalls.push(typeof code === "number" ? code : Number(code ?? 0));
     });
 
     // Capture stderr writes
     const stderrChunks: string[] = [];
-    const originalStderrWrite = process.stderr.write.bind(process.stderr);
     const stderrStub = mock.method(process.stderr, "write", (chunk: string | Uint8Array) => {
       stderrChunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
       return true;
     });
 
-    const prevSock = process.env.MAI_SOCK;
-    const prevToken = process.env.MAI_TOKEN;
+    const prevPortFile = process.env.FRONDOSE_PORT_FILE;
+    const prevToken = process.env.FRONDOSE_TOKEN;
     try {
-      delete process.env.MAI_SOCK;
-      delete process.env.MAI_TOKEN;
+      delete process.env.FRONDOSE_PORT_FILE;
+      delete process.env.FRONDOSE_TOKEN;
       try {
         sidecarModule.parseArgs([]);
       } catch {
@@ -165,12 +163,12 @@ describe("T-Sidecar.Args — parseArgs flag and env resolution", () => {
     } finally {
       exitStub.mock.restore();
       stderrStub.mock.restore();
-      if (prevSock !== undefined) process.env.MAI_SOCK = prevSock;
-      if (prevToken !== undefined) process.env.MAI_TOKEN = prevToken;
+      if (prevPortFile !== undefined) process.env.FRONDOSE_PORT_FILE = prevPortFile;
+      if (prevToken !== undefined) process.env.FRONDOSE_TOKEN = prevToken;
     }
 
     const stderrOutput = stderrChunks.join("");
-    assert.match(stderrOutput, /FATAL.*--sock.*--token|FATAL.*required/i);
+    assert.match(stderrOutput, /FATAL.*--port-file.*--token|FATAL.*required/i);
     assert.ok(exitCalls.includes(2), `process.exit(2) must be called; got: ${JSON.stringify(exitCalls)}`);
   });
 });
@@ -216,7 +214,7 @@ describe("T-Sidecar.Main — main() integration and ESM guard", () => {
     });
 
     const savedArgv = process.argv;
-    process.argv = ["node", SIDECAR_SRC, "--sock", "/tmp/main1.sock", "--token", "tok1"];
+    process.argv = ["node", SIDECAR_SRC, "--port-file", "/tmp/main1.port", "--token", "tok1"];
 
     try {
       const mod = (await import(
@@ -236,7 +234,7 @@ describe("T-Sidecar.Main — main() integration and ESM guard", () => {
     assert.ok(crashIdx !== -1, "registerCrashHandlers must be called");
     assert.ok(serveIdx !== -1, "runServeSubcommand must be called");
     assert.ok(crashIdx < serveIdx, "registerCrashHandlers must be called BEFORE runServeSubcommand");
-    assert.deepEqual(capturedServeOpts, { sockPath: "/tmp/main1.sock", bearerToken: "tok1" });
+    assert.deepEqual(capturedServeOpts, { portFile: "/tmp/main1.port", bearerToken: "tok1" });
     assert.ok(exitCalls.includes(0), `process.exit(0) must be called after serve resolves; got: ${JSON.stringify(exitCalls)}`);
   });
 
@@ -317,7 +315,7 @@ describe("T-Sidecar.Main — main() integration and ESM guard", () => {
       /* swallow */
     });
     const savedArgv = process.argv;
-    process.argv = ["node", SIDECAR_SRC, "--sock", "/tmp/main3.sock", "--token", "tok3"];
+    process.argv = ["node", SIDECAR_SRC, "--port-file", "/tmp/main3.port", "--token", "tok3"];
 
     let caughtError: Error | null = null;
     try {
