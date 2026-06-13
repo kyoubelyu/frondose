@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Database as DB } from "better-sqlite3";
+import { frondoseEnv } from "../../env.js";
 
 export type AutoRunStatus = "running" | "completed" | "stopped_by_user" | "stopped_by_agent" | "blocked";
 export type AutoActionType = "connect_sent" | "message_sent" | "follow_up_sent" | "comment_posted";
@@ -69,6 +70,50 @@ export function countAutoLedgerByAction(db: DB, runId: string): Record<string, n
   const out: Record<string, number> = {};
   for (const r of rows) out[r.actionType] = r.n;
   return out;
+}
+
+// ── LinkedIn-safety outbound guardrails (cross-run daily quota + inter-outbound cooldown) ──
+// These are SURFACED via get_auto_run_state (same soft-enforcement model as max_connects): the
+// agent checks them before every outbound. They bound outbound ACROSS runs/days, which max_connects
+// (per-run, optional) does not. Defaults are conservative LinkedIn-safe values; env overrides
+// FRONDOSE_AUTO_DAILY_OUTBOUND_CAP / FRONDOSE_AUTO_OUTBOUND_COOLDOWN_MIN (0 disables that guardrail).
+export const DEFAULT_AUTO_DAILY_OUTBOUND_CAP = 15;
+export const DEFAULT_AUTO_OUTBOUND_COOLDOWN_MIN = 5;
+
+/** Outbound action types that count toward the daily LinkedIn-safety quota + cooldown. */
+const OUTBOUND_ACTION_TYPES = ["connect_sent", "message_sent", "follow_up_sent"] as const;
+const OUTBOUND_IN_CLAUSE = OUTBOUND_ACTION_TYPES.map((a) => `'${a}'`).join(",");
+
+/** Resolve the daily-outbound cap + inter-outbound cooldown (env override; <0 falls back, 0 disables). */
+export function resolveOutboundGuardrails(): { dailyCap: number; cooldownMs: number } {
+  const cap = Number.parseInt(frondoseEnv("AUTO_DAILY_OUTBOUND_CAP") ?? "", 10);
+  const cool = Number.parseInt(frondoseEnv("AUTO_OUTBOUND_COOLDOWN_MIN") ?? "", 10);
+  return {
+    dailyCap: Number.isInteger(cap) && cap >= 0 ? cap : DEFAULT_AUTO_DAILY_OUTBOUND_CAP,
+    cooldownMs: (Number.isInteger(cool) && cool >= 0 ? cool : DEFAULT_AUTO_OUTBOUND_COOLDOWN_MIN) * 60_000,
+  };
+}
+
+/** Count SUCCESSFUL outbound actions across ALL runs since `sinceMs` (the cross-run daily quota). */
+export function countOutboundSince(db: DB, sinceMs: number): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM auto_run_ledger
+       WHERE result = 'success' AND ts >= ? AND action_type IN (${OUTBOUND_IN_CLAUSE})`,
+    )
+    .get(sinceMs) as { n: number };
+  return row.n;
+}
+
+/** Timestamp (ms) of the most recent SUCCESSFUL outbound action across all runs, or null. */
+export function lastOutboundAt(db: DB): number | null {
+  const row = db
+    .prepare(
+      `SELECT MAX(ts) AS ts FROM auto_run_ledger
+       WHERE result = 'success' AND action_type IN (${OUTBOUND_IN_CLAUSE})`,
+    )
+    .get() as { ts: number | null };
+  return row.ts ?? null;
 }
 
 export function insertAutoRun(db: DB, input: { maxDurationMinutes?: number; maxConnects?: number | null }): AutoRunRow {
