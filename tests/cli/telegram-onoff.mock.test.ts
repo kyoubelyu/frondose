@@ -91,7 +91,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     // Given:  process.platform = 'darwin'; TELEGRAM_TOKEN set; cfg.boundUserId set; repl.pid absent;
     //         consent fn returns true (via opts.yes=true bypass)
     // When:   runTelegramSubcommand('on', {...}) called
-    // Then:   plist written at HOME/Library/LaunchAgents/com.kyoube.mai.telegram.plist with mode 0o600
+    // Then:   plist written at HOME/Library/LaunchAgents/com.kyoube.frondose.telegram.plist with mode 0o600
     //         BEFORE launchctl bootstrap (launchctl may fail in CI with fake paths — that's OK here).
     //         cfg.enabled=true + '[telegram on] daemon installed' require live launchctl success.
     if (process.platform !== "darwin") return; // skip on non-darwin

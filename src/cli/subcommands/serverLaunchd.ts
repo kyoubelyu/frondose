@@ -10,8 +10,8 @@ import path from "node:path";
 import { DATA_DIR_NAME } from "../../persistence/paths.js";
 import type { EnvSnapshot, InstallOpts, PlistArgs } from "./launchd.js";
 
-const LEGACY_LABEL_NAMESPACE = "mai";
-export const SERVER_LABEL = `com.kyoube.${LEGACY_LABEL_NAMESPACE}.server`;
+const LABEL_NAMESPACE = "frondose";
+export const SERVER_LABEL = `com.kyoube.${LABEL_NAMESPACE}.server`;
 
 export const serverPlistPath = (home = os.homedir()): string =>
   path.join(home, "Library", "LaunchAgents", `${SERVER_LABEL}.plist`);

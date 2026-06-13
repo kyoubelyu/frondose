@@ -29,8 +29,8 @@ export interface InstallOpts {
   yes?: boolean; // bypass consent
 }
 
-const LEGACY_LABEL_NAMESPACE = "mai";
-export const LABEL = `com.kyoube.${LEGACY_LABEL_NAMESPACE}.telegram`;
+const LABEL_NAMESPACE = "frondose";
+export const LABEL = `com.kyoube.${LABEL_NAMESPACE}.telegram`;
 
 export const plistPath = (home = os.homedir()): string => path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
 
