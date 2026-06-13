@@ -27,7 +27,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -46,7 +46,7 @@ let mockTurnRespectAbort = false;
 
 // ─── runServeSubcommand handle (loaded after mocks are wired) ─────────────────
 
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 // ─── File-level setup: mock session.js + loop.js BEFORE serve.ts is imported ─
 
@@ -123,35 +123,35 @@ before(async () => {
   runServeSubcommand = (serveMod as any).runServeSubcommand;
 });
 
-// ─── UDS HTTP helpers ─────────────────────────────────────────────────────────
+// ─── TCP HTTP helpers (WIN-1: UDS → loopback TCP + port-file) ────────────────
 
-interface UdsReqOpts {
-  socketPath: string;
+interface TcpReqOpts {
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
 }
-interface UdsResult {
+interface TcpResult {
   status: number;
   // biome-ignore lint/suspicious/noExplicitAny: test result body type varies per endpoint
   body: any;
 }
 
-/** Make an HTTP request over a Unix Domain Socket; resolve with status + parsed JSON body. */
-async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
-  return new Promise<UdsResult>((resolve, reject) => {
+/** Make an HTTP request over TCP loopback; resolve with status + parsed JSON body. */
+async function udsReq(opts: TcpReqOpts): Promise<TcpResult> {
+  return new Promise<TcpResult>((resolve, reject) => {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
         try {
           resolve({ status: res.statusCode ?? 0, body: JSON.parse(Buffer.concat(chunks).toString("utf-8")) });
         } catch (e) {
-          reject(new Error(`JSON parse error in UDS response: ${e}`));
+          reject(new Error(`JSON parse error in TCP response: ${e}`));
         }
       });
     });
@@ -162,18 +162,19 @@ async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
 }
 
 /**
- * Collect raw bytes from an SSE-style UDS response.
+ * Collect raw bytes from an SSE-style TCP response.
  * Opens the connection, waits `collectMs`, then destroys and returns accumulated text.
  */
 async function udsSSECollect(opts: {
-  socketPath: string;
+  port: number;
   headers?: Record<string, string>;
   collectMs: number;
 }): Promise<{ statusCode: number; headers: Record<string, string | string[] | undefined>; text: string }> {
   return new Promise((resolve, reject) => {
     const r = httpReq(
       {
-        socketPath: opts.socketPath,
+        host: "127.0.0.1",
+        port: opts.port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", ...(opts.headers ?? {}) },
@@ -200,27 +201,30 @@ async function udsSSECollect(opts: {
   });
 }
 
-/** Poll until sockPath exists (with optional mode check) OR deadline_ms expires. */
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+/** Poll until portFile exists and contains a valid port, OR deadline_ms expires. */
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
     try {
-      const { existsSync } = await import("node:fs");
-      if (existsSync(sockPath)) return true;
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
     } catch {
       /* ignore transient errors */
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
 // ─── T-Serve.5 — POST /agent/turn: single-turn guard + body validation ────────
 
 describe("runServeSubcommand — POST /agent/turn: concurrency guard + body validation (G-P56b.5)", () => {
-  it.skip("T-Serve.5: given tmp UDS sock + bearer 'tok' + mocked runAgentLoop sleeping 2000ms, WHEN 4 sequential POSTs: (1) no body→400 missing_prompt, (2) {prompt:'qualify x'}→200 ok+turnId, (3) second turn while #2 sleeping→409 turn_in_progress same turnId, (4) wait 2200ms then new turn→200 ok+NEW turnId", async () => {
-    // Given: tmp dir sock; bearer "tok"; mocked runAgentLoop sleeps 2000ms;
-    //        runServeSubcommand started fire-and-forget; poll for sock ready (5s)
+  it.skip("T-Serve.5: given tmp port-file + bearer 'tok' + mocked runAgentLoop sleeping 2000ms, WHEN 4 sequential POSTs: (1) no body→400 missing_prompt, (2) {prompt:'qualify x'}→200 ok+turnId, (3) second turn while #2 sleeping→409 turn_in_progress same turnId, (4) wait 2200ms then new turn→200 ok+NEW turnId", async () => {
+    // Given: tmp dir port-file; bearer "tok"; mocked runAgentLoop sleeps 2000ms;
+    //        runServeSubcommand started fire-and-forget; poll for port-file ready (5s)
     // When:  (1) POST /agent/turn with no body
     //        (2) POST /agent/turn {prompt:"qualify x"} — first turn starts (agent sleeping 2000ms)
     //        (3) POST /agent/turn {prompt:"another"} immediately (turn #2 still sleeping)
@@ -231,7 +235,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     //        (4) 200 {ok:true, turnId:<NEW 8-hex, different from #2's turnId>}
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t5-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
 
@@ -242,22 +246,22 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     mockTurnSleepMs = 2000;
     mockTurnRespectAbort = false;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
+    void runServeSubcommand({ portFile, bearerToken: bearer });
 
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // (1) No body → 400 missing_prompt
-    const r1 = await udsReq({ socketPath: sockPath, method: "POST", path: "/agent/turn", headers: authHeader });
+    const r1 = await udsReq({ port, method: "POST", path: "/agent/turn", headers: authHeader });
     assert.equal(r1.status, 400, `(1) expected 400 got ${r1.status}`);
     assert.equal(r1.body.ok, false, "(1) ok must be false");
     assert.equal(r1.body.reason, "missing_prompt", "(1) reason must be missing_prompt");
 
     // (2) First valid turn → 200 ok + turnId (8-char hex)
     const r2 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -273,7 +277,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
 
     // (3) Second turn while #2 sleeping (immediately after) → 409 same turnId
     const r3 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -287,7 +291,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     // (4) Wait 2200ms for turn #2 to complete, then new turn → 200 + NEW turnId
     await new Promise((r) => setTimeout(r, 2200));
     const r4 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -310,7 +314,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
 // ─── T-Serve.6 — GET /agent/events: SSE stream + ping + frames ───────────────
 
 describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadcast frames (G-P56b.6)", () => {
-  it("T-Serve.6: given tmp UDS sock + bearer 'tok', WHEN GET /agent/events + concurrent POST /agent/turn {prompt:'x'} triggers done frame, THEN response Content-Type is text/event-stream; first bytes include ':' ping comment; accumulated text includes 'data: ' SSE frame lines", async () => {
+  it("T-Serve.6: given tmp port-file + bearer 'tok', WHEN GET /agent/events + concurrent POST /agent/turn {prompt:'x'} triggers done frame, THEN response Content-Type is text/event-stream; first bytes include ':' ping comment; accumulated text includes 'data: ' SSE frame lines", async () => {
     // Given: same tmp-dir server pattern; mockTurnSleepMs=200 so turn completes quickly;
     //        SSE listener opened BEFORE /agent/turn POST (defensive ordering)
     // When:  open SSE connection (GET /agent/events, Authorization: Bearer tok);
@@ -319,10 +323,9 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
     // Then:  response Content-Type === 'text/event-stream'
     //        accumulated text contains ':' (initial ping comment line `:\n\n`)
     //        accumulated text contains 'data: ' prefix (at least one SSE data frame)
-    //        connection close does not crash the server
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t6-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
 
@@ -332,16 +335,16 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
     mockTurnSleepMs = 200; // quick turn so done frame arrives within 800ms collect window
     mockTurnRespectAbort = false;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
+    void runServeSubcommand({ portFile, bearerToken: bearer });
 
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // Open SSE connection (non-awaited collector — runs in parallel)
     const ssePromise = udsSSECollect({
-      socketPath: sockPath,
+      port,
       headers: { ...authHeader, Accept: "text/event-stream" },
       collectMs: 800,
     });
@@ -351,7 +354,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
 
     // Fire a turn (mock resolves after 200ms → emits done frame)
     await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -389,7 +392,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
 // ─── T-Serve.7 — POST /agent/abort: cancellation ─────────────────────────────
 
 describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_found if no turn (G-P56b.7)", () => {
-  it.skip("T-Serve.7: given tmp UDS sock + bearer 'tok', WHEN (1) POST /agent/abort with no turn active→200 {ok:false,reason:'not_found'}, (2) start turn+wait 50ms+abort→200 {ok:true}, (3) SSE stream after abort shows done+aborted frame", async () => {
+  it.skip("T-Serve.7: given tmp port-file + bearer 'tok', WHEN (1) POST /agent/abort with no turn active→200 {ok:false,reason:'not_found'}, (2) start turn+wait 50ms+abort→200 {ok:true}, (3) SSE stream after abort shows done+aborted frame", async () => {
     // Given: tmp-dir server; mocked runAgentLoop respects abortSignal (mockTurnRespectAbort=true);
     //        mockTurnSleepMs=5000 (long sleep so abort fires while turn is running)
     // When:  scenario 1: POST /agent/abort (no turn running)
@@ -400,7 +403,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     //        scenario 3: SSE text contains '"finishReason":"aborted"'
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t7-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
 
@@ -410,22 +413,22 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     mockTurnSleepMs = 5000; // long sleep so abort fires before turn completes
     mockTurnRespectAbort = true;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
+    void runServeSubcommand({ portFile, bearerToken: bearer });
 
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // Scenario 1: abort with no turn running → 200 {ok:false, reason:"not_found"}
-    const ra1 = await udsReq({ socketPath: sockPath, method: "POST", path: "/agent/abort", headers: authHeader });
+    const ra1 = await udsReq({ port, method: "POST", path: "/agent/abort", headers: authHeader });
     assert.equal(ra1.status, 200, `scenario 1: expected status 200 got ${ra1.status}`);
     assert.equal(ra1.body.ok, false, "scenario 1: ok must be false");
     assert.equal(ra1.body.reason, "not_found", "scenario 1: reason must be not_found");
 
     // Open SSE listener BEFORE starting the turn
     const ssePromise = udsSSECollect({
-      socketPath: sockPath,
+      port,
       headers: { ...authHeader, Accept: "text/event-stream" },
       collectMs: 600,
     });
@@ -433,7 +436,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
 
     // Scenario 2a: start a turn
     const rturn = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -445,7 +448,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     await new Promise((r) => setTimeout(r, 50));
 
     // Scenario 2b: abort the running turn → 200 {ok:true}
-    const ra2 = await udsReq({ socketPath: sockPath, method: "POST", path: "/agent/abort", headers: authHeader });
+    const ra2 = await udsReq({ port, method: "POST", path: "/agent/abort", headers: authHeader });
     assert.equal(ra2.status, 200, `scenario 2: expected status 200 got ${ra2.status}`);
     assert.equal(ra2.body.ok, true, "scenario 2: ok must be true");
 
@@ -478,7 +481,7 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     //            — last 2 VALID rows (r2 + r4); NOT [r4] which would mean filter-after-slice
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t8-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
 
@@ -503,16 +506,16 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     mockTurnSleepMs = 2000;
     mockTurnRespectAbort = false;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
+    void runServeSubcommand({ portFile, bearerToken: bearer });
 
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // (1) GET /audit/tail?n=10 → all 3 valid rows
     const resp10 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "GET",
       path: "/audit/tail?n=10",
       headers: authHeader,
@@ -531,7 +534,7 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     //     because the last 2 PHYSICAL lines are the malformed r3 and r4.
     //     Correct filter-before-slice returns [r2, r4].
     const resp2 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "GET",
       path: "/audit/tail?n=2",
       headers: authHeader,

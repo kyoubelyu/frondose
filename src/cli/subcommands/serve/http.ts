@@ -58,9 +58,9 @@ export function rowEpochMs(row: unknown): number {
   return 0;
 }
 
-export function removeSocket(sockPath: string): void {
+export function removeFile(path: string): void {
   try {
-    rmSync(sockPath, { force: true });
+    rmSync(path, { force: true });
   } catch {
     // Best-effort cleanup.
   }

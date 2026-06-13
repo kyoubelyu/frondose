@@ -22,7 +22,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -36,7 +36,7 @@ let mockBindingCalledHandler: ((arg: { name: string; payload: string }) => void)
 let callSeq: string[] = [];
 const sseFramesSeen: string[] = [];
 
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 const STUB_HANDLE = { __stub: "handle" };
 
@@ -146,10 +146,10 @@ before(async () => {
   runServeSubcommand = (serveMod as any).runServeSubcommand;
 });
 
-// ─── UDS + harness helpers ───────────────────────────────────────────────────
+// ─── TCP + harness helpers ────────────────────────────────────────────────────
 
 async function udsReq(opts: {
-  socketPath: string;
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
@@ -160,7 +160,7 @@ async function udsReq(opts: {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
@@ -177,11 +177,12 @@ async function udsReq(opts: {
   });
 }
 
-function collectSse(socketPath: string, bearer: string, collectMs: number): Promise<void> {
+function collectSse(port: number, bearer: string, collectMs: number): Promise<void> {
   return new Promise((resolveP) => {
     const r = httpReq(
       {
-        socketPath,
+        host: "127.0.0.1",
+        port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", Authorization: `Bearer ${bearer}` },
@@ -205,19 +206,26 @@ function collectSse(socketPath: string, bearer: string, collectMs: number): Prom
   });
 }
 
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
-    const { existsSync } = await import("node:fs");
-    if (existsSync(sockPath)) return true;
+    try {
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
+    } catch {
+      /* ignore transient read errors */
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
-async function spinHarness(testName: string): Promise<{ sockPath: string; bearer: string; restoreEnv: () => void }> {
+async function spinHarness(testName: string): Promise<{ port: number; bearer: string; restoreEnv: () => void }> {
   const tmpDir = mkdtempSync(join(tmpdir(), `p57f-${testName}-`));
-  const sockPath = join(tmpDir, "mai.sock");
+  const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
@@ -232,13 +240,13 @@ async function spinHarness(testName: string): Promise<{ sockPath: string; bearer
   callSeq = [];
   sseFramesSeen.length = 0;
 
-  void runServeSubcommand({ sockPath, bearerToken: bearer });
-  const ready = await pollForSock(sockPath, 5000);
-  assert.ok(ready, `${testName}: server socket must be ready`);
+  void runServeSubcommand({ portFile, bearerToken: bearer });
+  const port = await pollForPort(portFile, 5000);
+  assert.ok(port !== null, `${testName}: server port file must appear within 5000ms`);
 
   // /chrome/ensure → subscribeContextId stub fires onContext(123) → overlayContextId set.
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/chrome/ensure",
     headers: { Authorization: `Bearer ${bearer}` },
@@ -246,7 +254,7 @@ async function spinHarness(testName: string): Promise<{ sockPath: string; bearer
 
   // P-Z2: P-57g made passive default-OFF; enable it via the real runtime toggle.
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/agent/passive-mode",
     headers: { Authorization: `Bearer ${bearer}` },
@@ -254,7 +262,7 @@ async function spinHarness(testName: string): Promise<{ sockPath: string; bearer
   });
 
   return {
-    sockPath,
+    port,
     bearer,
     restoreEnv: () => {
       if (origHome === undefined) delete process.env.MAI_HOME_BASE;
@@ -313,7 +321,7 @@ describe("triggerPassiveAnalysis — passive turn COMPLETION emits ✓-noted tic
   it("T-Ticker.2: given serve.ts harness + SSE collector, WHEN triggerPassiveAnalysis('click', {ref:{controlName:'connect_btn'}}) runs to completion, THEN after runAgentLoop resolves a callInOverlay fires with '__maiUpdateTicker' + '✓ noted: connect_btn' (refSummary fallback ariaLabel>controlName>text — controlName since no ariaLabel) AND passive-fired SSE is emitted", async () => {
     const h = await spinHarness("tt2");
     try {
-      const ssePromise = collectSse(h.sockPath, h.bearer, 1500);
+      const ssePromise = collectSse(h.port, h.bearer, 1500);
       await new Promise((r) => setTimeout(r, 100));
 
       dispatchOverlayBindingEvent({

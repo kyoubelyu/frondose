@@ -22,7 +22,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -51,7 +51,7 @@ let mockLimiterAllow = true;
 
 // ─── runServeSubcommand handle ───────────────────────────────────────────────
 
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 // ─── File-level setup ────────────────────────────────────────────────────────
 
@@ -160,34 +160,34 @@ before(async () => {
   runServeSubcommand = (serveMod as any).runServeSubcommand;
 });
 
-// ─── UDS HTTP helpers ────────────────────────────────────────────────────────
+// ─── TCP HTTP helpers ─────────────────────────────────────────────────────────
 
-interface UdsReqOpts {
-  socketPath: string;
+interface TcpReqOpts {
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
 }
-interface UdsResult {
+interface TcpResult {
   status: number;
   // biome-ignore lint/suspicious/noExplicitAny: body varies
   body: any;
 }
 
-async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
-  return new Promise<UdsResult>((resolveP, rejectP) => {
+async function udsReq(opts: TcpReqOpts): Promise<TcpResult> {
+  return new Promise<TcpResult>((resolveP, rejectP) => {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
         try {
           resolveP({ status: res.statusCode ?? 0, body: JSON.parse(Buffer.concat(chunks).toString("utf-8")) });
         } catch (e) {
-          rejectP(new Error(`JSON parse error in UDS response: ${e}`));
+          rejectP(new Error(`JSON parse error in TCP response: ${e}`));
         }
       });
     });
@@ -198,14 +198,15 @@ async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
 }
 
 async function udsSSECollect(opts: {
-  socketPath: string;
+  port: number;
   headers?: Record<string, string>;
   collectMs: number;
 }): Promise<{ statusCode: number; text: string }> {
   return new Promise((resolveP, rejectP) => {
     const r = httpReq(
       {
-        socketPath: opts.socketPath,
+        host: "127.0.0.1",
+        port: opts.port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", ...(opts.headers ?? {}) },
@@ -227,18 +228,21 @@ async function udsSSECollect(opts: {
   });
 }
 
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
     try {
-      const { existsSync } = await import("node:fs");
-      if (existsSync(sockPath)) return true;
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
     } catch {
-      /* ignore */
+      /* ignore transient read errors */
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
 /** Build a synthetic OverlayEvent with the non-enumerable `payload` field that
@@ -260,9 +264,9 @@ function makeOverlayEvent(eventType: string, payload: any) {
 async function spinHarness(
   testName: string,
   opts: { icpRoles?: string[]; identityOverride?: Record<string, unknown> } = {},
-): Promise<{ sockPath: string; bearer: string; tmpDir: string; restoreEnv: () => void }> {
+): Promise<{ port: number; bearer: string; tmpDir: string; restoreEnv: () => void }> {
   const tmpDir = mkdtempSync(join(tmpdir(), `p57b-${testName}-`));
-  const sockPath = join(tmpDir, "mai.sock");
+  const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
@@ -288,13 +292,13 @@ async function spinHarness(
   mockRunAgentLoopSleepMs = 20;
   mockLimiterAllow = true; // tests that need denial set this to false before dispatch
 
-  void runServeSubcommand({ sockPath, bearerToken: bearer });
-  const sockReady = await pollForSock(sockPath, 5000);
-  assert.ok(sockReady, `${testName}: server socket must be ready within 5000ms`);
+  void runServeSubcommand({ portFile, bearerToken: bearer });
+  const port = await pollForPort(portFile, 5000);
+  assert.ok(port !== null, `${testName}: server port file must appear within 5000ms`);
 
   // /chrome/ensure to register the binding handler
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/chrome/ensure",
     headers: { Authorization: `Bearer ${bearer}` },
@@ -303,7 +307,7 @@ async function spinHarness(
 
   // P-Z2: P-57g made passive default-OFF; enable it via the real runtime toggle.
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/agent/passive-mode",
     headers: { Authorization: `Bearer ${bearer}` },
@@ -311,7 +315,7 @@ async function spinHarness(
   });
 
   return {
-    sockPath,
+    port,
     bearer,
     tmpDir,
     restoreEnv: () => {
@@ -348,7 +352,7 @@ describe("handlePassiveProfileNav — rate-limit exhausted → passive-skipped S
       mockLimiterAllow = false;
 
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 800 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 800 });
       await new Promise((r) => setTimeout(r, 100)); // SSE handshake
 
       dispatchOverlayBindingEvent({
@@ -386,7 +390,7 @@ describe("triggerPassiveAnalysis — isolated passiveMessages[]; operator messag
 
       // (1) Operator POST /agent/turn → captures operator messages[]
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
@@ -461,7 +465,7 @@ describe("handlePassiveProfileNav — passiveProfileCache 10-min dedup + lazy TT
     const h = await spinHarness("t4", { icpRoles: ["VP Sales"] });
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 1500 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 1500 });
       await new Promise((r) => setTimeout(r, 100));
 
       // (1) First profile-nav for 'jane' → fires
@@ -523,7 +527,7 @@ describe("handlePassiveObservation — click → fire (no ICP pre-filter; rate-l
     const h = await spinHarness("t5", { icpRoles: ["VP Sales"] });
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2000 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2000 });
       await new Promise((r) => setTimeout(r, 100));
 
       // V1: /feed/ + "Like this post" — interactive click → fires (no ICP pre-filter; rate-limit only)
@@ -590,12 +594,12 @@ describe("handlePassiveObservation — silent skip on currentTurn !== null (G-P5
       // Long sleep so the operator turn is still in flight when we dispatch the passive event
       mockRunAgentLoopSleepMs = 1500;
 
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 1200 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 1200 });
       await new Promise((r) => setTimeout(r, 100));
 
       // Start operator turn
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
