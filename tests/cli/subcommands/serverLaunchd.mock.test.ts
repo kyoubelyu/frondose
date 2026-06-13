@@ -43,7 +43,7 @@ function makePlistArgs(overrides: Partial<PlistArgs> & { env?: Partial<EnvSnapsh
 // ─── T-SRV.LAUNCHD ────────────────────────────────────────────────────────────
 
 describe("serverLaunchd helpers (G-P25.7, G-P25.8)", () => {
-  it("T-SRV.LAUNCHD.1: renderServerPlist includes Label=com.kyoube.mai.server, ProgramArguments=[..., 'server', 'daemon'], log paths under ~/.mai/server/logs/", () => {
+  it("T-SRV.LAUNCHD.1: renderServerPlist includes Label=com.kyoube.frondose.server, ProgramArguments=[..., 'server', 'daemon'], log paths under ~/.mai/server/logs/", () => {
     // Given: PlistArgs with TELEGRAM_TOKEN="abc", nodeBin+maiEntry+home set
     // When:  renderServerPlist(args) called
     // Then:  output contains Label=SERVER_LABEL; ProgramArguments has 'server'+'daemon';
@@ -54,7 +54,7 @@ describe("serverLaunchd helpers (G-P25.7, G-P25.8)", () => {
     // Label
     assert.ok(xml.includes("<key>Label</key>"), "Label key must be present");
     assert.ok(xml.includes(`<string>${SERVER_LABEL}</string>`), `Label value must be '${SERVER_LABEL}'`);
-    assert.equal(SERVER_LABEL, "com.kyoube.mai.server", "SERVER_LABEL must be com.kyoube.mai.server");
+    assert.equal(SERVER_LABEL, "com.kyoube.frondose.server", "SERVER_LABEL must be com.kyoube.frondose.server");
 
     // ProgramArguments includes 'server' and 'daemon'
     assert.ok(xml.includes("<string>server</string>"), "ProgramArguments must include 'server'");

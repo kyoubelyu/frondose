@@ -60,9 +60,11 @@ describe("launchd: renderPlist", () => {
     // Given:  env snapshot = { TELEGRAM_TOKEN: 'abc' }; no TELEGRAM_PROXY, MAI_MODEL, providerKey
     // When:   renderPlist(args) is called
     // Then:   output contains exactly one <key>TELEGRAM_TOKEN</key>; no <key>TELEGRAM_PROXY</key>;
-    //         <key>Label</key> present; <string>com.kyoube.mai.telegram</string> present
+    //         <key>Label</key> present; <string>com.kyoube.frondose.telegram</string> present
     const args = makePlistArgs({ env: { TELEGRAM_TOKEN: "abc" } });
     const xml = renderPlist(args);
+    // Label computed value contract (T-FREN4c.Label.1 hard assertion)
+    assert.equal(LABEL, "com.kyoube.frondose.telegram", "T-FREN4c.Label.1: LABEL must be com.kyoube.frondose.telegram");
     // Label present
     assert.ok(xml.includes("<key>Label</key>"), "Label key must be present");
     assert.ok(xml.includes(`<string>${LABEL}</string>`), "Label string must match LABEL");
@@ -123,7 +125,7 @@ describe("launchd: installLaunchAgent + uninstallLaunchAgent", () => {
   it("T-LAUNCHD.4: when plist absent + consent=y, plist is written with mode 0o600 before launchctl bootstrap", async () => {
     // Given:  process.platform = 'darwin' (this test only runs on macOS); consent fn returns true
     // When:   installLaunchAgent(args, {consent, yes:false}) called
-    // Then:   plist file written at HOME/Library/LaunchAgents/com.kyoube.mai.telegram.plist with mode 0o600
+    // Then:   plist file written at HOME/Library/LaunchAgents/com.kyoube.frondose.telegram.plist with mode 0o600
     //         BEFORE launchctl bootstrap is invoked. launchctl may fail on CI (fake paths) — that is
     //         expected. The key assertion is that the plist IS on disk and has the correct mode.
     if (process.platform !== "darwin") {
