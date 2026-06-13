@@ -171,7 +171,7 @@ describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled s
       // → runOneTurn's catch converts the error to BootstrapTimeoutError
       // per §6.8(b)'s `if (abortController.signal.aborted)` gate.
       //
-      // NOTE on plumbing: streamText (in mai-agent's pinned `ai` version)
+      // NOTE on plumbing: streamText (in frondose's pinned `ai` version)
       // does NOT forward its `abortSignal` option to the model's doStream
       // `options.abortSignal` in a way that lets the model observe abort
       // events. Verified via timing instrumentation: a doStream-side abort

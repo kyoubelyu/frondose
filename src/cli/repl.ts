@@ -245,7 +245,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
     }
   }
 
-  out.write("mai-agent ready. type a prompt; Ctrl-C exits.\n> ");
+  out.write("frondose ready. type a prompt; Ctrl-C exits.\n> ");
   if (opts.linkedinSession && frondoseEnv("NO_EAGER_CHROME") !== "1") {
     opts.linkedinSession.getOrInitClient().catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);

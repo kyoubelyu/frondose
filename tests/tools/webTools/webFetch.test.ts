@@ -8,7 +8,7 @@
  * T-WebFetch.3 — HTTP 4xx → fail envelope with status message
  * T-WebFetch.4 — Network error (fetch throws) → fail envelope via failFromError
  * T-WebFetch.5 — HTTP URL (not HTTPS) → Zod validation error before fetch fires
- * T-WebFetch.6 — User-Agent header is "kyoubelyu/mai-agent" (NIT-1 fix verified)
+ * T-WebFetch.6 — User-Agent header is "kyoubelyu/frondose" (F-REN-4b flip: was kyoubelyu/mai-agent)
  * T-WebFetch.7 — Optional prompt echoed in result
  * T-WebFetch.8 — maxChars param respected (non-default value)
  *
@@ -165,7 +165,10 @@ test("T-WebFetch.5: HTTP URL (not HTTPS) → Zod schema refine rejects at parse 
 
 // ─── T-WebFetch.6: User-Agent header (NIT-1 fix verification) ────────────────
 
-test("T-WebFetch.6: User-Agent header contains 'kyoubelyu/mai-agent' (NIT-1 fix)", async () => {
+test("T-WebFetch.6: User-Agent header contains 'kyoubelyu/frondose' (F-REN-4b lockstep flip)", async () => {
+  // Given: webFetch.ts User-Agent updated to frondose/1.0 (+https://github.com/kyoubelyu/frondose)
+  // When:  tool.execute runs with a mocked fetch
+  // Then:  captured User-Agent contains 'kyoubelyu/frondose'; NOT 'kyoubelyu/mai-agent'
   const tool = makeWebFetchTool();
   let capturedUserAgent = "";
 
@@ -181,12 +184,12 @@ test("T-WebFetch.6: User-Agent header contains 'kyoubelyu/mai-agent' (NIT-1 fix)
   );
 
   assert.ok(
-    capturedUserAgent.includes("kyoubelyu/mai-agent"),
-    `User-Agent must contain 'kyoubelyu/mai-agent' (NIT-1 fix); got: "${capturedUserAgent}"`,
+    capturedUserAgent.includes("kyoubelyu/frondose"),
+    `User-Agent must contain 'kyoubelyu/frondose' (F-REN-4b flip); got: "${capturedUserAgent}"`,
   );
   assert.ok(
-    !capturedUserAgent.includes("kyoube/mai-agent") || capturedUserAgent.includes("kyoubelyu"),
-    "User-Agent must use 'kyoubelyu' (full username), not abbreviated 'kyoube'",
+    !capturedUserAgent.includes("kyoubelyu/mai-agent"),
+    `User-Agent must NOT contain 'kyoubelyu/mai-agent' after F-REN-4b rename; got: "${capturedUserAgent}"`,
   );
 });
 

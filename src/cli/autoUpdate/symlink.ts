@@ -1,7 +1,7 @@
 import { existsSync, readlinkSync, realpathSync, renameSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const PKG_NAME = "@kyoube/mai-agent";
+const PKG_NAME = "@kyoube/frondose";
 
 // §4 + §6.4: symlink swap helpers ─────────────────────────────────────────────
 
@@ -16,8 +16,8 @@ export function derivePackageSymlink(argv1: string): string | null {
   }
   const idx = target.indexOf(PKG_NAME);
   if (idx === -1) return null;
-  // target example: '../lib/node_modules/@kyoube/mai-agent/dist/cli/main.js'
-  // pkg slice end:   '../lib/node_modules/@kyoube/mai-agent'
+  // target example: '../lib/node_modules/@kyoube/frondose/dist/cli/main.js'
+  // pkg slice end:   '../lib/node_modules/@kyoube/frondose'
   return resolve(dirname(argv1), target.slice(0, idx + PKG_NAME.length));
 }
 

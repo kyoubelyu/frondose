@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# P-34: standalone mai-agent installer for a fresh macOS machine.
+# P-34: standalone frondose installer for a fresh macOS machine.
 # P-40: gh-native release fetch (no GITHUB_TOKEN); MAI_PREFIX sandbox override.
 # Usage:  bash install.sh
 #         MAI_PREFIX=/tmp/test bash install.sh   # sandbox install — overrides $HOME + brew prefix
 # Requires: macOS, Homebrew, gh CLI (authenticated via `gh auth login`).
-# Installs Chrome + Node@20 + mai-agent from the latest GitHub Release.
+# Installs Chrome + Node@20 + frondose from the latest GitHub Release.
 set -euo pipefail
 
-REPO="kyoubelyu/mai-agent"
+REPO="kyoubelyu/frondose"
 
 # P-58b: optional release-channel flags. No-arg => stable "Latest" (backward compatible).
 CHANNEL="stable"
@@ -29,11 +29,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "=== mai-agent install ==="
+echo "=== frondose install ==="
 
 # 1. Platform
 if [[ "$(uname)" != "Darwin" ]]; then
-  echo "ERROR: mai-agent is macOS-only." >&2
+  echo "ERROR: frondose is macOS-only." >&2
   exit 1
 fi
 
@@ -69,8 +69,8 @@ if ! command -v node &>/dev/null || [[ "$(node --version | cut -d. -f1 | tr -d '
   export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
 fi
 
-# 6. Install mai-agent
-echo "Installing mai-agent from the latest GitHub Release..."
+# 6. Install frondose
+echo "Installing frondose from the latest GitHub Release..."
 # P-40 FINDING-I1: MAI_PREFIX overrides BOTH base paths → sandbox-testable installs.
 HOME_BASE="${MAI_PREFIX:-$HOME}"
 BREW_BASE="${MAI_PREFIX:-$(brew --prefix)}"
@@ -97,9 +97,9 @@ if [[ -z "$TAG" || "$TAG" == "null" ]]; then
 fi
 INSTALL_DIR="$HOME_BASE/.frondose/agent/releases/$TAG"
 mkdir -p "$INSTALL_DIR"
-gh release download "$TAG" --repo "$REPO" --archive=tar.gz --output /tmp/mai-agent.tar.gz --clobber
-tar -xzf /tmp/mai-agent.tar.gz -C "$INSTALL_DIR" --strip-components=1
-rm -f /tmp/mai-agent.tar.gz
+gh release download "$TAG" --repo "$REPO" --archive=tar.gz --output /tmp/frondose.tar.gz --clobber
+tar -xzf /tmp/frondose.tar.gz -C "$INSTALL_DIR" --strip-components=1
+rm -f /tmp/frondose.tar.gz
 
 # P-40 FINDING-I3: non-fatal Xcode CLT check. The hardware-input addon needs the CLT,
 # but cdp mode is fully functional without it — warn, do NOT exit.
@@ -111,11 +111,11 @@ fi
 # P-40 FINDING-I4: full output — set -euo pipefail surfaces the real failure point.
 ( cd "$INSTALL_DIR" && npm install --prefer-offline && npm run build )
 
-PKG_LINK="$BREW_BASE/lib/node_modules/@kyoube/mai-agent"
+PKG_LINK="$BREW_BASE/lib/node_modules/@kyoube/frondose"
 BIN_LINK="$BREW_BASE/bin/mai"
 mkdir -p "$(dirname "$PKG_LINK")" "$(dirname "$BIN_LINK")"
 ln -sfn "$INSTALL_DIR" "$PKG_LINK"
-ln -sfn "../lib/node_modules/@kyoube/mai-agent/dist/cli/main.js" "$BIN_LINK"
+ln -sfn "../lib/node_modules/@kyoube/frondose/dist/cli/main.js" "$BIN_LINK"
 chmod +x "$INSTALL_DIR/dist/cli/main.js"
 # --- end install-core ---
 
@@ -128,5 +128,5 @@ printf '%s\n' "$CHANNEL" > "$CHANNEL_FILE"
 
 echo ""
 echo "=== Install complete ==="
-echo "mai-agent $TAG installed. 'mai' is on your PATH ($BIN_LINK)."
+echo "frondose $TAG installed. 'mai' is on your PATH ($BIN_LINK)."
 echo "Next: open Frondose and use Settings to configure your provider key, identity, and integrations."

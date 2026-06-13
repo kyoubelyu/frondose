@@ -38,14 +38,15 @@ const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const PKG_NAME = "@kyoube/mai-agent";
+// F-REN-4b lockstep flip: PKG_NAME was "@kyoube/mai-agent"; now "@kyoube/frondose"
+const PKG_NAME = "@kyoube/frondose";
 
 interface TmpInstall {
   tmpDir: string;
   homeDir: string;
   /** The bin symlink (e.g. <tmpDir>/bin/mai) passed as argv1. */
   argv1: string;
-  /** The resolved pkg symlink path (<tmpDir>/lib/node_modules/@kyoube/mai-agent). */
+  /** The resolved pkg symlink path (<tmpDir>/lib/node_modules/@kyoube/frondose). */
   pkgSymlinkPath: string;
   /** The releases directory (<homeDir>/.mai/agent/releases). */
   releasesDir: string;
@@ -56,8 +57,8 @@ interface TmpInstall {
 
 /**
  * Build a tmp install layout mimicking a global npm install:
- *   <tmpDir>/bin/mai               → symlink to <tmpDir>/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js
- *   <tmpDir>/lib/node_modules/@kyoube/mai-agent  → (symlink to pkgTarget, OR real dir if pkgAsRealDir)
+ *   <tmpDir>/bin/mai               → symlink to <tmpDir>/lib/node_modules/@kyoube/frondose/dist/cli/main.js
+ *   <tmpDir>/lib/node_modules/@kyoube/frondose  → (symlink to pkgTarget, OR real dir if pkgAsRealDir)
  *   <homeDir>/.mai/agent/releases/ → real directory
  *   <homeDir>/.mai/secrets.json    → stub file
  *
@@ -79,10 +80,10 @@ function makeTmpInstall(opts: { pkgAsRealDir?: boolean } = {}): TmpInstall {
   mkdirSync(join(maiDir, "agent"), { recursive: true });
   writeFileSync(join(maiDir, "secrets.json"), JSON.stringify({ test: true }));
 
-  // The bin symlink target: <tmpDir>/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js
+  // The bin symlink target: <tmpDir>/lib/node_modules/@kyoube/frondose/dist/cli/main.js
   // The target need not exist — derivePackageSymlink only calls readlinkSync(argv1) to read the
   // link string; it never stat()s the target. Keeping it dangling avoids pre-creating the
-  // @kyoube/mai-agent directory that pkgSymlinkPath must occupy.
+  // @kyoube/frondose directory that pkgSymlinkPath must occupy.
   const binTarget = join(tmpDir, "lib", "node_modules", PKG_NAME, "dist", "cli", "main.js");
   const argv1 = join(binDir, "mai");
   symlinkSync(binTarget, argv1);

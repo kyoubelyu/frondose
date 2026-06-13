@@ -71,7 +71,7 @@ export async function runUninstallSubcommand(opts: UninstallOpts): Promise<void>
   }
 
   removePathSafe(argv1); // the bin symlink (e.g. /opt/homebrew/bin/mai)
-  removePathSafe(pkgSymlink); // the @kyoube/mai-agent package symlink (dev-link: symlink only)
+  removePathSafe(pkgSymlink); // the @kyoube/frondose package symlink (dev-link: symlink only)
   removePathSafe(releasesDir); // ~/.frondose/agent/releases/
   process.stdout.write("[uninstall] Removed the mai binary + release dirs.\n");
 

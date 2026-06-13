@@ -137,11 +137,11 @@ describe("autoUpdate — lock primitives", () => {
 
 describe("autoUpdate — symlink helpers", () => {
   it(
-    "T-autoUpdate.Symlink.1: derivePackageSymlink resolves the npm-global @kyoube/mai-agent symlink path from argv1; returns null for non-symlinks and non-package targets",
+    "T-autoUpdate.Symlink.1: derivePackageSymlink resolves the npm-global @kyoube/frondose symlink path from argv1; returns null for non-symlinks and non-package targets (F-REN-4b flip from @kyoube/mai-agent)",
     () => {
-      // Given: tmpdir layout: bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js; lib/@kyoube/mai-agent → ../releases/v0.4.15; lib/releases/v0.4.15/
+      // Given: tmpdir layout: bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js; lib/@kyoube/frondose → ../releases/v0.4.15; lib/releases/v0.4.15/
       // When:  derivePackageSymlink(argv1) called with different argv1 values
-      // Then:  returns the @kyoube/mai-agent symlink path for a valid global install; null otherwise
+      // Then:  returns the @kyoube/frondose symlink path for a valid global install; null otherwise
 
       const tmp = mkdtempSync(join(tmpdir(), "p72s9-symlink1-"));
       try {
@@ -149,28 +149,28 @@ describe("autoUpdate — symlink helpers", () => {
         // IMPORTANT: create real dirs first, then place symlinks ON TOP — never
         // mkdirSync a path that will become a symlink target or the symlink itself.
         mkdirSync(join(tmp, "bin"), { recursive: true });
-        // Parent of the @kyoube/mai-agent symlink: lib/@kyoube/
+        // Parent of the @kyoube/frondose symlink: lib/@kyoube/
         mkdirSync(join(tmp, "lib", "@kyoube"), { recursive: true });
         // Real release dir that the package-symlink points to
         mkdirSync(join(tmp, "lib", "releases", "v0.4.15"), { recursive: true });
 
-        // bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js
+        // bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js
         // (dangling into the dist path is fine — readlink reads the target string, not the resolved file)
         const binMai = join(tmp, "bin", "mai");
-        symlinkSync("../lib/@kyoube/mai-agent/dist/cli/main.js", binMai);
+        symlinkSync("../lib/@kyoube/frondose/dist/cli/main.js", binMai);
 
-        // lib/@kyoube/mai-agent → ../../lib/releases/v0.4.15 (relative to the symlink's location)
-        // The symlink lives at lib/@kyoube/mai-agent; its target must be resolvable from there.
-        const pkgSymlinkPath = join(tmp, "lib", "@kyoube", "mai-agent");
+        // lib/@kyoube/frondose → ../../lib/releases/v0.4.15 (relative to the symlink's location)
+        // The symlink lives at lib/@kyoube/frondose; its target must be resolvable from there.
+        const pkgSymlinkPath = join(tmp, "lib", "@kyoube", "frondose");
         symlinkSync("../../releases/v0.4.15", pkgSymlinkPath);
 
-        // Expected: the resolved path to lib/@kyoube/mai-agent (the npm-global package symlink)
+        // Expected: the resolved path to lib/@kyoube/frondose (the npm-global package symlink)
         const result = derivePackageSymlink(binMai);
-        assert.ok(result !== null, "result should not be null for a valid global-install bin path");
-        // The result should point to lib/@kyoube/mai-agent (may be a trailing slash variant — check without trailing slash)
+        assert.ok(result !== null, "result should not be null for a valid @kyoube/frondose global-install bin path");
+        // The result should point to lib/@kyoube/frondose (may be a trailing slash variant — check without trailing slash)
         assert.ok(
-          result.includes("@kyoube/mai-agent") || result.includes("@kyoube"),
-          `result should contain '@kyoube/mai-agent'; got: ${result}`,
+          result.includes("@kyoube/frondose"),
+          `result should contain '@kyoube/frondose'; got: ${result}`,
         );
 
         // Edge case 1: non-symlink real file → null
@@ -182,13 +182,13 @@ describe("autoUpdate — symlink helpers", () => {
           "non-symlink argv1 should return null",
         );
 
-        // Edge case 2: symlink target does NOT contain @kyoube/mai-agent → null
+        // Edge case 2: symlink target does NOT contain @kyoube/frondose (PKG_NAME) → null
         const wrongBin = join(tmp, "bin", "wrong");
         symlinkSync("/usr/local/bin/some-other-tool", wrongBin);
         assert.strictEqual(
           derivePackageSymlink(wrongBin),
           null,
-          "symlink not pointing to @kyoube/mai-agent should return null",
+          "symlink not pointing to @kyoube/frondose (or any recognized PKG_NAME) should return null",
         );
       } finally {
         rmSync(tmp, { recursive: true, force: true });

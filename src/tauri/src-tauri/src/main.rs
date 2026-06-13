@@ -393,6 +393,9 @@ fn resolve_sidecar_bin() -> String {
         }
     }
     for candidate in [
+        "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js",
+        "/usr/local/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js",
+        // F-REN-4b transition: legacy @kyoube/mai-agent install fallback
         "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
         "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
     ] {
@@ -404,7 +407,7 @@ fn resolve_sidecar_bin() -> String {
 }
 
 /// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
-/// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/mai-agent` →
+/// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/frondose` (legacy: @kyoube/mai-agent) →
 /// `~/.frondose/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
 /// `FRONDOSE_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
 /// relative path so `cargo tauri dev` (CWD = src-tauri) keeps working.
@@ -433,8 +436,11 @@ fn resolve_mai_bin() -> String {
         }
     }
     for candidate in [
-        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js", // Apple Silicon
-        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",    // Intel
+        "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js", // Apple Silicon (4b)
+        "/usr/local/lib/node_modules/@kyoube/frondose/dist/cli/main.js",    // Intel (4b)
+        // F-REN-4b transition: legacy @kyoube/mai-agent install fallback
+        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",
+        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",
     ] {
         if std::path::Path::new(candidate).is_file() {
             return candidate.to_string();

@@ -168,10 +168,10 @@ test("T-M_p5.7: composeSoulBand(null) returns non-empty fallback with placeholde
 
   assert.ok(out.length > 500, `T-M_p5.7: Soul null-fallback must be > 500 chars; got ${out.length}`);
 
-  // Must include placeholder identity
+  // Must include placeholder identity (F-REN-4b: soul.ts:30 now uses "frondose operator")
   assert.ok(
-    out.includes("mai-agent operator"),
-    `T-M_p5.7: null fallback must include "mai-agent operator" placeholder`,
+    out.includes("frondose operator"),
+    `T-M_p5.7: null fallback must include "frondose operator" placeholder (F-REN-4b flip from "mai-agent operator")`,
   );
 
   // Must include methodology (distillation is always included)
