@@ -42,7 +42,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -66,7 +66,7 @@ let mockTurnSleepMs = 50;
 
 // ─── runServeSubcommand handle (loaded after mocks are wired) ─────────────────
 
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 // ─── File-level setup: mock session.js + loop.js + modelResolver BEFORE serve.ts ─
 
@@ -136,35 +136,35 @@ before(async () => {
   runServeSubcommand = (serveMod as any).runServeSubcommand;
 });
 
-// ─── UDS HTTP helpers ─────────────────────────────────────────────────────────
+// ─── TCP HTTP helpers (WIN-1: UDS → loopback TCP + port-file) ────────────────
 
-interface UdsReqOpts {
-  socketPath: string;
+interface TcpReqOpts {
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
 }
-interface UdsResult {
+interface TcpResult {
   status: number;
   // biome-ignore lint/suspicious/noExplicitAny: test result body type varies
   body: any;
 }
 
-/** Make an HTTP request over a Unix Domain Socket; resolve with status + parsed JSON. */
-async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
-  return new Promise<UdsResult>((resolveP, rejectP) => {
+/** Make an HTTP request over TCP loopback; resolve with status + parsed JSON. */
+async function udsReq(opts: TcpReqOpts): Promise<TcpResult> {
+  return new Promise<TcpResult>((resolveP, rejectP) => {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
         try {
           resolveP({ status: res.statusCode ?? 0, body: JSON.parse(Buffer.concat(chunks).toString("utf-8")) });
         } catch (e) {
-          rejectP(new Error(`JSON parse error in UDS response: ${e}`));
+          rejectP(new Error(`JSON parse error in TCP response: ${e}`));
         }
       });
     });
@@ -176,14 +176,15 @@ async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
 
 /** Collect SSE bytes for `collectMs`. */
 async function udsSSECollect(opts: {
-  socketPath: string;
+  port: number;
   headers?: Record<string, string>;
   collectMs: number;
 }): Promise<{ statusCode: number; text: string }> {
   return new Promise((resolveP, rejectP) => {
     const r = httpReq(
       {
-        socketPath: opts.socketPath,
+        host: "127.0.0.1",
+        port: opts.port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", ...(opts.headers ?? {}) },
@@ -208,19 +209,22 @@ async function udsSSECollect(opts: {
   });
 }
 
-/** Poll until sockPath exists OR deadline_ms expires. */
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+/** Poll until portFile contains a valid port, OR deadline_ms expires. */
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
     try {
-      const { existsSync } = await import("node:fs");
-      if (existsSync(sockPath)) return true;
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
     } catch {
       /* ignore */
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
 // ─── T-Serve.9 — currentTurn 409 guard preserved from P-56b ────────────────
@@ -232,22 +236,22 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
     // Then:  r1=200+turnId8hex; r2=409 turn_in_progress with same turnId
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t9-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 1500;
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    void runServeSubcommand({ portFile, bearerToken: bearer });
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // First POST → 200 + turnId
     const r1 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -263,7 +267,7 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
 
     // Second POST while #1 sleeping → 409 same turnId
     const r2 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -291,7 +295,7 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
     //        with the matching payload fields.
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t10-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
@@ -302,19 +306,19 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
     mockTurnSleepMs = 1000;
     mockOnStepFinish = null;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    void runServeSubcommand({ portFile, bearerToken: bearer });
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // Open SSE listener BEFORE firing the turn (concurrent collect)
-    const ssePromise = udsSSECollect({ socketPath: sockPath, headers: authHeader, collectMs: 1500 });
+    const ssePromise = udsSSECollect({ port, headers: authHeader, collectMs: 1500 });
     await new Promise((r) => setTimeout(r, 100)); // SSE handshake settle
 
     // POST /agent/turn → captures onStepFinish into mockOnStepFinish
     const r1 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/turn",
       headers: authHeader,
@@ -389,7 +393,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     //        mockCapturedMessages last content contains locked prompt substring.
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t11-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
@@ -399,15 +403,15 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     mockTurnSleepMs = 500;
     mockCapturedMessages = null;
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    void runServeSubcommand({ portFile, bearerToken: bearer });
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // (1) Missing url → 400 missing_url
     const r1 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/activate",
       headers: authHeader,
@@ -420,7 +424,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     // (2) Valid activate → 200 + turnId
     const targetUrl = "https://www.linkedin.com/in/williamhgates/";
     const r2 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/activate",
       headers: authHeader,
@@ -437,7 +441,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
 
     // (3) Concurrent activate while #2 sleeping → 409 turn_in_progress
     const r3 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/activate",
       headers: authHeader,
@@ -479,25 +483,25 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
     // Then:  SSE text contains both 'cron-mode cronEnabled:false' and 'cron-mode cronEnabled:true' frames.
 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t12-"));
-    const sockPath = join(tmpDir, "mai.sock");
+    const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
     const origHome = process.env.MAI_HOME_BASE;
     process.env.MAI_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
-    void runServeSubcommand({ sockPath, bearerToken: bearer });
-    const sockReady = await pollForSock(sockPath, 5000);
-    assert.ok(sockReady, "server socket must be ready within 5000ms");
+    void runServeSubcommand({ portFile, bearerToken: bearer });
+    const port = await pollForPort(portFile, 5000);
+    assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
     // Open SSE listener BEFORE POSTs
-    const ssePromise = udsSSECollect({ socketPath: sockPath, headers: authHeader, collectMs: 800 });
+    const ssePromise = udsSSECollect({ port, headers: authHeader, collectMs: 800 });
     await new Promise((r) => setTimeout(r, 100));
 
     // (1) POST {enabled:false} → 200 + cronEnabled:false
     const r1 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/cron-mode",
       headers: authHeader,
@@ -509,7 +513,7 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
 
     // (2) POST {enabled:true} → flips back
     const r2 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/cron-mode",
       headers: authHeader,
@@ -521,7 +525,7 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
 
     // (3) POST {} (no enabled field) → 400 missing_enabled
     const r3 = await udsReq({
-      socketPath: sockPath,
+      port,
       method: "POST",
       path: "/agent/cron-mode",
       headers: authHeader,

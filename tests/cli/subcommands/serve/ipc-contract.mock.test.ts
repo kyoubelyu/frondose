@@ -1,15 +1,22 @@
 /**
- * P-APP-7 — IPC contract characterization fixture.
+ * P-APP-7 / WIN-1 — IPC contract characterization fixture.
  *
  * Freezes the app↔sidecar protocol in 4 groups (11 tests):
- *   §A  IPC.Transport  (4)  — bearer header, MAI_SIDECAR_OWNER, boot flags, chmod constants
+ *   §A  IPC.Transport  (4)  — bearer header + TCP loopback (WIN-1), FRONDOSE_SIDECAR_OWNER,
+ *                             --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)
  *   §B  IPC.Endpoints  (3)  — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)
  *   §C  IPC.Frames     (2)  — SseFrame sidecar union (28), UI parallel union (23)
  *   §D  IPC.Mask       (2)  — GET /settings no raw key, POST→GET mask round-trip
  *
- * CAPTURE PHASE — every assertion reflects current source reality.  Any RED
- * surfaced by this fixture is a REAL contract drift, not a test bug; record and
- * route to orchestrator.
+ * WIN-1 transport update (Step 3 scaffold):
+ *   T-IPC.Transport.1 — UDS/chmod golden REPLACED with TCP-loopback + port-file + Bearer + Host.
+ *   T-IPC.Transport.2 — FRONDOSE_SIDECAR_OWNER="frondose-app" KEPT unchanged (identity, not transport).
+ *   T-IPC.Transport.3 — parseArgs contract updated: --port-file / FRONDOSE_PORT_FILE / new fatal text.
+ *   T-IPC.Transport.4 — chmod 0o600/0o700 golden REPLACED with NoUDS source scan.
+ *
+ * CAPTURE PHASE — every assertion reflects NEW TCP contract (WIN-1).  Any RED
+ * surfaced by this fixture pre-Step-4 is EXPECTED (outside-in TDD); post-Step-4 RED
+ * is a REAL contract drift, not a test bug; record and route to orchestrator.
  *
  * Run (standalone):
  *   node --import tsx --test --test-force-exit \
@@ -319,28 +326,39 @@ function assertSetsEqual(actual: Set<string>, expected: ReadonlySet<string>, lab
 // §A — IPC.Transport
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Transport — bearer header, owner constant, boot flags, chmod", () => {
+describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant, --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)", () => {
 
-  it("T-IPC.Transport.1: when main.rs and http.ts are read, both sides use the same Authorization header name and Bearer prefix", () => {
-    // Given: main.rs (Rust app side) + http.ts (Node sidecar side) at HEAD
-    // When: both files are read as text and inspected for header literals
-    // Then: both contain "Authorization" + "Bearer " with trailing space; a drift on either side fails
+  it("T-IPC.Transport.1: when main.rs and http.ts are read, the TCP-loopback transport uses Authorization Bearer and 127.0.0.1 Host header on both sides (WIN-1)", () => {
+    // Given: main.rs (Rust app side) + http.ts (Node sidecar side) at HEAD after WIN-1
+    // When: both files are read as text and inspected for header literals and loopback bind
+    // Then: main.rs uses 127.0.0.1 (loopback) + "Authorization"/"Bearer {}"; http.ts has "Bearer " prefix; no UDS uri scheme
 
+    // TODO (Step 5): fill assertion bodies after builder lands TCP transport.
+    // The assertions below describe the NEW TCP contract — they will FAIL until Step 4.
     const mainRs  = readFileSync(MAIN_RS,  "utf-8");
     const httpTs  = readFileSync(HTTP_TS,  "utf-8");
 
-    // App side — uds_request builder at main.rs:58 + SSE subscriber at main.rs:252.
-    // Rust uses format!("Bearer {}", token) so the HEADER NAME "Authorization" appears
-    // as a literal; the prefix "Bearer " appears inside the format string as "Bearer {}".
+    // App side — http_request (renamed from uds_request) builds http://127.0.0.1:<port><path>.
+    // Rust uses format!("http://127.0.0.1:{}{}", port, path) so "127.0.0.1" appears as a literal.
+    assert.ok(
+      mainRs.includes("127.0.0.1"),
+      "main.rs must contain the loopback address literal '127.0.0.1' (TCP transport — WIN-1)",
+    );
+
+    // Authorization header name and Bearer prefix — same as before on both sides.
     assert.ok(
       mainRs.includes(`"${BEARER_HEADER_NAME}"`),
       `main.rs must contain the literal "${BEARER_HEADER_NAME}" as the header name`,
     );
-    // The Rust format string is "Bearer {}" — the prefix "Bearer " (with trailing space) is
-    // embedded in that format literal.  Assert the format string contains the expected prefix.
     assert.ok(
       mainRs.includes('"Bearer {}') && mainRs.includes('"Bearer {}"'),
       'main.rs must contain the Bearer format string "Bearer {}" (format!("Bearer {}", token))',
+    );
+
+    // Host header — Rust sets Host: localhost (or 127.0.0.1) on every request per design §2.2.
+    assert.ok(
+      mainRs.includes('"Host"') || mainRs.includes('"host"'),
+      "main.rs must set a Host header on TCP requests (hyper HttpConnector path)",
     );
 
     // Sidecar side — http.ts:checkBearer reads authorization header + startsWith("Bearer ")
@@ -351,6 +369,16 @@ describe("IPC.Transport — bearer header, owner constant, boot flags, chmod", (
     assert.ok(
       httpTs.includes(`"${BEARER_PREFIX}"`),
       `http.ts must contain the literal "${BEARER_PREFIX}" (note trailing space)`,
+    );
+
+    // NoUDS: main.rs must NOT reference hyperlocal or unix socket scheme after WIN-1
+    assert.ok(
+      !mainRs.includes("hyperlocal"),
+      "main.rs must not reference hyperlocal after WIN-1 transport swap",
+    );
+    assert.ok(
+      !mainRs.includes("Client::unix"),
+      "main.rs must not call Client::unix() after WIN-1 — use Client::new() TCP",
     );
   });
 
@@ -372,92 +400,139 @@ describe("IPC.Transport — bearer header, owner constant, boot flags, chmod", (
     );
   });
 
-  it("T-IPC.Transport.3: when sidecarMain.parseArgs is called with valid argv shapes, it returns {sockPath, bearerToken}; when called without args and no env, it calls process.exit(2)", async () => {
-    // Given: sidecarMain.ts:parseArgs accepts --sock/--token (space or = form) + MAI_SOCK/MAI_TOKEN env
+  it("T-IPC.Transport.3: when sidecarMain.parseArgs is called with valid argv shapes, it returns {portFile, bearerToken}; when called without args and no env, it calls process.exit(2) with '--port-file and --token required' (WIN-1)", async () => {
+    // Given: sidecarMain.ts:parseArgs updated to accept --port-file/--token (space or = form) + FRONDOSE_PORT_FILE/FRONDOSE_TOKEN env
     // When: called with each of the 3 success shapes + 1 failure shape (monkeypatched exit)
-    // Then: success shapes return {sockPath:"/x", bearerToken:"T"}; failure shape causes exit(2) via the monkeypatch
+    // Then: success shapes return {portFile:"/x", bearerToken:"T"}; failure shape causes exit(2) with new fatal text
+
+    // TODO (Step 5): fill assertion bodies after builder renames --sock → --port-file.
+    // These assertions will FAIL until Step 4 because parseArgs still calls process.exit on --port-file input.
 
     const { parseArgs } = await import("../../../../src/app/sidecarMain.js");
 
-    // Success shape 1: space-separated (the form main.rs:534-545 uses)
-    assert.deepEqual(
-      parseArgs(["--sock", "/x", "--token", "T"]),
-      { sockPath: "/x", bearerToken: "T" },
-      "space-separated form must parse correctly",
-    );
-
-    // Success shape 2: equals-form
-    assert.deepEqual(
-      parseArgs(["--sock=/x", "--token=T"]),
-      { sockPath: "/x", bearerToken: "T" },
-      "equals-form must parse correctly",
-    );
-
-    // Success shape 3: env fallback
-    const origSock  = process.env.MAI_SOCK;
-    const origToken = process.env.MAI_TOKEN;
-    process.env.MAI_SOCK  = "/x";
-    process.env.MAI_TOKEN = "T";
-    try {
-      assert.deepEqual(
-        parseArgs([]),
-        { sockPath: "/x", bearerToken: "T" },
-        "env fallback (MAI_SOCK + MAI_TOKEN) must parse correctly",
-      );
-    } finally {
-      if (origSock  === undefined) delete process.env.MAI_SOCK;  else process.env.MAI_SOCK  = origSock;
-      if (origToken === undefined) delete process.env.MAI_TOKEN; else process.env.MAI_TOKEN = origToken;
+    // Helper: guard against process.exit(2) so the whole file doesn't crash pre-impl
+    function withExitGuard<T>(fn: () => T): { result?: T; exitCode?: number; stderr: string } {
+      const origExit  = process.exit;
+      const origWrite = process.stderr.write.bind(process.stderr);
+      let capturedCode: number | undefined;
+      let stderrMsg = "";
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderrMsg += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+        return true;
+      }) as typeof process.stderr.write;
+      process.exit = ((code?: number | string) => {
+        capturedCode = typeof code === "number" ? code : 2;
+        throw new Error(`__exit_${capturedCode}`);
+      }) as typeof process.exit;
+      try {
+        const result = fn();
+        return { result, stderr: stderrMsg };
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("__exit_")) {
+          return { exitCode: capturedCode, stderr: stderrMsg };
+        }
+        throw err;
+      } finally {
+        process.exit         = origExit;
+        process.stderr.write = origWrite;
+      }
     }
 
-    // Failure shape: no args + no env → process.exit(2)
-    // Monkeypatch to prevent actual process termination; stub stderr to suppress noise.
-    const origExit   = process.exit;
-    const origStderr = process.stderr.write.bind(process.stderr);
-    let capturedCode: number | undefined;
+    // Success shape 1: space-separated (the form main.rs:spawn_mai_serve uses after WIN-1)
+    // Pre-impl: parseArgs exits(2) because --port-file is not recognized. Post-impl: returns result.
+    {
+      const outcome = withExitGuard(() => parseArgs(["--port-file", "/x", "--token", "T"]));
+      assert.strictEqual(outcome.exitCode, undefined, "--port-file space form must not cause exit (WIN-1: replaces --sock)");
+      assert.deepEqual(
+        outcome.result,
+        { portFile: "/x", bearerToken: "T" },
+        "--port-file space-separated form must parse correctly (WIN-1)",
+      );
+    }
 
-    process.stderr.write = (() => true) as typeof process.stderr.write;
-    process.exit = ((code?: number | string) => {
-      capturedCode = typeof code === "number" ? code : 2;
-      throw new Error(`__exit_${capturedCode}`);
-    }) as typeof process.exit;
+    // Success shape 2: equals-form
+    {
+      const outcome = withExitGuard(() => parseArgs(["--port-file=/x", "--token=T"]));
+      assert.strictEqual(outcome.exitCode, undefined, "--port-file= form must not cause exit");
+      assert.deepEqual(
+        outcome.result,
+        { portFile: "/x", bearerToken: "T" },
+        "--port-file= equals-form must parse correctly (WIN-1)",
+      );
+    }
 
-    try {
-      const prevSock  = process.env.MAI_SOCK;
-      const prevToken = process.env.MAI_TOKEN;
-      delete process.env.MAI_SOCK;
-      delete process.env.MAI_TOKEN;
+    // Success shape 3: env fallback — FRONDOSE_PORT_FILE (MAI_SOCK dropped; no transition window for internal arg)
+    {
+      const origPortFile = process.env["FRONDOSE_PORT_FILE"];
+      const origToken    = process.env["FRONDOSE_TOKEN"];
+      process.env["FRONDOSE_PORT_FILE"] = "/x";
+      process.env["FRONDOSE_TOKEN"]     = "T";
       try {
-        parseArgs([]);
-        assert.fail("parseArgs with no args/env must call process.exit");
-      } catch (err) {
-        assert.ok(
-          err instanceof Error && err.message.includes("__exit_2"),
-          `expected process.exit(2); got: ${err instanceof Error ? err.message : String(err)}`,
+        const outcome = withExitGuard(() => parseArgs([]));
+        assert.strictEqual(outcome.exitCode, undefined, "env fallback FRONDOSE_PORT_FILE must not cause exit");
+        assert.deepEqual(
+          outcome.result,
+          { portFile: "/x", bearerToken: "T" },
+          "env fallback (FRONDOSE_PORT_FILE + FRONDOSE_TOKEN via frondoseEnv) must parse correctly (WIN-1)",
         );
-        assert.strictEqual(capturedCode, 2, "exit code must be 2 per sidecarMain.ts:57");
       } finally {
-        if (prevSock  !== undefined) process.env.MAI_SOCK  = prevSock;
-        if (prevToken !== undefined) process.env.MAI_TOKEN = prevToken;
+        if (origPortFile === undefined) delete process.env["FRONDOSE_PORT_FILE"]; else process.env["FRONDOSE_PORT_FILE"] = origPortFile;
+        if (origToken    === undefined) delete process.env["FRONDOSE_TOKEN"];     else process.env["FRONDOSE_TOKEN"]     = origToken;
       }
-    } finally {
-      process.exit         = origExit;
-      process.stderr.write = origStderr;
+    }
+
+    // Failure shape: no args + no env → process.exit(2) with new fatal text
+    {
+      const prevPortFile = process.env["FRONDOSE_PORT_FILE"];
+      const prevToken    = process.env["FRONDOSE_TOKEN"];
+      const prevSock     = process.env["FRONDOSE_SOCK"];
+      const prevMaiSock  = process.env["MAI_SOCK"];
+      delete process.env["FRONDOSE_PORT_FILE"];
+      delete process.env["FRONDOSE_TOKEN"];
+      delete process.env["FRONDOSE_SOCK"];
+      delete process.env["MAI_SOCK"];
+      try {
+        const outcome = withExitGuard(() => parseArgs([]));
+        assert.strictEqual(outcome.exitCode, 2, "parseArgs with no args/env must call process.exit(2)");
+        assert.ok(
+          outcome.stderr.includes("--port-file and --token required"),
+          `stderr must include '--port-file and --token required' (WIN-1 fatal text); got: ${outcome.stderr}`,
+        );
+      } finally {
+        if (prevPortFile !== undefined) process.env["FRONDOSE_PORT_FILE"] = prevPortFile;
+        if (prevToken    !== undefined) process.env["FRONDOSE_TOKEN"]     = prevToken;
+        if (prevSock     !== undefined) process.env["FRONDOSE_SOCK"]      = prevSock;
+        if (prevMaiSock  !== undefined) process.env["MAI_SOCK"]           = prevMaiSock;
+      }
     }
   });
 
-  it("T-IPC.Transport.4: when serve.ts is read, it contains chmodSync with 0o700 for parent dir and 0o600 for socket file", () => {
-    // Given: serve.ts manages the UDS socket lifecycle
+  it("T-IPC.Transport.4: when serve.ts is read, it listens on 127.0.0.1:0 (not a UDS path) and does NOT contain chmodSync for 0o600 on the transport file (WIN-1 NoUDS golden)", () => {
+    // Given: serve.ts updated to TCP-loopback transport after WIN-1
     // When: the source file is read as text
-    // Then: both chmod calls are present at their expected values; a weakening (e.g. 0o755) fails
+    // Then: '127.0.0.1' appears in the listen call; no chmodSync(…, 0o600) for the socket/port-file remains
 
+    // TODO (Step 5): fill after builder removes UDS / adds TCP listen.
+    // This assertion FAILS pre-impl because current serve.ts has server.listen(opts.sockPath).
     const serveTs = readFileSync(SERVE_TS, "utf-8");
+
+    // Must have loopback bind
     assert.ok(
-      serveTs.includes("0o700"),
-      "serve.ts must contain the 0o700 chmod for the parent directory",
+      serveTs.includes("127.0.0.1"),
+      "serve.ts must bind on '127.0.0.1' (TCP loopback — WIN-1 transport)",
     );
+
+    // Must NOT retain the per-file 0o600 chmod from the UDS path
+    // (Optional parent-dir 0o700 for unix hardening is permitted per plan §2.3 note.)
     assert.ok(
-      serveTs.includes("0o600"),
-      "serve.ts must contain the 0o600 chmod for the socket file",
+      !serveTs.includes("0o600"),
+      "serve.ts must NOT contain chmodSync 0o600 after WIN-1 — that was the UDS socket permission",
+    );
+
+    // Must reference portFile (not sockPath) as the transport artifact name
+    assert.ok(
+      serveTs.includes("portFile") || serveTs.includes("port_file"),
+      "serve.ts must reference portFile (or port_file) not sockPath after WIN-1",
     );
   });
 

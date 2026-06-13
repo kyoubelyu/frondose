@@ -26,7 +26,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -54,7 +54,7 @@ let setIntervalAccelerator: { active: boolean; factor: number } = { active: fals
 
 // ─── runServeSubcommand handle ───────────────────────────────────────────────
 
-let runServeSubcommand: (opts: { sockPath: string; bearerToken: string }) => Promise<void>;
+let runServeSubcommand: (opts: { portFile: string; bearerToken: string }) => Promise<void>;
 
 // ─── File-level setup ────────────────────────────────────────────────────────
 
@@ -184,27 +184,27 @@ before(async () => {
   runServeSubcommand = (serveMod as any).runServeSubcommand;
 });
 
-// ─── UDS HTTP helpers ────────────────────────────────────────────────────────
+// ─── TCP HTTP helpers ─────────────────────────────────────────────────────────
 
-interface UdsReqOpts {
-  socketPath: string;
+interface TcpReqOpts {
+  port: number;
   method: string;
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
 }
-interface UdsResult {
+interface TcpResult {
   status: number;
   // biome-ignore lint/suspicious/noExplicitAny: body varies
   body: any;
 }
 
-async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
-  return new Promise<UdsResult>((resolveP, rejectP) => {
+async function udsReq(opts: TcpReqOpts): Promise<TcpResult> {
+  return new Promise<TcpResult>((resolveP, rejectP) => {
     const bodyStr = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers ?? {}) };
     if (bodyStr) headers["Content-Length"] = String(Buffer.byteLength(bodyStr));
-    const r = httpReq({ socketPath: opts.socketPath, method: opts.method, path: opts.path, headers }, (res) => {
+    const r = httpReq({ host: "127.0.0.1", port: opts.port, method: opts.method, path: opts.path, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
@@ -222,14 +222,15 @@ async function udsReq(opts: UdsReqOpts): Promise<UdsResult> {
 }
 
 async function udsSSECollect(opts: {
-  socketPath: string;
+  port: number;
   headers?: Record<string, string>;
   collectMs: number;
 }): Promise<{ statusCode: number; text: string }> {
   return new Promise((resolveP, rejectP) => {
     const r = httpReq(
       {
-        socketPath: opts.socketPath,
+        host: "127.0.0.1",
+        port: opts.port,
         method: "GET",
         path: "/agent/events",
         headers: { Accept: "text/event-stream", ...(opts.headers ?? {}) },
@@ -251,27 +252,30 @@ async function udsSSECollect(opts: {
   });
 }
 
-async function pollForSock(sockPath: string, deadline_ms: number): Promise<boolean> {
+async function pollForPort(portFile: string, deadline_ms: number): Promise<number | null> {
   const end = Date.now() + deadline_ms;
   while (Date.now() < end) {
     try {
-      const { existsSync } = await import("node:fs");
-      if (existsSync(sockPath)) return true;
+      if (existsSync(portFile)) {
+        const content = readFileSync(portFile, "utf-8").trim();
+        const port = parseInt(content, 10);
+        if (!isNaN(port) && port > 0) return port;
+      }
     } catch {
-      /* ignore */
+      /* ignore transient read errors */
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return false;
+  return null;
 }
 
 /** Spin tmp serve harness. */
 async function spinHarness(
   testName: string,
   opts: { writeScheduleJsonl?: string } = {},
-): Promise<{ sockPath: string; bearer: string; tmpDir: string; restoreEnv: () => void }> {
+): Promise<{ port: number; bearer: string; tmpDir: string; restoreEnv: () => void }> {
   const tmpDir = mkdtempSync(join(tmpdir(), `p57c-${testName}-`));
-  const sockPath = join(tmpDir, "mai.sock");
+  const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
@@ -295,19 +299,19 @@ async function spinHarness(
   mockCapturedOpts = null;
   mockRunAgentLoopCallCount = 0;
 
-  void runServeSubcommand({ sockPath, bearerToken: bearer });
-  const sockReady = await pollForSock(sockPath, 5000);
-  assert.ok(sockReady, `${testName}: server socket must be ready within 5000ms`);
+  void runServeSubcommand({ portFile, bearerToken: bearer });
+  const port = await pollForPort(portFile, 5000);
+  assert.ok(port !== null, `${testName}: server port file must appear within 5000ms`);
 
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/chrome/ensure",
     headers: { Authorization: `Bearer ${bearer}` },
   });
 
   return {
-    sockPath,
+    port,
     bearer,
     tmpDir,
     restoreEnv: () => {
@@ -322,11 +326,11 @@ async function spinHarness(
 
 /** Reset module-level retry state via a successful operator turn (success-path clears).
  *  Returns when SSE done arrives. */
-async function resetRetryStateViaSuccess(sockPath: string, bearer: string, label: string): Promise<void> {
+async function resetRetryStateViaSuccess(port: number, bearer: string, label: string): Promise<void> {
   mockMode = "succeed";
   const authHeader = { Authorization: `Bearer ${bearer}` };
   const r = await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/agent/turn",
     headers: authHeader,
@@ -338,11 +342,11 @@ async function resetRetryStateViaSuccess(sockPath: string, bearer: string, label
 }
 
 /** Drive a failing operator turn to set lastFailedTurnPrompt + leave retryAttempts unchanged. */
-async function setupFailedTurn(sockPath: string, bearer: string, failPrompt: string): Promise<void> {
+async function setupFailedTurn(port: number, bearer: string, failPrompt: string): Promise<void> {
   mockMode = "throw";
   const authHeader = { Authorization: `Bearer ${bearer}` };
   await udsReq({
-    socketPath: sockPath,
+    port,
     method: "POST",
     path: "/agent/turn",
     headers: authHeader,
@@ -364,14 +368,14 @@ describe("dispatchOverlayEvent — overlay prompt during running triggers server
     const h = await spinHarness("t14");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2500 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2500 });
       await new Promise((r) => setTimeout(r, 100));
 
       // Start an operator turn that will be aborted mid-stream
       mockMode = "respect-abort";
       const baselineCount = mockRunAgentLoopCallCount;
       const r1 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
@@ -431,13 +435,13 @@ describe("POST /agent/retry — re-fires lastFailedTurnPrompt + increments retry
     const h = await spinHarness("t15");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "t15");
-      await setupFailedTurn(h.sockPath, h.bearer, "fail-15");
+      await resetRetryStateViaSuccess(h.port, h.bearer, "t15");
+      await setupFailedTurn(h.port, h.bearer, "fail-15");
 
       mockMode = "succeed"; // retry should fire and succeed
       const beforeCount = mockRunAgentLoopCallCount;
       const r = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -471,8 +475,8 @@ describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
     const h = await spinHarness("t16");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "t16");
-      await setupFailedTurn(h.sockPath, h.bearer, "p-16");
+      await resetRetryStateViaSuccess(h.port, h.bearer, "t16");
+      await setupFailedTurn(h.port, h.bearer, "p-16");
 
       // Do 3 failing retries to push retryAttempts to 3
       // Each retry: retryAttempts++ BEFORE runOneTurn; then runOneTurn throws → catch restores lastFailedTurnPrompt
@@ -482,7 +486,7 @@ describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
       mockMode = "throw";
       for (let i = 0; i < 3; i++) {
         const rRetry = await udsReq({
-          socketPath: h.sockPath,
+          port: h.port,
           method: "POST",
           path: "/agent/retry",
           headers: authHeader,
@@ -495,7 +499,7 @@ describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
       // Now retryAttempts=3, lastFailedTurnPrompt='p-16' (restored by catch). 4th retry rejected.
       const countBefore4th = mockRunAgentLoopCallCount;
       const r4 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -518,13 +522,13 @@ describe("runOneTurn success path — clears lastFailedTurnPrompt + resets retry
     const h = await spinHarness("t17");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "t17");
-      await setupFailedTurn(h.sockPath, h.bearer, "fail-17");
+      await resetRetryStateViaSuccess(h.port, h.bearer, "t17");
+      await setupFailedTurn(h.port, h.bearer, "fail-17");
 
       // 1 failing retry to push retryAttempts to 1
       mockMode = "throw";
       const r1 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -535,7 +539,7 @@ describe("runOneTurn success path — clears lastFailedTurnPrompt + resets retry
       // Now succeed an operator turn
       mockMode = "succeed";
       const r2 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
@@ -546,7 +550,7 @@ describe("runOneTurn success path — clears lastFailedTurnPrompt + resets retry
 
       // Verify state cleared: retry should now reject with no_failed_turn
       const r3 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -586,7 +590,7 @@ describe("Cron driver — emits cron-tick BEFORE runAgentLoop + cron-done in fin
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       mockMode = "succeed";
 
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2000 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2000 });
       await new Promise((r) => setTimeout(r, 1500)); // wait for accelerated cron to fire
 
       const sse = await ssePromise;
@@ -621,7 +625,7 @@ describe("Cron driver — cron-fired turns are NOT retryable (G-P57c.6, rev-1 MR
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
 
       // (1) Seed lastFailedTurnPrompt via operator failure (isRetryable:true callsite sets it to 'prior op fail')
-      await setupFailedTurn(h.sockPath, h.bearer, "prior op fail");
+      await setupFailedTurn(h.port, h.bearer, "prior op fail");
       // Now: lastFailedTurnPrompt = 'prior op fail', retryAttempts = 0
 
       // Sanity: verify lastFailedTurnPrompt is set by probing retry endpoint preview (use throw mode so retry doesn't actually run)
@@ -644,7 +648,7 @@ describe("Cron driver — cron-fired turns are NOT retryable (G-P57c.6, rev-1 MR
       fs.writeFileSync(join(h.tmpDir, ".frondose", "agent", "schedule.jsonl"), `${scheduleEntry}\n`, "utf-8");
 
       // (3) Subscribe SSE + wait for cron tick (every 100ms accelerated)
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2000 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2000 });
       await new Promise((r) => setTimeout(r, 1700)); // ample wait for ≥1 cron tick
 
       const sse = await ssePromise;
@@ -661,7 +665,7 @@ describe("Cron driver — cron-fired turns are NOT retryable (G-P57c.6, rev-1 MR
       // NOT preserved as 'prior op fail' attribution. Probe via retry endpoint:
       mockMode = "succeed"; // make retry probe safe if it accidentally fires
       const retryProbe = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -686,14 +690,14 @@ describe("runOneTurn catch — non-abort error with isRetryable:true sets lastFa
     const h = await spinHarness("te1");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "te1");
+      await resetRetryStateViaSuccess(h.port, h.bearer, "te1");
 
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 1500 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 1500 });
       await new Promise((r) => setTimeout(r, 100));
 
       mockMode = "throw";
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
@@ -710,7 +714,7 @@ describe("runOneTurn catch — non-abort error with isRetryable:true sets lastFa
       // Verify lastFailedTurnPrompt was set by probing retry endpoint
       mockMode = "succeed";
       const r = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -737,18 +741,18 @@ describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPro
     const h = await spinHarness("te2");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "te2");
-      await setupFailedTurn(h.sockPath, h.bearer, "prior fail"); // sets lastFailedTurnPrompt
+      await resetRetryStateViaSuccess(h.port, h.bearer, "te2");
+      await setupFailedTurn(h.port, h.bearer, "prior fail"); // sets lastFailedTurnPrompt
 
       // Sanity: retry would fire now (lastFailedTurnPrompt set)
       // But we don't actually do it — we test that an aborted operator turn CLEARS it.
 
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 2500 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2500 });
       await new Promise((r) => setTimeout(r, 100));
 
       mockMode = "respect-abort";
       const r1 = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/turn",
         headers: authHeader,
@@ -759,7 +763,7 @@ describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPro
 
       // Abort mid-stream
       await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/abort",
         headers: authHeader,
@@ -778,7 +782,7 @@ describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPro
       // Verify retry rejects with no_failed_turn (lastFailedTurnPrompt was cleared by abort path)
       mockMode = "succeed";
       const retryProbe = await udsReq({
-        socketPath: h.sockPath,
+        port: h.port,
         method: "POST",
         path: "/agent/retry",
         headers: authHeader,
@@ -803,14 +807,14 @@ describe("dispatchOverlayEvent retry branch — enforces MAX_RETRY_ATTEMPTS guar
     const h = await spinHarness("te3");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
-      await resetRetryStateViaSuccess(h.sockPath, h.bearer, "te3");
-      await setupFailedTurn(h.sockPath, h.bearer, "p-te3");
+      await resetRetryStateViaSuccess(h.port, h.bearer, "te3");
+      await setupFailedTurn(h.port, h.bearer, "p-te3");
 
       // 3 failing retries to push retryAttempts to MAX=3
       mockMode = "throw";
       for (let i = 0; i < 3; i++) {
         await udsReq({
-          socketPath: h.sockPath,
+          port: h.port,
           method: "POST",
           path: "/agent/retry",
           headers: authHeader,
@@ -818,7 +822,7 @@ describe("dispatchOverlayEvent retry branch — enforces MAX_RETRY_ATTEMPTS guar
         await new Promise((r) => setTimeout(r, 100));
       }
 
-      const ssePromise = udsSSECollect({ socketPath: h.sockPath, headers: authHeader, collectMs: 800 });
+      const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 800 });
       await new Promise((r) => setTimeout(r, 100));
 
       const countBefore = mockRunAgentLoopCallCount;

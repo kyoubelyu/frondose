@@ -5,13 +5,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use hyper::body::HttpBody;
-use hyper::{Body, Client, Method, Request, StatusCode};
-use hyperlocal::{UnixClientExt, Uri};
+use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use rand::RngCore;
 use serde_json::{json, Value};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -32,29 +31,40 @@ use tokio::sync::{Mutex, Notify};
 /// (Tauri's `manage()` copies the Arc handles via `.clone()`, not the inner data).
 struct MaiServeState {
     token: String,
-    sock_path: PathBuf,
+    /// WIN-1: the sidecar's current loopback TCP port (0 = not ready). Shared
+    /// Arc<AtomicU16> across all state clones so a supervised respawn (which gets a
+    /// NEW ephemeral port) is visible to every request + the SSE subscriber.
+    port: Arc<AtomicU16>,
+    /// WIN-1: path the sidecar writes its chosen port to; Rust polls it on boot + respawn.
+    port_file: PathBuf,
     parent_dir: PathBuf,
     child: Arc<Mutex<Option<Child>>>,
     shutting_down: Arc<AtomicBool>,
     child_pid: Arc<AtomicU32>,
 }
 
-/// Build a hyperlocal URI for a path on the UDS sock.
-fn build_uri(sock: &PathBuf, path: &str) -> Uri {
-    Uri::new(sock, path).into()
+/// Build a loopback HTTP URI for the sidecar's current port. Paths are static literals.
+fn build_uri(port: u16, path: &str) -> Uri {
+    format!("http://127.0.0.1:{}{}", port, path)
+        .parse()
+        .expect("static loopback uri")
 }
 
-/// One-shot UDS HTTP request (no keepalive). Returns response body as Value.
+/// One-shot loopback-TCP HTTP request (no keepalive). Returns response body as Value.
 async fn uds_request(
     state: &MaiServeState,
     method: Method,
     path: &str,
     body: Option<Value>,
 ) -> Result<Value, String> {
-    let client = Client::unix();
+    let port = state.port.load(Ordering::SeqCst);
+    if port == 0 {
+        return Err("sidecar not ready (no port)".to_string());
+    }
+    let client = Client::new();
     let mut req = Request::builder()
         .method(method)
-        .uri(build_uri(&state.sock_path, path))
+        .uri(build_uri(port, path))
         .header("Authorization", format!("Bearer {}", state.token))
         .header("Host", "localhost");
     let body_bytes = match body {
@@ -245,10 +255,16 @@ async fn frondose_workflow_cancel(
 /// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
 async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
     loop {
-        let client = Client::unix();
+        let port = state.port.load(Ordering::SeqCst);
+        if port == 0 {
+            // Sidecar not ready (boot or mid-respawn) — wait for a port to be published.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            continue;
+        }
+        let client = Client::new();
         let req = Request::builder()
             .method(Method::GET)
-            .uri(build_uri(&state.sock_path, "/agent/events"))
+            .uri(build_uri(port, "/agent/events"))
             .header("Authorization", format!("Bearer {}", state.token))
             .header("Host", "localhost")
             .body(Body::empty());
@@ -293,7 +309,9 @@ async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
     }
 }
 
-/// Generate a per-process UDS path under $TMPDIR and a 32-byte hex token.
+/// WIN-1: generate a per-process port-file path under $TMPDIR and a 32-byte hex token.
+/// The sidecar binds 127.0.0.1:0 and writes the chosen port to the port-file; the bearer
+/// token (not the dir perms) is the request guard, so no chmod is needed (cross-platform).
 fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
     let mut token_bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut token_bytes);
@@ -312,15 +330,8 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
     let tmp = std::env::temp_dir();
     let parent_dir = tmp.join(format!("frondose-com.kyoube.frondose-{}", suffix_hex));
     std::fs::create_dir(&parent_dir).map_err(|e| format!("mkdir {}: {}", parent_dir.display(), e))?;
-    // Restrict parent dir to owner. The socket is also chmod'd by the Node sidecar.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&parent_dir, std::fs::Permissions::from_mode(0o700))
-            .map_err(|e| format!("chmod 0700: {}", e))?;
-    }
-    let sock_path = parent_dir.join("frondose.sock");
-    Ok((token, sock_path, parent_dir))
+    let port_file = parent_dir.join("frondose.port");
+    Ok((token, port_file, parent_dir))
 }
 
 /// [P-58d.3] Resource dir WITHOUT an AppHandle — resolve_* run before Tauri is built.
@@ -548,8 +559,8 @@ async fn run_update_check(app: AppHandle) {
     }
 }
 
-/// Spawn `node <sidecar_bin> --sock <path> --token <tok>` as a child process.
-async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
+/// Spawn `node <sidecar_bin> --port-file <path> --token <tok>` as a child process.
+async fn spawn_mai_serve(port_file: &PathBuf, token: &str) -> Result<Child, String> {
     // P-APP-6: resolve node + the dedicated app sidecar entrypoint by absolute
     // path so a Finder-launched bundle (launchd minimal PATH) can spawn it.
     let sidecar_bin = PathBuf::from(resolve_sidecar_bin());
@@ -561,8 +572,8 @@ async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
     );
     let child = Command::new(&node_path)
         .arg(&sidecar_bin)
-        .arg("--sock")
-        .arg(sock.to_str().ok_or("invalid sock path utf-8")?)
+        .arg("--port-file")
+        .arg(port_file.to_str().ok_or("invalid port-file path utf-8")?)
         .arg("--token")
         .arg(token)
         .env("FRONDOSE_AUTOUPDATE", "skip")
@@ -574,15 +585,27 @@ async fn spawn_mai_serve(sock: &PathBuf, token: &str) -> Result<Child, String> {
     Ok(child)
 }
 
-/// Block until the UDS sock file appears + a GET /health returns ok, or timeout.
+/// WIN-1: block until the sidecar's port-file appears + parses to a non-zero port + a
+/// GET /health on that port returns ok; on success store the port into `state.port`
+/// (so requests/SSE target it) and return. Used at boot AND after every supervised
+/// respawn (each respawn binds a NEW ephemeral port).
 async fn await_serve_ready(state: &MaiServeState, timeout_ms: u64) -> Result<(), String> {
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
     while std::time::Instant::now() < deadline {
-        if state.sock_path.exists() && uds_request(state, Method::GET, "/health", None).await.is_ok() {
-            return Ok(());
+        if let Ok(s) = std::fs::read_to_string(&state.port_file) {
+            if let Ok(port) = s.trim().parse::<u16>() {
+                if port != 0 {
+                    // Publish the port BEFORE the health check so uds_request targets it.
+                    state.port.store(port, Ordering::SeqCst);
+                    if uds_request(state, Method::GET, "/health", None).await.is_ok() {
+                        return Ok(());
+                    }
+                }
+            }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    state.port.store(0, Ordering::SeqCst);
     Err(format!("mai serve not ready within {}ms", timeout_ms))
 }
 
@@ -685,20 +708,24 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
             return;
         }
 
-        // [P-75 D-24] Remove the stale UDS socket file from the dead sidecar.
-        // Unix domain socket files DON'T auto-delete on process exit (only the
-        // bind reference is released); a respawned `mai serve` calling listen()
-        // on the same path then hits EADDRINUSE and exits immediately, causing
-        // the supervisor to thrash in a tight respawn loop. Removing the file
-        // pre-spawn restores the happy path. `remove_file` is best-effort —
-        // missing file is fine (initial-spawn-failure case has no socket yet).
-        let _ = std::fs::remove_file(&state.sock_path);
+        // [WIN-1] Mark the port not-ready and remove the dead sidecar's stale port-file
+        // BEFORE respawn. The respawned sidecar binds a NEW ephemeral 127.0.0.1 port and
+        // writes it to a FRESH port-file; clearing the cached port (0) + deleting the stale
+        // file closes the stale-read hole (Rust would otherwise read the dead port and
+        // health-check a dead address). `remove_file` is best-effort.
+        state.port.store(0, Ordering::SeqCst);
+        let _ = std::fs::remove_file(&state.port_file);
 
-        match spawn_mai_serve(&state.sock_path, &state.token).await {
+        match spawn_mai_serve(&state.port_file, &state.token).await {
             Ok(new_child) => {
                 let new_pid = new_child.id().unwrap_or(0);
                 state.child_pid.store(new_pid, Ordering::SeqCst);
                 eprintln!("[mai-tauri] D-24 sidecar respawned: pid={}", new_pid);
+                // [WIN-1] Wait for the new sidecar to publish its port-file + pass /health,
+                // then `await_serve_ready` stores the NEW port so requests/SSE target it.
+                if let Err(e) = await_serve_ready(&state, 10_000).await {
+                    eprintln!("[mai-tauri] WIN-1 respawn: sidecar port not ready: {}", e);
+                }
                 {
                     let mut g = state.child.lock().await;
                     *g = Some(new_child);
@@ -727,21 +754,25 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
 
 #[tokio::main]
 async fn main() {
-    let (token, sock_path, parent_dir) = provision_state().expect("provision UDS state");
+    let (token, port_file, parent_dir) = provision_state().expect("provision sidecar state");
     // P-58d.1 [3b/CMR-2]: best-effort spawn — a missing/broken sidecar must NOT panic
     // before the updater gets a turn (the updater is the recovery path).
-    let child = spawn_mai_serve(&sock_path, &token).await.ok();
+    let child = spawn_mai_serve(&port_file, &token).await.ok();
 
     // [P-75 D-24] Atomics for the watchdog: shared by the outer `state` Arc AND the
     // Tauri-managed state (via Arc::clone in `manage()` below). The supervisor reads/
     // writes `child_pid` around `child.wait()`; `shutdown_sidecar` reads it to send
     // SIGTERM. `shutting_down` is the supervisor's exit signal.
+    // [WIN-1] `port` (0 = not ready) is shared the same way so a respawn's new ephemeral
+    // port reaches every request + the SSE subscriber.
     let shutting_down = Arc::new(AtomicBool::new(false));
     let child_pid = Arc::new(AtomicU32::new(child.as_ref().and_then(|c| c.id()).unwrap_or(0)));
+    let port = Arc::new(AtomicU16::new(0));
 
     let state = Arc::new(MaiServeState {
         token,
-        sock_path: sock_path.clone(),
+        port: port.clone(),
+        port_file: port_file.clone(),
         parent_dir: parent_dir.clone(),
         child: Arc::new(Mutex::new(child)),
         shutting_down: shutting_down.clone(),
@@ -763,7 +794,8 @@ async fn main() {
     let app = tauri::Builder::default()
         .manage(MaiServeState {
             token: state.token.clone(),
-            sock_path: state.sock_path.clone(),
+            port: state.port.clone(),
+            port_file: state.port_file.clone(),
             parent_dir: state.parent_dir.clone(),
             child: state.child.clone(),
             shutting_down: state.shutting_down.clone(),
