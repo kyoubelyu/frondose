@@ -20,7 +20,7 @@ import type { IdentityRecord } from "../../persistence/identity.js";
  *   - Tools framed as own reflective practice
  *   - No modal/negative commands ("must" / "MUST" / "forbidden" / "do not")
  *
- * @param identity Operator's identity record from ~/.mai/agent/identity.json.
+ * @param identity Operator's identity record from ~/.frondose/agent/identity.json.
  *                 If null (file missing OR bootstrap not yet run), use placeholder
  *                 identity sentence + 4 axis defaults.
  */

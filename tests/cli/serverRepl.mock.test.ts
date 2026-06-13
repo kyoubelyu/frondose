@@ -103,8 +103,8 @@ function nextWebPort(): number {
  * The sessions dir is auto-created by serverSessionFile().
  */
 function writeServerEnv(dir: string): void {
-  const maiServerDir = join(dir, ".mai", "server");
-  const maiAgentDir = join(dir, ".mai", "agent");
+  const maiServerDir = join(dir, ".frondose", "server");
+  const maiAgentDir = join(dir, ".frondose", "agent");
   mkdirSync(maiServerDir, { recursive: true });
   mkdirSync(maiAgentDir, { recursive: true });
 
@@ -239,7 +239,7 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
     const { captured, restore } = mockProcessExit();
     try {
       process.env.HOME = dir;
-      const maiServerDir = join(dir, ".mai", "server");
+      const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       // Write live PID (current test runner process — guaranteed alive)
       writePid(join(maiServerDir, "server.pid"));

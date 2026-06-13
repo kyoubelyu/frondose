@@ -16,7 +16,7 @@ import { makeAuditWriter } from "../persistence/audit.js";
 import { readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
 import { openMemoryDatabase } from "../persistence/memory.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { isAlive, readPid, removePid, writePid } from "../persistence/processLock.js";
 import { readSecrets } from "../persistence/secrets.js";
 import { readServerIdentity } from "../persistence/serverIdentity.js";
@@ -93,7 +93,7 @@ export async function runServerDaemon(): Promise<void> {
     process.exit(1);
   }
   // Step-5a D-SRV.DAEMON.CONFIGPATH: pass SERVER_CONFIG_PATH() so boundUserId is
-  // read from ~/.mai/server/config.json (not the worker's ~/.mai/agent/config.json).
+  // read from ~/.frondose/server/config.json (not the worker's ~/.frondose/agent/config.json).
   const cfg = readTelegramConfig(SERVER_TELEGRAM_CONFIG_PATH(), SERVER_CONFIG_PATH());
   if (cfg.boundUserId === null) {
     process.stderr.write("[server daemon] boundUserId null; run `mai server bind` first\n");
@@ -186,7 +186,7 @@ export async function runServerDaemon(): Promise<void> {
 
   const turnLock = new TurnLock();
   const messages: CoreMessage[] = [];
-  // Step-3b C-3 fix: serverSessionFile() auto-creates ~/.mai/server/sessions/.
+  // Step-3b C-3 fix: serverSessionFile() auto-creates ~/.frondose/server/sessions/.
   const sessionFile = { path: serverSessionFile() };
   let pollerHandle: PollerHandle | null = null;
 
@@ -210,7 +210,7 @@ export async function runServerDaemon(): Promise<void> {
       onStepFinish: auditWriter,
       out: process.stdout,
       configPath: SERVER_TELEGRAM_CONFIG_PATH(),
-      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), ".mai/agent/uploads"),
+      uploadAllowlistRoot: frondoseEnv("UPLOAD_ALLOWLIST") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent/uploads"),
       // P-26 Step-5a B-26R-1: prepend pending worker events to each Telegram-driven
       // user turn (capped at MAX_PER_DRAIN=20 rows per call inside drainServerInbox).
       inboxPrefix: () => drainServerInbox(serverInboxDb),

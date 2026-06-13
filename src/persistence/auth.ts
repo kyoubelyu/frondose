@@ -3,7 +3,7 @@
  * P-24 (plan §6.3): `readAuth` / `writeAuth` route through `readSecrets` /
  * `writeSecrets`. The path arg is derived via `authPathToSecretsPath` so
  * tests passing `tmpDir/auth.json` write to `tmpDir/secrets.json`, never
- * touching the operator's real `~/.mai/agent/secrets.json` (B-1 fix).
+ * touching the operator's real `~/.frondose/agent/secrets.json` (B-1 fix).
  *
  * Schemas + `migrateProviderEntry` remain exported here — `secrets.ts`
  * imports `providerEntrySchema` + `migrateProviderEntry` to validate
@@ -11,10 +11,10 @@
  */
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
-export const DEFAULT_AUTH_PATH = (): string => join(getHomeBase(), ".mai", "auth.json");
+export const DEFAULT_AUTH_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "auth.json");
 
 export const providerEntrySchema = z.object({
   key: z.string().min(1),

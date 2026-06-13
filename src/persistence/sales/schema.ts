@@ -2,9 +2,9 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Database as DB } from "better-sqlite3";
 import Database from "better-sqlite3";
-import { getHomeBase } from "../paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../paths.js";
 
-export const DEFAULT_SALES_DB_PATH = (): string => join(getHomeBase(), ".mai", "agent", "sales.sqlite");
+export const DEFAULT_SALES_DB_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "sales.sqlite");
 
 /** Current sales schema version. P-SP-A ships v1 (initial 8 tables).
  *  Future P-SP-B+ extensions bump this and add applyV2/applyV3 etc.,

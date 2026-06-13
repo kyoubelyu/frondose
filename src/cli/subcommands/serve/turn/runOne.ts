@@ -5,13 +5,14 @@ import type { StepResult, ToolSet } from "ai";
 import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
+import { DATA_DIR_NAME } from "../../../../persistence/paths.js";
 import { getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
 import { hideEdgeRing, showEdgeRing } from "../takeover.js";
 
 // [P-75 D-13 dbg] file-based diagnostic
-const TURN_DBG = path.join(os.homedir(), ".mai", "agent", "logs", "turn-debug.log");
+const TURN_DBG = path.join(os.homedir(), DATA_DIR_NAME, "agent", "logs", "turn-debug.log");
 function turnDbg(msg: string): void {
   try {
     fs.mkdirSync(path.dirname(TURN_DBG), { recursive: true });

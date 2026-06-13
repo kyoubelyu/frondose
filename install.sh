@@ -95,7 +95,7 @@ if [[ -z "$TAG" || "$TAG" == "null" ]]; then
   echo "ERROR: could not resolve a release tag for $REPO (channel=$CHANNEL)." >&2
   exit 1
 fi
-INSTALL_DIR="$HOME_BASE/.mai/agent/releases/$TAG"
+INSTALL_DIR="$HOME_BASE/.frondose/agent/releases/$TAG"
 mkdir -p "$INSTALL_DIR"
 gh release download "$TAG" --repo "$REPO" --archive=tar.gz --output /tmp/mai-agent.tar.gz --clobber
 tar -xzf /tmp/mai-agent.tar.gz -C "$INSTALL_DIR" --strip-components=1
@@ -122,7 +122,7 @@ chmod +x "$INSTALL_DIR/dist/cli/main.js"
 # P-58b: persist the update channel so `mai` startup auto-update stays on it.
 # --prerelease => "prerelease" (ride alphas); otherwise "stable". --version pins
 # explicitly => stable (no auto-ride). Plain text; read by src/persistence/channel.ts.
-CHANNEL_FILE="$HOME_BASE/.mai/agent/channel"
+CHANNEL_FILE="$HOME_BASE/.frondose/agent/channel"
 mkdir -p "$(dirname "$CHANNEL_FILE")"
 printf '%s\n' "$CHANNEL" > "$CHANNEL_FILE"
 

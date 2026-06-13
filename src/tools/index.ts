@@ -6,7 +6,7 @@ import { OUTREACH_TOOL_NAMES, withSafeMode } from "../agent/safeMode.js";
 import type { LinkedinSession } from "../linkedin/types.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../persistence/config.js";
 import { openCredentialsDb } from "../persistence/credentialLibrary.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../persistence/secrets.js";
 import { openServerInboxDb } from "../persistence/serverInbox.js";
 import { SERVER_PERSONAS_DIR, SERVER_SCHEDULE_PATH, SERVER_WORKERS_CONFIG_DIR } from "../persistence/serverPaths.js";
@@ -69,7 +69,7 @@ export interface PersistencePaths {
   credentialsDbPath?: string;
   // P-31 Step 4a STUB: schedule.jsonl path for schedule_task tool. Builder wires at Step 4b.
   schedulePath?: string;
-  // P-SP-A: sales kernel SQLite path (~/.mai/agent/sales.sqlite by default).
+  // P-SP-A: sales kernel SQLite path (~/.frondose/agent/sales.sqlite by default).
   salesDbPath?: string;
 }
 
@@ -210,7 +210,7 @@ export function makeAllTools(
   } else {
     // P-SP-A: sales kernel — worker-only (server has no LinkedIn primitives).
     // [P-75 D-30] pass session so record_raw_candidate can live-identity-check profileUrl.
-    const salesDbPath = persistence?.salesDbPath ?? join(getHomeBase(), ".mai", "agent", "sales.sqlite");
+    const salesDbPath = persistence?.salesDbPath ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "sales.sqlite");
     Object.assign(out, makeSalesTools(salesDbPath, session));
     // worker-only: query_lead_globally + publish_event. Both always register;
     // both return a structured envelope when serverCoords===null.
@@ -219,7 +219,7 @@ export function makeAllTools(
       publish_event: makePublishEventTool(serverCoords),
     });
     // P-31: schedule_task — worker self-scheduling.
-    const workerSchedulePath = persistence?.schedulePath ?? join(getHomeBase(), ".mai", "agent", "schedule.jsonl");
+    const workerSchedulePath = persistence?.schedulePath ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
     Object.assign(out, makeCronTools(workerSchedulePath));
   }
 

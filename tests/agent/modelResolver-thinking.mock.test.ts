@@ -233,9 +233,9 @@ test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-dis
   const restore = saveEnv("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m9-"));
   try {
-    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
@@ -276,9 +276,9 @@ test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope
   const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m10-"));
   try {
-    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           anthropic: { key: "sk-ant-stub", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
@@ -309,9 +309,9 @@ test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-res
   const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m11-"));
   try {
-    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" },

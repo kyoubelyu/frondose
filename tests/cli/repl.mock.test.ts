@@ -37,12 +37,12 @@ import type { ControlSignals } from "../../src/tools/control/stop.js";
 /**
  * HOME shim — create a tmp dir, mkdir `<tmp>/.mai/agent`, set HOME to tmp.
  * `os.homedir()` resolves from `process.env.HOME` on Unix, so `runRepl`'s hardcoded
- * `path.join(os.homedir(), ".mai", "agent", "turn.lock")` lands in the tmp tree.
+ * `path.join(os.homedir(), ".frondose", "agent", "turn.lock")` lands in the tmp tree.
  * Returns a cleanup that restores HOME + removes the tmp dir.
  */
 function withTmpHome(): { tmpHome: string; cleanup: () => void } {
   const tmpHome = mkdtempSync(join(os.tmpdir(), "mai-p54-repl-"));
-  mkdirSync(join(tmpHome, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
   const priorHome = process.env.HOME;
   process.env.HOME = tmpHome;
   return {

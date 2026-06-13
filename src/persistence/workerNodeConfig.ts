@@ -1,4 +1,4 @@
-/** P-30: per-worker node config at ~/.mai/server/workers/<id>.json — VNC port/
+/** P-30: per-worker node config at ~/.frondose/server/workers/<id>.json — VNC port/
  *  password + optional SSH overrides. Operator-authored, chmod 600 (holds
  *  vnc_password). Reader returns null on missing/malformed (never throws). */
 import { existsSync, readFileSync } from "node:fs";

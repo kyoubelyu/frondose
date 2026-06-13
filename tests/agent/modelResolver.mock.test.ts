@@ -98,7 +98,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     await t.test("(d) auth.json default wins when factory/cli/env absent", () => {
       process.env.HOME = tmpHome;
       delete process.env.MAI_MODEL;
-      const maiDir = join(tmpHome, ".mai");
+      const maiDir = join(tmpHome, ".frondose");
       mkdirSync(maiDir, { recursive: true });
       writeFileSync(join(maiDir, "auth.json"), '{"default":"openai:auth-model"}', "utf-8");
       const result = resolveModelSpec({});
@@ -107,7 +107,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
       // P-24 path-shift: readSecrets migrated auth.json → secrets.json on first read above;
       // remove secrets.json too so sub-test (e) falls back to hardcoded DEFAULT_MODEL_SPEC.
       rmSync(join(maiDir, "auth.json"));
-      const migratedSecretsPath = join(tmpHome, ".mai", "agent", "secrets.json");
+      const migratedSecretsPath = join(tmpHome, ".frondose", "agent", "secrets.json");
       if (existsSync(migratedSecretsPath)) rmSync(migratedSecretsPath);
     });
 
@@ -215,7 +215,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     savedDeepseekKey = process.env.DEEPSEEK_API_KEY;
     savedDeepseekBase = process.env.DEEPSEEK_BASE_URL;
     process.env.HOME = tmpHome;
-    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     // Clear env-var key overrides so tests control key resolution explicitly
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -242,7 +242,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // When:  resolveModel({ factory: "anthropic:claude-sonnet-4-5" }) is called
     // Then:  throws with "scope-disabled" in message (P-71 blocks direct Anthropic runtime)
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           anthropic: { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
@@ -263,7 +263,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // When:  resolveModel({ factory: "together:meta-llama/Llama-4" }) is called
     // Then:  returned model.provider does NOT contain "anthropic"; createOpenAI path taken with name="together"
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
@@ -288,7 +288,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // When:  resolveModel({ factory: "unknown-prov:some-model" }) is called
     // Then:  throws Error whose message contains "Provider 'unknown-prov' not configured" and Frondose Settings guidance
     // P-APP-11 b1: error guidance changed from "mai auth set" to "Frondose → Settings"
-    writeFileSync(join(tmpHome, ".mai", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
+    writeFileSync(join(tmpHome, ".frondose", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
     assert.throws(
       () => resolveModel({ factory: "unknown-prov:some-model" }),
       (err: Error) => {
@@ -305,7 +305,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // Then:  throws scope-disabled (P-71 blocks direct Anthropic — env key is irrelevant)
     process.env.ANTHROPIC_API_KEY = "sk-ant-env-test";
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           anthropic: { key: "sk-ant-file", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
@@ -327,7 +327,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // Then:  throws scope-disabled (P-71 — 'openai' is a reserved direct-provider name)
     process.env.OPENAI_API_KEY = "sk-env-test";
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           openai: { key: "sk-file", baseUrl: "https://api.openai.com/v1", type: "openai" },
@@ -349,7 +349,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // Then:  the actual HTTP request targets "https://api.deepseek.com/v1/chat/completions" (env normalized, /v1 added)
     process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
@@ -389,7 +389,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // Then:  request URL is "https://proxy.example.com/v1/chat/completions" (idempotent — no /v1/v1)
     process.env.DEEPSEEK_BASE_URL = "https://proxy.example.com/v1";
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
@@ -431,7 +431,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // Then:  request URL starts with "https://api.together.xyz/v1/" (DEEPSEEK_BASE_URL env var ignored for non-deepseek providers)
     process.env.DEEPSEEK_BASE_URL = "https://proxy.example.com";
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: {
           together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
@@ -478,7 +478,7 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
     tmpHome = mkdtempSync(join(tmpdir(), "mai-home-p21-detect-"));
     savedHome = process.env.HOME;
     process.env.HOME = tmpHome;
-    mkdirSync(join(tmpHome, ".mai"), { recursive: true });
+    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     // Ensure no env-var keys interfere
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -496,7 +496,7 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
     // When:  detectAnyModelKey() is called
     // Then:  returns true (iterates ALL providers — finds "together" key; NOT just 3 hardcoded names)
     writeFileSync(
-      join(tmpHome, ".mai", "auth.json"),
+      join(tmpHome, ".frondose", "auth.json"),
       JSON.stringify({
         providers: { together: { key: "tapi-xxx", type: "openai", baseUrl: "https://api.together.xyz/v1" } },
       }),
@@ -514,7 +514,7 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
     // Given: auth.json has empty providers {}; ANTHROPIC/OPENAI/DEEPSEEK_API_KEY all unset
     // When:  detectAnyModelKey() is called
     // Then:  returns false
-    writeFileSync(join(tmpHome, ".mai", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
+    writeFileSync(join(tmpHome, ".frondose", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
     const result = detectAnyModelKey();
     assert.equal(
       result,

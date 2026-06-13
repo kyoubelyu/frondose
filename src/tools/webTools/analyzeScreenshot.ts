@@ -30,7 +30,7 @@ const analyzeScreenshotParams = z.object({
  * UNCHANGED — vision call is fully isolated.
  *
  * D-7 file sandbox: assertFileReadable() called on the supplied path BEFORE
- * readFileSync. Allowed: ~/.mai/agent/**, FRONDOSE_UPLOAD_ALLOWLIST, os.tmpdir(),
+ * readFileSync. Allowed: ~/.frondose/agent/**, FRONDOSE_UPLOAD_ALLOWLIST, os.tmpdir(),
  * tests/fixtures/** (when cwd is repo root).
  *
  * D-13: NOT in IDEMPOTENT_TOOLS (vision tokens cost; retry could double-bill).

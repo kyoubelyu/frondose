@@ -2,9 +2,9 @@
  *  All constants are getter functions so getHomeBase() is evaluated lazily
  *  (important for test isolation: tests can set process.env.MAI_HOME_BASE before calling). */
 import { join } from "node:path";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
-export const SERVER_ROOT = (): string => join(getHomeBase(), ".mai", "server");
+export const SERVER_ROOT = (): string => join(getHomeBase(), DATA_DIR_NAME, "server");
 export const SERVER_MEMORY_DB_PATH = (): string => join(SERVER_ROOT(), "memory.sqlite");
 export const SERVER_AUDIT_PATH = (): string => join(SERVER_ROOT(), "audit.jsonl");
 export const SERVER_SESSIONS_ROOT = (): string => join(SERVER_ROOT(), "sessions");

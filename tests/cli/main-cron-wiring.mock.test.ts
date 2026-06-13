@@ -30,11 +30,11 @@ import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
 
 /**
  * Inline the MAI_SCHEDULE_PATH resolution logic from main.ts (D-9):
- *   const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+ *   const schedulePath = process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".frondose", "agent", "schedule.jsonl");
  * Test inlines this rather than importing main.ts (which has top-level CLI side effects).
  */
 function resolveSchedulePath(): string {
-  return process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+  return process.env.MAI_SCHEDULE_PATH ?? path.join(os.homedir(), ".frondose", "agent", "schedule.jsonl");
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -59,11 +59,11 @@ describe("main.ts MAI_SCHEDULE_PATH resolution (D-9, D-13, G-P10.14)", () => {
   it("T-Wiring.2: when MAI_SCHEDULE_PATH is unset, main resolves schedule path to path.join(os.homedir(), '.mai', 'agent', 'schedule.jsonl')", () => {
     // Given: MAI_SCHEDULE_PATH is not set in process.env
     // When: main resolves the schedule path via env read with fallback
-    // Then: resolved path === path.join(homedir, ".mai", "agent", "schedule.jsonl")
+    // Then: resolved path === path.join(homedir, ".frondose", "agent", "schedule.jsonl")
     const prev = process.env.MAI_SCHEDULE_PATH;
     delete process.env.MAI_SCHEDULE_PATH;
     try {
-      const expected = path.join(os.homedir(), ".mai", "agent", "schedule.jsonl");
+      const expected = path.join(os.homedir(), ".frondose", "agent", "schedule.jsonl");
       assert.equal(resolveSchedulePath(), expected);
     } finally {
       if (prev !== undefined) process.env.MAI_SCHEDULE_PATH = prev;
@@ -107,7 +107,7 @@ describe("main.ts CHECKPOINT swap (D-9, G-P10.14)", () => {
 describe("main.ts P-11 wiring: MAI_TELEGRAM_CONFIG_PATH + TurnLock (G-P11.20)", () => {
   /** Inline the MAI_TELEGRAM_CONFIG_PATH resolution logic from main.ts (D-4 / §6.10). */
   function resolveTelegramConfigPath(): string {
-    return process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".mai", "agent", "telegram.json");
+    return process.env.MAI_TELEGRAM_CONFIG_PATH ?? path.join(os.homedir(), ".frondose", "agent", "telegram.json");
   }
 
   it("T-Wiring.p11.1: when MAI_TELEGRAM_CONFIG_PATH=/tmp/foo.json is set, main resolves telegram config path to /tmp/foo.json", () => {
@@ -127,11 +127,11 @@ describe("main.ts P-11 wiring: MAI_TELEGRAM_CONFIG_PATH + TurnLock (G-P11.20)", 
   it("T-Wiring.p11.2: when MAI_TELEGRAM_CONFIG_PATH is unset, main resolves telegram config path to path.join(homedir, '.mai', 'agent', 'telegram.json')", () => {
     // Given: MAI_TELEGRAM_CONFIG_PATH is not set
     // When: main resolves via env read with fallback
-    // Then: resolved path === path.join(homedir, ".mai", "agent", "telegram.json")
+    // Then: resolved path === path.join(homedir, ".frondose", "agent", "telegram.json")
     const prev = process.env.MAI_TELEGRAM_CONFIG_PATH;
     delete process.env.MAI_TELEGRAM_CONFIG_PATH;
     try {
-      const expected = path.join(os.homedir(), ".mai", "agent", "telegram.json");
+      const expected = path.join(os.homedir(), ".frondose", "agent", "telegram.json");
       assert.equal(resolveTelegramConfigPath(), expected);
     } finally {
       if (prev !== undefined) process.env.MAI_TELEGRAM_CONFIG_PATH = prev;

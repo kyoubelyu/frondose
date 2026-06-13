@@ -1,12 +1,12 @@
 /** P-25: server session file helpers (OQ-4: no cwdHash; flat sessions dir).
- *  Mirrors src/persistence/session.ts but scoped to ~/.mai/server/sessions/.
+ *  Mirrors src/persistence/session.ts but scoped to ~/.frondose/server/sessions/.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreMessage } from "ai";
 import { SERVER_SESSIONS_ROOT } from "./serverPaths.js";
 
-/** Returns a new session-file path under ~/.mai/server/sessions/; auto-creates the dir. */
+/** Returns a new session-file path under ~/.frondose/server/sessions/; auto-creates the dir. */
 export function serverSessionFile(): string {
   const dir = SERVER_SESSIONS_ROOT();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

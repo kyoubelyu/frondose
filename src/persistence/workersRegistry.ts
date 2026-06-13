@@ -1,4 +1,4 @@
-/** P-26: workers + lead_actions persistence under ~/.mai/server/workers.sqlite.
+/** P-26: workers + lead_actions persistence under ~/.frondose/server/workers.sqlite.
  *
  * Step-3b C-6: only the CONSTANT-TIME `getWorkerByTokenHashConstantTime` is
  * exported. No non-CT helper is provided — preventing accidental auth lookup

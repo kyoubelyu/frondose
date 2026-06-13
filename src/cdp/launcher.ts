@@ -3,12 +3,12 @@ import { launch as chromeLaunch } from "chrome-launcher";
 import { DEFAULT_FLAGS } from "chrome-launcher/dist/flags.js";
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { clearStaleSingletonLocks } from "./profileLock.js";
 import type { ChromeHandle, ChromeLaunchOptions } from "./types.js";
 
 const DEFAULT_PORT = 9222;
-const DEFAULT_PROFILE_DIR = (): string => join(getHomeBase(), ".mai", "agent", "chrome-profile");
+const DEFAULT_PROFILE_DIR = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
 
 const TARGET_POLL_INTERVAL_MS = 300;
 const TARGET_POLL_MAX_ATTEMPTS = 10;
@@ -112,7 +112,7 @@ export async function ensureChrome(opts: ChromeLaunchOptions = {}): Promise<Chro
   // (verified empirically 2026-06-10: cookie round-trip across graceful
   // restart, 3/3 stable runs). Let DEFAULT_FLAGS flow through unmodified.
   // NOTE: cookies are encrypted at rest under a constant, non-secret key;
-  // treat ~/.mai/agent/chrome-profile/ as session-equivalent secret state.
+  // treat ~/.frondose/agent/chrome-profile/ as session-equivalent secret state.
   const launched = await launchFn({
     port,
     userDataDir: profileDir,

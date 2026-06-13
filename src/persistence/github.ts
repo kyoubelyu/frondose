@@ -8,10 +8,10 @@
  */
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { getHomeBase } from "./paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, type SecretsJson, writeSecrets } from "./secrets.js";
 
-export const DEFAULT_GITHUB_CONFIG_PATH = (): string => join(getHomeBase(), ".mai", "agent", "github.json");
+export const DEFAULT_GITHUB_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "github.json");
 
 export const githubConfigSchema = z.object({
   token: z.string().min(1).optional(),

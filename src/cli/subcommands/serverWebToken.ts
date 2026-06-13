@@ -1,5 +1,5 @@
 /** P-29: `mai server web-token set/show/remove` — manages the web dashboard
- *  Basic-Auth secret in ~/.mai/server/secrets.json (server.webToken). */
+ *  Basic-Auth secret in ~/.frondose/server/secrets.json (server.webToken). */
 import { randomBytes } from "node:crypto";
 import { readSecrets, writeSecrets } from "../../persistence/secrets.js";
 import { SERVER_SECRETS_PATH } from "../../persistence/serverPaths.js";
@@ -44,6 +44,6 @@ export function runServerWebTokenSubcommand(action: "set" | "show" | "remove", o
   // P-36 F-C: mask the token in the confirmation output (OQ-3).
   process.stdout.write(
     `[web-token] set. Token: ${mask(token)}\n` +
-      "  The full token is in ~/.mai/server/secrets.json (chmod 600) if you need to copy it.\n",
+      "  The full token is in ~/.frondose/server/secrets.json (chmod 600) if you need to copy it.\n",
   );
 }

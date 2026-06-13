@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 
 /**
  * P-9 D-10 / D-14: Hook runner. Loaded once at REPL boot. NO hot-reload.
@@ -43,7 +43,7 @@ export class HookRunner {
   private readonly hooksJson: HooksJson | null;
   private readonly matcherCache = new WeakMap<HookEntry, RegExp>();
 
-  constructor(hooksJsonPath = path.join(getHomeBase(), ".mai", "agent", "hooks.json")) {
+  constructor(hooksJsonPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "hooks.json")) {
     this.hooksJson = loadHooksJson(hooksJsonPath);
   }
 

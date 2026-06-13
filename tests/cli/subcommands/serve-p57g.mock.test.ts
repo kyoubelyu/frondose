@@ -205,9 +205,9 @@ async function spinHarness(testName: string): Promise<{ sockPath: string; bearer
   const bearer = "tok";
   const origHome = process.env.MAI_HOME_BASE;
   process.env.MAI_HOME_BASE = tmpDir;
-  mkdirSync(join(tmpDir, ".mai", "agent"), { recursive: true });
+  mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
   writeFileSync(
-    join(tmpDir, ".mai", "agent", "identity.json"),
+    join(tmpDir, ".frondose", "agent", "identity.json"),
     JSON.stringify({ icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() }, null, 2),
     "utf-8",
   );

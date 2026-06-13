@@ -28,7 +28,7 @@ function makeTmpHome(): { home: string; cleanup: () => void } {
 }
 
 function writeTelegramCfg(home: string, overrides: Record<string, unknown> = {}): string {
-  const dir = join(home, ".mai", "agent");
+  const dir = join(home, ".frondose", "agent");
   mkdirSync(dir, { recursive: true });
   const cfgPath = join(dir, "telegram.json");
   writeFileSync(cfgPath, JSON.stringify({ ...DEFAULT_TELEGRAM_CONFIG, boundUserId: 12345, ...overrides }), "utf-8");
@@ -136,7 +136,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     try {
       process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "tg-stub-token";
-      const agentDir = join(home, ".mai", "agent");
+      const agentDir = join(home, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writePid(join(agentDir, "repl.pid")); // live PID
       const cfgPath = writeTelegramCfg(home);
@@ -198,7 +198,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     const origHome = process.env.HOME;
     try {
       process.env.HOME = home;
-      const agentDir = join(home, ".mai", "agent");
+      const agentDir = join(home, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writePid(join(agentDir, "telegram.pid")); // live PID
       // Create log file with recognizable last line

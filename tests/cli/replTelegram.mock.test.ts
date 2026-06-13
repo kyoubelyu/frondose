@@ -61,7 +61,7 @@ function makeMockModel(): MockLanguageModelV1 {
 }
 
 function writeTelegramCfg(home: string, overrides: Record<string, unknown> = {}): string {
-  const dir = join(home, ".mai", "agent");
+  const dir = join(home, ".frondose", "agent");
   mkdirSync(dir, { recursive: true });
   const cfgPath = join(dir, "telegram.json");
   writeFileSync(
@@ -84,8 +84,8 @@ describe("repl: daemon-handshake on REPL boot", () => {
     try {
       process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "stub-token";
-      const tgPidPath = join(home, ".mai", "agent", "telegram.pid");
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      const tgPidPath = join(home, ".frondose", "agent", "telegram.pid");
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       writePid(tgPidPath); // write current process.pid — guaranteed alive
       const cfgPath = writeTelegramCfg(home);
 
@@ -182,7 +182,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     const origHome = process.env.HOME;
     try {
       process.env.HOME = home;
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       const inStream = new PassThrough();
       const cfgPath = writeTelegramCfg(home, { enabled: false });
@@ -203,7 +203,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
 
       // writePid(replPidPath) is synchronous and happens before the first await
       // so it's already done when runRepl() returns the Promise
-      const replPidPath = join(home, ".mai", "agent", "repl.pid");
+      const replPidPath = join(home, ".frondose", "agent", "repl.pid");
       assert.ok(existsSync(replPidPath), "repl.pid must be written before first await");
       assert.strictEqual(
         Number(readFileSync(replPidPath, "utf-8").trim()),
@@ -228,7 +228,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     const origHome = process.env.HOME;
     try {
       process.env.HOME = home;
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       const inStream = new PassThrough();
       inStream.end(); // EOF immediately → readline closes → REPL exits
@@ -247,7 +247,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       });
 
       // After runRepl resolves, cleanupReplPid() was called
-      const replPidPath = join(home, ".mai", "agent", "repl.pid");
+      const replPidPath = join(home, ".frondose", "agent", "repl.pid");
       assert.ok(!existsSync(replPidPath), "repl.pid must be removed after REPL exits");
     } finally {
       process.env.HOME = origHome;
@@ -265,10 +265,10 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     try {
       process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "stub-token";
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       // Write live telegram.pid → daemon advisory fires, poller skipped
-      writePid(join(home, ".mai", "agent", "telegram.pid"));
+      writePid(join(home, ".frondose", "agent", "telegram.pid"));
       const cfgPath = writeTelegramCfg(home, { enabled: true, boundUserId: 12345 });
 
       // The shared session path (matches what main.ts would pick when enabled=true)
@@ -327,11 +327,11 @@ describe("repl: cross-process turn.lock acquired before runAgentLoop (C2 recipro
     const origHome = process.env.HOME;
     try {
       process.env.HOME = home;
-      mkdirSync(join(home, ".mai", "agent"), { recursive: true });
+      mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       const cfgPath = writeTelegramCfg(home, { enabled: false });
       const sessionPath = join(home, "session.jsonl");
-      const turnLockPath = join(home, ".mai", "agent", "turn.lock");
+      const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
 
       const inStream = new PassThrough();
       const replPromise = runRepl({

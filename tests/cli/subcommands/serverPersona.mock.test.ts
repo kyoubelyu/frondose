@@ -48,7 +48,7 @@ function validTemplateJson(fullName = "BD Alice"): string {
 
 /** Returns the personas dir for the given HOME tmpDir. */
 function personasDirFor(homeDir: string): string {
-  return join(homeDir, ".mai", "server", "personas");
+  return join(homeDir, ".frondose", "server", "personas");
 }
 
 // ─── T-CLI.PERS.ADD.1 ────────────────────────────────────────────────────────

@@ -41,8 +41,8 @@ export interface ProvisionDeps {
   execImpl?: typeof runSshExec;
   installShPath?: string;
   /** P-42: test-only sandbox-prefix DI. When set, the install.sh exec gets
-   *  `MAI_PREFIX=<prefix>` and config/secrets are written under `<prefix>/.mai/agent`
-   *  instead of `~/.mai/agent`. NOT on the provision_worker Zod schema — undefined
+   *  `MAI_PREFIX=<prefix>` and config/secrets are written under `<prefix>/.frondose/agent`
+   *  instead of `~/.frondose/agent`. NOT on the provision_worker Zod schema — undefined
    *  for every real operator provision (zero production behavior change). */
   maiPrefix?: string;
 }
@@ -148,9 +148,9 @@ export async function runSshProvision(
   const exec = deps.execImpl ?? runSshExec;
   // P-42: when maiPrefix is set, redirect BOTH the install.sh prefix env var AND the
   // config/secrets target dir into the sandbox — otherwise a localhost provision test
-  // clobbers the operator's real ~/.mai. safePrefix is validated up-front (early guard).
+  // clobbers the operator's real ~/.frondose. safePrefix is validated up-front (early guard).
   const installCmd = safePrefix !== null ? `MAI_PREFIX=${safePrefix} bash -s` : "bash -s";
-  const maiHome = safePrefix !== null ? `${safePrefix}/.mai/agent` : "~/.mai/agent";
+  const maiHome = safePrefix !== null ? `${safePrefix}/.frondose/agent` : "~/.frondose/agent";
   try {
     const r1 = await exec(target, installCmd, installSh);
     if (r1.code !== 0) throw new Error(`install.sh failed (exit ${r1.code}): ${r1.stderr.slice(-500)}`);

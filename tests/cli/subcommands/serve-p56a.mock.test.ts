@@ -238,7 +238,7 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
 
     // ── Variant A: identity set ──────────────────────────────────────────────
     const homeDirA = mkdtempSync(join(tmpdir(), "p56a-t2a-"));
-    const configDirA = join(homeDirA, ".mai", "agent");
+    const configDirA = join(homeDirA, ".frondose", "agent");
     mkdirSync(configDirA, { recursive: true });
     // Write valid config.json v2 with identity (Zod fills defaults for server/worker/etc)
     writeFileSync(

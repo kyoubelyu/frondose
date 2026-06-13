@@ -17,7 +17,7 @@ import path from "node:path";
 import type { CoreMessage, LanguageModel, StepResult, ToolSet } from "ai";
 import { runAgentLoop } from "../agent/loop.js";
 import type { TurnLock } from "../agent/turnSemaphore.js";
-import { getHomeBase } from "../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { acquireTurnLock, isPidAlive, releaseTurnLock } from "../persistence/processLock.js";
 import { appendMessages as appendMessagesPerCwd } from "../persistence/session.js";
 import {
@@ -377,8 +377,8 @@ export async function startDaemonPoller(
     lastReceivedAt: cfg.lastReceivedAt ?? null,
     abort,
   };
-  const replPidPath = path.join(getHomeBase(), ".mai", "agent", "repl.pid");
-  const turnLockPath = path.join(getHomeBase(), ".mai", "agent", "turn.lock");
+  const replPidPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "repl.pid");
+  const turnLockPath = path.join(getHomeBase(), DATA_DIR_NAME, "agent", "turn.lock");
   void (async () => {
     const token = process.env.TELEGRAM_TOKEN;
     if (!token) {

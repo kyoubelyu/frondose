@@ -136,11 +136,14 @@ describe("T-UpdateSrv.Imports — entry import graph", () => {
 
   it(
     "T-UpdateSrv.Imports.2: src/app/updateServerMain.ts top-level static import specifiers are exactly " +
-      "{ node:url, ../cli/crashLogger.js } — dynamic body NOT in static set",
+      "{ node:url, ../cli/crashLogger.js, ../persistence/dataDirMigration.js, ../persistence/paths.js } — dynamic body NOT in static set (updated F-REN-4a: bootMigrateOrExit + getHomeBase added)",
     () => {
       // Given: src/app/updateServerMain.ts exists
       // When:  validator collects top-level static import specifiers from the source
-      // Then:  specifier set is exactly { "node:url", "../cli/crashLogger.js" };
+      // Then:  specifier set is exactly {
+      //          "node:url", "../cli/crashLogger.js",
+      //          "../persistence/dataDirMigration.js", "../persistence/paths.js"
+      //        } (F-REN-4a added bootMigrateOrExit + getHomeBase imports);
       //        "../cli/subcommands/updateServer.js" must NOT appear in the static set
       assert.ok(
         existsSync(SRC_ENTRY),
@@ -152,12 +155,19 @@ describe("T-UpdateSrv.Imports — entry import graph", () => {
       const specifiers = extractStaticImportSpecifiers(src);
       const specSet = new Set(specifiers);
 
-      // Exactly these two specifiers — no more, no less
-      const expected = new Set(["node:url", "../cli/crashLogger.js"]);
+      // Exactly these four specifiers — no more, no less
+      // (F-REN-4a added ../persistence/dataDirMigration.js + ../persistence/paths.js
+      //  for bootMigrateOrExit(getHomeBase()) call)
+      const expected = new Set([
+        "node:url",
+        "../cli/crashLogger.js",
+        "../persistence/dataDirMigration.js",
+        "../persistence/paths.js",
+      ]);
       assert.deepEqual(
         specSet,
         expected,
-        `Static import specifier set must be exactly { "node:url", "../cli/crashLogger.js" }. ` +
+        `Static import specifier set must be exactly the 4 expected specifiers (F-REN-4a). ` +
           `Got: ${JSON.stringify([...specSet])}`,
       );
 

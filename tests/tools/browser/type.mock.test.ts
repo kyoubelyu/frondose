@@ -708,7 +708,7 @@ function makeFakeSessionOnProfile(slug: string, entries: Array<{ ref: string; ro
 function seedSalesDb(slug: string, draftText: string): string {
   const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-"));
   process.env.MAI_HOME_BASE = home;
-  const dbPath = pathJoin(home, ".mai", "agent", "sales.sqlite");
+  const dbPath = pathJoin(home, ".frondose", "agent", "sales.sqlite");
   // getSalesDb takes care of mkdir + schema init on first open.
   const db = getSalesDb(dbPath);
   const profileUrl = `https://www.linkedin.com/in/${slug}/`;

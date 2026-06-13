@@ -5,7 +5,7 @@ import type { CdpClient } from "../../cdp/client.js";
 import { hardwareTypeAt } from "../../cdp/hardwareInput.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
-import { getHomeBase } from "../../persistence/paths.js";
+import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
 
 const NOTE_FIELD_RE = /note|message|备注|附言|留言/i;
@@ -64,7 +64,7 @@ function latestDraftTextForCurrentLead(pageUrl: string | undefined): string | nu
   const slug = profileSlugFromUrl(pageUrl);
   if (!slug) return null;
   try {
-    const dbPath = join(getHomeBase(), ".mai", "agent", "sales.sqlite");
+    const dbPath = join(getHomeBase(), DATA_DIR_NAME, "agent", "sales.sqlite");
     const db = getSalesDb(dbPath);
     const candidateRow = db
       .prepare("SELECT id FROM raw_candidates WHERE profile_url = ? OR profile_url = ?")
