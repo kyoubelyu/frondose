@@ -6,7 +6,7 @@
  *     contains @kyoube/mai-agent / kyoubelyu/mai-agent / \bmai-agent\b outside the
  *     documented allowlist.
  *
- *   T-FREN4b.PkgName.1 — package.json name === "@kyoube/frondose"; version === "0.5.0-alpha.54".
+ *   T-FREN4b.PkgName.1 — package.json name === "@kyoube/frondose"; version === "0.5.0-alpha.55".
  *   T-FREN4b.PkgName.2 — package-lock.json root + packages[""] both carry the new name+version.
  *
  *   T-FREN4b.Symlink.1 — symlink.ts PKG_NAME === "@kyoube/frondose";
@@ -220,27 +220,27 @@ describe(
 // T-FREN4b.PkgName — package.json + package-lock.json identity
 // ---------------------------------------------------------------------------
 
-describe("package identity — @kyoube/frondose + 0.5.0-alpha.54 (T-FREN4b.PkgName)", () => {
+describe("package identity — @kyoube/frondose + 0.5.0-alpha.55 (T-FREN4b.PkgName)", () => {
   it(
-    "T-FREN4b.PkgName.1: package.json name === '@kyoube/frondose' and version === '0.5.0-alpha.54'; bin field absent (install.sh creates bin link, not npm)",
+    "T-FREN4b.PkgName.1: package.json name === '@kyoube/frondose' and version === '0.5.0-alpha.55'; bin field absent (install.sh creates bin link, not npm)",
     () => {
-      // Given: post-Step-4 package.json at repo root
+      // Given: post-Step-4 package.json at repo root (F-REN-4d version bump to alpha.55)
       // When:  parsed as JSON
-      // Then:  name === "@kyoube/frondose"; version === "0.5.0-alpha.54"; no bin field drift
+      // Then:  name === "@kyoube/frondose"; version === "0.5.0-alpha.55"; no bin field drift
 
       const pkgPath = join(REPO, "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
       assert.equal(pkg.name, "@kyoube/frondose", "T-FREN4b.PkgName.1: package.json name must be @kyoube/frondose");
-      assert.equal(pkg.version, "0.5.0-alpha.54", "T-FREN4b.PkgName.1: package.json version must be 0.5.0-alpha.54");
+      assert.equal(pkg.version, "0.5.0-alpha.55", "T-FREN4b.PkgName.1: package.json version must be 0.5.0-alpha.55");
     },
   );
 
   it(
-    "T-FREN4b.PkgName.2: package-lock.json root .name and .packages[''].name both equal '@kyoube/frondose'; root + packages[''] versions both equal '0.5.0-alpha.54'",
+    "T-FREN4b.PkgName.2: package-lock.json root .name and .packages[''].name both equal '@kyoube/frondose'; root + packages[''] versions both equal '0.5.0-alpha.55'",
     () => {
-      // Given: post-Step-4 package-lock.json at repo root
+      // Given: post-Step-4 package-lock.json at repo root (F-REN-4d version bump to alpha.55)
       // When:  parsed as JSON
-      // Then:  root name + packages[""].name === "@kyoube/frondose"; both version fields === "0.5.0-alpha.54"
+      // Then:  root name + packages[""].name === "@kyoube/frondose"; both version fields === "0.5.0-alpha.55"
 
       const lockPath = join(REPO, "package-lock.json");
       const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as {
@@ -249,7 +249,7 @@ describe("package identity — @kyoube/frondose + 0.5.0-alpha.54 (T-FREN4b.PkgNa
         packages: Record<string, { name?: string; version: string }>;
       };
       assert.equal(lock.name, "@kyoube/frondose", "T-FREN4b.PkgName.2: package-lock root .name must be @kyoube/frondose");
-      assert.equal(lock.version, "0.5.0-alpha.54", "T-FREN4b.PkgName.2: package-lock root .version must be 0.5.0-alpha.54");
+      assert.equal(lock.version, "0.5.0-alpha.55", "T-FREN4b.PkgName.2: package-lock root .version must be 0.5.0-alpha.55");
       assert.equal(
         lock.packages[""]?.name,
         "@kyoube/frondose",
@@ -257,8 +257,8 @@ describe("package identity — @kyoube/frondose + 0.5.0-alpha.54 (T-FREN4b.PkgNa
       );
       assert.equal(
         lock.packages[""]?.version,
-        "0.5.0-alpha.54",
-        "T-FREN4b.PkgName.2: package-lock .packages[\"\"].version must be 0.5.0-alpha.54",
+        "0.5.0-alpha.55",
+        "T-FREN4b.PkgName.2: package-lock .packages[\"\"].version must be 0.5.0-alpha.55",
       );
     },
   );
