@@ -588,12 +588,13 @@ describe("Commander registration", () => {
   it("T-UPDATE.12: helptext includes 'update' subcommand with description", async () => {
     // Given: Commander program registered in dist/cli/main.js
     // When:  Help text is generated via node dist/cli/main.js --help
-    // Then:  Output includes "update" subcommand and "Check for mai-agent updates"
+    // Then:  Output includes "update" subcommand and "Check for frondose updates"
+    //        (F-REN-4b lockstep flip: was "Check for mai-agent updates")
     const out = execSync("node dist/cli/main.js --help", { encoding: "utf-8" });
     assert.ok(out.includes("update"), `help text should include "update" subcommand: ${out}`);
     assert.ok(
-      out.includes("Check for mai-agent updates"),
-      `help text should include description "Check for mai-agent updates": ${out}`,
+      out.includes("Check for frondose updates"),
+      `help text should include description "Check for frondose updates" (F-REN-4b flip): ${out}`,
     );
   });
 });

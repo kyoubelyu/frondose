@@ -1,6 +1,6 @@
 /** P-30: SSH terminal WebSocket bridge. ssh2 (pure-JS, NO child_process).
- *  Adapted from VM-Test-Matrix host/proxy/lib/ssh-ws.js — mai-agent variant
- *  opens a plain interactive login shell (no tmux entrypoint; mai-agent's
+ *  Adapted from VM-Test-Matrix host/proxy/lib/ssh-ws.js — frondose variant
+ *  opens a plain interactive login shell (no tmux entrypoint; frondose's
  *  shared-session model is P-23's JSONL turn-lock, not tmux). */
 import { Client } from "ssh2";
 import type { WebSocket } from "ws";

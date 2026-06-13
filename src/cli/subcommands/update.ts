@@ -120,7 +120,7 @@ export async function runUpdateSubcommand(opts: UpdateSubcommandOpts = {}): Prom
   // 3. Fetch latest release
   let release: { tag_name: string; published_at: string; html_url: string };
   try {
-    const resp = await fetch("https://api.github.com/repos/kyoubelyu/mai-agent/releases/latest", {
+    const resp = await fetch("https://api.github.com/repos/kyoubelyu/frondose/releases/latest", {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",

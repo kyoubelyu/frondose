@@ -283,7 +283,7 @@ describe("cron / telegram / worker deps interfaces do NOT carry a 'control' fiel
 // `assert.fail("TODO Step 5 …")`. Validator fills the assertion bodies at
 // Step 5 once Codex's Step 4b adds:
 //   - `ReplOpts.linkedinSession?: LinkedinSession` field (plan §6.4(b))
-//   - eager Chrome init block in `repl.ts` immediately after "mai-agent ready"
+//   - eager Chrome init block in `repl.ts` immediately after "frondose ready"
 //     prints; gated on `MAI_NO_EAGER_CHROME !== "1"`; fire-and-forget with
 //     `.catch` stderr swallow (plan §6.4(c))
 //   - `main.ts:319` call object passes `linkedinSession` into `runRepl` (§6.5)
@@ -317,14 +317,14 @@ function makeFakeLinkedinSession(opts?: { rejectWith?: Error }): {
 }
 
 describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
-  it("T-EagerChrome.1: when linkedinSession is provided AND MAI_NO_EAGER_CHROME is unset, runRepl fires linkedinSession.getOrInitClient() exactly once AFTER the 'mai-agent ready' line writes to out", async () => {
+  it("T-EagerChrome.1: when linkedinSession is provided AND MAI_NO_EAGER_CHROME is unset, runRepl fires linkedinSession.getOrInitClient() exactly once AFTER the 'frondose ready' line writes to out", async () => {
     // Given: opts.linkedinSession = { getOrInitClient: spy }; MAI_NO_EAGER_CHROME unset;
     //        a MockLanguageModelV1 that returns an immediate 'ok' stream;
     //        PassThrough stdin with a single "\n" (empty line) then EOF;
     //        a custom `out` stream that records every write timestamp.
     // When:  runRepl runs and settles after the one-line stdin EOF.
     // Then:  (a) the spy's callCount is exactly 1; (b) the spy's first call
-    //        timestamp is AFTER the timestamp of the "mai-agent ready" write
+    //        timestamp is AFTER the timestamp of the "frondose ready" write
     //        to `out` (eager init happens AFTER the ready line per §6.4(c)).
     //
     // VALIDATOR NOTE (Step 5 fill): use the `withTmpHome()` helper for lock
@@ -334,12 +334,12 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
     // needed for the scaffold to compile.
     const { tmpHome, cleanup } = withTmpHome();
     try {
-      // out stream that records the ts of each "mai-agent ready" write.
+      // out stream that records the ts of each "frondose ready" write (F-REN-4b flip).
       let readyTs: number | null = null;
       const out: NodeJS.WritableStream = {
         write(chunk: string | Buffer): boolean {
           const s = typeof chunk === "string" ? chunk : chunk.toString("utf-8");
-          if (readyTs === null && s.includes("mai-agent ready")) readyTs = Date.now();
+          if (readyTs === null && s.includes("frondose ready")) readyTs = Date.now();
           return true;
         },
       } as unknown as NodeJS.WritableStream;
@@ -392,10 +392,10 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
       assert.equal(spyTs !== null ? 1 : 0, 1, "linkedinSession.getOrInitClient must be called exactly once");
 
       // (b) Ready line was written before the spy fired.
-      assert.ok(readyTs !== null, "out must have received the 'mai-agent ready' line");
+      assert.ok(readyTs !== null, "out must have received the 'frondose ready' line");
       assert.ok(
         spyTs! >= readyTs!,
-        `eager init must fire AFTER 'mai-agent ready' prints; readyTs=${readyTs}, spyTs=${spyTs}`,
+        `eager init must fire AFTER 'frondose ready' prints; readyTs=${readyTs}, spyTs=${spyTs}`,
       );
       void makeFakeLinkedinSession;
     } finally {

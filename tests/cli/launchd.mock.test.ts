@@ -210,7 +210,7 @@ describe("launchd: installLaunchAgent + uninstallLaunchAgent", () => {
 
 describe("P-23 contract: Hard Rule 8 + tool count", () => {
   it("T-CONTRACT.R8: no child_process import under src/tools/**", () => {
-    // Given:  the mai-agent source tree post-Step-4b
+    // Given:  the frondose source tree post-Step-4b
     // When:   all TypeScript files under src/tools/ are scanned for 'child_process'
     // Then:   zero matches (launchd.ts is under src/cli/subcommands/, not src/tools/)
     // NOTE:   CI biome lint enforces this rule; this test provides a deterministic signal.

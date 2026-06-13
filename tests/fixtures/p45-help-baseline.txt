@@ -5,7 +5,7 @@ LinkedIn autonomous agent
 Options:
   -V, --version            output the version number
   --model <spec>           LLM model spec (provider:modelId); overrides
-                           MAI_MODEL
+                           FRONDOSE_MODEL (legacy MAI_MODEL still accepted)
   --prompt <text>          one-shot prompt; exits after response
   --new-session            start a fresh session (discard prior context)
                            (default: false)
@@ -14,22 +14,20 @@ Options:
   --reset-identity         delete identity.json and re-run first-run bootstrap
                            (default: false)
   --max-steps <n>          max agent-loop tool-call steps per turn (overrides
-                           MAI_MAX_STEPS; default 200)
+                           FRONDOSE_MAX_STEPS [legacy MAI_MAX_STEPS still
+                           accepted]; default 200)
   -h, --help               display help for command
 
 Commands:
   soul <action>            Soul-band controls: reset re-prompts the 4 free
                            axes.
-  telegram                 Bidirectional Telegram channel management
-  server                   Operator's orchestrator agent
-  gh                       GitHub issue tool configuration
   serve [options]          HTTP-over-UDS bridge for the v0.5 Tauri desktop
                            shell
-  update [options]         Check for mai-agent updates on GitHub Releases
+  update [options]         Check for frondose updates on GitHub Releases
   update-server [options]  Serve the local Frondose download portal + updater
-                           manifest (~/.mai/site/) over LAN HTTP
+                           manifest (~/.frondose/site/) over LAN HTTP
   uninstall [options]      Remove the global mai install (bin + package symlink
-                           + release dirs); --purge also removes ~/.mai/
+                           + release dirs); --purge also removes ~/.frondose/
   status                   Show agent status (auth + chrome + identity +
                            telegram + cron + memory)
   analytics                Show sales analytics: funnel, rates, score

@@ -6,7 +6,7 @@ import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 /**
  * Default upload allowlist (per guardian critic CONCERN-MR-1 path (a) — reverts plan §6.4
  * defaults `[~/Downloads, ~/Desktop, ~/Documents]` to scout's research recommendation
- * + dispatch instruction: a single quarantine dir under mai-agent's namespace, minimizing
+ * + dispatch instruction: a single quarantine dir under frondose's namespace, minimizing
  * blast radius if a path-traversal bug surfaces. Operator can override via
  * `FRONDOSE_UPLOAD_ALLOWLIST=/path1:/path2` for ad-hoc allowlists.
  */

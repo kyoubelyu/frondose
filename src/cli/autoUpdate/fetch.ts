@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 
-const REPO_PATH = "kyoubelyu/mai-agent";
+const REPO_PATH = "kyoubelyu/frondose";
 const LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`;
 const RELEASES_LIST_URL = `https://api.github.com/repos/${REPO_PATH}/releases?per_page=30`;
 

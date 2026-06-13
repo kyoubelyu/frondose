@@ -90,7 +90,7 @@ function releasesDirPath(): string {
 /** Create a mock fetch that resolves a JSON release object for the given tag. */
 function makeMockReleaseFetch(
   tagName: string,
-  tarballUrl = `https://codeload.github.com/kyoubelyu/mai-agent/legacy.tar.gz/refs/tags/${tagName}`,
+  tarballUrl = `https://codeload.github.com/kyoubelyu/frondose/legacy.tar.gz/refs/tags/${tagName}`,
 ): AutoUpdateDI["fetchImpl"] {
   return async (_url, _opts) => {
     return {
@@ -183,15 +183,16 @@ async function captureStderr(fn: () => Promise<void>): Promise<string> {
 
 /**
  * Build a symlink structure where argv[1] is a symlink whose target contains
- * `@kyoube/mai-agent`, allowing derivePackageSymlink to resolve pkgSymlink.
+ * `@kyoube/frondose`, allowing derivePackageSymlink to resolve pkgSymlink.
+ * (F-REN-4b lockstep flip: was @kyoube/mai-agent)
  *
- *   dir/bin/mai  →  ../lib/@kyoube/mai-agent/dist/cli/main.js  (dangling OK)
- *   dir/lib/@kyoube/mai-agent  →  ../releases/v0.4.15  (symlink to version dir)
+ *   dir/bin/mai  →  ../lib/@kyoube/frondose/dist/cli/main.js  (dangling OK)
+ *   dir/lib/@kyoube/frondose  →  ../releases/v0.4.15  (symlink to version dir)
  *   dir/lib/releases/v0.4.15/  (real dir; .git/ created when devLink=true)
  *
  * Returns { argv1, pkgSymlink }:
  *   argv1     = dir/bin/mai (the symlink process.argv[1] points to)
- *   pkgSymlink = dir/lib/@kyoube/mai-agent (the resolved package symlink)
+ *   pkgSymlink = dir/lib/@kyoube/frondose (the resolved package symlink)
  */
 function makeSymlinkSetup(dir: string, devLink: boolean): { argv1: string; pkgSymlink: string } {
   const binDir = join(dir, "bin");
@@ -204,13 +205,13 @@ function makeSymlinkSetup(dir: string, devLink: boolean): { argv1: string; pkgSy
     mkdirSync(join(versionDir, ".git"), { recursive: true });
   }
 
-  // lib/@kyoube/mai-agent → ../releases/v0.4.15
-  const pkgSymlink = join(libDir, "mai-agent");
+  // lib/@kyoube/frondose → ../releases/v0.4.15
+  const pkgSymlink = join(libDir, "frondose");
   symlinkSync(join("..", "releases", "v0.4.15"), pkgSymlink);
 
-  // bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js  (dangling — readlinkSync only reads link target)
+  // bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js  (dangling — readlinkSync only reads link target)
   const argv1 = join(binDir, "mai");
-  symlinkSync("../lib/@kyoube/mai-agent/dist/cli/main.js", argv1);
+  symlinkSync("../lib/@kyoube/frondose/dist/cli/main.js", argv1);
 
   return { argv1, pkgSymlink };
 }
@@ -976,7 +977,7 @@ function makeTrackingFetch(opts: { stableTag?: string; prereleaseList?: Prerelea
         status: 200,
         json: async () => ({
           tag_name: opts.stableTag ?? "v0.4.49",
-          tarball_url: "https://codeload.github.com/kyoubelyu/mai-agent/legacy.tar.gz/refs/tags/stable",
+          tarball_url: "https://codeload.github.com/kyoubelyu/frondose/legacy.tar.gz/refs/tags/stable",
         }),
         arrayBuffer: async () => new ArrayBuffer(0),
       } as unknown as Response;
@@ -1005,7 +1006,7 @@ function prereleaseListWith(tag: string): PrereleaseListItem[] {
   return [
     {
       tag_name: tag,
-      tarball_url: `https://codeload.github.com/kyoubelyu/mai-agent/legacy.tar.gz/refs/tags/${tag}`,
+      tarball_url: `https://codeload.github.com/kyoubelyu/frondose/legacy.tar.gz/refs/tags/${tag}`,
       prerelease: true,
       draft: false,
       published_at: "2026-05-24T00:00:00Z",
