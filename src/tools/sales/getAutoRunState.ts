@@ -4,6 +4,7 @@ import { failFromError, ok } from "../../linkedin/envelope.js";
 import {
   countAutoLedgerByAction,
   countOutboundSince,
+  countSuccessfulConnects,
   getCurrentAutoRun,
   lastOutboundAt,
   resolveOutboundGuardrails,
@@ -38,12 +39,15 @@ export function makeGetAutoRunStateTool(salesDbPath: string) {
     description:
       "Return the current Auto-mode run (status='running') with its action counters from " +
       "the ledger (DENSIFIED — connect_sent/message_sent/follow_up_sent/comment_posted are " +
-      "always present as numbers), PLUS connectsRemaining (= run.maxConnects - counters.connect_sent, " +
-      "clamped at 0; null when run.maxConnects is null OR no run is active), PLUS dailyOutbound " +
-      "(cross-run LinkedIn-safety quota + inter-outbound cooldown). Returns " +
+      "always present as numbers), PLUS connectsRemaining (= run.maxConnects - SUCCESSFUL " +
+      "connect_sent rows, clamped at 0; null when run.maxConnects is null OR no run is active), " +
+      "PLUS dailyOutbound (cross-run LinkedIn-safety quota + inter-outbound cooldown). Returns " +
       "{ run: null, counters: {connect_sent:0,message_sent:0,follow_up_sent:0,comment_posted:0}, " +
       "connectsRemaining: null, dailyOutbound } when no Auto run is active. Use this before any " +
-      "outbound action in Auto mode to verify caps + the daily quota + cooldown.",
+      "outbound action in Auto mode to verify caps + the daily quota + cooldown. " +
+      "NOTE: counters.connect_sent counts ALL connect attempts (including guard-skipped and " +
+      "failed); connectsRemaining reflects ONLY successfully-sent connects against the cap — " +
+      "they can legitimately differ when an attempt was guard-rejected or failed.",
     parameters: getAutoRunStateParams,
     execute: async (_input) => {
       try {
@@ -65,8 +69,11 @@ export function makeGetAutoRunStateTool(salesDbPath: string) {
           comment_posted: 0,
           ...countAutoLedgerByAction(db, run.id),
         };
+        // P-AUTO-13: mirror the hard click-cap gate (serve.ts:autoRun) — only ACTUALLY-SENT
+        // connects consume the budget. counters.connect_sent stays the densified all-rows
+        // view so the operator's summary still sees skipped/failed attempts.
         const connectsRemaining =
-          run.maxConnects === null ? null : Math.max(0, run.maxConnects - counters.connect_sent);
+          run.maxConnects === null ? null : Math.max(0, run.maxConnects - countSuccessfulConnects(db, run.id));
         return ok("get_auto_run_state", { run, counters, connectsRemaining, dailyOutbound });
       } catch (e) {
         return failFromError("get_auto_run_state", e);

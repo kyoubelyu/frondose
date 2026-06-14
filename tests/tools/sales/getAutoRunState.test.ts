@@ -246,12 +246,21 @@ describe("T-A9.State — get_auto_run_state: dense counters + connectsRemaining 
   });
 
   // ─── T-A9.State.6 ────────────────────────────────────────────────────────────
-  it("T-A9.State.6: all-rows counting basis — mixed results (success/failed/skipped) all counted toward connect_sent", async () => {
+  // P-AUTO-13 UPDATE (Step 3, 2026-06-15): connectsRemaining now uses success-only count.
+  // BEFORE P-AUTO-13: connectsRemaining used all-rows (countAutoLedgerByAction), so 3 mixed
+  //   rows (1 success + 1 failed + 1 skipped) → connectsRemaining = maxConnects - 3 = 0.
+  // AFTER P-AUTO-13: connectsRemaining uses countSuccessfulConnects (success rows only),
+  //   so 3 mixed rows with 1 success → connectsRemaining = maxConnects - 1 = 2.
+  // counters.connect_sent remains all-rows (densified view for the end_auto_run summary).
+  // This is the P-AUTO-13 §4a BLOCKER fix: guard-rejected/failed connect rows do NOT consume
+  // the connect budget.
+  it("T-A9.State.6: mixed-result rows — connectsRemaining counts ONLY success rows; counters.connect_sent counts all rows", async () => {
     // Given: auto_runs row with status='running', maxConnects=3;
     //        3 ledger rows: one connect_sent/success, one connect_sent/failed, one connect_sent/skipped
     // When:  makeGetAutoRunStateTool(tmpPath).execute({}) is called
-    // Then:  result.data.counters.connect_sent === 3 AND result.data.connectsRemaining === 0
-    //        (mirrors serve.ts:258 / click.ts:146 — counts all rows by action_type, no result filter)
+    // Then:  result.data.counters.connect_sent === 3 (all-rows densified view for the summary)
+    //        AND result.data.connectsRemaining === 2 (maxConnects=3 - 1 success = 2)
+    //        NOT connectsRemaining===0 (the old all-rows formula — WRONG after P-AUTO-13)
     const tmpPath = makeTmpPath();
     const { db, runId } = await seedRunningAutoRun(tmpPath, { maxConnects: 3 });
     insertConnectSentRows(db, runId, 3, ["success", "failed", "skipped"]);
@@ -269,12 +278,15 @@ describe("T-A9.State — get_auto_run_state: dense counters + connectsRemaining 
     assert.strictEqual(
       result.data.counters.connect_sent,
       3,
-      "T-A9.State.6: counters.connect_sent must count all rows regardless of result",
+      "T-A9.State.6: counters.connect_sent must count ALL rows regardless of result (densified all-rows view for summary)",
     );
+    // P-AUTO-13: connectsRemaining uses SUCCESS-ONLY count (not all-rows).
+    // 1 success row → connectsRemaining = maxConnects(3) - successCount(1) = 2.
     assert.strictEqual(
       result.data.connectsRemaining,
-      0,
-      "T-A9.State.6: connectsRemaining must be 0 when all 3 connect_sent rows are counted",
+      2,
+      "T-A9.State.6 (P-AUTO-13): connectsRemaining must be 2 (maxConnects=3, 1 success row); " +
+        "skipped/failed rows must NOT consume the connect budget",
     );
   });
 

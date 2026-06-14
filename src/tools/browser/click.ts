@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
+import { failWithReason } from "../../linkedin/envelope.js";
 import {
   applyPacing,
   captureCurrentSurfaceContext,
@@ -114,10 +115,13 @@ export function makeClickTool(session: LinkedinSession) {
           // P-33 general-web carve-out: not a LinkedIn outbound surface -> skip guard
         } else if (session.canClickOutbound && requiresApproval(clickLabel, clickSurface)) {
           if (!session.canClickOutbound(clickLabel, clickSurface)) {
-            return fail(
+            // P-AUTO-13 (M6): typed discriminator so the agent + ledger can tell
+            // a policy block from a transient page error.
+            return failWithReason(
               "click",
               "invalid_input",
               `Outbound action blocked: label "${clickLabel}" on surface "${clickSurface}" requires operator approval`,
+              "approval_required",
             );
           }
         }
@@ -132,25 +136,25 @@ export function makeClickTool(session: LinkedinSession) {
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
         if (outboundClass === "connect_send" && session.outboundDisabled === true) {
-          const f = fail(
+          return failWithReason(
             "click",
             "invalid_input",
             "Outbound disabled for this session: a prior connect dispatched but its ledger write failed (fail-closed). Reconcile the auto-run ledger and start a fresh run before sending more.",
+            "outbound_disabled",
           );
-          return { ...f, reason: "outbound_disabled" as const };
         }
         // Legacy per-run cap guard (P-SP-E G-PSPE.17) — connect_open OR connect_send:
         // pre-CDP hard reject when the running auto-run would exceed its connect cap.
         if (outboundClass === "connect_open" || outboundClass === "connect_send") {
           const autoRun = session.autoRun?.();
           if (autoRun && autoRun.maxConnects !== null && autoRun.connectSentCount >= autoRun.maxConnects) {
-            const f = fail(
+            // P-AUTO-1+2: distinct envelope reason so the agent + ledger + summary reflect reality.
+            return failWithReason(
               "click",
               "invalid_input",
               `Auto cap reached: connect_sent=${autoRun.connectSentCount}/${autoRun.maxConnects}. Call end_auto_run to close the run cleanly.`,
+              "auto_cap_reached",
             );
-            // P-AUTO-1+2: distinct envelope reason so the agent + ledger + summary reflect reality.
-            return { ...f, reason: "auto_cap_reached" as const };
           }
         }
         // P-AUTO-1+2 (B-1/B-2 fix): hard daily-outbound + cooldown gates, fail-closed. Fire on the
@@ -162,38 +166,38 @@ export function makeClickTool(session: LinkedinSession) {
           const daily = session.dailyOutbound();
           // Auto: a running auto-run row is MANDATORY — fail-closed (B-1 defense-in-depth).
           if (mode === "auto" && autoRun === null) {
-            const f = fail(
+            return failWithReason(
               "click",
               "invalid_input",
               "Auto outbound rejected: no running auto-run (fail-closed). Call start_auto_run first.",
+              "no_active_run",
             );
-            return { ...f, reason: "no_active_run" as const };
           }
           // Daily snapshot is MANDATORY whenever the guardrail is wired — fail-closed (a null
           // snapshot must NEVER silently skip the cap; matches the session.dailyOutbound contract).
           if (daily === null) {
-            const f = fail(
+            return failWithReason(
               "click",
               "invalid_input",
               "Outbound rejected: daily-outbound snapshot unavailable (fail-closed).",
+              "no_daily_snapshot",
             );
-            return { ...f, reason: "no_daily_snapshot" as const };
           }
           if (daily.remaining <= 0) {
-            const f = fail(
+            return failWithReason(
               "click",
               "invalid_input",
               `Daily outbound quota reached: remaining=${daily.remaining}. Wait for the next UTC day before sending more.`,
+              "daily_quota_reached",
             );
-            return { ...f, reason: "daily_quota_reached" as const };
           }
           if (daily.cooldownRemainingMs > 0) {
-            const f = fail(
+            return failWithReason(
               "click",
               "invalid_input",
               `Inter-outbound cooldown active: ${Math.ceil(daily.cooldownRemainingMs / 1000)}s remaining. Do read-only work until it elapses.`,
+              "cooldown_active",
             );
-            return { ...f, reason: "cooldown_active" as const };
           }
         }
         // P-AUTO-6: connect-surface integrity. The search/network sidebar "Invite <Name> to connect"
@@ -201,8 +205,12 @@ export function makeClickTool(session: LinkedinSession) {
         if (LINKEDIN_OUTBOUND_SURFACES.has(clickSurface) && session.connectNoteRequiredForLabel) {
           const verdict = session.connectNoteRequiredForLabel(clickLabel, clickSurface);
           if (verdict.block) {
-            const f = fail("click", "invalid_input", `Note-less instant invite blocked: ${verdict.reason}`);
-            return { ...f, reason: "connect_note_required" as const };
+            return failWithReason(
+              "click",
+              "invalid_input",
+              `Note-less instant invite blocked: ${verdict.reason}`,
+              "connect_note_required",
+            );
           }
         }
         // [P-75 D-17] Re-validate the ref before dispatching the click. LinkedIn re-uses
@@ -255,14 +263,14 @@ export function makeClickTool(session: LinkedinSession) {
               } catch {
                 // Durable block unavailable (DB unreachable); the in-memory latch already fail-closes this session.
               }
-              const f = fail(
+              return failWithReason(
                 "click",
                 "runtime_error",
                 `Connect dispatched but the ledger write failed (${ledgerErr instanceof Error ? ledgerErr.message : "db error"}). ` +
                   "Outbound is now DISABLED for this session to prevent uncounted sends — do NOT retry this connect (it already sent). " +
                   "Reconcile the ledger and start a fresh run.",
+                "ledger_write_failed",
               );
-              return { ...f, reason: "ledger_write_failed" as const };
             }
           }
         }

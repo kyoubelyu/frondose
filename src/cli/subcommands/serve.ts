@@ -35,8 +35,8 @@ import { readMode } from "../../persistence/mode.js";
 import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import {
   type AutoRunRow,
-  countAutoLedgerByAction,
   countOutboundSince,
+  countSuccessfulConnects,
   DEFAULT_SALES_DB_PATH,
   getCurrentAutoRun,
   lastOutboundAt,
@@ -254,11 +254,12 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     const db = getSalesDb(salesDbPath);
     const row = getCurrentAutoRun(db);
     if (!row || row.status !== "running") return null;
-    const counters = countAutoLedgerByAction(db, row.id);
+    // P-AUTO-13: hard click cap counts ACTUALLY-SENT connects only; guard-rejected/failed
+    // connect_sent ledger rows stay visible in the summary but don't consume the budget.
     return {
       runId: row.id,
       maxConnects: row.maxConnects,
-      connectSentCount: counters.connect_sent ?? 0,
+      connectSentCount: countSuccessfulConnects(db, row.id),
     };
   };
   // P-AUTO-1+2 (§3.3): fresh-snapshot daily/cooldown probe consumed by the click-path
