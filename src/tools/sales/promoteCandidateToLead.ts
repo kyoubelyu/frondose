@@ -3,6 +3,7 @@ import { z } from "zod";
 import { fail, failFromError, ok } from "../../linkedin/envelope.js";
 import { tokenizeRoleQuery } from "../../methodology/icpMatcher.js";
 import { readIdentity } from "../../persistence/identity.js";
+import { getCurrentAutoRun } from "../../persistence/sales/auto-run.js";
 import {
   appendTimelineEvent,
   getLatestScoreByCandidate,
@@ -12,6 +13,8 @@ import {
   setCandidateStatus,
 } from "../../persistence/salesDb.js";
 import { getSalesDb } from "./_dbHandle.js";
+
+const PROMOTE_FLOOR = 40; // matches scoreLead.ts:41 warm band (40-59) + Magical suggest_card >= 40
 
 const promoteParams = z.object({
   candidateId: z.string().trim().min(1).describe("raw_candidates.id to promote."),
@@ -26,6 +29,14 @@ const promoteParams = z.object({
       "[P-75 D-29] Default false. Set true ONLY when the operator has explicitly authorized a " +
         "promotion despite the headline not matching any ICP targetRole. Auto mode should NEVER " +
         "set this; Manual mode may set it after the operator confirms the persona is on-strategy.",
+    ),
+  bypassScoreGate: z
+    .boolean()
+    .optional()
+    .describe(
+      "[P-AUTO-4] Default false. Set true ONLY when the operator has explicitly authorized promoting a " +
+        "candidate scored below the qualification floor (totalScore < 40) or flagged disqualify. " +
+        "Auto mode can NEVER bypass (code-enforced via the active auto-run); Manual/Magical may after operator confirmation.",
     ),
 });
 
@@ -79,11 +90,13 @@ export function makePromoteCandidateToLeadTool(salesDbPath: string) {
       "already promoted, returns the existing leadId with alreadyPromoted=true. " +
       "[P-75 D-29] Persona validation: refuses promotion when the candidate's evidence_summary " +
       "(LinkedIn headline) does not token-match any multi-token ICP targetRole. To bypass after " +
-      "explicit operator confirmation, pass bypassPersonaCheck=true.",
+      "explicit operator confirmation, pass bypassPersonaCheck=true. " +
+      "[P-AUTO-4] Requires totalScore >= 40 and nextAction != 'disqualify' (the qualification gate); " +
+      "bypassScoreGate overrides ONLY in Manual/Magical, never Auto.",
     parameters: promoteParams,
     execute: async (input) => {
       try {
-        const { candidateId, ownerMode, bypassPersonaCheck } = promoteParams.parse(input);
+        const { candidateId, ownerMode, bypassPersonaCheck, bypassScoreGate } = promoteParams.parse(input);
         const db = getSalesDb(salesDbPath);
         const candidate = getRawCandidate(db, candidateId);
         if (!candidate) return fail("promote_candidate_to_lead", "not_found", `No candidate with id ${candidateId}`);
@@ -108,6 +121,27 @@ export function makePromoteCandidateToLeadTool(salesDbPath: string) {
           }
         }
         const score = getLatestScoreByCandidate(db, candidateId);
+        // [P-AUTO-4] Qualification gate — code-enforced; Auto can NEVER bypass.
+        // Trusted Auto signal = a running auto_runs row (DB-authoritative), NOT the LLM-supplied
+        // ownerMode (which an Auto agent could spoof). Mirrors P-AUTO-1+2 canClickOutbound.
+        const scoreGateBypassed = bypassScoreGate === true && getCurrentAutoRun(db) == null;
+        if (!scoreGateBypassed) {
+          const ts = score?.totalScore ?? null;
+          if (score == null || ts == null || score.nextAction === "disqualify" || ts < PROMOTE_FLOOR) {
+            const why =
+              score == null || ts == null
+                ? "no qualifying score on record"
+                : score.nextAction === "disqualify"
+                  ? "scored nextAction='disqualify'"
+                  : `totalScore ${ts} < floor ${PROMOTE_FLOOR}`;
+            return fail(
+              "promote_candidate_to_lead",
+              "invalid_input",
+              `Candidate not qualified for promotion (${why}). Re-score the candidate, or — only after operator ` +
+                `confirmation in Manual/Magical mode — set bypassScoreGate=true. Auto mode cannot bypass.`,
+            );
+          }
+        }
         const leadId = insertLead(db, {
           candidateId,
           accountId: candidate.accountId,
