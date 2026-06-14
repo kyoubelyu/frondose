@@ -20,20 +20,29 @@ import { dirname, join } from "node:path";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
 import { resolveModelOrNull } from "../../agent/modelResolver.js";
-import { frondoseEnv } from "../../env.js";
 import { BOUNDARY, BOUNDARY_RESUME } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../agent/systemPrompt/soul.js";
 import { createWorkflowController } from "../../agent/workflow/controller.js";
+import { frondoseEnv } from "../../env.js";
 import { createLinkedinSession } from "../../linkedin/session.js";
 import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
-import { countAutoLedgerByAction, DEFAULT_SALES_DB_PATH, getAutoRun } from "../../persistence/salesDb.js";
-import { modeFromState } from "../../tauri/ui/mode.js";
+import {
+  type AutoRunRow,
+  countAutoLedgerByAction,
+  countOutboundSince,
+  DEFAULT_SALES_DB_PATH,
+  getCurrentAutoRun,
+  lastOutboundAt,
+  resolveOutboundGuardrails,
+  utcStartOfDay,
+} from "../../persistence/salesDb.js";
+import { type AppMode, modeFromState } from "../../tauri/ui/mode.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
 import { getSalesDb } from "../../tools/sales/_dbHandle.js";
@@ -55,6 +64,21 @@ export interface ServeOpts {
 }
 
 const AUDIT_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
+
+/**
+ * P-AUTO-1+2 (B-1 fix): pure mode-aware outbound authorization predicate.
+ *
+ * The load-bearing safety invariant: Manual and Magical turns MUST always require
+ * `workflow.hasApprovedOutboundStep()` — a stale `running` auto_runs row from a prior
+ * Auto run that wasn't cleanly ended (operator aborted, mode toggled to Manual/Magical,
+ * /agent/turn force-released) MUST NOT authorize outbound past the manual approval gate.
+ *
+ * Returns true ONLY when the resolved runtime mode is Auto AND a running auto-run row
+ * exists. Manual/Magical callers fall back to the workflow approval gate.
+ */
+export function isAutoOutboundAuthorized(opts: { resolvedMode: AppMode; runningRun: AutoRunRow | null }): boolean {
+  return opts.resolvedMode === "auto" && opts.runningRun?.status === "running";
+}
 export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // WIN-1: the port-file's parent dir holds only the chosen port (not a secret); the
   // bearer token + 127.0.0.1 bind are the guard — no chmod (cross-platform).
@@ -136,11 +160,35 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     },
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
   });
-  session.canClickOutbound = (_label, _surface) => workflow.hasApprovedOutboundStep();
+  // P-AUTO-1+2 (B-1+B-2 fix): mode-aware outbound authorization, fail-closed.
+  session.canClickOutbound = (_label, _surface) => {
+    const resolvedMode = modeFromState({
+      cronEnabled: state.cronEnabled,
+      passiveEnabled: state.passiveEnabled,
+    });
+    if (resolvedMode === "auto") {
+      // Auto: outbound is authorized EXCLUSIVELY by a running auto-run row. NO fallback to the
+      // workflow approval gate — a stale auto workflow, or Auto with no running run, must NEVER
+      // authorize outbound (B-1). An out-of-Auto mode flip drops to the branch below (B-2).
+      const db = getSalesDb(salesDbPath);
+      const runningRun = getCurrentAutoRun(db);
+      return isAutoOutboundAuthorized({ resolvedMode, runningRun });
+    }
+    // Manual/Magical: a genuine per-step operator approval is required. hasApprovedOutboundStep
+    // no longer honors a stale approvalMode==="auto" (B-2 — short-circuit removed, FIX 2).
+    return workflow.hasApprovedOutboundStep();
+  };
+  // P-AUTO-1+2 (B-1 defense-in-depth): resolved-mode probe for the click-path hard gate so it
+  // can independently require a running auto-run in Auto (in-tool backstop to canClickOutbound).
+  session.resolvedMode = () => modeFromState({ cronEnabled: state.cronEnabled, passiveEnabled: state.passiveEnabled });
+  // P-AUTO-1+2 (B-1 fix): DB-authoritative active-run probe. Drops the null-blind
+  // short-circuit at the prior :141 (`if state.autoRunId === null return null`) — that
+  // hid operator-started auto_runs rows because `start_auto_run` never sets
+  // `state.autoRunId`. Now reads `getCurrentAutoRun(db)` directly so cron + operator
+  // entry points both surface to every consumer (click guard, cap watcher, daily probe).
   session.autoRun = () => {
-    if (state.autoRunId === null) return null;
     const db = getSalesDb(salesDbPath);
-    const row = getAutoRun(db, state.autoRunId);
+    const row = getCurrentAutoRun(db);
     if (!row || row.status !== "running") return null;
     const counters = countAutoLedgerByAction(db, row.id);
     return {
@@ -149,6 +197,22 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       connectSentCount: counters.connect_sent ?? 0,
     };
   };
+  // P-AUTO-1+2 (§3.3): fresh-snapshot daily/cooldown probe consumed by the click-path
+  // hard gate. Computes per-call (NOT cached per-turn) so a recently-sent outbound is
+  // reflected immediately. UTC window anchor (utcStartOfDay) replaces the prior
+  // local-midnight slice — deterministic cross-timezone behavior.
+  session.dailyOutbound = () => {
+    const db = getSalesDb(salesDbPath);
+    const { dailyCap, cooldownMs } = resolveOutboundGuardrails();
+    const sentToday = countOutboundSince(db, utcStartOfDay());
+    const remaining = Math.max(0, dailyCap - sentToday);
+    const lastTs = lastOutboundAt(db);
+    const cooldownRemainingMs = lastTs === null ? 0 : Math.max(0, cooldownMs - (Date.now() - lastTs));
+    return { remaining, cooldownRemainingMs };
+  };
+  // P-AUTO-1+2 (G-A2.Count): wire the sales DB path so click.ts can append the
+  // deterministic connect_sent/success ledger row after a successful CDP dispatch.
+  session.salesDbPath = salesDbPath;
   const broadcast = (frame: SseFrame): void => {
     const data = `data: ${JSON.stringify(frame)}\n\n`;
     for (const res of state.sseClients) {

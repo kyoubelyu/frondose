@@ -199,12 +199,17 @@ describe("T-E.CapGuard — click.ts cap-aware Auto guard (P-SP-E Sketch I / G-PS
   });
 
   // ─── T-E.CapGuard.5 ──────────────────────────────────────────────────────────
-  it("T-E.CapGuard.5: click label is 'Send' (not Connect family) → cap guard does NOT fire even at connect cap limit", async () => {
+  // [P-AUTO-1+2 REVISED] Updated comments: 'Send' is now classified as 'message_send'
+  // by classifyOutboundLabel() — it is still NOT in the connect cap scope, and this
+  // test remains TRUE (the connect cap does not fire for message_send). The classifier
+  // is the mechanism; the observed behavior (cap does not fire) is unchanged.
+  it("T-E.CapGuard.5: click label is 'Send' (message_send class) → connect cap guard does NOT fire even at connect cap limit", async () => {
     // Given: session.autoRun() = {runId:'r1', maxConnects:1, connectSentCount:1} (at cap)
-    //        BUT click label = 'Send' (message send, not connect — different action type)
+    //        BUT click label = 'Send' (classifies as message_send — not connect-type)
     // When:  makeClickTool(session).execute({label:'Send'}) called
-    // Then:  cap guard for connect_sent does NOT fire (guard only checks /^(Connect|Invite.*to connect)/i regex);
+    // Then:  connect cap guard does NOT fire (classifyOutboundLabel('Send')='message_send');
     //        click proceeds normally; clickAt spy invoked
+    //        NOTE: P-AUTO-1+2 hard-gates CONNECT-TYPE outbound only; message_send gating is a later phase.
     const clickAtSpy = { called: false };
     const session = makeMockSession({
       autoRun: () => ({ runId: "r1", maxConnects: 1, connectSentCount: 1 }),

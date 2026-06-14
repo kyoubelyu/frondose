@@ -16,6 +16,7 @@ export function handleEndpoint(state: WorkflowState, approvedStepIds: Set<string
 export function handoff(state: WorkflowState, deps: WorkflowControllerDeps, wf: Workflow | null): { status: number; response: unknown; resumePrompt?: string } {
   if (!wf) return { status: 200, response: { ok: false, reason: "no_workflow" } };
   wf.approvalMode = "auto";
+  wf.handoff = true;
   wf.state = "active";
   state.awaitingApprovalStepId = null;
   deps.emitFrame({ type: "workflow-mode-changed", workflowId: wf.id, approvalMode: "auto", ts: Date.now() });

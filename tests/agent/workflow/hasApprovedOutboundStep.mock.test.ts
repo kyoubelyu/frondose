@@ -91,18 +91,39 @@ describe("T-Wf — WorkflowController.hasApprovedOutboundStep() (P-63)", () => {
   });
 
   // ─── T-Wf.2 ─────────────────────────────────────────────────────────────────
-  it("T-Wf.2: when workflow is in auto (cron handoff) mode, hasApprovedOutboundStep() returns true regardless of step approval state", () => {
-    // Given: a workflow proposed inside a cron turn (isCronTurn:true → approvalMode==="auto")
-    // When:  hasApprovedOutboundStep() called (no operator approval action taken)
-    // Then:  returns true — every step is pre-approved in auto mode
-    //   Covers G-P63.10 (auto-mode arm, plan §5.4 step 3: approvalMode === "auto" → true)
+  it("T-Wf.2: a cron-proposed auto workflow (NOT operator-handed-off) → hasApprovedOutboundStep() returns false (P-AUTO-1+2 B-2 fix)", () => {
+    // Given: a workflow proposed inside a cron turn (isCronTurn:true → approvalMode==="auto", handoff unset)
+    // When:  hasApprovedOutboundStep() called (no handoff, no per-step approval)
+    // Then:  returns FALSE — a cron-auto workflow's outbound is gated by the running auto-run
+    //        (isAutoOutboundAuthorized in serve.ts), NOT the workflow approval state. Honoring
+    //        approvalMode==="auto" unconditionally here WAS the B-2 leak (a stale cron-auto workflow
+    //        authorizing outbound after the runtime mode flipped out of Auto).
+    //   Covers G-P63.10 (auto-mode arm, revised by P-AUTO-1+2 B-2: cron-auto no longer self-approves)
     const ctrl = createWorkflowController(makeDeps());
     proposeAutoWorkflow(ctrl, [{ id: "step_auto_1", title: "Visit profiles", requiresApproval: false }]);
 
     assert.strictEqual(
       ctrl.hasApprovedOutboundStep(),
+      false,
+      "cron-auto workflow (handoff unset) must return false — authorization moved to the running auto-run (B-2)",
+    );
+  });
+
+  // ─── T-Wf.2b ────────────────────────────────────────────────────────────────
+  it("T-Wf.2b: after operator /workflow/handoff, hasApprovedOutboundStep() returns true (handoff pre-approves outbound)", () => {
+    // Given: a MANUAL workflow with a requiresApproval outbound step in_progress
+    // When:  operator hands off via handleEndpoint("/workflow/handoff", null) → approvalMode="auto", handoff=true
+    // Then:  returns TRUE — operator handoff pre-approves remaining outbound. This is the legitimate
+    //        feature the B-2 fix MUST preserve; the `handoff` flag distinguishes operator intent from
+    //        a stale cron remnant (which has handoff unset and is rejected by T-Wf.2).
+    const ctrl = createWorkflowController(makeDeps());
+    proposeManualWorkflow(ctrl, [{ id: "step_out", title: "Send invite", requiresApproval: true }]);
+    ctrl.handleEndpoint("/workflow/handoff", null);
+
+    assert.strictEqual(
+      ctrl.hasApprovedOutboundStep(),
       true,
-      "auto-mode workflow must return true (every step pre-approved in cron handoff; plan §5.4)",
+      "operator-handed-off workflow must return true (handoff flag set; B-2 preserves the handoff feature)",
     );
   });
 

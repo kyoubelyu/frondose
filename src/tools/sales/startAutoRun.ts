@@ -1,7 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
-import { getCurrentAutoRun, insertAutoRun } from "../../persistence/salesDb.js";
+import { DEFAULT_AUTO_RUN_MAX_CONNECTS, getCurrentAutoRun, insertAutoRun } from "../../persistence/salesDb.js";
 import { getSalesDb } from "./_dbHandle.js";
 
 const startAutoRunParams = z.object({
@@ -12,14 +12,11 @@ const startAutoRunParams = z.object({
     .max(1440)
     .optional()
     .describe("Total run duration cap in minutes (wall clock). Defaults to 480 (8 hours)."),
-  maxConnects: z
-    .number()
-    .int()
-    .min(0)
-    .max(1000)
-    .nullable()
-    .optional()
-    .describe("Total outbound connect-send cap for this run. null/omitted = no cap."),
+  maxConnects: z.number().int().min(0).max(1000).nullable().optional().describe(
+    // P-AUTO-1+2 (NIT-3): omitted ≠ null. Omitted falls back to DEFAULT_AUTO_RUN_MAX_CONNECTS
+    // (5) as a conservative LinkedIn-safe cap; explicit null is preserved as operator opt-out.
+    `Total outbound connect-send cap for this run. Omitted = ${DEFAULT_AUTO_RUN_MAX_CONNECTS} (default); null = explicit opt-out (no cap).`,
+  ),
 });
 
 export function makeStartAutoRunTool(salesDbPath: string) {
@@ -46,7 +43,10 @@ export function makeStartAutoRunTool(salesDbPath: string) {
         }
         const row = insertAutoRun(db, {
           maxDurationMinutes: parsed.maxDurationMinutes,
-          maxConnects: parsed.maxConnects ?? null,
+          // P-AUTO-1+2 B-5: pass through undefined / null distinctly so insertAutoRun can
+          // apply DEFAULT_AUTO_RUN_MAX_CONNECTS to omitted (undefined) while preserving an
+          // explicit `null` opt-out. (Stop coercing `?? null`, which collapsed both to null.)
+          maxConnects: parsed.maxConnects,
         });
         return ok("start_auto_run", {
           runId: row.id,
