@@ -7,6 +7,7 @@ import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
 import { DATA_DIR_NAME } from "../../../../persistence/paths.js";
 import { getCurrentAutoRun } from "../../../../persistence/salesDb.js";
+import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
 import { hideEdgeRing, showEdgeRing } from "../takeover.js";
@@ -194,11 +195,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
             const client = deps.session.getClient();
             if (ctxId !== undefined && client) {
               const json = JSON.stringify(card);
-              void callInOverlay(
-                client.handle,
-                ctxId,
-                `function() { window.__maiShowCard(${JSON.stringify(json)}); }`,
-              );
+              void callInOverlay(client.handle, ctxId, `function() { window.__maiShowCard(${JSON.stringify(json)}); }`);
             }
           }
           if (tr.toolName === "suggest_next_actions") {
@@ -220,7 +217,12 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
             }
           }
         }
-        const { abort } = deps.workflow.onToolResults(toolResults, { turnId, isCronTurn: args.isCronTurn ?? false });
+        // P-AUTO-1+2 (B-1): thread the resolved runtime mode so an operator Auto turn sets approvalMode='auto'.
+        const { abort } = deps.workflow.onToolResults(toolResults, {
+          turnId,
+          isCronTurn: args.isCronTurn ?? false,
+          resolvedMode: modeFromState({ cronEnabled: state.cronEnabled, passiveEnabled: state.passiveEnabled }),
+        });
         if (abort) abortController.abort();
         deps.emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
       },

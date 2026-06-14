@@ -59,15 +59,19 @@ describe("T-E.DB — auto_runs DB helpers (P-SP-E Sketch A)", () => {
   });
 
   // ─── T-E.DB.2 ────────────────────────────────────────────────────────────────
-  it("T-E.DB.2: insertAutoRun({}) (no caps) returns row with maxDurationMinutes=480 (schema default) + maxConnects=null", async () => {
+  // [P-AUTO-1+2 REVISED] Old assertion: maxConnects=null for omitted caps.
+  // New assertion: maxConnects=5 (DEFAULT_AUTO_RUN_MAX_CONNECTS) for omitted caps.
+  // Explicit null must still be preserved as opt-out (see T-A2.Def.4 in startAutoRunDefault).
+  it("T-E.DB.2: insertAutoRun({}) (no caps) returns row with maxDurationMinutes=480 + maxConnects=5 (DEFAULT, not null)", async () => {
     // Given: empty in-memory sales.sqlite
-    // When:  insertAutoRun(db, {}) called with no cap arguments
-    // Then:  returned row has maxDurationMinutes=480 AND maxConnects=null (schema defaults)
+    // When:  insertAutoRun(db, {}) called with no cap arguments (undefined ≠ explicit null)
+    // Then:  returned row has maxDurationMinutes=480 AND maxConnects=5 (DEFAULT_AUTO_RUN_MAX_CONNECTS)
+    //        NOTE: this assertion REPLACES the old "null" assertion — null was wrong for omitted caps.
     const db = openSalesDatabase(makeTmpPath());
     const row = insertAutoRun(db, {});
 
     assert.equal(row.maxDurationMinutes, 480, "T-E.DB.2: default maxDurationMinutes must be 480 (8 hours)");
-    assert.equal(row.maxConnects, null, "T-E.DB.2: default maxConnects must be null (no cap)");
+    assert.equal(row.maxConnects, 5, "T-E.DB.2: omitted maxConnects must default to 5 (DEFAULT_AUTO_RUN_MAX_CONNECTS), not null");
     assert.equal(row.status, "running", "T-E.DB.2: status must be 'running'");
   });
 

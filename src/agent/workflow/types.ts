@@ -15,6 +15,10 @@ export interface Workflow {
   id: string;
   title: string;
   approvalMode: "manual" | "auto";
+  /** P-AUTO-1+2 (B-2): set true ONLY by the /workflow/handoff endpoint (operator intent).
+   *  Distinguishes an operator-handed-off auto workflow (pre-approves outbound in non-auto
+   *  runtime mode) from a stale cron-created auto workflow (handoff unset — must NOT leak). */
+  handoff?: boolean;
   steps: TodoStep[];
   state: "active" | "awaiting_approval" | "completed" | "cancelled";
   createdAt: string;

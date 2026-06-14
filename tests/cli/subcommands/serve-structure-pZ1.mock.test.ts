@@ -122,11 +122,17 @@ describe("serve.ts public export contract — exactly ServeOpts + runServeSubcom
       "serve.ts must export `async function runServeSubcommand(opts: ServeOpts): Promise<void>`",
     );
 
-    // (3) No other top-level export leaks — exactly 2 export statements.
+    // (3) No other top-level export leaks — ServeOpts + runServeSubcommand + the P-AUTO-1+2
+    // `isAutoOutboundAuthorized` safety predicate (a legitimate pure seam, unit-tested in isolation;
+    // NOT a P-Z1 refactor internal — the mustNotLeak guard below still pins those out).
+    assert.ok(
+      /^export function isAutoOutboundAuthorized\b/m.test(src),
+      "serve.ts must export the isAutoOutboundAuthorized predicate (P-AUTO-1+2 testable seam)",
+    );
     assert.equal(
       exportLines.length,
-      2,
-      `serve.ts must have EXACTLY 2 top-level exports (ServeOpts + runServeSubcommand); found ${exportLines.length}:\n  ${exportLines.join("\n  ")}`,
+      3,
+      `serve.ts must have EXACTLY 3 top-level exports (ServeOpts + runServeSubcommand + isAutoOutboundAuthorized); found ${exportLines.length}:\n  ${exportLines.join("\n  ")}`,
     );
 
     // (4) Explicit anti-leak guards for the symbols the refactor extracts into serve/*.ts.

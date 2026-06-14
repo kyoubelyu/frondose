@@ -107,6 +107,14 @@ export interface LinkedinSession {
   setVisualDriver?(driver: (fnDeclaration: string) => boolean): void;
   showAgentTarget?(box: { x: number; y: number; w: number; h: number }, label: string): Promise<void>;
   canClickOutbound?: (label: string, surface: string) => boolean;
+  /** P-AUTO-1+2 (B-1 defense-in-depth): resolved runtime mode probe for the click-path hard
+   *  gate so it can independently require a running auto-run in Auto. Optional → REPL/test/
+   *  server callers that never wire it degrade to null (no Auto run-requirement enforced). */
+  resolvedMode?: () => "manual" | "magical" | "auto";
+  /** P-AUTO-1+2 (B-3): in-memory fail-closed latch. Set true when a post-dispatch ledger write
+   *  fails — guarantees NO further outbound this session even if the durable DB block can't be
+   *  written. Checked by the click-path connect_send gate before dispatch. */
+  outboundDisabled?: boolean;
   clearAgentTarget?(): void;
 }
 

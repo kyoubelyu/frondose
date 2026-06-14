@@ -1,12 +1,28 @@
 import type { WorkflowControllerDeps } from "../controller.js";
 import type { WorkflowState } from "../types.js";
 import { clickLabel, isSaveDraftSuccess, isTodoWriteResult } from "./helpers.js";
-import { autoAdvanceOnSaveDraft, ensureWorkflowForSaveDraft, reconcileTodoWrite } from "./reconcile.js";
+import {
+  autoAdvanceOnSaveDraft,
+  ensureWorkflowForSaveDraft,
+  reconcileTodoWrite,
+  type WorkflowReconcileCtx,
+} from "./reconcile.js";
 import type { ToolResultLike } from "./types-internal.js";
 
-export function onToolResults(state: WorkflowState, approvedStepIds: Set<string>, terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, toolResults: ToolResultLike[], ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
+export function onToolResults(
+  state: WorkflowState,
+  approvedStepIds: Set<string>,
+  terminalWorkflowIds: Set<string>,
+  deps: WorkflowControllerDeps,
+  toolResults: ToolResultLike[],
+  ctx: WorkflowReconcileCtx,
+): { abort: boolean } {
   let abort = false;
-  const manualMode = !ctx.isCronTurn && (state.current?.approvalMode ?? "manual") === "manual";
+  // P-AUTO-1+2 (B-1): a turn is "manualMode" for the always-ask telegram/gh path when it is
+  // NOT cron AND the resolved mode is NOT Auto. Operator-started Auto turns must take the
+  // same auto path as cron — otherwise the always-ask warning fires on an Auto run.
+  const manualMode =
+    !ctx.isCronTurn && ctx.resolvedMode !== "auto" && (state.current?.approvalMode ?? "manual") === "manual";
   for (const tr of toolResults) {
     if (tr.toolName === "todo_write" && isTodoWriteResult(tr.result)) {
       abort = reconcileTodoWrite(state, approvedStepIds, terminalWorkflowIds, deps, tr.result, ctx).abort || abort;

@@ -1,5 +1,6 @@
 import { hasApprovedOutboundStep as hasApprovedOutboundStepImpl } from "./controller/approval-gate.js";
 import { handleEndpoint as handleEndpointImpl } from "./controller/endpoints.js";
+import type { WorkflowReconcileCtx } from "./controller/reconcile.js";
 import { onToolResults as onToolResultsImpl } from "./controller/tool-observer.js";
 import type { ToolResultLike } from "./controller/types-internal.js";
 import type { WorkflowAuditEntry, WorkflowSseFrame, WorkflowState } from "./types.js";
@@ -10,7 +11,7 @@ export interface WorkflowControllerDeps {
 }
 
 export interface WorkflowController {
-  onToolResults(toolResults: ToolResultLike[], ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean };
+  onToolResults(toolResults: ToolResultLike[], ctx: WorkflowReconcileCtx): { abort: boolean };
   // approve() resumePrompt includes "Do NOT call suggest_card" so approved steps resume into execution.
   handleEndpoint(
     url: string,

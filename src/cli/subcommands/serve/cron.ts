@@ -3,6 +3,7 @@ import { soulModeFragment } from "../../../agent/systemPrompt/soul.js";
 import { callInOverlay } from "../../../overlay/inject.js";
 import {
   countAutoLedgerByAction,
+  DEFAULT_AUTO_RUN_MAX_CONNECTS,
   endAutoRun,
   getAutoRun,
   getCurrentAutoRun,
@@ -51,7 +52,10 @@ export function createCronDriver(
     const durMatch = trimmed.match(/\[AUTO_DURATION=(\d+)\]/);
     const connMatch = trimmed.match(/\[AUTO_CONNECTS=(\d+)\]/);
     const requestedDuration = durMatch ? Number.parseInt(durMatch[1] ?? "", 10) : undefined;
-    const requestedConnects = connMatch ? Number.parseInt(connMatch[1] ?? "", 10) : null;
+    // P-AUTO-1+2 B-5: no [AUTO_CONNECTS=N] directive in the task text → fall back to
+    // DEFAULT_AUTO_RUN_MAX_CONNECTS (5), NOT null. Operator authors an explicit cap by adding
+    // the directive; the constant keeps cron-fired runs LinkedIn-safe by default.
+    const requestedConnects = connMatch ? Number.parseInt(connMatch[1] ?? "", 10) : DEFAULT_AUTO_RUN_MAX_CONNECTS;
     const salesDb = getSalesDb(deps.salesDbPath);
     let activeRun = getCurrentAutoRun(salesDb);
     if (activeRun) {

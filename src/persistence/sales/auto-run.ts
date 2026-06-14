@@ -72,19 +72,12 @@ export function countAutoLedgerByAction(db: DB, runId: string): Record<string, n
   return out;
 }
 
-// ── LinkedIn-safety outbound guardrails (cross-run daily quota + inter-outbound cooldown) ──
-// These are SURFACED via get_auto_run_state (same soft-enforcement model as max_connects): the
-// agent checks them before every outbound. They bound outbound ACROSS runs/days, which max_connects
-// (per-run, optional) does not. Defaults are conservative LinkedIn-safe values; env overrides
-// FRONDOSE_AUTO_DAILY_OUTBOUND_CAP / FRONDOSE_AUTO_OUTBOUND_COOLDOWN_MIN (0 disables that guardrail).
+// LinkedIn-safety outbound guardrails: cross-run daily quota + cooldown (bound outbound ACROSS runs/days;
+// env FRONDOSE_AUTO_DAILY_OUTBOUND_CAP / FRONDOSE_AUTO_OUTBOUND_COOLDOWN_MIN, 0 disables; hard-gated in click.ts).
 export const DEFAULT_AUTO_DAILY_OUTBOUND_CAP = 15;
 export const DEFAULT_AUTO_OUTBOUND_COOLDOWN_MIN = 5;
+const OUTBOUND_IN_CLAUSE = ["connect_sent", "message_sent", "follow_up_sent"].map((a) => `'${a}'`).join(",");
 
-/** Outbound action types that count toward the daily LinkedIn-safety quota + cooldown. */
-const OUTBOUND_ACTION_TYPES = ["connect_sent", "message_sent", "follow_up_sent"] as const;
-const OUTBOUND_IN_CLAUSE = OUTBOUND_ACTION_TYPES.map((a) => `'${a}'`).join(",");
-
-/** Resolve the daily-outbound cap + inter-outbound cooldown (env override; <0 falls back, 0 disables). */
 export function resolveOutboundGuardrails(): { dailyCap: number; cooldownMs: number } {
   const cap = Number.parseInt(frondoseEnv("AUTO_DAILY_OUTBOUND_CAP") ?? "", 10);
   const cool = Number.parseInt(frondoseEnv("AUTO_OUTBOUND_COOLDOWN_MIN") ?? "", 10);
@@ -116,11 +109,20 @@ export function lastOutboundAt(db: DB): number | null {
   return row.ts ?? null;
 }
 
+/** P-AUTO-1+2 B-5: default cap for OMITTED (undefined) maxConnects; explicit `null` = opt-out (not collapsed). */
+export const DEFAULT_AUTO_RUN_MAX_CONNECTS = 5;
+
+/** P-AUTO-1+2: UTC start-of-day (ms) — deterministic cross-timezone daily-outbound window anchor. */
+export function utcStartOfDay(nowMs?: number): number {
+  const d = nowMs === undefined ? new Date() : new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 export function insertAutoRun(db: DB, input: { maxDurationMinutes?: number; maxConnects?: number | null }): AutoRunRow {
   const id = randomUUID();
   const startedAt = Date.now();
   const maxDurationMinutes = input.maxDurationMinutes ?? 480;
-  const maxConnects = input.maxConnects ?? null;
+  const maxConnects = input.maxConnects === undefined ? DEFAULT_AUTO_RUN_MAX_CONNECTS : input.maxConnects;
   db.prepare(`
     INSERT INTO auto_runs
       (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
