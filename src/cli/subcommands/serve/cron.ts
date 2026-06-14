@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { resolveCronMaxSteps, resolveCronNoProgressLimit } from "../../../agent/maxSteps.js";
 import { soulModeFragment } from "../../../agent/systemPrompt/soul.js";
 import { callInOverlay } from "../../../overlay/inject.js";
 import {
@@ -8,10 +9,13 @@ import {
   getAutoRun,
   getCurrentAutoRun,
   insertAutoRun,
+  lastOutboundAt,
+  resolveOutboundGuardrails,
 } from "../../../persistence/salesDb.js";
 import { computeCronRunId, findDueJobs, markRan, readSchedule, writeSchedule } from "../../../persistence/schedule.js";
 import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
 import type { ServeDeps, ServeState } from "./context.js";
+import { cronProgressHighWaterMark } from "./cronProgress.js";
 import type { createTurnRunner } from "./turn.js";
 
 export function createCronDriver(
@@ -21,6 +25,15 @@ export function createCronDriver(
 ): {
   tick(): Promise<void>;
 } {
+  // P-AUTO-12 part (a) + (b): resolve cron budgets once at driver
+  // construction (env reads are pure; resolving per-tick would only
+  // matter on restart-less reconfig, which isn't supported).
+  const cronMaxSteps = resolveCronMaxSteps();
+  const noProgressLimit = resolveCronNoProgressLimit();
+
+  // Tiny local sum-of-counters helper. Inlined for clarity.
+  const sumCounters = (c: Record<string, number>): number => Object.values(c).reduce((a, b) => a + b, 0);
+
   async function tick(): Promise<void> {
     if (!state.cronEnabled) return;
     if (state.currentTurn !== null) return;
@@ -127,6 +140,13 @@ export function createCronDriver(
     }
     state.messages.push({ role: "user", content: cronPrompt });
     // P-57c: cron-fired turns are not retryable in M-1; lastTurnUserPrompt is not set here.
+    // P-AUTO-12 (b): pre-runOneTurn high-water-mark snapshot — bounds the
+    // attribution race to this cron tick (cron.ts:24-26 skips when another
+    // turn is active, so the only writer between pre/post snapshots is the
+    // agent loop driven by this cron tick; the /agent/turn force-interrupt
+    // edge is documented in plan §3.2.2 as a SAFE false-negative).
+    const preLedgerTotal = sumCounters(countAutoLedgerByAction(salesDb, activeRun.id));
+    const preHwm = cronProgressHighWaterMark(salesDb);
     try {
       await turn.runOneTurn({
         turnId,
@@ -134,6 +154,7 @@ export function createCronDriver(
         userPrompt: cronPrompt,
         isRetryable: false,
         isCronTurn: true,
+        maxSteps: cronMaxSteps, // P-AUTO-12 (a): cron-only step cap (default 40).
       });
       // P-SP-E: emit progress frame after each turn (OQ-E6 option c).
       const postRun = getCurrentAutoRun(salesDb);
@@ -149,6 +170,74 @@ export function createCronDriver(
             ts: Date.now(),
           });
           state.lastEmittedAutoCounters = currentCounters;
+        }
+        // P-AUTO-12 part (b): combined durable-progress predicate + cooldown
+        // exclusion + raised threshold. See plan §3.2.1 / §3.2.4 / §3.4.
+        //
+        // Reaper / D-16 coordination: see plan §3.6 — by construction the
+        // reaper (runs in runOneTurn.finally BEFORE this block) only ends the
+        // row when the duration cap is exceeded; in that case postRun is null
+        // and we don't enter this arm, so the duration cap takes precedence
+        // and this code never runs on a duration-capped tick. The matched
+        // cron run's auto-run-completed frame is emitted by the existing
+        // `else if (state.autoRunId !== null)` branch below (P-SP-E REVISED
+        // handler) — NOT by the reaper itself (the reaper SKIPS its emit +
+        // clear when cronWillEmit is true).
+        const postLedgerTotal = sumCounters(currentCounters);
+        const postHwm = cronProgressHighWaterMark(salesDb);
+        const progressThisTick =
+          postLedgerTotal > preLedgerTotal ||
+          postHwm.timelineMax > preHwm.timelineMax ||
+          postHwm.draftsMax > preHwm.draftsMax ||
+          postHwm.candidatesMax > preHwm.candidatesMax;
+
+        // Cooldown exclusion — mirrors getAutoRunState's dailyOutboundSnapshot
+        // (src/tools/sales/getAutoRunState.ts:14-30). If we're in an
+        // inter-outbound cooldown WAIT, this tick was correct read-only
+        // behavior — do NOT increment, do NOT reset.
+        const { cooldownMs } = resolveOutboundGuardrails();
+        const lastAt = lastOutboundAt(salesDb);
+        const cooldownActive = lastAt !== null && Date.now() - lastAt < cooldownMs;
+
+        if (state.cronNoProgressRunId !== postRun.id) {
+          // Run-id change (or first observation in this serve process) — reset.
+          state.cronNoProgressRunId = postRun.id;
+          state.cronNoProgressTurns = 0;
+        } else if (progressThisTick) {
+          // Any of the four signals advanced — reset the consecutive counter.
+          state.cronNoProgressTurns = 0;
+        } else if (cooldownActive) {
+          // Read-only cooldown wait — HOLD (neither increment nor reset).
+          // Intentionally a no-op.
+        } else {
+          // No progress this tick AND not a cooldown wait — increment.
+          state.cronNoProgressTurns += 1;
+          if (state.cronNoProgressTurns >= noProgressLimit) {
+            const summary = `No durable funnel progress in ${state.cronNoProgressTurns} consecutive cron ticks — auto-closed`;
+            const res = endAutoRun(salesDb, postRun.id, {
+              status: "stopped_by_agent",
+              summary,
+              counters: currentCounters,
+            });
+            if (res.alreadyEnded === false) {
+              deps.emitFrame({
+                type: "auto-run-completed",
+                runId: postRun.id,
+                status: "stopped_by_agent",
+                summary,
+                finalCounters: currentCounters,
+                endedAt: Date.now(),
+                ts: Date.now(),
+              });
+            }
+            // Clear all per-run tracking — neither the reaper nor the cron
+            // else-if branch can re-emit because both key on
+            // state.autoRunId !== null.
+            state.autoRunId = null;
+            state.lastEmittedAutoCounters = null;
+            state.cronNoProgressRunId = null;
+            state.cronNoProgressTurns = 0;
+          }
         }
       } else if (state.autoRunId !== null) {
         // P-SP-E *(REVISED per CONCERN-MR-2, 3b round-1 — concrete auto-run-completed emission)*:
