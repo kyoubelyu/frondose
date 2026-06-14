@@ -228,6 +228,7 @@ function makeDeps(frames: unknown[], workflowOnToolResultsOverride?: () => { abo
     },
     emitFrame: (frame: unknown) => frames.push(frame),
     emitOverlayEvent: () => undefined,
+    composeOperatorSystem: (mode: string) => `<SYS:${mode}>`,
   } as unknown as ServeDeps;
 }
 
@@ -291,9 +292,13 @@ describe("createTurnRunner — runOneTurn happy path", () => {
     // no LLM-error audit
     assert.equal(llmErrorAuditCalls.length, 0, "writeLlmErrorAudit must NOT be called on happy path");
 
-    // runAgentLoopPi called exactly once with system (not systemResume)
+    // runAgentLoopPi called exactly once; operator turn uses composeOperatorSystem (not raw deps.system, not systemResume)
     assert.equal(runLoopCallCount, 1);
-    assert.equal(capturedRunLoopOpts?.system, "sys", "non-resume turn must use deps.system");
+    // P-AUTO-8: operator turns now call deps.composeOperatorSystem(liveMode) instead of deps.system directly.
+    // default state has cronEnabled=false, passiveEnabled=false → liveMode="manual" → stub returns "<SYS:manual>".
+    assert.equal(capturedRunLoopOpts?.system, "<SYS:manual>", "non-resume operator turn must use composeOperatorSystem result");
+    assert.notEqual(capturedRunLoopOpts?.system, "sys", "must NOT pass raw deps.system for operator turn post-P-AUTO-8");
+    assert.notEqual(capturedRunLoopOpts?.system, "sysResume", "must NOT pass deps.systemResume for non-resume operator turn");
   });
 });
 

@@ -12,6 +12,7 @@ import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
 import { hideEdgeRing, showEdgeRing } from "../takeover.js";
 import { reapExpiredAutoRun } from "./reaper.js";
+import { selectSystemForTurn } from "./selectSystem.js";
 
 // [P-75 D-13 dbg] file-based diagnostic
 const TURN_DBG = path.join(os.homedir(), DATA_DIR_NAME, "agent", "logs", "turn-debug.log");
@@ -162,7 +163,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     );
     await runAgentLoopPi({
       model: deps.model,
-      system: args.isWorkflowResume ? deps.systemResume : deps.system,
+      system: selectSystemForTurn(args, state, deps),
       messages: state.messages,
       tools: filteredTools,
       maxSteps: args.maxSteps ?? deps.maxSteps,

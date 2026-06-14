@@ -23,6 +23,7 @@ import { applyIdentityPatch, readIdentity } from "../../../persistence/identity.
 import { type IdentityPatch, identityPatchSchema } from "../../../persistence/identitySchema.js";
 import { readMode } from "../../../persistence/mode.js";
 import { readSearchConfig, writeSearchConfig } from "../../../persistence/search.js";
+import type { AppMode } from "../../../tauri/ui/mode.js";
 import type { ServeDeps } from "./context.js";
 
 export interface SettingsView {
@@ -175,7 +176,7 @@ export function applySettings(patch: SettingsPatch): void {
 
 // Hot-reload the per-turn-read deps (turn.ts reads deps.system/deps.model each turn). Compute BOTH into
 // locals BEFORE assigning so a resolveModel throw leaves the OLD deps fully intact (atomic).
-export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "systemResume">): {
+export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "systemResume" | "composeOperatorSystem">): {
   restartRequired: boolean;
 } {
   try {
@@ -185,16 +186,31 @@ export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "syst
     // overwrite the Auto-band system prompt with a Manual-band one, breaking Auto mode
     // until restart. Read the current mode from mode.json so Auto stays Auto.
     const currentMode = readMode();
-    const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment(currentMode)}`;
-    const newSystem = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
+    // P-AUTO-8 (M1): same split as serve.ts boot. `newSystem` carries NO mode fragment —
+    // cron's runOneTurn cron branch reads it as-is; the cron PROMPT carries the Auto
+    // fragment at cron.ts:107. `newSystemResume` keeps a fragment (currentMode at recompose
+    // time) so workflow-resume turns continue under a stable mode. The new
+    // `newComposeOperatorSystem` closure captures the FRESH `soulBandPlain` (in case
+    // `cfg.soul.override` or `identity` changed via Settings) and is used per turn by
+    // runOne.ts (operator branch) and passive.ts (always Magical).
+    const soulBandPlain = resolveSoulBand(cfg.soul.override, identity);
+    const soulBandWithMode = `${soulBandPlain}\n\n${soulModeFragment(currentMode)}`;
+    const newSystem = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBandPlain, checkpoint: CHECKPOINT });
     const newSystemResume = composeSystemPrompt({
       boundary: BOUNDARY_RESUME,
-      soul: soulBand,
+      soul: soulBandWithMode,
       checkpoint: CHECKPOINT_RESUME,
     });
+    const newComposeOperatorSystem = (mode: AppMode): string =>
+      composeSystemPrompt({
+        boundary: BOUNDARY,
+        soul: `${soulBandPlain}\n\n${soulModeFragment(mode)}`,
+        checkpoint: CHECKPOINT,
+      });
     const newModel = resolveModel({}); // may throw if the new config is invalid
     deps.system = newSystem;
     deps.systemResume = newSystemResume;
+    deps.composeOperatorSystem = newComposeOperatorSystem;
     deps.model = newModel;
     return { restartRequired: false };
   } catch (e) {

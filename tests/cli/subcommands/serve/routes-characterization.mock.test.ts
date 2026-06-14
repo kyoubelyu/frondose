@@ -141,6 +141,8 @@ function makeWorkflowDeps() {
 function makeDeps(overrides: Partial<ServeDeps> = {}): ServeDeps {
   const { ctrl } = makeWorkflowDeps();
   const emitFrame = makeSpy();
+  // P-AUTO-8 (N-1): cast tolerates the new required composeOperatorSystem field added to
+  // ServeDeps at Step 4 — matches the pattern used by turn-characterization + serve-pY4 fixtures.
   return {
     model: {} as ServeDeps["model"],
     system: "SYSTEM",
@@ -157,7 +159,7 @@ function makeDeps(overrides: Partial<ServeDeps> = {}): ServeDeps {
     emitFrame,
     emitOverlayEvent: makeSpy(),
     ...overrides,
-  };
+  } as unknown as ServeDeps;
 }
 
 function makeTurnStub() {
