@@ -797,7 +797,9 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
 
     const ctrl = createWorkflowController({ emitFrame: () => {}, writeWorkflowAudit: () => {} });
     const state = makeState();
-    const deps: import("../../../../src/cli/subcommands/serve/context.js").ServeDeps = {
+    // P-AUTO-8 (N-1): cast tolerates the new required composeOperatorSystem field added to
+    // ServeDeps at Step 4 — matches the pattern used by turn-characterization + serve-pY4 fixtures.
+    const deps = {
       model: {} as never,
       system: "SYSTEM",
       systemResume: "RESUME",
@@ -812,7 +814,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
       workflow: ctrl,
       emitFrame: makeSpy(),
       emitOverlayEvent: makeSpy(),
-    };
+    } as unknown as import("../../../../src/cli/subcommands/serve/context.js").ServeDeps;
     const handler = createRequestHandler(state, deps, {} as never, {} as never);
 
     const res = await issueRequest(handler, {
@@ -848,7 +850,9 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
 
     const ctrl = createWorkflowController({ emitFrame: () => {}, writeWorkflowAudit: () => {} });
     const state = makeState();
-    const deps: import("../../../../src/cli/subcommands/serve/context.js").ServeDeps = {
+    // P-AUTO-8 (N-1): cast tolerates the new required composeOperatorSystem field added to
+    // ServeDeps at Step 4 — matches the pattern used by turn-characterization + serve-pY4 fixtures.
+    const deps = {
       model: {} as never,
       system: "SYSTEM",
       systemResume: "RESUME",
@@ -863,7 +867,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
       workflow: ctrl,
       emitFrame: makeSpy(),
       emitOverlayEvent: makeSpy(),
-    };
+    } as unknown as import("../../../../src/cli/subcommands/serve/context.js").ServeDeps;
     const handler = createRequestHandler(state, deps, {} as never, {} as never);
 
     const res = await issueRequest(handler, {

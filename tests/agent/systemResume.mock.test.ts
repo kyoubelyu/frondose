@@ -57,7 +57,9 @@ const BOUNDARY_TS = readFileSync(join(REPO, "src/agent/systemPrompt/boundary.ts"
 const CHECKPOINT_TS = readFileSync(join(REPO, "src/agent/systemPrompt/checkpoint.ts"), "utf-8");
 const TURN_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
 // P-72 slice 7: isWorkflowResume + deps.systemResume moved to turn/runOne.ts; steerThenTrigger(prompt, true) moved to turn/steer.ts.
+// P-AUTO-8: deps.systemResume further extracted to turn/selectSystem.ts (pure helper for 3-branch system select).
 const TURN_RUN_ONE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"), "utf-8");
+const TURN_SELECT_SYSTEM_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/selectSystem.ts"), "utf-8");
 const TURN_STEER_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/steer.ts"), "utf-8");
 const CONTEXT_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/context.ts"), "utf-8");
 const SERVE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf-8");
@@ -82,8 +84,9 @@ describe("turn.ts — isWorkflowResume flag threads resume path to deps.systemRe
 
     // P-72 slice 7: isWorkflowResume + deps.systemResume moved to turn/runOne.ts (Strategy A split).
     // steerThenTrigger(prompt, true) call moved to turn/steer.ts (resumeWorkflowTurn → await steer(prompt, true)).
-    // Widen each check to OR across the original turn.ts and the relevant submodule.
-    const combinedTurnAndRunOne = TURN_TS + TURN_RUN_ONE_TS;
+    // P-AUTO-8: deps.systemResume further extracted to turn/selectSystem.ts (3-branch pure helper).
+    // Widen each check to OR across the original turn.ts and the relevant submodule(s).
+    const combinedTurnAndRunOne = TURN_TS + TURN_RUN_ONE_TS + TURN_SELECT_SYSTEM_TS;
     const combinedTurnAndSteer = TURN_TS + TURN_STEER_TS;
 
     // (1) TurnArgs gains the flag — lives in turn/runOne.ts post-split

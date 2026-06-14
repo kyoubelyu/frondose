@@ -3,6 +3,7 @@ import type { CoreMessage } from "ai";
 import type { WorkflowController } from "../../../agent/workflow/controller.js";
 import type { WorkflowSseFrame } from "../../../agent/workflow/types.js";
 import type { OverlayEvent } from "../../../overlay/eventBus.js";
+import type { AppMode } from "../../../tauri/ui/mode.js";
 import type { PassiveRateLimiter } from "../passiveRateLimit.js";
 
 export const MAX_RETRY_ATTEMPTS = 3;
@@ -126,6 +127,12 @@ export interface ServeDeps {
   model: ReturnType<typeof import("../../../agent/modelResolver.js").resolveModel> | null;
   system: string;
   systemResume: string;
+  // P-AUTO-8 (M1): per-turn 3-band system composer with the mode-fragment INSIDE Soul.
+  // Captures the current soulBandPlain at boot / `reloadAgentDeps` time. Consumed by:
+  //   - runOne.ts operator branch (non-cron, non-workflow-resume) with the LIVE mode.
+  //   - passive.ts (always Magical context).
+  // Cron + workflow-resume turns still use `deps.system` / `deps.systemResume` respectively.
+  composeOperatorSystem: (mode: AppMode) => string;
   tools: ReturnType<typeof import("../../../tools/index.js").makeAllTools>;
   maxSteps: number;
   auditWriter: ReturnType<typeof import("../../../persistence/audit.js").makeAuditWriter>;
