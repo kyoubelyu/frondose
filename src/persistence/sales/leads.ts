@@ -127,3 +127,13 @@ export function listDueFollowUps(db: DB, now: number, limit: number): LeadRow[] 
   `)
     .all(now, limit) as LeadRow[];
 }
+
+/** P-AUTO-10 (M3): id + person_name for every non-disqualified lead, for JS-side
+ *  normalized-token-set dedup at promote time. NOT scoped by account_id (live data
+ *  has the cited Marcus rows at account_id=NULL while a fresh Marcus raw_candidate
+ *  carries a real account_id, so same-account scoping would miss the collision). */
+export function getActiveLeadNames(db: DB): { id: string; personName: string }[] {
+  return db
+    .prepare(`SELECT id, person_name AS personName FROM leads WHERE stage != 'disqualified'`)
+    .all() as { id: string; personName: string }[];
+}
