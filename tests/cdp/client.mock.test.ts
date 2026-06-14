@@ -35,7 +35,16 @@ const FAKE_BORDER = [10, 20, 30, 20, 30, 40, 10, 40];
 
 // ─── T-M18 ─────────────────────────────────────────────────────────────────────
 
-test("T-M18: clickAt(selector) does getDocument + querySelectorAll + getBoxModel + 3 mouse events", async () => {
+// [P-AUTO-11 T-M18 rewrite] — original asserted exactly 3 mouse events + exact raw-center
+// coordinates; both break after P-AUTO-11 (curve emits ≥3 mouseMoved + press + release;
+// landing is jitter-offset from the raw center). Replaced with structural assertions per
+// plan §3 / §5. The DOM-resolution assertions (getDocument, querySelectorAll, getBoxModel)
+// are UNCHANGED — only the mouse-event block is rewritten.
+//
+// Raw center for FAKE_BORDER [10,20,30,20,30,40,10,40]:
+//   center_x = (10 + 30) / 2 = 20   center_y = (20 + 40) / 2 = 30
+// Jitter bound (±4 px): press/release x ∈ [16, 24], y ∈ [26, 34].
+test("T-M18: clickAt(selector) does getDocument + querySelectorAll + getBoxModel + structural mouse events", async () => {
   const mouseEvents: MouseEventCall[] = [];
   const getDocumentCalls: Array<{ depth: number }> = [];
   const querySelectorAllCalls: Array<{ nodeId: number; selector: string }> = [];
@@ -66,6 +75,8 @@ test("T-M18: clickAt(selector) does getDocument + querySelectorAll + getBoxModel
   const client = CdpClient.fromHandle(fakeHandle);
   await client.clickAt("#submit");
 
+  // ── DOM resolution assertions (UNCHANGED from original T-M18) ────────────
+
   // DOM.getDocument must be called with depth:0
   assert.equal(getDocumentCalls.length, 1, "getDocument must be called exactly once");
   assert.equal(getDocumentCalls[0]?.depth, 0, "getDocument must be called with depth:0");
@@ -80,23 +91,40 @@ test("T-M18: clickAt(selector) does getDocument + querySelectorAll + getBoxModel
   assert.equal(boxModelCalls[0]?.nodeId, 42, "getBoxModel must receive the resolved nodeId");
   assert.equal(boxModelCalls[0]?.backendNodeId, undefined, "selector path must use nodeId not backendNodeId");
 
-  // Must fire exactly 3 mouse events in order
-  assert.equal(mouseEvents.length, 3, "must dispatch exactly 3 mouse events");
-  assert.equal(mouseEvents[0]?.type, "mouseMoved");
-  assert.equal(mouseEvents[1]?.type, "mousePressed");
-  assert.equal(mouseEvents[2]?.type, "mouseReleased");
+  // ── Mouse event structural assertions (REWRITTEN for P-AUTO-11 realism) ──
 
-  // All events must use the computed center coordinates
-  for (const evt of mouseEvents) {
-    assert.equal(evt.x, 20, `event ${evt.type} x must be 20`);
-    assert.equal(evt.y, 30, `event ${evt.type} y must be 30`);
-  }
+  // (a) At least one mouseMoved precedes mousePressed (a path, not a teleport).
+  const movedEvents = mouseEvents.filter((e) => e.type === "mouseMoved");
+  const pressedEvents = mouseEvents.filter((e) => e.type === "mousePressed");
+  const releasedEvents = mouseEvents.filter((e) => e.type === "mouseReleased");
+  const firstPressIdx = mouseEvents.findIndex((e) => e.type === "mousePressed");
+  const movedBeforePress = mouseEvents.slice(0, firstPressIdx).filter((e) => e.type === "mouseMoved");
+  assert.ok(movedBeforePress.length >= 1, `at least one mouseMoved must precede mousePressed (got ${movedEvents.length} total moved; press at idx ${firstPressIdx})`);
 
-  // mousePressed and mouseReleased must have button:'left' and clickCount:1
-  assert.equal(mouseEvents[1]?.button, "left");
-  assert.equal(mouseEvents[1]?.clickCount, 1);
-  assert.equal(mouseEvents[2]?.button, "left");
-  assert.equal(mouseEvents[2]?.clickCount, 1);
+  // (b) Exactly one mousePressed and exactly one mouseReleased.
+  assert.equal(pressedEvents.length, 1, "must dispatch exactly one mousePressed");
+  assert.equal(releasedEvents.length, 1, "must dispatch exactly one mouseReleased");
+
+  // (c) The last mouseMoved, mousePressed, and mouseReleased all share ONE identical (x,y).
+  //     (The jittered target is chosen once and used for the final move + press + release.)
+  const lastMoved = movedEvents[movedEvents.length - 1];
+  const pressed = pressedEvents[0];
+  const released = releasedEvents[0];
+  assert.ok(lastMoved !== undefined && pressed !== undefined && released !== undefined, "lastMoved, pressed, released must all be present");
+  assert.equal(pressed.x, released.x, "mousePressed.x must equal mouseReleased.x");
+  assert.equal(pressed.y, released.y, "mousePressed.y must equal mouseReleased.y");
+  assert.equal(lastMoved.x, pressed.x, "last mouseMoved.x must equal mousePressed.x (same jittered target)");
+  assert.equal(lastMoved.y, pressed.y, "last mouseMoved.y must equal mousePressed.y (same jittered target)");
+
+  // (d) The shared (x,y) is within ±4 px of the raw center (20, 30) — jitter bound.
+  assert.ok(Math.abs((pressed.x ?? 0) - 20) <= 4, `mousePressed.x=${pressed.x} must be within ±4 of center 20 (range [16,24])`);
+  assert.ok(Math.abs((pressed.y ?? 0) - 30) <= 4, `mousePressed.y=${pressed.y} must be within ±4 of center 30 (range [26,34])`);
+
+  // (e) mousePressed and mouseReleased must have button:'left' and clickCount:1.
+  assert.equal(pressed.button, "left", "mousePressed must have button:'left'");
+  assert.equal(pressed.clickCount, 1, "mousePressed must have clickCount:1");
+  assert.equal(released.button, "left", "mouseReleased must have button:'left'");
+  assert.equal(released.clickCount, 1, "mouseReleased must have clickCount:1");
 });
 
 // ─── T-M19 ─────────────────────────────────────────────────────────────────────
