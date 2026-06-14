@@ -7,13 +7,45 @@
  *                Also: parseMaxSteps accepts surrounding whitespace + "42" → 42.
  *                DEFAULT_MAX_STEPS === 200.
  *
- * Gate coverage: G-P46.5.
+ * P-AUTO-12 extension — T-CronMaxSteps resolver unit tests (G-A12.3, G-A12.4) +
+ *                       T-CronNoProgress resolver unit tests (G-A12.22):
+ * T-CronMaxSteps.3 — legacy MAI_CRON_MAX_STEPS=25 honored when FRONDOSE_ unset.
+ * T-CronMaxSteps.4 — invalid FRONDOSE_CRON_MAX_STEPS falls through to default 40.
+ * T-CronNoProgress.17 — invalid FRONDOSE_CRON_NOPROGRESS_LIMIT falls through to default 10.
+ *
+ * Gate coverage: G-P46.5, G-A12.3, G-A12.4, G-A12.22.
  * No Chrome or LLM required.
  */
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { DEFAULT_MAX_STEPS, parseMaxSteps, resolveMaxSteps } from "../../src/agent/maxSteps.js";
+
+// P-AUTO-12: dynamic import of the new cron resolvers (not yet shipped by builder at Step 3).
+// The `|| null` fallback allows the scaffold to COMPILE and run; the resolver tests then FAIL
+// at runtime when the functions are null — intentional: these are Step-3 TODO assertions.
+// biome-ignore lint/suspicious/noExplicitAny: pre-builder dynamic import fallback
+let resolveCronMaxSteps: (() => number) | null = null;
+// biome-ignore lint/suspicious/noExplicitAny: pre-builder dynamic import fallback
+let resolveCronNoProgressLimit: (() => number) | null = null;
+// biome-ignore lint/suspicious/noExplicitAny: pre-builder dynamic import fallback
+let DEFAULT_CRON_MAX_STEPS: number | null = null;
+// biome-ignore lint/suspicious/noExplicitAny: pre-builder dynamic import fallback
+let DEFAULT_CRON_NOPROGRESS_LIMIT: number | null = null;
+
+before(async () => {
+  try {
+    const mod = await import("../../src/agent/maxSteps.js");
+    // biome-ignore lint/suspicious/noExplicitAny: dynamic import
+    const m = mod as any;
+    resolveCronMaxSteps = m.resolveCronMaxSteps ?? null;
+    resolveCronNoProgressLimit = m.resolveCronNoProgressLimit ?? null;
+    DEFAULT_CRON_MAX_STEPS = m.DEFAULT_CRON_MAX_STEPS ?? null;
+    DEFAULT_CRON_NOPROGRESS_LIMIT = m.DEFAULT_CRON_NOPROGRESS_LIMIT ?? null;
+  } catch {
+    // Not yet shipped — scaffolds will fail at assertion time
+  }
+});
 
 // ─── T-MaxSteps.1: resolver precedence ──────────────────────────────────────
 
@@ -121,5 +153,99 @@ describe("T-MaxSteps.2: parseMaxSteps rejects invalid inputs; accepts valid posi
         `resolveMaxSteps('${inv}') must return DEFAULT_MAX_STEPS=200 when MAI_MAX_STEPS unset`,
       );
     }
+  });
+});
+
+// ─── P-AUTO-12: T-CronMaxSteps.3 — legacy MAI_ env back-compat (G-A12.3) ─────
+
+describe("T-CronMaxSteps.3: legacy MAI_CRON_MAX_STEPS=25 is honored when FRONDOSE_CRON_MAX_STEPS unset (env shim)", () => {
+  let savedFrondose: string | undefined;
+  let savedMai: string | undefined;
+
+  before(() => {
+    savedFrondose = process.env.FRONDOSE_CRON_MAX_STEPS;
+    savedMai = process.env.MAI_CRON_MAX_STEPS;
+    delete process.env.FRONDOSE_CRON_MAX_STEPS;
+    process.env.MAI_CRON_MAX_STEPS = "25";
+  });
+
+  after(() => {
+    if (savedFrondose === undefined) delete process.env.FRONDOSE_CRON_MAX_STEPS;
+    else process.env.FRONDOSE_CRON_MAX_STEPS = savedFrondose;
+    if (savedMai === undefined) delete process.env.MAI_CRON_MAX_STEPS;
+    else process.env.MAI_CRON_MAX_STEPS = savedMai;
+  });
+
+  it("resolveCronMaxSteps() returns 25 when MAI_CRON_MAX_STEPS='25' and FRONDOSE_CRON_MAX_STEPS unset", () => {
+    // Given: FRONDOSE_CRON_MAX_STEPS not set; MAI_CRON_MAX_STEPS='25' (legacy back-compat via env.ts shim)
+    // When:  resolveCronMaxSteps() is called
+    // Then:  result is 25 (the legacy env var is honored)
+    assert.ok(resolveCronMaxSteps !== null, "resolveCronMaxSteps must be exported from maxSteps.ts (not yet shipped at Step 3)");
+    // TODO (Step 5): assert.equal(resolveCronMaxSteps(), 25)
+    assert.equal(resolveCronMaxSteps!(), 25, "resolveCronMaxSteps() must return 25 when MAI_CRON_MAX_STEPS='25'");
+  });
+});
+
+// ─── P-AUTO-12: T-CronMaxSteps.4 — invalid env falls through (G-A12.4) ────────
+
+describe("T-CronMaxSteps.4: invalid FRONDOSE_CRON_MAX_STEPS falls through to DEFAULT_CRON_MAX_STEPS=40", () => {
+  before(() => {
+    delete process.env.MAI_CRON_MAX_STEPS;
+  });
+
+  after(() => {
+    delete process.env.FRONDOSE_CRON_MAX_STEPS;
+  });
+
+  it("resolveCronMaxSteps() returns 40 for each invalid FRONDOSE_CRON_MAX_STEPS value", () => {
+    // Given: FRONDOSE_CRON_MAX_STEPS set to invalid values ("0", "-5", "abc", "1.5", "")
+    // When:  resolveCronMaxSteps() is called for each
+    // Then:  result is DEFAULT_CRON_MAX_STEPS=40 for all (parseMaxSteps rejects invalid input)
+    assert.ok(resolveCronMaxSteps !== null, "resolveCronMaxSteps must be exported (not yet at Step 3)");
+    assert.ok(DEFAULT_CRON_MAX_STEPS !== null, "DEFAULT_CRON_MAX_STEPS must be exported (not yet at Step 3)");
+    const invalids = ["0", "-5", "abc", "1.5", "", "1e3", "007", "+5", " "];
+    for (const v of invalids) {
+      process.env.FRONDOSE_CRON_MAX_STEPS = v;
+      assert.equal(
+        resolveCronMaxSteps!(),
+        40,
+        `resolveCronMaxSteps() must return 40 (DEFAULT_CRON_MAX_STEPS) when FRONDOSE_CRON_MAX_STEPS='${v}'`,
+      );
+    }
+    delete process.env.FRONDOSE_CRON_MAX_STEPS;
+    assert.equal(resolveCronMaxSteps!(), 40, "resolveCronMaxSteps() must return 40 when env unset");
+    assert.equal(DEFAULT_CRON_MAX_STEPS, 40, "DEFAULT_CRON_MAX_STEPS constant must equal 40");
+  });
+});
+
+// ─── P-AUTO-12: T-CronNoProgress.17 — invalid threshold env (G-A12.22) ────────
+
+describe("T-CronNoProgress.17: invalid FRONDOSE_CRON_NOPROGRESS_LIMIT falls through to DEFAULT_CRON_NOPROGRESS_LIMIT=10", () => {
+  before(() => {
+    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+  });
+
+  after(() => {
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
+  });
+
+  it("resolveCronNoProgressLimit() returns 10 for each invalid FRONDOSE_CRON_NOPROGRESS_LIMIT value", () => {
+    // Given: FRONDOSE_CRON_NOPROGRESS_LIMIT set to invalid values ("0", "-1", "abc", "")
+    // When:  resolveCronNoProgressLimit() is called for each
+    // Then:  result is DEFAULT_CRON_NOPROGRESS_LIMIT=10 for all
+    assert.ok(resolveCronNoProgressLimit !== null, "resolveCronNoProgressLimit must be exported (not yet at Step 3)");
+    assert.ok(DEFAULT_CRON_NOPROGRESS_LIMIT !== null, "DEFAULT_CRON_NOPROGRESS_LIMIT must be exported (not yet at Step 3)");
+    const invalids = ["0", "-1", "abc", "", "1.5", "007", "1e3"];
+    for (const v of invalids) {
+      process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT = v;
+      assert.equal(
+        resolveCronNoProgressLimit!(),
+        10,
+        `resolveCronNoProgressLimit() must return 10 (DEFAULT) when FRONDOSE_CRON_NOPROGRESS_LIMIT='${v}'`,
+      );
+    }
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
+    assert.equal(resolveCronNoProgressLimit!(), 10, "resolveCronNoProgressLimit() must return 10 when env unset");
+    assert.equal(DEFAULT_CRON_NOPROGRESS_LIMIT, 10, "DEFAULT_CRON_NOPROGRESS_LIMIT constant must equal 10");
   });
 });

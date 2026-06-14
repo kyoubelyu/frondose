@@ -112,6 +112,15 @@ export interface ServeState {
   passiveEnabled: boolean;
   autoRunId: string | null;
   lastEmittedAutoCounters?: Record<string, number> | null;
+  // P-AUTO-12 part (b): per-run no-progress tracking — in-memory only.
+  // - cronNoProgressRunId: the auto_run id currently being tracked (null
+  //   when no run is active). Used to detect a run-id change and reset.
+  // - cronNoProgressTurns: consecutive cron ticks against cronNoProgressRunId
+  //   that made NO durable funnel progress (per the four-way predicate at
+  //   plan §3.2.1) AND were NOT cooldown waits. Closes the run at
+  //   resolveCronNoProgressLimit() (default 10).
+  cronNoProgressRunId: string | null;
+  cronNoProgressTurns: number;
   lastTurnUserPrompt: string | null;
   lastFailedTurnPrompt: string | null;
   retryAttempts: number;
