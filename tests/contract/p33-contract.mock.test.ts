@@ -522,7 +522,7 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   navigate_to_url: ["url", "waitUntil"],
   present_summary: ["bullets", "nextStep", "summary", "title"],
   press: ["key"],
-  promote_candidate_to_lead: ["bypassPersonaCheck", "candidateId", "ownerMode"],
+  promote_candidate_to_lead: ["bypassPersonaCheck", "bypassScoreGate", "candidateId", "ownerMode"],
   publish_event: ["data", "type"],
   qualify_profile: ["companyName", "icp", "industry", "region", "role"],
   query_lead_globally: ["lookbackHours", "personRef"],
