@@ -142,13 +142,27 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const cronEnabledAtBoot = readMode() === "auto";
   const passiveEnabledAtBoot = (frondoseEnv("PASSIVE_SUGGEST") ?? "off").toLowerCase() === "on";
   const bootMode = modeFromState({ cronEnabled: cronEnabledAtBoot, passiveEnabled: passiveEnabledAtBoot });
-  const soulBand = `${resolveSoulBand(cfg.soul.override, identity)}\n\n${soulModeFragment(bootMode)}`;
-  const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBand, checkpoint: CHECKPOINT });
+  // P-AUTO-8 (M1): split into a fragment-free band (for `system`, consumed only by cron's
+  // runOneTurn branch — cron.ts:107 prepends soulModeFragment("auto") to the PROMPT) and a
+  // with-mode band (for `systemResume`, which keeps the boot-mode fragment so an in-flight
+  // workflow resumes under the mode it opened on). Operator turns + passive turns use the new
+  // `composeOperatorSystem` closure to compose a fresh 3-band system per turn with the fragment
+  // INSIDE the Soul band (before Checkpoint) — preserving the Boundary -> Soul -> Checkpoint
+  // invariant (CLAUDE.md §1 Product Contract).
+  const soulBandPlain = resolveSoulBand(cfg.soul.override, identity);
+  const soulBandWithMode = `${soulBandPlain}\n\n${soulModeFragment(bootMode)}`;
+  const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBandPlain, checkpoint: CHECKPOINT });
   const systemResume = composeSystemPrompt({
     boundary: BOUNDARY_RESUME,
-    soul: soulBand,
+    soul: soulBandWithMode,
     checkpoint: CHECKPOINT_RESUME,
   });
+  const composeOperatorSystem = (mode: AppMode): string =>
+    composeSystemPrompt({
+      boundary: BOUNDARY,
+      soul: `${soulBandPlain}\n\n${soulModeFragment(mode)}`,
+      checkpoint: CHECKPOINT,
+    });
   // P-APP-8: tolerant boot. A missing or invalid LLM key must not crash the sidecar.
   // resolveModelOrNull writes one actionable stderr line and returns null; Settings
   // can hydrate deps.model later through reloadAgentDeps without a restart.
@@ -283,6 +297,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     model,
     system,
     systemResume,
+    composeOperatorSystem,
     tools,
     maxSteps,
     auditWriter,

@@ -88,9 +88,11 @@ function seedConfig(over: Record<string, unknown> = {}): void {
 function jsonContains(obj: unknown, needle: string): boolean {
   return JSON.stringify(obj).includes(needle);
 }
-/** A reload-deps stub (turn.ts reads deps.system/deps.model per turn). Used by T-Reload at Step 5. */
+/** A reload-deps stub (turn.ts reads deps.system/deps.model per turn). Used by T-Reload at Step 5.
+ * P-AUTO-8 (N-1): cast tolerates the widened Pick<ServeDeps, "system"|"model"|"systemResume"|"composeOperatorSystem">
+ * that reloadAgentDeps will require after Step 4 adds the composeOperatorSystem field to ServeDeps. */
 function makeReloadDeps(): Pick<ServeDeps, "system" | "model"> {
-  return { system: "OLD", model: { __old: true } as unknown as ServeDeps["model"] };
+  return { system: "OLD", model: { __old: true } as unknown as ServeDeps["model"] } as unknown as Pick<ServeDeps, "system" | "model">;
 }
 // readConfig/readSecrets verify writes in the Step-5 assertions; makeReloadDeps stubs T-Reload (referenced now
 // so the gate-on-builder scaffold compiles cleanly while every body is still an assert.fail TODO).

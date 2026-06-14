@@ -189,9 +189,17 @@ export function createPassiveHandlers(
     // P-57f (D-DOGFOOD-06): real-time ticker feedback — passive turns were silent.
     passiveTicker(`mai · observing ${eventType}: ${passiveRefSummary(eventType, ctx)}…`);
     try {
+      // P-AUTO-8 (M1, F-2): passive analysis is ALWAYS Magical context. After the boot split
+      // removed the mode fragment from `deps.system`, reading `deps.system` would drop the
+      // system-level "You NEVER initiate outbound in Magical mode" sentence (soul.ts:167) for
+      // passive turns — which is fine for `profile-nav` (its prompt carries an explicit hard
+      // outbound prohibition) but a regression for `click` and `input` passive prompts (which
+      // don't). Using `composeOperatorSystem("magical")` here restores that system-level
+      // guardrail for all three passive event types, with the fragment INSIDE Soul (3-band
+      // invariant preserved).
       await runAgentLoop({
         model: deps.model,
-        system: deps.system,
+        system: deps.composeOperatorSystem("magical"),
         messages: passiveMessages,
         tools: deps.tools,
         maxSteps: 20,
