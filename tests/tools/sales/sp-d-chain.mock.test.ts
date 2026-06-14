@@ -80,6 +80,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       const scoreResult = (await makeScoreLeadTool(path).execute(
         {
           candidateId,
+          // P-AUTO-5: qualification required; totalScore:75 is in qualified band [60,100]
+          qualification: "qualified",
           totalScore: 75,
           confidence: 0.6,
           icpFit: "Strong",
@@ -284,7 +286,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       const { candidateId } = recResult.data;
 
       await makeScoreLeadTool(path).execute(
-        { candidateId, totalScore: 70, confidence: 0.6, nextAction: "connect_now" },
+        // P-AUTO-5: qualification required; totalScore:70 is in qualified band [60,100]
+        { candidateId, qualification: "qualified", totalScore: 70, confidence: 0.6, nextAction: "connect_now" },
         toolOpts,
       );
 

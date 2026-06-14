@@ -93,7 +93,7 @@
     {
       "name": "lead_scores",
       "type": "table",
-      "sql": "CREATE TABLE lead_scores (\n      id                       TEXT    PRIMARY KEY,\n      candidate_id             TEXT    NOT NULL REFERENCES raw_candidates(id),\n      lead_id                  TEXT    REFERENCES leads(id),\n      total_score              INTEGER NOT NULL,\n      icp_fit                  TEXT,\n      pain_hypothesis          TEXT,\n      buying_trigger           TEXT,\n      authority_level          TEXT,\n      suggested_opening_line   TEXT,\n      confidence               REAL,\n      next_action              TEXT,\n      evidence_json            TEXT,\n      method_used              TEXT,\n      model                    TEXT,\n      created_at               INTEGER NOT NULL\n    )"
+      "sql": "CREATE TABLE lead_scores (\n      id                       TEXT    PRIMARY KEY,\n      candidate_id             TEXT    NOT NULL REFERENCES raw_candidates(id),\n      lead_id                  TEXT    REFERENCES leads(id),\n      total_score              INTEGER NOT NULL,\n      icp_fit                  TEXT,\n      pain_hypothesis          TEXT,\n      buying_trigger           TEXT,\n      authority_level          TEXT,\n      suggested_opening_line   TEXT,\n      confidence               REAL,\n      next_action              TEXT,\n      evidence_json            TEXT,\n      method_used              TEXT,\n      model                    TEXT,\n      created_at               INTEGER NOT NULL\n    , icp_qualification TEXT)"
     },
     {
       "name": "lead_timeline",
@@ -176,5 +176,5 @@
       "sql": null
     }
   ],
-  "schema_version_max": 2
+  "schema_version_max": 3
 }

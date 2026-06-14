@@ -50,6 +50,8 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       const tool = makeScoreLeadTool(path);
       const result = await tool.execute({
         candidateId,
+        // P-AUTO-5: qualification required; totalScore:78 is in qualified band [60,100]
+        qualification: "qualified",
         totalScore: 78,
         confidence: 0.75,
         icpFit: "VP Sales, EMEA match",
@@ -121,6 +123,8 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       const tool = makeScoreLeadTool(path);
       const result = await tool.execute({
         candidateId: "nonexistent-id",
+        // P-AUTO-5: qualification required; totalScore:50 is in partial_match band [40,59]
+        qualification: "partial_match",
         totalScore: 50,
         confidence: 0.5,
       });
@@ -166,6 +170,8 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       const tool = makeScoreLeadTool(path);
       const result = await tool.execute({
         candidateId,
+        // P-AUTO-5: qualification required; totalScore:42 is in partial_match band [40,59]
+        qualification: "partial_match",
         totalScore: 42,
         confidence: 0.25,
         nextAction: "research_more",
@@ -270,6 +276,8 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       const result = await tool.execute({
         candidateId,
         leadId,
+        // P-AUTO-5: qualification required; totalScore:80 is in qualified band [60,100]
+        qualification: "qualified",
         totalScore: 80,
         confidence: 0.8,
       });
