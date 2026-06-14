@@ -1,7 +1,13 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
-import { DEFAULT_AUTO_RUN_MAX_CONNECTS, getCurrentAutoRun, insertAutoRun } from "../../persistence/salesDb.js";
+import {
+  countAutoLedgerByAction,
+  DEFAULT_AUTO_RUN_MAX_CONNECTS,
+  endAutoRun,
+  getCurrentAutoRun,
+  insertAutoRun,
+} from "../../persistence/salesDb.js";
 import { getSalesDb } from "./_dbHandle.js";
 
 const startAutoRunParams = z.object({
@@ -33,13 +39,25 @@ export function makeStartAutoRunTool(salesDbPath: string) {
         const db = getSalesDb(salesDbPath);
         const existing = getCurrentAutoRun(db);
         if (existing) {
-          return ok("start_auto_run", {
-            runId: existing.id,
-            startedAt: existing.startedAt,
-            maxDurationMinutes: existing.maxDurationMinutes,
-            maxConnects: existing.maxConnects,
-            resumed: true,
-          });
+          // P-AUTO-7: force-close a PAST-CAP orphan before resuming, so stale caps can't be resumed
+          // (the reaper closes on turn-end, but a fresh start_auto_run before the next turn must also
+          // self-heal). A within-budget run resumes unchanged.
+          if (Date.now() - existing.startedAt >= existing.maxDurationMinutes * 60_000) {
+            endAutoRun(db, existing.id, {
+              status: "stopped_by_agent",
+              summary: "Duration cap reached (auto-closed)",
+              counters: countAutoLedgerByAction(db, existing.id),
+            });
+            // fall through to insert a fresh row below
+          } else {
+            return ok("start_auto_run", {
+              runId: existing.id,
+              startedAt: existing.startedAt,
+              maxDurationMinutes: existing.maxDurationMinutes,
+              maxConnects: existing.maxConnects,
+              resumed: true,
+            });
+          }
         }
         const row = insertAutoRun(db, {
           maxDurationMinutes: parsed.maxDurationMinutes,
