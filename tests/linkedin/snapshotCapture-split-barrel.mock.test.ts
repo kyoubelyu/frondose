@@ -30,6 +30,7 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BARREL = join(REPO, "src/linkedin/snapshotCapture.ts");
 const FEED_LEAF = join(REPO, "src/linkedin/snapshotCapture/feedPostSynth.ts");
 const PROFILE_LEAF = join(REPO, "src/linkedin/snapshotCapture/profileSynth.ts");
+const SEARCH_LEAF = join(REPO, "src/linkedin/snapshotCapture/searchResultSynth.ts"); // P-AUTO-3 B3
 
 // ─── T-snapshotCapture.PublicSurface.1 ───────────────────────────────────────
 
@@ -63,6 +64,9 @@ describe("T-snapshotCapture.PublicSurface — all 3 public exports reachable via
       // PROFILE_SYNTH_JS
       assert.strictEqual(typeof m.PROFILE_SYNTH_JS, "string", "m.PROFILE_SYNTH_JS must be typeof 'string'");
 
+      // SEARCH_RESULT_SYNTH_JS (P-AUTO-3 B3 — third synth leaf, re-exported via the barrel)
+      assert.strictEqual(typeof m.SEARCH_RESULT_SYNTH_JS, "string", "m.SEARCH_RESULT_SYNTH_JS must be typeof 'string'");
+
       // captureCurrentSurfaceContext
       assert.strictEqual(
         typeof m.captureCurrentSurfaceContext,
@@ -79,8 +83,8 @@ describe("T-snapshotCapture.PublicSurface — all 3 public exports reachable via
       const exportedKeys = Object.keys(m).sort();
       assert.deepStrictEqual(
         exportedKeys,
-        ["FEED_POST_SYNTH_JS", "PROFILE_SYNTH_JS", "captureCurrentSurfaceContext"],
-        "barrel must expose EXACTLY 3 public exports — no private synth or helper accidentally promoted",
+        ["FEED_POST_SYNTH_JS", "PROFILE_SYNTH_JS", "SEARCH_RESULT_SYNTH_JS", "captureCurrentSurfaceContext"],
+        "barrel must expose EXACTLY 4 public exports (3 synth constants + captureCurrentSurfaceContext) — no private helper promoted",
       );
     },
   );
@@ -172,15 +176,16 @@ describe("T-snapshotCapture.NoCircular — no circular imports among the 3 snaps
 
 describe("T-snapshotCapture.LoCBudget — each file within §4.1 LoC budget (G-P72s10.2)", () => {
   it(
-    "T-snapshotCapture.LoCBudget.1: barrel ≤ 380 LoC; feedPostSynth ≤ 50 LoC; profileSynth ≤ 60 LoC (wc -l semantics: count newline chars)",
+    "T-snapshotCapture.LoCBudget.1: barrel ≤ 400 LoC; feedPostSynth ≤ 50 LoC; profileSynth ≤ 60 LoC; searchResultSynth ≤ 55 LoC (wc -l semantics)",
     () => {
-      // Given: all 3 source files exist post-split
+      // Given: all 4 source files exist (P-AUTO-3 added the searchResultSynth leaf)
       // When:  LoC measured as (text.match(/\n/g) ?? []).length for each file (wc -l semantics — slice 9 fix)
-      // Then:  barrel ≤ 380; feedPostSynth ≤ 50; profileSynth ≤ 60
+      // Then:  barrel ≤ 400 (380 → 400, +1 synth wrapper for P-AUTO-3 B3); feedPostSynth ≤ 50; profileSynth ≤ 60; searchResultSynth ≤ 55
 
       assert.ok(existsSync(BARREL), `T-snapshotCapture.LoCBudget.1: barrel must exist at ${BARREL}`);
       assert.ok(existsSync(FEED_LEAF), `T-snapshotCapture.LoCBudget.1: feedPostSynth.ts must exist at ${FEED_LEAF}`);
       assert.ok(existsSync(PROFILE_LEAF), `T-snapshotCapture.LoCBudget.1: profileSynth.ts must exist at ${PROFILE_LEAF}`);
+      assert.ok(existsSync(SEARCH_LEAF), `T-snapshotCapture.LoCBudget.1: searchResultSynth.ts must exist at ${SEARCH_LEAF}`);
 
       function wc(filePath: string): number {
         const text = readFileSync(filePath, "utf-8");
@@ -190,10 +195,11 @@ describe("T-snapshotCapture.LoCBudget — each file within §4.1 LoC budget (G-P
       const barrelLoC = wc(BARREL);
       const feedLoC = wc(FEED_LEAF);
       const profileLoC = wc(PROFILE_LEAF);
+      const searchLoC = wc(SEARCH_LEAF);
 
       assert.ok(
-        barrelLoC <= 380,
-        `T-snapshotCapture.LoCBudget.1: barrel LoC (${barrelLoC}) must be ≤ 380 (Codex D1 approved budget)`,
+        barrelLoC <= 400,
+        `T-snapshotCapture.LoCBudget.1: barrel LoC (${barrelLoC}) must be ≤ 400 (380 + P-AUTO-3 synth wrapper)`,
       );
       assert.ok(
         feedLoC <= 50,
@@ -202,6 +208,10 @@ describe("T-snapshotCapture.LoCBudget — each file within §4.1 LoC budget (G-P
       assert.ok(
         profileLoC <= 60,
         `T-snapshotCapture.LoCBudget.1: profileSynth.ts LoC (${profileLoC}) must be ≤ 60`,
+      );
+      assert.ok(
+        searchLoC <= 55,
+        `T-snapshotCapture.LoCBudget.1: searchResultSynth.ts LoC (${searchLoC}) must be ≤ 55`,
       );
     },
   );
