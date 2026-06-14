@@ -37,18 +37,37 @@ export function makeGetAutoRunStateTool(salesDbPath: string) {
   return tool({
     description:
       "Return the current Auto-mode run (status='running') with its action counters from " +
-      "the ledger, PLUS dailyOutbound (cross-run LinkedIn-safety quota + inter-outbound cooldown). " +
-      "Returns { run: null, counters: {}, dailyOutbound } when no Auto run is active. Use this " +
-      "before any outbound action in Auto mode to verify caps + the daily quota + cooldown.",
+      "the ledger (DENSIFIED — connect_sent/message_sent/follow_up_sent/comment_posted are " +
+      "always present as numbers), PLUS connectsRemaining (= run.maxConnects - counters.connect_sent, " +
+      "clamped at 0; null when run.maxConnects is null OR no run is active), PLUS dailyOutbound " +
+      "(cross-run LinkedIn-safety quota + inter-outbound cooldown). Returns " +
+      "{ run: null, counters: {connect_sent:0,message_sent:0,follow_up_sent:0,comment_posted:0}, " +
+      "connectsRemaining: null, dailyOutbound } when no Auto run is active. Use this before any " +
+      "outbound action in Auto mode to verify caps + the daily quota + cooldown.",
     parameters: getAutoRunStateParams,
     execute: async (_input) => {
       try {
         const db = getSalesDb(salesDbPath);
         const dailyOutbound = dailyOutboundSnapshot(db);
         const run = getCurrentAutoRun(db);
-        if (!run) return ok("get_auto_run_state", { run: null, counters: {}, dailyOutbound });
-        const counters = countAutoLedgerByAction(db, run.id);
-        return ok("get_auto_run_state", { run, counters, dailyOutbound });
+        // P-AUTO-9: densify the LOCAL counters so every key is always a number. The shared
+        // countAutoLedgerByAction helper is unchanged (3 other callers). Mirrors the hard
+        // click-cap gate's `counters.connect_sent ?? 0` at serve.ts:258 — same truth for the
+        // agent's advisory and the runtime block.
+        if (!run) {
+          const counters = { connect_sent: 0, message_sent: 0, follow_up_sent: 0, comment_posted: 0 };
+          return ok("get_auto_run_state", { run: null, counters, connectsRemaining: null, dailyOutbound });
+        }
+        const counters = {
+          connect_sent: 0,
+          message_sent: 0,
+          follow_up_sent: 0,
+          comment_posted: 0,
+          ...countAutoLedgerByAction(db, run.id),
+        };
+        const connectsRemaining =
+          run.maxConnects === null ? null : Math.max(0, run.maxConnects - counters.connect_sent);
+        return ok("get_auto_run_state", { run, counters, connectsRemaining, dailyOutbound });
       } catch (e) {
         return failFromError("get_auto_run_state", e);
       }
