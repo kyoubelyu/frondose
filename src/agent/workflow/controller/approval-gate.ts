@@ -1,7 +1,14 @@
 import type { WorkflowControllerDeps } from "../controller.js";
 import type { Workflow, WorkflowState } from "../types.js";
+import type { WorkflowReconcileCtx } from "./reconcile.js";
 
-export function checkApprovalGate(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, wf: Workflow, ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
+export function checkApprovalGate(
+  state: WorkflowState,
+  approvedStepIds: Set<string>,
+  deps: WorkflowControllerDeps,
+  wf: Workflow,
+  ctx: WorkflowReconcileCtx,
+): { abort: boolean } {
   if (ctx.isCronTurn || wf.approvalMode !== "manual" || state.awaitingApprovalStepId !== null) return { abort: false };
   const gateStep = wf.steps.find((s) => s.state === "in_progress" && s.requiresApproval && !approvedStepIds.has(s.id));
   if (!gateStep) return { abort: false };
@@ -24,7 +31,13 @@ export function checkApprovalGate(state: WorkflowState, approvedStepIds: Set<str
   return { abort: true };
 }
 
-export function approve(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, wf: Workflow | null, stepId: string | null): { status: number; response: unknown; resumePrompt?: string } {
+export function approve(
+  state: WorkflowState,
+  approvedStepIds: Set<string>,
+  deps: WorkflowControllerDeps,
+  wf: Workflow | null,
+  stepId: string | null,
+): { status: number; response: unknown; resumePrompt?: string } {
   const step = wf?.steps.find((s) => s.id === stepId);
   if (!wf || !step || state.awaitingApprovalStepId !== stepId) {
     return { status: 200, response: { ok: false, reason: "no_pending_approval" } };
@@ -73,7 +86,13 @@ export function approve(state: WorkflowState, approvedStepIds: Set<string>, deps
   };
 }
 
-export function decline(state: WorkflowState, deps: WorkflowControllerDeps, wf: Workflow | null, stepId: string | null, reason: string | undefined): { status: number; response: unknown; resumePrompt?: string } {
+export function decline(
+  state: WorkflowState,
+  deps: WorkflowControllerDeps,
+  wf: Workflow | null,
+  stepId: string | null,
+  reason: string | undefined,
+): { status: number; response: unknown; resumePrompt?: string } {
   const step = wf?.steps.find((s) => s.id === stepId);
   if (!wf || !step || state.awaitingApprovalStepId !== stepId) {
     return { status: 200, response: { ok: false, reason: "no_pending_approval" } };
@@ -107,7 +126,10 @@ export function decline(state: WorkflowState, deps: WorkflowControllerDeps, wf: 
 export function hasApprovedOutboundStep(state: WorkflowState, approvedStepIds: Set<string>): boolean {
   if (!state.current) return false;
   if (state.current.state === "completed" || state.current.state === "cancelled") return false;
-  if (state.current.approvalMode === "auto") return true;
+  // P-AUTO-1+2 (B-2): an auto workflow pre-approves outbound ONLY when operator-handed-off.
+  // A stale cron-created auto workflow (handoff unset) must NOT authorize here — its outbound
+  // is gated by the running auto-run (isAutoOutboundAuthorized), not the workflow approval state.
+  if (state.current.approvalMode === "auto" && state.current.handoff === true) return true;
   const inProgress = state.current.steps.find((s) => s.state === "in_progress");
   if (!inProgress || !inProgress.requiresApproval) return false;
   return approvedStepIds.has(inProgress.id);

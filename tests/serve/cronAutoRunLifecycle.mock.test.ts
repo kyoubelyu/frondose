@@ -308,11 +308,14 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
   });
 
   // ─── T-E.Cron.4 ──────────────────────────────────────────────────────────────
-  it("T-E.Cron.4 (G-PSPE.10): NO [AUTO_*] directives in task text → cron still creates row with defaults (maxDurationMinutes=480, maxConnects=null) per OQ-E11", async () => {
+  // [P-AUTO-1+2 REVISED] Old assertion: maxConnects=null when no [AUTO_CONNECTS] directive.
+  // New assertion: maxConnects=5 (DEFAULT_AUTO_RUN_MAX_CONNECTS) when no directive — cron
+  // must also use the constant, not null. [CONNECTS_USED=0/5] in cronPrompt accordingly.
+  it("T-E.Cron.4 (G-PSPE.10): NO [AUTO_*] directives in task text → cron creates row with defaults (maxDurationMinutes=480, maxConnects=5) per P-AUTO-1+2", async () => {
     // Given: cron task text with NO [AUTO_DURATION=N] or [AUTO_CONNECTS=N] tokens
     // When:  cron.tick() fires
-    // Then:  auto_runs has 1 new row with maxDurationMinutes=480 AND maxConnects=null;
-    //        cronPrompt contains [AUTO_RUN_ID=...] and [CONNECTS_USED=0/none]
+    // Then:  auto_runs has 1 new row with maxDurationMinutes=480 AND maxConnects=5 (DEFAULT);
+    //        cronPrompt contains [AUTO_RUN_ID=...] and [CONNECTS_USED=0/5]
     if (!createCronDriver || !openSalesDatabase) {
       assert.ok(false, "T-E.Cron.4: createCronDriver or openSalesDatabase not importable");
       return;
@@ -341,21 +344,23 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
       480,
       "T-E.Cron.4: default maxDurationMinutes must be 480 (no [AUTO_DURATION] directive)",
     );
+    // [P-AUTO-1+2 REVISED] was: maxConnects=null; now: maxConnects=5 (DEFAULT_AUTO_RUN_MAX_CONNECTS)
     assert.equal(
       rows[0].max_connects,
-      null,
-      "T-E.Cron.4: default maxConnects must be null (no [AUTO_CONNECTS] directive)",
+      5,
+      "T-E.Cron.4: default maxConnects must be 5 (DEFAULT_AUTO_RUN_MAX_CONNECTS) when no [AUTO_CONNECTS] directive",
     );
 
-    // cronPrompt has AUTO_RUN_ID + CONNECTS_USED=0/none
+    // cronPrompt has AUTO_RUN_ID + CONNECTS_USED=0/5 (not 0/none — default is now 5)
     const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
     assert.ok(
       cronPrompt.includes("[AUTO_RUN_ID="),
       "T-E.Cron.4: cronPrompt must contain [AUTO_RUN_ID= even without AUTO directives",
     );
+    // [P-AUTO-1+2 REVISED] was: /\[CONNECTS_USED=0\/none\]/; now: /\[CONNECTS_USED=0\/5\]/
     assert.ok(
-      /\[CONNECTS_USED=0\/none\]/.test(cronPrompt),
-      "T-E.Cron.4: cronPrompt must contain [CONNECTS_USED=0/none] when maxConnects=null",
+      /\[CONNECTS_USED=0\/5\]/.test(cronPrompt),
+      "T-E.Cron.4: cronPrompt must contain [CONNECTS_USED=0/5] when maxConnects=5 (DEFAULT)",
     );
   });
 

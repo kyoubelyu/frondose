@@ -4,7 +4,9 @@ import type { TodoStep, Workflow, WorkflowState } from "../types.js";
 import { checkApprovalGate } from "./approval-gate.js";
 import { inferStepState, stepFrame } from "./helpers.js";
 import type { TodoWriteResult, ToolResultLike } from "./types-internal.js";
-
+// biome-ignore format: file LoC budget per controller-split-shape ≤ 250
+export type WorkflowReconcileCtx = { turnId: string; isCronTurn: boolean; resolvedMode?: "manual" | "magical" | "auto" };
+// biome-ignore format: file LoC budget per controller-split-shape ≤ 250
 export function emitCompletionIfNeeded(terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, wf: Workflow): void {
   if (!wf.steps.every((s) => s.state === "completed")) return;
   wf.state = "completed";
@@ -14,7 +16,8 @@ export function emitCompletionIfNeeded(terminalWorkflowIds: Set<string>, deps: W
   deps.writeWorkflowAudit({ kind: "completed", workflowId: wf.id, finalState: "completed" });
 }
 
-export function reconcileTodoWrite(state: WorkflowState, approvedStepIds: Set<string>, terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, result: TodoWriteResult, ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
+// biome-ignore format: file LoC budget per controller-split-shape ≤ 250
+export function reconcileTodoWrite(state: WorkflowState, approvedStepIds: Set<string>, terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, result: TodoWriteResult, ctx: WorkflowReconcileCtx): { abort: boolean } {
   const now = new Date().toISOString();
   const prior = state.current;
   // [P-59 WF-1 / 5a] A todo_write is a CONTINUATION of the current workflow ONLY when it is the SAME,
@@ -58,8 +61,8 @@ export function reconcileTodoWrite(state: WorkflowState, approvedStepIds: Set<st
   const wf: Workflow = {
     id: continuationPrior === null ? `wf_${randomUUID()}` : continuationPrior.id,
     title: result.workflowTitle,
-    // [P-59 WF-1] a NEW workflow must NOT inherit a prior handoff "auto" mode — that would skip the gate.
-    approvalMode: continuationPrior === null ? (ctx.isCronTurn ? "auto" : "manual") : continuationPrior.approvalMode,
+    // biome-ignore format: file LoC budget per controller-split-shape ≤ 250
+    approvalMode: continuationPrior === null ? (ctx.isCronTurn || ctx.resolvedMode === "auto" ? "auto" : "manual") : continuationPrior.approvalMode,
     steps,
     state: "active",
     createdAt: continuationPrior === null ? now : continuationPrior.createdAt,
@@ -142,7 +145,8 @@ export function reconcileTodoWrite(state: WorkflowState, approvedStepIds: Set<st
 // ever proposing a workflow plan [D-14]. In case (b) we synthesize a minimal
 // single-step workflow "Send the saved draft" with requiresApproval=true so the
 // operator can still approve and the gate plumbing works end-to-end.
-export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowControllerDeps, ctx: { turnId: string; isCronTurn: boolean }, tr: ToolResultLike): void {
+// biome-ignore format: file LoC budget per controller-split-shape ≤ 250 (signature kept one-line)
+export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowControllerDeps, ctx: WorkflowReconcileCtx, tr: ToolResultLike): void {
   if (state.current !== null || ctx.isCronTurn) return;
   const args = (tr.args as { leadId?: string; kind?: string } | null | undefined) ?? {};
   const kind = typeof args.kind === "string" ? args.kind : "outbound";
@@ -183,7 +187,8 @@ export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowC
   });
 }
 
-export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, ctx: { turnId: string; isCronTurn: boolean }): { abort: boolean } {
+// biome-ignore format: file LoC budget per controller-split-shape ≤ 250
+export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, ctx: WorkflowReconcileCtx): { abort: boolean } {
   const wf = state.current;
   if (!wf || ctx.isCronTurn || wf.approvalMode !== "manual") return { abort: false };
   if (state.awaitingApprovalStepId !== null) return { abort: false };

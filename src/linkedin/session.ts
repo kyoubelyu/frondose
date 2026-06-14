@@ -12,6 +12,15 @@ declare module "./types.js" {
      *  Returns the current running auto_runs row (with maxConnects) and current
      *  ledger count for connect_sent. Undefined when serve wiring not applied. */
     autoRun?: () => { runId: string; maxConnects: number | null; connectSentCount: number } | null;
+    /** P-AUTO-1+2 (§3.3): fresh-snapshot daily/cooldown probe for the click-path hard gate.
+     *  Returns the remaining daily outbound quota AND the inter-outbound cooldown remaining ms,
+     *  computed at click time (NOT a stale per-turn snapshot). Undefined when serve wiring
+     *  not applied (REPL / tests). In Auto-mode outbound, a null return = fail-closed. */
+    dailyOutbound?: () => { remaining: number; cooldownRemainingMs: number } | null;
+    /** P-AUTO-1+2 (G-A2.Count): salesDb path so the click path can append the deterministic
+     *  connect_sent/success ledger row after a successful connect_send dispatch (the agent's
+     *  record_auto_action is no longer the authority for connect-type — soul.ts updated). */
+    salesDbPath?: string;
   }
 }
 
