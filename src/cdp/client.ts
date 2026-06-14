@@ -1,6 +1,7 @@
 // @ts-expect-error chrome-remote-interface ships no types; any-bleed contained via CdpHandle in types.ts (plan R-P2-01)
 import CDP from "chrome-remote-interface";
 import { waitForPageTarget } from "./launcher.js";
+import { jitter, mouseCurve } from "./mouseRealism.js";
 import { raceCdp } from "./raced.js";
 import { getSnapshot } from "./snapshot.js";
 import type {
@@ -13,6 +14,8 @@ import type {
   WaitState,
 } from "./types.js";
 import { waitForFn, waitForLoad, waitForText, waitForUrl } from "./waitFor.js";
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Quad-array center: chrome-launcher Quad: [x0,y0,x1,y1,x2,y2,x3,y3]. */
 function center(border: number[]): { x: number; y: number } {
@@ -52,6 +55,10 @@ export class CdpClient {
    *  (and applied to a client booted mid-turn), cleared at turn end. When present,
    *  raced CDP calls reject immediately on abort instead of waiting out the deadline. */
   private turnSignal?: AbortSignal;
+  /** [P-AUTO-11 M4] Last screen point the synthetic pointer landed on. Initialized
+   *  to (0,0); updated to the JITTERED landing after each completed clickAt (never
+   *  on abort — the race rejects before the assignment). NOT reset on navigate(). */
+  private lastPointerPos: { x: number; y: number } = { x: 0, y: 0 };
 
   private constructor(client: CdpHandle) {
     this.client = client;
@@ -183,28 +190,43 @@ export class CdpClient {
     }
     const arg = backendNodeId !== undefined ? { backendNodeId } : { nodeId };
     const box = await this.race(this.client.DOM.getBoxModel(arg), "DOM.getBoxModel");
-    const { x, y } = center(box.model.border);
-    await this.race(this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x, y }), "Input.mouseMoved");
+    // P-AUTO-11 (M4): human-shaped click — jittered target + curved path + press-dwell, tracking lastPointerPos.
+    const c = center(box.model.border);
+    const target = { x: jitter(c.x), y: jitter(c.y) };
+    for (const p of mouseCurve(this.lastPointerPos, target)) {
+      await this.race(this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x: p.x, y: p.y }), "Input.mouseMoved");
+      await sleep(2 + Math.random() * 6);
+    }
     await this.race(
       this.client.Input.dispatchMouseEvent({
         type: "mousePressed",
-        x,
-        y,
+        x: target.x,
+        y: target.y,
         button: "left",
         clickCount: 1,
       }),
       "Input.mousePressed",
     );
+    await sleep(40 + Math.random() * 80); // P-AUTO-11: 40-120ms human press-dwell
     await this.race(
       this.client.Input.dispatchMouseEvent({
         type: "mouseReleased",
-        x,
-        y,
+        x: target.x,
+        y: target.y,
         button: "left",
         clickCount: 1,
       }),
       "Input.mouseReleased",
     );
+    // Race-safety: the serve path uses abort-then-replace (routes/agent.ts:21-24,58 — aborts the prior
+    // turn then `void runOneTurn(...)` without awaiting), NOT TurnLock, so two clickAt on this shared
+    // session CdpClient CAN briefly overlap on an explicit operator /agent/turn interruption (Auto/cron
+    // turns are sequential and never race here). Benign because: this write runs ONLY on a fully-completed
+    // click — an aborted click rejects at its next this.race(...) (signal.aborted) before reaching here,
+    // so an interrupted click never writes lastPointerPos; JS is single-threaded so the plain reference
+    // assignment cannot tear; and lastPointerPos is a best-effort stealth hint (next click's curve origin)
+    // where a stale-but-plausible value is biometrically harmless, not a correctness or security issue.
+    this.lastPointerPos = target;
   }
 
   /** P-Y2.3: resolve an element's viewport box for the takeover highlight. Same resolution as clickAt

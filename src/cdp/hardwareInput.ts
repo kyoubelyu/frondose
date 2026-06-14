@@ -3,39 +3,15 @@
  *  unit tests; the CdpClient + CgEvent are injectable for mock tests. */
 import { type CgEvent, loadCgEvent } from "../native/cgevent.js";
 import type { CdpClient } from "./client.js";
+// P-AUTO-11: jitter/mouseCurve moved to mouseRealism.ts (dep-free) so client.ts
+// can import them without an import cycle. Import-then-export form: the import
+// creates the LOCAL binding for hardwareClickAt's bare jitter(...)/mouseCurve(...)
+// calls below; the export preserves back-compat for tests/cdp/hardwareCoords.mock.test.ts:18
+// + tests/cdp/hardwareInput.mock.test.ts:30 that import these names from this file.
+import { jitter, mouseCurve } from "./mouseRealism.js";
+export { jitter, mouseCurve };
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-/** ±max-px integer offset — humanising micro-jitter on the click target. */
-export function jitter(v: number, max = 4): number {
-  return v + Math.round((Math.random() - 0.5) * max * 2);
-}
-
-/** Pure: a bounded, target-converging step list from `from` to `to`
- *  (replaces robotjs moveMouseSmooth; D-7 — unit-testable). */
-export function mouseCurve(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-): Array<{ x: number; y: number }> {
-  const dist = Math.hypot(to.x - from.x, to.y - from.y);
-  if (dist < 1) return [to];
-  const steps = Math.max(1, Math.min(40, Math.round(dist / 30)));
-  const pts: Array<{ x: number; y: number }> = [];
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    // ease-in-out + small per-step wobble; last step lands exactly on `to`.
-    const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
-    pts.push(
-      i === steps
-        ? { x: to.x, y: to.y }
-        : {
-            x: Math.round(from.x + (to.x - from.x) * e + (Math.random() - 0.5) * 3),
-            y: Math.round(from.y + (to.y - from.y) * e + (Math.random() - 0.5) * 3),
-          },
-    );
-  }
-  return pts;
-}
 
 /** CDP key name → macOS virtual keycode. NIT-1: letters/digits included so
  *  `mapKey` is complete (the Cmd+A select-all in hardwareTypeAt uses `mapKey("A")`). */
