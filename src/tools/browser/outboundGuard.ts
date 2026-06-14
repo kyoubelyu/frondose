@@ -67,30 +67,34 @@ export function classifyOutboundLabel(label: string): OutboundClass {
   return "benign";
 }
 
+/** P-AUTO-10 (M3): the inner-cleanup chain from personNameFromInviteLabel,
+ *  exported so promote-time same-person dedup can normalize a bare name
+ *  (not just a captured invite-label group). The order is identical to the
+ *  P-75 D-11 round-4 chain and is regression-pinned by T-Norm.1.
+ *   (2) drop a trailing parenthetical ("Jane Doe (She/Her)" -> "Jane Doe")
+ *   (3) drop a trailing creds clause after the first comma
+ *   (4) drop a trailing connection-degree token end-anchored ("1st" / "2nd" / "3rd" / "1度" ...)
+ *   (5) strip glyphs that are not letters/marks/space/.'’-
+ *   (6) Unicode NFC + collapse internal whitespace + trim. */
+export function normalizePersonName(name: string): string {
+  return name
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/,\s*.*$/, "")
+    .replace(/\s+(?:1st|2nd|3rd|1度|2度|3度)$/iu, "")
+    .replace(/[^\p{L}\p{M}\s.'’\-]/gu, "")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** P-AUTO-6: extract + normalize the target person from the instant-invite label.
- *  "Invite Onder Temel to connect" → "Onder Temel". Deterministic strip order (Step-2a-r2,
- *  critic Issue-2: creds clause BEFORE degree token so "1st" inside a creds tail isn't eaten;
- *  degree-strip anchored to end-of-string so it can't fire mid-name):
- *   (1) capture the name between "Invite " and " to connect";
- *   (2) drop a trailing parenthetical ("Jane Doe (She/Her)" → "Jane Doe");
- *   (3) drop a trailing credential clause — everything after the first comma
- *       ("Jane Doe, PhD" / "Jane Doe, 1st VP" / "Jane Doe, MBA, PMP" → "Jane Doe");
- *   (4) drop a trailing connection-degree token, end-anchored, for the no-comma case
- *       ("Jane Doe 1st" → "Jane Doe");
- *   (5) strip glyphs that are not letters/marks/space/.'’- (emoji, badges, verification check);
- *   (6) Unicode NFC + collapse internal whitespace + trim.
- *  Returns null when the label is not an instant-invite ("Connect", "Send invitation"). */
+ *  "Invite Onder Temel to connect" → "Onder Temel". Returns null when the label
+ *  is not an instant-invite ("Connect", "Send invitation"). The inner cleanup
+ *  chain lives in normalizePersonName above (extracted in P-AUTO-10). */
 export function personNameFromInviteLabel(label: string): string | null {
   const m = label.match(/^Invite\s+(.+?)\s+to\s+connect\b/i);
   if (!m) return null;
   // biome-ignore lint/style/noNonNullAssertion: regex match guarantees group 1.
-  const name = m[1]!
-    .replace(/\s*\([^)]*\)\s*$/, "") // (2) trailing parenthetical e.g. "(She/Her)"
-    .replace(/,\s*.*$/, "") // (3) trailing creds clause (greedy after 1st comma)
-    .replace(/\s+(?:1st|2nd|3rd|1度|2度|3度)$/iu, "") // (4) end-anchored degree token (no-comma case)
-    .replace(/[^\p{L}\p{M}\s.'’\-]/gu, "") // (5) emoji/badge/check glyphs
-    .normalize("NFC")
-    .replace(/\s+/g, " ")
-    .trim();
+  const name = normalizePersonName(m[1]!);
   return name || null;
 }

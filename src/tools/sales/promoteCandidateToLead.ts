@@ -6,12 +6,14 @@ import { readIdentity } from "../../persistence/identity.js";
 import { getCurrentAutoRun } from "../../persistence/sales/auto-run.js";
 import {
   appendTimelineEvent,
+  getActiveLeadNames,
   getLatestScoreByCandidate,
   getLeadByCandidate,
   getRawCandidate,
   insertLead,
   setCandidateStatus,
 } from "../../persistence/salesDb.js";
+import { normalizePersonName } from "../browser/outboundGuard.js";
 import { getSalesDb } from "./_dbHandle.js";
 
 const PROMOTE_FLOOR = 40; // matches scoreLead.ts:41 warm band (40-59) + Magical suggest_card >= 40
@@ -77,6 +79,21 @@ function checkPersonaMatch(
       `evidence_summary if it's stale, or (c) call promote_candidate_to_lead with bypassPersonaCheck=true ` +
       `ONLY if the operator has explicitly confirmed the persona is on-strategy.`,
   };
+}
+
+/** P-AUTO-10 (M3): normalized name token set for soft same-person dedup at promote.
+ *  Reuses normalizePersonName (extracted from P-AUTO-6 personNameFromInviteLabel)
+ *  + tokenizeRoleQuery (icpMatcher). Empty after normalization yields an empty
+ *  Set; tokenSetEqual treats empty sets as no-signal (returns false). */
+function nameTokenSet(name: string): Set<string> {
+  return new Set(tokenizeRoleQuery(normalizePersonName(name)));
+}
+
+function tokenSetEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size === 0 || b.size === 0) return false;
+  if (a.size !== b.size) return false;
+  for (const t of a) if (!b.has(t)) return false;
+  return true;
 }
 
 /** P-SP-A: promote a scored candidate to a lead. Idempotent — if already
@@ -155,8 +172,28 @@ export function makePromoteCandidateToLeadTool(salesDbPath: string) {
           ownerMode,
         });
         setCandidateStatus(db, candidateId, "promoted");
-        appendTimelineEvent(db, { candidateId, leadId, eventType: "promoted_to_lead", metadata: { ownerMode } });
-        return ok("promote_candidate_to_lead", { leadId, candidateId, alreadyPromoted: false });
+        // P-AUTO-10 (M3): soft same-person signal — additive ONLY, never blocks. The new lead row
+        // IS already visible on this connection, so `l.id !== leadId` self-exclusion is LOAD-BEARING.
+        const candSet = nameTokenSet(candidate.personName);
+        const duplicateOf = getActiveLeadNames(db)
+          .filter((l) => l.id !== leadId && tokenSetEqual(candSet, nameTokenSet(l.personName)))
+          .map((l) => l.id);
+        const dupSignal =
+          duplicateOf.length > 0
+            ? { duplicateOf, requiresOperatorConfirm: true as const, weakMatch: candSet.size < 2 }
+            : null;
+        appendTimelineEvent(db, {
+          candidateId,
+          leadId,
+          eventType: "promoted_to_lead",
+          metadata: dupSignal ? { ownerMode, ...dupSignal } : { ownerMode },
+        });
+        return ok(
+          "promote_candidate_to_lead",
+          dupSignal
+            ? { leadId, candidateId, alreadyPromoted: false, ...dupSignal }
+            : { leadId, candidateId, alreadyPromoted: false },
+        );
       } catch (e) {
         return failFromError("promote_candidate_to_lead", e);
       }
