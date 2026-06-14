@@ -103,12 +103,12 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
 
   // ─── T-SP-D.Soul.3 ───────────────────────────────────────────────────────────
 
-  it("T-SP-D.Soul.3: when soulModeFragment('manual') is called after P-SP-D F-2 paste, it contains 'save_message_draft' + 'requiresApproval' + 'in_progress'; soulModeFragment('auto') is unchanged (still 'AUTO mode', does NOT contain 'save_message_draft')", () => {
-    // Given: src/agent/systemPrompt/soul.ts after P-SP-D Sketch A F-2 edit —
-    //        the Manual-branch return string is extended with draft-first discipline
+  it("T-SP-D.Soul.3: soulModeFragment('manual') contains 'save_message_draft' + 'requiresApproval' + 'in_progress' (F-2 draft-first); soulModeFragment('auto') contains 'AUTO mode' AND now (P-AUTO-14) 'save_message_draft' via CONVERT THE BEST", () => {
+    // Given: src/agent/systemPrompt/soul.ts after P-SP-D Sketch A F-2 edit (manual draft-first)
+    //        + P-AUTO-14 (auto CONVERT THE BEST adds promote→save_message_draft to the auto arm)
     // When:  soulModeFragment("manual") and soulModeFragment("auto") are called
     // Then:  manual fragment contains "save_message_draft" AND "requiresApproval" AND "in_progress"
-    //        auto fragment still contains "AUTO mode" and does NOT contain "save_message_draft"
+    //        auto fragment contains "AUTO mode" AND "save_message_draft" ([D-A14.1] supersedes F-2 pass-through)
 
     const manualFragment = soulModeFragment("manual");
 
@@ -126,15 +126,20 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
       "manual fragment must include in_progress (F-2 draft-first discipline, G-PSPD.2)",
     );
 
-    // Auto fragment must be unchanged (F-2 only modifies the manual branch)
+    // Auto fragment still carries the 'AUTO mode' declaration. [D-A14.1] The original P-SP-D
+    // assertion that the auto arm does NOT contain save_message_draft (it was "pass-through" at
+    // F-2 time) is SUPERSEDED by P-AUTO-14: the auto fragment's "★ CONVERT THE BEST" directive
+    // now intentionally references promote_candidate_to_lead → save_message_draft (the durable
+    // capture-then-convert step). The P-SP-D intent (F-2 only touched the MANUAL branch's
+    // draft-first discipline) is preserved by the manual assertions above.
     const autoFragment = soulModeFragment("auto");
     assert.ok(
       autoFragment.includes("AUTO mode"),
-      "auto fragment must still include 'AUTO mode' — auto arm unchanged by F-2 (G-PSPD.2)",
+      "auto fragment must still include 'AUTO mode' (G-PSPD.2)",
     );
     assert.ok(
-      !autoFragment.includes("save_message_draft"),
-      "auto fragment must NOT include save_message_draft — auto arm is pass-through (G-PSPD.2)",
+      autoFragment.includes("save_message_draft"),
+      "auto fragment now includes save_message_draft via P-AUTO-14 CONVERT THE BEST (supersedes the F-2 pass-through assertion)",
     );
   });
 });
