@@ -191,6 +191,9 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     // (frondose_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
     passiveEnabled: passiveEnabledAtBoot,
     autoRunId: null,
+    // P-AUTO-12 (b): cron no-progress tracking — in-memory only.
+    cronNoProgressRunId: null,
+    cronNoProgressTurns: 0,
     lastTurnUserPrompt: null,
     lastFailedTurnPrompt: null,
     retryAttempts: 0,
