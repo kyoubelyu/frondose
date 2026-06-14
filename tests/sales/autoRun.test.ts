@@ -14,10 +14,13 @@ import { seedAutoRun } from "./_fixtures/salesDb.js";
 
 describe("T-SP-A.AutoRun — get_auto_run_state + record_auto_action tools", () => {
   // ─── T-SP-A.AutoRun.1 ────────────────────────────────────────────────────────
-  it("T-SP-A.AutoRun.1: get_auto_run_state when no active run returns {run:null, counters:{}}", async () => {
+  // D-A9.1 (P-AUTO-9): updated assertion to match densified no-run shape.
+  // The no-run branch now returns densified counters (all 4 keys = 0) + connectsRemaining: null.
+  // Was: assert.deepStrictEqual(result.data.counters, {}, ...) — fails after P-AUTO-9 Step 4.
+  it("T-SP-A.AutoRun.1: get_auto_run_state when no active run returns {run:null, counters:<densified-zeros>, connectsRemaining:null}", async () => {
     // Given: empty auto_runs table (fresh :memory: DB)
     // When:  get_auto_run_state({}) invoked
-    // Then:  tool returns {ok:true, data:{run:null, counters:{}}}
+    // Then:  tool returns {ok:true, data:{run:null, counters:{connect_sent:0,message_sent:0,follow_up_sent:0,comment_posted:0}, connectsRemaining:null}}
     closeSalesDatabase(":memory:");
     openSalesDatabase(":memory:");
 
@@ -27,7 +30,16 @@ describe("T-SP-A.AutoRun — get_auto_run_state + record_auto_action tools", () 
     assert.ok(result.ok, "Tool must return ok:true");
     assert.strictEqual(result.command, "get_auto_run_state");
     assert.strictEqual(result.data.run, null, "run must be null when no active auto run");
-    assert.deepStrictEqual(result.data.counters, {}, "counters must be empty object");
+    assert.deepStrictEqual(
+      result.data.counters,
+      { connect_sent: 0, message_sent: 0, follow_up_sent: 0, comment_posted: 0 },
+      "D-A9.1: counters must be densified zeros in no-run branch (P-AUTO-9)",
+    );
+    assert.strictEqual(
+      result.data.connectsRemaining,
+      null,
+      "D-A9.1: connectsRemaining must be null in no-run branch (P-AUTO-9)",
+    );
   });
 
   // ─── T-SP-A.AutoRun.2 ────────────────────────────────────────────────────────
