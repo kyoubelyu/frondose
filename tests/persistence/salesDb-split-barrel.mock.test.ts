@@ -545,6 +545,10 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
     //        drafts<=75, timeline<=75, accounts<=45, scores<=40, auto-run<=165,
     //        barrel<=80 (raised from 50 by [2a-r2] for the named export type blocks)
     //        [P-AUTO-5] schema 240→250 for the v3 applyV3 migration (icp_qualification column)
+    //        [P-AUTO-13] auto-run 165→185 for countSuccessfulConnects (the success-filtered
+    //        connect-cap helper — cohesive with countAutoLedgerByAction/countOutboundSince in this
+    //        module; extracting a ~7-line count helper to a new module would be over-engineering;
+    //        182 is still far under the 800 global limit)
     const LOC_BUDGETS: Record<string, number> = {
       schema: 250,
       urlNormalize: 15,
@@ -554,7 +558,7 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
       timeline: 75,
       accounts: 45,
       scores: 40,
-      autoRun: 165,
+      autoRun: 185,
       barrel: 80,
     };
 

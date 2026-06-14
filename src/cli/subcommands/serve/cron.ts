@@ -4,6 +4,7 @@ import { soulModeFragment } from "../../../agent/systemPrompt/soul.js";
 import { callInOverlay } from "../../../overlay/inject.js";
 import {
   countAutoLedgerByAction,
+  countSuccessfulConnects,
   DEFAULT_AUTO_RUN_MAX_CONNECTS,
   endAutoRun,
   getAutoRun,
@@ -112,8 +113,11 @@ export function createCronDriver(
       state.autoRunId = activeRun.id;
     }
     const elapsedNow = Math.floor((Date.now() - activeRun.startedAt) / 60000);
-    const counters = countAutoLedgerByAction(salesDb, activeRun.id);
-    const connectsUsed = counters.connect_sent ?? 0;
+    // P-AUTO-13: success-only — matches serve.ts (hard click cap) + getAutoRunState.ts
+    // (advisory). Without this the cron prompt would say e.g. CONNECTS_USED=3 while the tool
+    // returns connectsRemaining=maxConnects-1 (1 success + 2 skipped), confusing the agent
+    // in the same turn.
+    const connectsUsed = countSuccessfulConnects(salesDb, activeRun.id);
     const capStr = activeRun.maxConnects === null ? "none" : String(activeRun.maxConnects);
     const autoRunLine = `\n[AUTO_RUN_ID=${activeRun.id}]\n[ELAPSED=${elapsedNow}/${activeRun.maxDurationMinutes}min]\n[CONNECTS_USED=${connectsUsed}/${capStr}]`;
 

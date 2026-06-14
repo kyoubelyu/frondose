@@ -131,6 +131,28 @@ export type { RefMap };
 /** The 4 frozen failure kinds per references/cli-primitives.md §Output envelope. */
 export type FailureKind = "invalid_input" | "ambiguous_target" | "not_found" | "runtime_error";
 
+/**
+ * P-AUTO-13 (M6): a machine-readable discriminator for guard-rejected failures.
+ * Carried as an OPTIONAL top-level field on CommandFailure (matching the historic
+ * `{...fail(), reason}` spread shape). Produced via the typed `failWithReason()`
+ * helper in envelope.ts (parameter-typed `reason: GuardReason`) at the nine
+ * click-path producer sites (click.ts:117/140/153/170/180/188/196/205/265).
+ * Absent for transient failures (e.g. ref_stale, page errors), which the agent
+ * classifies as result:'failed'; present for policy guard-blocks, which the
+ * agent classifies as result:'skipped' (the skip-worthy subset excludes
+ * ledger_write_failed — see soul.ts auto fragment for the contract).
+ */
+export type GuardReason =
+  | "outbound_disabled"
+  | "no_active_run"
+  | "no_daily_snapshot"
+  | "daily_quota_reached"
+  | "cooldown_active"
+  | "auto_cap_reached"
+  | "connect_note_required"
+  | "approval_required"
+  | "ledger_write_failed";
+
 /** A single ambiguity candidate (e.g. when click matches multiple labels). */
 export interface CommandCandidate {
   label?: string;
@@ -154,6 +176,12 @@ export interface CommandFailure {
     message: string;
     candidates?: CommandCandidate[];
   };
+  /** P-AUTO-13: optional guard-rejection discriminator (top-level — matches
+   *  the historic `{...fail(), reason}` spread shape, now produced via the
+   *  typed `failWithReason()` helper at click.ts:117/140/153/170/180/188/
+   *  196/205/265). Absent for transient failures; present for pre-dispatch
+   *  policy blocks and the post-dispatch ledger_write_failed case. */
+  reason?: GuardReason;
 }
 
 export type CommandEnvelope<T extends Record<string, unknown> = Record<string, unknown>> =

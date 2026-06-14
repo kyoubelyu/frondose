@@ -4,6 +4,7 @@ import {
   type CommandFailure,
   type CommandSuccess,
   type FailureKind,
+  type GuardReason,
   SURFACE_CHANGED_HINT,
 } from "./types.js";
 
@@ -32,6 +33,22 @@ export function withHint<T extends Record<string, unknown>>(
     ...envelope,
     data: { ...envelope.data, hint: SURFACE_CHANGED_HINT } as T & { hint: string },
   };
+}
+
+/**
+ * P-AUTO-13 (M6): typed producer for the guard-rejection envelope shape.
+ * Equivalent to `{ ...fail(command, kind, message), reason }` but parameter-types
+ * the discriminator against `GuardReason` so a typo at any click-path producer
+ * site fails `tsc --noEmit` at the call. Replaces the ad-hoc `{...f, reason: "X" as const}`
+ * pattern that left the discriminator unconstrained.
+ */
+export function failWithReason(
+  command: string,
+  kind: FailureKind,
+  message: string,
+  reason: GuardReason,
+): CommandFailure {
+  return { ...fail(command, kind, message), reason };
 }
 
 /** Translate a thrown Error from CdpClient/etc. into a failure envelope. */

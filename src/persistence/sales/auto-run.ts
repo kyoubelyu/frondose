@@ -72,6 +72,23 @@ export function countAutoLedgerByAction(db: DB, runId: string): Record<string, n
   return out;
 }
 
+/** P-AUTO-13: count connect_sent ledger rows that ACTUALLY SENT (result='success').
+ *  Used by the per-run cap consumers (click.ts hard gate via serve.ts; getAutoRunState
+ *  advisory; cron prompt CONNECTS_USED injection) so guard-rejected/failed connect
+ *  rows — which P-AUTO-13 now requires the agent to log — do NOT consume the connect
+ *  budget. The shared countAutoLedgerByAction stays all-rows (the end_auto_run
+ *  summary wants every attempt; its result breakdown is separate). Mirrors
+ *  countOutboundSince's result='success' filter shape. */
+export function countSuccessfulConnects(db: DB, runId: string): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM auto_run_ledger
+       WHERE run_id = ? AND action_type = 'connect_sent' AND result = 'success'`,
+    )
+    .get(runId) as { n: number };
+  return row.n;
+}
+
 // LinkedIn-safety outbound guardrails: cross-run daily quota + cooldown (bound outbound ACROSS runs/days;
 // env FRONDOSE_AUTO_DAILY_OUTBOUND_CAP / FRONDOSE_AUTO_OUTBOUND_COOLDOWN_MIN, 0 disables; hard-gated in click.ts).
 export const DEFAULT_AUTO_DAILY_OUTBOUND_CAP = 15;
