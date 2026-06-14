@@ -12,8 +12,19 @@ import { randomUUID } from "node:crypto";
 import { tool } from "ai";
 import { z } from "zod";
 import { fail, ok } from "../../linkedin/envelope.js";
+import { type Qualification, qualificationSchema } from "../../methodology/types.js";
 import { appendTimelineEvent } from "../../persistence/salesDb.js";
 import { getSalesDb } from "./_dbHandle.js";
+
+// 0-100 totalScore-consistency band, keyed by the given qualification (NOT qualifyProfile's
+// 0..1 QUALIFICATION_SCORE_MAP, which is a suggest_card confidence multiplier — different scale).
+const QUALIFICATION_BAND: Record<Qualification, { min: number; max: number }> = {
+  disqualified: { min: 0, max: 19 },
+  tracked: { min: 0, max: 39 },
+  partial_match: { min: 40, max: 59 },
+  qualified: { min: 60, max: 100 },
+  unknown: { min: 0, max: 100 },
+};
 
 const scoreLeadParams = z.object({
   candidateId: z
@@ -41,6 +52,11 @@ const scoreLeadParams = z.object({
         "40-59 warm, 60-79 hot, 80-100 priority. Reflects icpFit + buyingTrigger + authority " +
         "+ evidence quality together, not just ICP match.",
     ),
+  qualification: qualificationSchema.describe(
+    "The deterministic ICP qualification from qualify_profile " +
+      "(qualified/partial_match/tracked/unknown/disqualified). REQUIRED — the totalScore must " +
+      "be consistent with this qualification's band.",
+  ),
   icpFit: z
     .string()
     .nullable()
@@ -146,6 +162,15 @@ export function makeScoreLeadTool(salesDbPath: string) {
             `candidateId '${input.candidateId}' not found in raw_candidates — call record_raw_candidate first`,
           );
         }
+        const band = QUALIFICATION_BAND[input.qualification];
+        if (input.totalScore < band.min || input.totalScore > band.max) {
+          return fail(
+            "score_lead",
+            "invalid_input",
+            `totalScore ${input.totalScore} contradicts qualification '${input.qualification}' (expected ${band.min}-${band.max}). ` +
+              `Re-derive the qualification via qualify_profile, or set a totalScore consistent with it.`,
+          );
+        }
         const scoreId = randomUUID();
         const now = Date.now();
         // ONE atomic transaction: lead_scores INSERT + lead_timeline.scored
@@ -154,8 +179,8 @@ export function makeScoreLeadTool(salesDbPath: string) {
           db.prepare(
             `INSERT INTO lead_scores (id, candidate_id, lead_id, total_score, icp_fit,
                pain_hypothesis, buying_trigger, authority_level, suggested_opening_line,
-               confidence, next_action, evidence_json, method_used, model, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               confidence, next_action, icp_qualification, evidence_json, method_used, model, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             scoreId,
             input.candidateId,
@@ -168,6 +193,7 @@ export function makeScoreLeadTool(salesDbPath: string) {
             input.suggestedOpeningLine ?? null,
             input.confidence,
             input.nextAction ?? null,
+            input.qualification,
             input.evidenceJson ?? null,
             input.methodUsed ?? null,
             "agent", // Option B: agent is the model; no separate LLM call

@@ -47,8 +47,9 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
     }
     assert.strictEqual(tableNames.length, 9, "Must have exactly 9 tables (8 + schema_version)");
 
-    const versionRow = db.prepare("SELECT version FROM schema_version").get() as { version: number };
-    assert.strictEqual(versionRow.version, 1, "schema_version.version must be 1");
+    // P-AUTO-5: version bumped from 1 to 3 (applyV1 + applyV2 + applyV3 all run on fresh open)
+    const versionRow = db.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
+    assert.strictEqual(versionRow.version, 3, "schema_version MAX(version) must be 3 (applyV1+V2+V3 all run)");
 
     // SQLite ignores PRAGMA journal_mode=WAL for :memory: databases (WAL requires
     // a real file path). Production code correctly calls the pragma; :memory: returns
@@ -63,15 +64,16 @@ describe("T-SP-A.Schema — sales DB migration + schema invariants", () => {
 
   // ─── T-SP-A.Schema.2 ─────────────────────────────────────────────────────────
   it.skip("T-SP-A.Schema.2: idempotent re-open — calling openSalesDatabase twice does not duplicate schema_version", async () => {
-    // Given: an existing :memory: DB already at schema version 1
+    // Given: an existing :memory: DB already at schema version 3 (applyV1+V2+V3)
     // When:  openSalesDatabase is called again (returns cached handle)
-    // Then:  schema_version has exactly 1 row with version=1; no CREATE TABLE error
+    // Then:  schema_version has exactly 3 rows (v1, v2, v3); no CREATE TABLE error
+    // P-AUTO-5: migration now runs to v3 — 3 version rows expected after first open
     closeSalesDatabase(":memory:");
-    openSalesDatabase(":memory:"); // first open — runs migration
+    openSalesDatabase(":memory:"); // first open — runs migration (v1+v2+v3)
     const db2 = openSalesDatabase(":memory:"); // second call — returns from cache
-    const versions = db2.prepare("SELECT version FROM schema_version").all() as { version: number }[];
-    assert.strictEqual(versions.length, 1, "schema_version must have exactly 1 row after idempotent re-open");
-    assert.strictEqual(versions[0]!.version, 1, "version must be 1");
+    const versions = db2.prepare("SELECT version FROM schema_version ORDER BY version").all() as { version: number }[];
+    assert.strictEqual(versions.length, 3, "schema_version must have exactly 3 rows after idempotent re-open (v1+v2+v3)");
+    assert.strictEqual(versions[2]!.version, 3, "max version must be 3");
   });
 
   // ─── T-SP-A.Schema.3 ─────────────────────────────────────────────────────────

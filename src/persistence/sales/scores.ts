@@ -16,6 +16,7 @@ export interface LeadScoreRow {
   methodUsed: string | null;
   model: string | null;
   createdAt: number;
+  icpQualification: string | null;
 }
 
 export function getLatestScoreByCandidate(db: DB, candidateId: string): LeadScoreRow | null {
@@ -26,7 +27,8 @@ export function getLatestScoreByCandidate(db: DB, candidateId: string): LeadScor
            pain_hypothesis AS painHypothesis, buying_trigger AS buyingTrigger,
            authority_level AS authorityLevel,
            suggested_opening_line AS suggestedOpeningLine, confidence,
-           next_action AS nextAction, evidence_json AS evidenceJson,
+           next_action AS nextAction, icp_qualification AS icpQualification,
+           evidence_json AS evidenceJson,
            method_used AS methodUsed, model, created_at AS createdAt
     FROM lead_scores WHERE candidate_id = ? ORDER BY created_at DESC LIMIT 1
   `)
