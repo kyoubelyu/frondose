@@ -17,6 +17,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import { dirname, join } from "node:path";
+import type { Database as DB } from "better-sqlite3";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
 import { resolveModelOrNull } from "../../agent/modelResolver.js";
@@ -43,6 +44,7 @@ import {
   utcStartOfDay,
 } from "../../persistence/salesDb.js";
 import { type AppMode, modeFromState } from "../../tauri/ui/mode.js";
+import { personNameFromInviteLabel } from "../../tools/browser/outboundGuard.js";
 import type { ControlSignals } from "../../tools/index.js";
 import { makeAllTools } from "../../tools/index.js";
 import { getSalesDb } from "../../tools/sales/_dbHandle.js";
@@ -79,6 +81,51 @@ const AUDIT_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "au
 export function isAutoOutboundAuthorized(opts: { resolvedMode: AppMode; runningRun: AutoRunRow | null }): boolean {
   return opts.resolvedMode === "auto" && opts.runningRun?.status === "running";
 }
+
+/**
+ * P-AUTO-6: connect-surface integrity. Pure DB-lookup seam that decides whether a click on the
+ * search/network sidebar "Invite <Name> to connect" must be blocked because a personalized
+ * connect_note was drafted for that exact person. The sidebar invite sends with NO modal, so
+ * a note-intended draft would be silently discarded if the click went through.
+ *
+ * Returns block:true ONLY when:
+ *   - surface is "search" OR "network" (profile is the sanctioned note-modal path);
+ *   - the label parses to a non-null person name;
+ *   - that name matches a raw_candidates row (NOCASE);
+ *   - a lead exists for that candidate;
+ *   - the lead has a connect_note draft in status ∈ ('draft','approved','revised').
+ *
+ * Exported alongside isAutoOutboundAuthorized so it can be unit-tested against a seeded temp DB.
+ */
+export function connectNoteRequiredForLabel(
+  db: DB,
+  label: string,
+  surface: string,
+): { block: boolean; reason?: string } {
+  if (surface !== "search" && surface !== "network") return { block: false };
+  const name = personNameFromInviteLabel(label);
+  if (!name) return { block: false };
+  // Fail-closed over-block on homonyms (plan §4): block if ANY candidate matching the normalized
+  // name has a lead with an unsent connect_note draft. One JOIN scans ALL same-named rows so a
+  // draft on a same-named other is never missed (the prior 3 single-row .get()s checked only one).
+  const draft = db
+    .prepare(
+      `SELECT 1 FROM raw_candidates rc
+         JOIN leads l ON l.candidate_id = rc.id
+         JOIN message_drafts d ON d.lead_id = l.id
+        WHERE rc.person_name = ? COLLATE NOCASE
+          AND d.kind = 'connect_note'
+          AND d.status IN ('draft','approved','revised')
+        LIMIT 1`,
+    )
+    .get(name);
+  if (!draft) return { block: false };
+  return {
+    block: true,
+    reason: `a connect_note draft exists for "${name}", but the sidebar "Invite … to connect" sends with NO note. Open ${name}'s profile and use the Connect modal to attach the saved note — or delete/mark the draft if a note-less invite is intended.`,
+  };
+}
+
 export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // WIN-1: the port-file's parent dir holds only the chosen port (not a secret); the
   // bearer token + 127.0.0.1 bind are the guard — no chmod (cross-platform).
@@ -213,6 +260,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // P-AUTO-1+2 (G-A2.Count): wire the sales DB path so click.ts can append the
   // deterministic connect_sent/success ledger row after a successful CDP dispatch.
   session.salesDbPath = salesDbPath;
+  // P-AUTO-6: per-call (NOT cached) so a freshly saved draft is reflected immediately. Decoupled
+  // from the workflow controller (avoids the D-14 title hole + the cold-sweep null-workflow hole).
+  session.connectNoteRequiredForLabel = (label, surface) =>
+    connectNoteRequiredForLabel(getSalesDb(salesDbPath), label, surface);
   const broadcast = (frame: SseFrame): void => {
     const data = `data: ${JSON.stringify(frame)}\n\n`;
     for (const res of state.sseClients) {

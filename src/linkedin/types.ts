@@ -115,6 +115,11 @@ export interface LinkedinSession {
    *  fails — guarantees NO further outbound this session even if the durable DB block can't be
    *  written. Checked by the click-path connect_send gate before dispatch. */
   outboundDisabled?: boolean;
+  /** P-AUTO-6: connect-surface integrity. Given the clicked label + surface, return BLOCK when a
+   *  note-less instant invite (search/network sidebar "Invite <Name> to connect" — sends with NO
+   *  modal) would fire for a person who HAS an unsent connect_note draft. Optional → REPL/test/server
+   *  callers that never wire it degrade to no-op (like canClickOutbound). */
+  connectNoteRequiredForLabel?: (label: string, surface: string) => { block: boolean; reason?: string };
   clearAgentTarget?(): void;
 }
 
