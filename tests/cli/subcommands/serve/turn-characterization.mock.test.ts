@@ -169,6 +169,15 @@ before(async () => {
     },
   });
 
+  // 5b. P-AUTO-7: mock the reaper to a no-op — these tests pin runOneTurn's frame/audit behavior,
+  // not the auto-run reaper (which has its own test, tests/tools/sales/pAuto7-reaper.mock.test.ts).
+  const reaperUrl = pathToFileURL(resolve(process.cwd(), "src/cli/subcommands/serve/turn/reaper.js")).href;
+  mock.module(reaperUrl, {
+    namedExports: {
+      reapExpiredAutoRun: () => undefined,
+    },
+  });
+
   // 6. Dynamic import createTurnRunner AFTER mocks are registered.
   const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
   createTurnRunner = turnMod.createTurnRunner as typeof createTurnRunner;

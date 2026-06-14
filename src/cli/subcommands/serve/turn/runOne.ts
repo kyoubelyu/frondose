@@ -11,6 +11,7 @@ import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
 import { hideEdgeRing, showEdgeRing } from "../takeover.js";
+import { reapExpiredAutoRun } from "./reaper.js";
 
 // [P-75 D-13 dbg] file-based diagnostic
 const TURN_DBG = path.join(os.homedir(), DATA_DIR_NAME, "agent", "logs", "turn-debug.log");
@@ -315,5 +316,10 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     clearInterval(silentHangWatcher); // [P-75 D-27] stop the silent-hang watcher
     deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
+    try {
+      reapExpiredAutoRun(getSalesDb(deps.salesDbPath), state, args.isCronTurn ?? false, deps.emitFrame);
+    } catch {
+      /* P-AUTO-7: reaper/db handle must never crash turn teardown */
+    }
   }
 }
