@@ -196,6 +196,15 @@ export function makeClickTool(session: LinkedinSession) {
             return { ...f, reason: "cooldown_active" as const };
           }
         }
+        // P-AUTO-6: connect-surface integrity. The search/network sidebar "Invite <Name> to connect"
+        // sends with NO modal → a personalized connect_note for that person would be silently discarded.
+        if (LINKEDIN_OUTBOUND_SURFACES.has(clickSurface) && session.connectNoteRequiredForLabel) {
+          const verdict = session.connectNoteRequiredForLabel(clickLabel, clickSurface);
+          if (verdict.block) {
+            const f = fail("click", "invalid_input", `Note-less instant invite blocked: ${verdict.reason}`);
+            return { ...f, reason: "connect_note_required" as const };
+          }
+        }
         // [P-75 D-17] Re-validate the ref before dispatching the click. LinkedIn re-uses
         // the same DOM input across modal states (Connect overlay, New Message dialog,
         // comment composer) — backendNodeId is unchanged but the aria-label flips. Without

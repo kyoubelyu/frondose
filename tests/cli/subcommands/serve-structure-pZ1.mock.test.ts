@@ -123,16 +123,22 @@ describe("serve.ts public export contract — exactly ServeOpts + runServeSubcom
     );
 
     // (3) No other top-level export leaks — ServeOpts + runServeSubcommand + the P-AUTO-1+2
-    // `isAutoOutboundAuthorized` safety predicate (a legitimate pure seam, unit-tested in isolation;
-    // NOT a P-Z1 refactor internal — the mustNotLeak guard below still pins those out).
+    // `isAutoOutboundAuthorized` safety predicate + the P-AUTO-6 `connectNoteRequiredForLabel`
+    // seam (both are legitimate pure seams, unit-tested in isolation; NOT P-Z1 refactor
+    // internals — the mustNotLeak guard below still pins those out).
     assert.ok(
       /^export function isAutoOutboundAuthorized\b/m.test(src),
       "serve.ts must export the isAutoOutboundAuthorized predicate (P-AUTO-1+2 testable seam)",
     );
+    // P-AUTO-6: connectNoteRequiredForLabel is the 4th exported seam.
+    assert.ok(
+      /^export function connectNoteRequiredForLabel\b/m.test(src),
+      "serve.ts must export connectNoteRequiredForLabel (P-AUTO-6 testable seam) — builder must add it at Step 4",
+    );
     assert.equal(
       exportLines.length,
-      3,
-      `serve.ts must have EXACTLY 3 top-level exports (ServeOpts + runServeSubcommand + isAutoOutboundAuthorized); found ${exportLines.length}:\n  ${exportLines.join("\n  ")}`,
+      4,
+      `serve.ts must have EXACTLY 4 top-level exports (ServeOpts + runServeSubcommand + isAutoOutboundAuthorized + connectNoteRequiredForLabel); found ${exportLines.length}:\n  ${exportLines.join("\n  ")}`,
     );
 
     // (4) Explicit anti-leak guards for the symbols the refactor extracts into serve/*.ts.
