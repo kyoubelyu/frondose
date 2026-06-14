@@ -9,7 +9,7 @@ export const DEFAULT_SALES_DB_PATH = (): string => join(getHomeBase(), DATA_DIR_
 /** Current sales schema version. P-SP-A ships v1 (initial 8 tables).
  *  Future P-SP-B+ extensions bump this and add applyV2/applyV3 etc.,
  *  following the same per-step transaction pattern as memory.ts. */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 3;
 export const CURRENT_SALES_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
 
 /** Per-process singleton handle cache, keyed by path. */
@@ -62,6 +62,14 @@ function runSalesMigrations(db: DB): void {
     db.transaction(() => {
       applyV2(db);
       db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
+    })();
+  }
+  if (current < 3) {
+    // P-AUTO-5: lead_scores.icp_qualification — anchor the LLM score to the deterministic ICP
+    // qualification. Additive nullable column; SQLite ALTER ADD COLUMN is direct (no rebuild).
+    db.transaction(() => {
+      applyV3(db);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(3);
     })();
   }
 }
@@ -232,4 +240,8 @@ function applyV2(db: DB): void {
   } finally {
     db.pragma("foreign_keys = ON");
   }
+}
+
+function applyV3(db: DB): void {
+  db.exec("ALTER TABLE lead_scores ADD COLUMN icp_qualification TEXT");
 }

@@ -388,7 +388,8 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     const db = openSalesDatabase(tmpPath);
 
     const row = db.prepare("SELECT MAX(version) AS maxVersion FROM schema_version").get() as { maxVersion: number };
-    assert.strictEqual(row.maxVersion, 2, "schema_version MAX(version) must be 2 — both applyV1 and applyV2 must have run");
+    // P-AUTO-5: applyV3 added (icp_qualification column) — max version is now 3
+    assert.strictEqual(row.maxVersion, 3, "schema_version MAX(version) must be 3 — applyV1 + applyV2 + applyV3 must have run");
 
     closeSalesDatabase(tmpPath);
     try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
@@ -493,10 +494,11 @@ describe("T-P72s4.Importer — representative importer sample compiles and resol
     // Instead, verify the key symbol (CURRENT_SCHEMA_VERSION) directly via the barrel:
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
     const barrelForSchemaCheck = await import("../../src/persistence/salesDb.js") as Record<string, any>;
+    // P-AUTO-5: CURRENT_SCHEMA_VERSION bumped from 1 to 3 (reflects actual max after applyV3)
     assert.strictEqual(
       barrelForSchemaCheck.CURRENT_SCHEMA_VERSION,
-      1,
-      "CURRENT_SCHEMA_VERSION must be 1 via barrel (R6 enforcement — salesDb.schema.test.ts imports this)",
+      3,
+      "CURRENT_SCHEMA_VERSION must be 3 via barrel (P-AUTO-5 bump — runner now reaches v3)",
     );
     assert.strictEqual(typeof barrelForSchemaCheck.closeSalesDatabase, "function",
       "closeSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)");
@@ -539,11 +541,12 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
   it("T-P72s4.LoCBudget.1: when all 10 files (9 modules + barrel) are on disk, each is within its §3.1 LoC budget", () => {
     // Given: the 9 modules under src/persistence/sales/ + the barrel src/persistence/salesDb.ts
     // When:  fs.readFileSync(path).split('\n').length is computed for each
-    // Then:  schema<=240, url-normalize<=15, raw-candidates<=90, leads<=140,
+    // Then:  schema<=250, url-normalize<=15, raw-candidates<=90, leads<=140,
     //        drafts<=75, timeline<=75, accounts<=45, scores<=40, auto-run<=165,
     //        barrel<=80 (raised from 50 by [2a-r2] for the named export type blocks)
+    //        [P-AUTO-5] schema 240→250 for the v3 applyV3 migration (icp_qualification column)
     const LOC_BUDGETS: Record<string, number> = {
-      schema: 240,
+      schema: 250,
       urlNormalize: 15,
       rawCandidates: 90,
       leads: 140,

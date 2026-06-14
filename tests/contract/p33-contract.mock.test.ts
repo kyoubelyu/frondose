@@ -535,7 +535,8 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   schedule_follow_up: ["dueAt", "leadId", "nextAction"],
   schedule_task: ["cron_expr", "task"],
   score_account: ["accountScore", "candidateId", "companySize", "currentPainHypothesis", "evidence", "industry", "linkedinUrl", "name", "region"],
-  score_lead: ["authorityLevel", "buyingTrigger", "candidateId", "confidence", "evidenceJson", "icpFit", "leadId", "methodUsed", "nextAction", "painHypothesis", "suggestedOpeningLine", "totalScore"],
+  // P-AUTO-5: "qualification" added (required param — ICP qualification anchors the score)
+  score_lead: ["authorityLevel", "buyingTrigger", "candidateId", "confidence", "evidenceJson", "icpFit", "leadId", "methodUsed", "nextAction", "painHypothesis", "qualification", "suggestedOpeningLine", "totalScore"],
   screenshot: ["out"],
   scroll: ["amount", "direction"],
   search_memory: ["limit", "query"],

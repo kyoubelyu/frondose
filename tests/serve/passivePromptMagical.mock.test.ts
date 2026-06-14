@@ -168,8 +168,10 @@ describe("T-SP-C.Passive — buildPassivePrompt Magical-mode profile-nav branch 
       // Scope all searches to the `buildPassivePrompt` function body.
       const fnStart = PASSIVE_SRC.indexOf("function buildPassivePrompt");
       assert.ok(fnStart >= 0, "passive.ts must contain buildPassivePrompt function");
-      // Extract 5000 chars of the function body (profile-nav + click + input all within)
-      const fnBody = PASSIVE_SRC.slice(fnStart, fnStart + 5000);
+      // Extract the function body (profile-nav + click + input all within). Window widened
+      // 5000→7000 for P-AUTO-5: the Magical profile-nav branch gained a `qualify_profile`
+      // Step 2b, shifting the (later) input branch past the old 5000-char window.
+      const fnBody = PASSIVE_SRC.slice(fnStart, fnStart + 7000);
 
       // Click branch within buildPassivePrompt
       const clickBranchOffset = fnBody.indexOf('if (eventType === "click")');
