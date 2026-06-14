@@ -1,11 +1,13 @@
 import type { CdpClient } from "../cdp/client.js";
+import { inferSurface } from "./scopeResolver.js";
 import { FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
-import { inferSurface } from "./scopeResolver.js";
+import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
 import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
 
 export * from "./snapshotCapture/feedPostSynth.js";
 export * from "./snapshotCapture/profileSynth.js";
+export * from "./snapshotCapture/searchResultSynth.js";
 
 interface FeedPostRaw {
   author: string;
@@ -19,6 +21,12 @@ interface ProfileCardRaw {
   company: string | null;
   location: string | null;
   connections: string | null;
+}
+
+interface SearchResultRaw {
+  slug: string;
+  name: string;
+  profileUrl: string;
 }
 
 // Mark visible overlay items with a transient data-attr (DOM query is NOT subject to the AX-tree
@@ -140,6 +148,10 @@ export async function captureCurrentSurfaceContext(client: CdpClient): Promise<C
     entries.push(...synth);
   } else if (surface === "feed") {
     entries.push(...(await synthesizeFeedPostEntries(client))); // P-37 B4
+  } else if (surface === "search" || surface === "network") {
+    // P-AUTO-3 (B3): synthesize person entries on the search + network discovery
+    // surfaces. unshift so synthetic rows lead the list and survive MAX_TEXT truncation.
+    entries.unshift(...(await synthesizeSearchResultEntries(client)));
   } else if (surface === "profile") {
     // P-47 G-3 (OQ-3): PREPEND the structured profile entries at index 0 so
     // they lead the text list ahead of the ~15 nav/sidebar entries and survive
@@ -273,6 +285,18 @@ async function synthesizeFeedPostEntries(client: CdpClient): Promise<SnapshotEnt
     role: "feedPost",
     name: p.profileUrl ? `Post by ${p.author} (${p.profileUrl}): ${p.headline}` : `Post by ${p.author}: ${p.headline}`,
   }));
+}
+
+/** P-AUTO-3 (B3): synthesize person entries on the search + network discovery surfaces. */
+async function synthesizeSearchResultEntries(client: CdpClient): Promise<SnapshotEntry[]> {
+  let rows: SearchResultRaw[] = [];
+  try {
+    rows = JSON.parse(await client.evaluate<string>(SEARCH_RESULT_SYNTH_JS)) as SearchResultRaw[];
+  } catch {
+    return [];
+  }
+  // name embeds the /in/ URL → agent records WITHOUT navigating, and role::name dedupe is URL-unique.
+  return rows.map((r, i) => ({ ref: `@sr${i}`, role: "searchResult", name: `${r.name} — ${r.profileUrl}` }));
 }
 
 /** P-47 G-3: synthesize structured profile-card entries from the profile DOM.
