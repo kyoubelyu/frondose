@@ -35,6 +35,9 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { closeSalesDatabase, openSalesDatabase } from "../../../src/persistence/salesDb.js";
 import { makeMarkMessageSentTool } from "../../../src/tools/sales/markMessageSent.js";
@@ -52,6 +55,35 @@ function tmpPath(): string {
 /** Minimal Vercel tool execute options. */
 const toolOpts = { messages: [] as never[], toolCallId: "test" };
 
+/**
+ * P-AUTO-15b MR-2+MR-3 (Step 3, 2026-06-15): temp-HOME isolation helper.
+ * The new QS-7.a evidence gate in promoteCandidateToLead reads readIdentity()
+ * from the operator's actual config.json, making tests non-deterministic if the
+ * operator has a targetRole ICP configured. This helper seeds a no-ICP identity
+ * so the QS-7.a gate skips (mirrors tests/tools/methodology/qualifyProfile.mock.test.ts:40-44).
+ */
+function setupNoIcpHome(): { restore: () => void } {
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-spd-chain-home-"));
+  const origHome = process.env.HOME;
+  const origHomeBase = process.env.MAI_HOME_BASE;
+  process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
+  mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
+  writeFileSync(
+    join(tmpHome, ".frondose", "agent", "config.json"),
+    JSON.stringify({ identity: { fullName: "Test BD", role: "BD", icp: { targetRole: [] } }, updatedAt: new Date().toISOString() }),
+  );
+  return {
+    restore: () => {
+      if (origHome !== undefined) process.env.HOME = origHome;
+      else delete process.env.HOME;
+      if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
+      else delete process.env.MAI_HOME_BASE;
+      rmSync(tmpHome, { recursive: true, force: true });
+    },
+  };
+}
+
 describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () => {
   // ─── T-SP-D.Chain.1 ──────────────────────────────────────────────────────────
 
@@ -61,6 +93,11 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
     // Then:  lead_timeline has discovered, scored, promoted_to_lead, message_sent, connect_sent (in order);
     //        message_drafts.status='sent'; leads.stage='connect_sent'
 
+    // P-AUTO-15b MR-2+MR-3 (Step 3, 2026-06-15): isolate readIdentity() to no-ICP config so
+    // QS-7.a gate skips (evidence gate only fires when ICP targetRole is configured).
+    // Also supply evidenceJson on score_lead (QS-5 requires it for totalScore>=40)
+    // and evidenceSummary on record_raw_candidate (so QS-7.a gate has signal if ICP were present).
+    const { restore: restoreChain1Home } = setupNoIcpHome();
     const path = tmpPath();
     const db = openSalesDatabase(path);
     try {
@@ -70,6 +107,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
           personName: "Alice Example",
           profileUrl: "https://www.linkedin.com/in/alice-example/",
           source: "profile-nav",
+          bypassIdentityCheck: true, // no session in chain test
+          evidenceSummary: "VP Sales at Acme — scaling outbound", // P-AUTO-15b: supply evidence for QS-7.a
         },
         toolOpts,
       )) as { ok: boolean; data: { candidateId: string } };
@@ -88,6 +127,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
           painHypothesis: "Scaling outbound without headcount",
           nextAction: "connect_now",
           methodUsed: "pain_chain",
+          // P-AUTO-15b MR-2: add evidenceJson — QS-5 gate requires it for totalScore>=40
+          evidenceJson: '{"role":"VP Sales","icpFit":"Strong","source":"chain1-fixture"}',
         },
         toolOpts,
       )) as { ok: boolean };
@@ -154,6 +195,7 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
         "leads.stage must be 'connect_sent' after update_lead_stage (G-PSPD.6)",
       );
     } finally {
+      restoreChain1Home(); // P-AUTO-15b MR-3: restore HOME after Chain.1
       closeSalesDatabase(path);
     }
   });
@@ -270,6 +312,9 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
     // When:  mark_message_sent({draftId}) is called a second time with the same draftId
     // Then:  returns {ok:false, error:{kind:"invalid_input", message: /already sent/}}
 
+    // P-AUTO-15b MR-2+MR-3 (Step 3, 2026-06-15): isolate readIdentity() to no-ICP config
+    // so QS-7.a gate skips. Add evidenceJson (QS-5) and evidenceSummary (QS-7.a) to fixture.
+    const { restore: restoreChain4Home } = setupNoIcpHome();
     const path = tmpPath();
     openSalesDatabase(path);
     try {
@@ -279,6 +324,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
           personName: "Dave Fixture",
           profileUrl: "https://www.linkedin.com/in/dave-fixture/",
           source: "search",
+          bypassIdentityCheck: true,
+          evidenceSummary: "VP Sales at TestCo — chain4 fixture", // P-AUTO-15b: supply evidence
         },
         toolOpts,
       )) as { ok: boolean; data: { candidateId: string } };
@@ -287,7 +334,8 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
 
       await makeScoreLeadTool(path).execute(
         // P-AUTO-5: qualification required; totalScore:70 is in qualified band [60,100]
-        { candidateId, qualification: "qualified", totalScore: 70, confidence: 0.6, nextAction: "connect_now" },
+        // P-AUTO-15b MR-2: add evidenceJson — QS-5 gate requires it for totalScore>=40
+        { candidateId, qualification: "qualified", totalScore: 70, confidence: 0.6, nextAction: "connect_now", evidenceJson: '{"role":"VP Sales","source":"chain4-fixture"}' },
         toolOpts,
       );
 
@@ -330,6 +378,7 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
         "error.message must match /already sent/ (per markMessageSent.ts:25, G-PSPD.8)",
       );
     } finally {
+      restoreChain4Home(); // P-AUTO-15b MR-3: restore HOME after Chain.4
       closeSalesDatabase(path);
     }
   });

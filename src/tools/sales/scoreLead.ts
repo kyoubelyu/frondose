@@ -171,6 +171,47 @@ export function makeScoreLeadTool(salesDbPath: string) {
               `Re-derive the qualification via qualify_profile, or set a totalScore consistent with it.`,
           );
         }
+        // QS-5 (P-AUTO-15b): qualified band requires machine-auditable evidenceJson.
+        // The gate fires only for totalScore >= 40 (qualified/partial_match band);
+        // thin cold scores (<40) may legitimately have no evidence.
+        if (input.totalScore >= 40) {
+          if (input.evidenceJson == null || input.evidenceJson.length === 0) {
+            return fail(
+              "score_lead",
+              "invalid_input",
+              `totalScore ${input.totalScore} (>= 40, qualified band) requires evidenceJson — ` +
+                "a JSON-stringified object/array of the facts you cited (role, recentPost, connections, headline). " +
+                "Re-inspect the profile and supply evidence, or lower the totalScore below 40.",
+            );
+          }
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(input.evidenceJson);
+          } catch {
+            return fail(
+              "score_lead",
+              "invalid_input",
+              "evidenceJson is not valid JSON. Pass a JSON-stringified object like " +
+                '\'{"role":"VP Sales","recentPost":"hiring SDRs"}\'.',
+            );
+          }
+          if (parsed === null || typeof parsed !== "object") {
+            return fail(
+              "score_lead",
+              "invalid_input",
+              `evidenceJson must parse to a non-null object or array — got ${typeof parsed}. ` +
+                'Cite the facts as keyed properties (e.g. \'{"role":"VP Sales"}\').',
+            );
+          }
+        }
+        // QS-6 (P-AUTO-15b): thinness clamp. When the score lacks both machine-auditable
+        // evidence AND a buyingTrigger, confidence cannot meaningfully exceed 0.4.
+        // (For totalScore >= 40 the QS-5 gate above guarantees evidenceJson is present,
+        // so this clamp's null-evidence branch is unreachable in the qualified band.)
+        const evidenceJsonPresent = input.evidenceJson != null && input.evidenceJson.length > 0;
+        const buyingTriggerPresent = input.buyingTrigger != null && input.buyingTrigger.length > 0;
+        const confidence =
+          !evidenceJsonPresent && !buyingTriggerPresent ? Math.min(input.confidence, 0.4) : input.confidence;
         const scoreId = randomUUID();
         const now = Date.now();
         // ONE atomic transaction: lead_scores INSERT + lead_timeline.scored
@@ -191,7 +232,7 @@ export function makeScoreLeadTool(salesDbPath: string) {
             input.buyingTrigger ?? null,
             input.authorityLevel ?? null,
             input.suggestedOpeningLine ?? null,
-            input.confidence,
+            confidence,
             input.nextAction ?? null,
             input.qualification,
             input.evidenceJson ?? null,
@@ -205,7 +246,7 @@ export function makeScoreLeadTool(salesDbPath: string) {
             candidateId: input.candidateId,
             leadId: input.leadId ?? null,
             eventType: "scored",
-            metadata: { scoreId, totalScore: input.totalScore, confidence: input.confidence },
+            metadata: { scoreId, totalScore: input.totalScore, confidence },
           });
           db.prepare(`UPDATE raw_candidates SET status='scored', latest_score_id=?, last_seen_at=? WHERE id=?`).run(
             scoreId,
