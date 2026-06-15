@@ -28,10 +28,40 @@ export const TEXT_ROLES = new Set([
   "searchResult",
 ]);
 
+// P-AUTO-15a (CAP-3 (b)): person-bearing roles whose names may embed a /in/<slug>
+// URL. When the URL is recoverable, dedup keys on `${role}::${slug}` so two
+// same-name distinct people both survive. Fallback to `${role}::${name}` when
+// no URL is recoverable (rare — feed posts whose actor anchor doesn't carry an
+// /in/ link; profileCard names which embed headline not URL).
+export const PERSON_BEARING_ROLES = new Set(["searchResult", "feedPost", "profileCard"]);
+
+// Match an embedded LinkedIn /in/<slug> URL inside a person-bearing entry name.
+// Accepts absolute (https://www.linkedin.com/in/<slug>/) AND relative (/in/<slug>).
+const PROFILE_URL_RE = /\/in\/([A-Za-z0-9._%-]+)/;
+
+export function extractProfileUrl(name: string): string | null {
+  const m = name.match(PROFILE_URL_RE);
+  return m?.[1] ? m[1].toLowerCase() : null;
+}
+
+export function dedupKeyFor(e: SnapshotEntry): string {
+  if (PERSON_BEARING_ROLES.has(e.role)) {
+    const slug = extractProfileUrl(e.name);
+    if (slug) return `${e.role}::${slug}`;
+  }
+  return `${e.role}::${e.name}`;
+}
+
 const MAX_BUTTONS = 12;
 const MAX_INPUTS = 12;
 const MAX_TEXT = 40;
 const TEXT_TRUNCATE = 180;
+// P-AUTO-15a (CAP-3 (c)): safety upper bound on person-bearing text entries.
+// Well above any real surface's upstream synth caps (FEED_POST_CAP=15 +
+// searchResultSynth internal cap=10 + profile's small fixed count). Unreachable
+// in practice; exists only to prevent a synthetic/runaway context from emitting
+// unboundedly.
+const MAX_PERSON_HARD = 60;
 
 // P-46 D-3: composer-surface detection. Predicates ported from
 // mai-linkedin/src/runtime/predicates/composer.ts — match the post-composer
@@ -125,13 +155,13 @@ export const AVAILABLE_SCOPES_BY_SURFACE: Record<LinkedInSurface, string[]> = {
 export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string): InspectSummary {
   const seen = new Set<string>();
   const dedupe = (e: SnapshotEntry): boolean => {
-    const k = `${e.role}::${e.name}`;
+    const k = dedupKeyFor(e);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   };
 
-  const filteredEntries = scope ? filterByScope(ctx.entries, scope) : ctx.entries;
+  const filteredEntries = scope ? filterEntriesByScope(ctx.entries, scope) : ctx.entries;
   const deduped = filteredEntries.filter(dedupe);
 
   // P-46 D-3 (OQ-3): when a composer is open, promote composer buttons (esp.
@@ -174,10 +204,27 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
     .slice(0, MAX_INPUTS)
     .map((e) => ({ ref: e.ref, label: e.name }));
 
-  const text = deduped
-    .filter((e) => TEXT_ROLES.has(e.role) && e.name.length > 0)
-    .slice(0, MAX_TEXT)
-    .map((e) => (e.name.length > TEXT_TRUNCATE ? `${e.name.slice(0, TEXT_TRUNCATE)}…` : e.name));
+  // P-AUTO-15a (CAP-3 (c)+(d)): person-first-uncapped partition. Person-bearing
+  // text entries get FIRST-CLAIM access to the text budget bounded only by the
+  // safety cap MAX_PERSON_HARD. Non-person entries fill the REMAINDER of MAX_TEXT.
+  // When something is dropped (shown < visible), append a synthetic diagnostic
+  // hint entry as an EXTRA slot beyond MAX_TEXT (does NOT consume a real-entry
+  // slot). Invariant: person_shown ≥ what the old text.slice(0, MAX_TEXT) would
+  // have surfaced, for every input (post-dedup, post-scope-filter).
+  const textEligible = deduped.filter((e) => TEXT_ROLES.has(e.role) && e.name.length > 0);
+  const personEligible = textEligible.filter((e) => PERSON_BEARING_ROLES.has(e.role));
+  const nonPersonEligible = textEligible.filter((e) => !PERSON_BEARING_ROLES.has(e.role));
+  const personShown = personEligible.slice(0, MAX_PERSON_HARD);
+  const nonPersonBudget = Math.max(0, MAX_TEXT - personShown.length);
+  const nonPersonShown = nonPersonEligible.slice(0, nonPersonBudget);
+  const renderText = (e: SnapshotEntry) =>
+    e.name.length > TEXT_TRUNCATE ? `${e.name.slice(0, TEXT_TRUNCATE)}…` : e.name;
+  const text = [...personShown.map(renderText), ...nonPersonShown.map(renderText)];
+  const visibleCount = textEligible.length;
+  const shownCount = text.length; // real entries only; hint not yet appended
+  if (shownCount < visibleCount) {
+    text.push(`[diagnostic] ${visibleCount} entries visible, ${shownCount} shown — scroll/refine to see more`);
+  }
 
   // P-46 D-3 (OQ-4): composerModal is a runtime-conditional scope — list it only
   // when composer signals are actually present (per inspect-contract.md).
@@ -200,8 +247,11 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
 }
 
 /** P-46 D-3: scope filter. `composerModal` → composer buttons + composer text
- *  input only. All other scopes keep the P-3 no-op behavior (full entry set). */
-function filterByScope(entries: SnapshotEntry[], scope: string): SnapshotEntry[] {
+ *  input only. All other scopes keep the P-3 no-op behavior (full entry set).
+ *  P-AUTO-15a: exported as `filterEntriesByScope` so the inspect tool can reuse
+ *  the SAME scope filter when deriving full:true diagnostics (N2 fix — keeps
+ *  the scoped count consistent with the scoped set the partition observed). */
+export function filterEntriesByScope(entries: SnapshotEntry[], scope: string): SnapshotEntry[] {
   if (scope === "composerModal") {
     return entries.filter((e) => isComposerButtonEntry(e) || isComposerInputEntry(e));
   }

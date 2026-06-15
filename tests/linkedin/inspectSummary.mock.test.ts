@@ -1,9 +1,39 @@
 /**
  * P-3 mock tests — T-M46..T-M49: InspectSummary building.
  * P-46 mock tests — T-Inspect.1–6, T-Contract.1: composer surface + D-3 fix + contract.
+ * P-AUTO-15a Step 3 — T-A15a.5..T-A15a.17 scaffolds (all intentionally fail until Step 4)
  *
  * Tests buildInspectSummary(), deduplication, slicing limits, and scope handling.
  * No Chrome or LLM required.
+ *
+ * N1 audit (validator-owned per plan §4):
+ *   Line ~123: expect(summary.text.length).toBeLessThanOrEqual(40) [T-M48]
+ *     Fixture: 12 staticText + 1 long staticText = 12 non-person text entries.
+ *     Under new partition: 0 person entries; nonPersonBudget = 40; all 12 emitted; shown=12=visible.
+ *     No hint fires. VERDICT: RETAIN — non-truncating input, assertion remains valid.
+ *   Line ~433: expect(summary.text.length).toBeLessThanOrEqual(40) [T-Profile.2]
+ *     Fixture: 2 profileCard + 50 staticText.
+ *     Under new partition: 2 person entries (profileCard) emitted first; nonPersonBudget=38;
+ *     38 of 50 staticText emitted; shown=40=MAX_TEXT; visible=52; hint fires (40<52).
+ *     BUT: the assert is text.length<=40 BEFORE hint. Post hint: text.length=41.
+ *     WAIT — re-check: the hint is EXTRA slot beyond MAX_TEXT, so text.length becomes 41.
+ *     HOWEVER: this fixture (2 profileCard ∈ PERSON_BEARING_ROLES, 50 staticText) →
+ *     personShown=2, nonPersonBudget=38, nonPersonShown=38 staticText; shown=40, visible=52.
+ *     40 < 52 → hint fires → text.length = 41. The <= 40 assertion WILL BREAK.
+ *     BUT: profileCard names do NOT embed /in/<slug> (format: "Jane Doe — VP Sales at Acme").
+ *     Under dedupKeyFor: profileCard falls back to role::name (no slug recoverable).
+ *     The 2 profileCard entries ARE in PERSON_BEARING_ROLES → go into personShown.
+ *     personShown=2; nonPersonBudget=38; 38 of 50 staticText emitted; 12 staticText dropped.
+ *     shown=40, visible=52 → 40<52 → hint fires → text.length=41.
+ *     VERDICT: TRUNCATING — the hint fires; text.length becomes 41. The <= 40 assertion
+ *     at line ~433 will break after Step 4. RETAIN AS-IS NOW (pre-Step 4 it still passes).
+ *     At Step 5 validator will update the bound to: summary.text.length <= 41 (max: 40 real + 1 hint).
+ *
+ *   FINAL N1 VERDICTS:
+ *     T-M48 line ~123 (12 staticText fixture): RETAIN — non-truncating; hint does not fire.
+ *     T-Profile.2 line ~433 (2 profileCard + 50 staticText fixture): UPDATE AT STEP 5
+ *       — truncating; hint fires; bound changes from <= 40 to <= 41.
+ *       (The existing test body also asserts text.length >= 2, which remains valid.)
  */
 
 import assert from "node:assert/strict";
@@ -429,8 +459,11 @@ describe("T-Profile.2 (G-P47.4): profileCard entries are at top of text[] and su
 
     const summary = buildInspectSummary(ctx);
 
-    // (d) text.length ≤ 40 (MAX_TEXT cap respected)
-    assert.ok(summary.text.length <= 40, `T-Profile.2: text.length (${summary.text.length}) must be ≤ 40`);
+    // (d) text.length ≤ 41 [D-15a / N1 update]: fixture is 2 profileCard + 50 staticText.
+    //     Under the person-first partition: personShown=2, nonPersonBudget=38, nonPersonShown=38 staticText;
+    //     shown=40, visible=52; 40<52 → hint fires → text.length=41 (40 real + 1 hint as EXTRA slot).
+    //     Old bound was ≤40 (pre-15a, no hint). Updated to ≤41 at Step 5 per plan §4 N1 rule: TRUNCATING fixture.
+    assert.ok(summary.text.length <= 41, `T-Profile.2: text.length (${summary.text.length}) must be ≤ 41 [D-15a / N1]`);
     assert.ok(summary.text.length >= 2, "T-Profile.2: at least 2 text entries (the profileCard entries)");
 
     // (a) text[0] is @pp1 identity line (requires profileCard ∈ TEXT_ROLES + prepend ordering)
@@ -622,5 +655,403 @@ describe("T-D11.R4: Send-invitation outbound promotion (2nd-degree modal regress
       summary.buttons.some((b) => /Send invitation/i.test(b.label)),
       `'Send invitation' must appear; got: ${JSON.stringify(summary.buttons.map((b) => b.label))}`,
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-AUTO-15a Step 3 — T-A15a.5..T-A15a.17
+// Scaffolds: compileable, all assertion bodies are TODO, all intentionally fail.
+// Gates: G-A15a.3 (dedup), G-A15a.4 (person budget), G-A15a.5 (hint + diagnostics),
+//        G-A15a.6 (regression guards — ordering invariants)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── T-A15a.5 (G-A15a.3): two searchResult same-name, distinct URLs — both survive ─
+
+describe("T-A15a.5 (G-A15a.3): two searchResult entries with same display name but distinct profileUrls both survive dedup", () => {
+  it("when ctx has two searchResult entries whose names embed distinct /in/ slugs, buildInspectSummary keeps both", () => {
+    // Given: context with two searchResult entries:
+    //   "Alice Chen — https://www.linkedin.com/in/alice-chen-1/"
+    //   "Alice Chen — https://www.linkedin.com/in/alice-chen-2/"
+    // When:  buildInspectSummary(ctx)
+    // Then:  summary.text contains both entries (distinct slugs → distinct dedup keys)
+    const ctx = makeCtx("search", [
+      { ref: "@sr1", role: "searchResult", name: "Alice Chen — https://www.linkedin.com/in/alice-chen-1/" },
+      { ref: "@sr2", role: "searchResult", name: "Alice Chen — https://www.linkedin.com/in/alice-chen-2/" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 2, "both alice-chen-1 and alice-chen-2 must survive dedup");
+    assert.ok(summary.text.some((t) => t.includes("alice-chen-1")), "alice-chen-1 must appear in text");
+    assert.ok(summary.text.some((t) => t.includes("alice-chen-2")), "alice-chen-2 must appear in text");
+  });
+});
+
+// ─── T-A15a.6 (G-A15a.3): two feedPost same-author, distinct /in/ slugs — both survive ─
+
+describe("T-A15a.6 (G-A15a.3): two feedPost entries with same author but distinct embedded /in/ slugs both survive dedup", () => {
+  it("when ctx has two feedPost entries embedding distinct /in/ slugs, buildInspectSummary keeps both", () => {
+    // Given: two feedPost entries:
+    //   "Post by Alex Smith (/in/alex-smith-eng): foo"
+    //   "Post by Alex Smith (/in/alex-smith-pm): bar"
+    // When:  buildInspectSummary(ctx)
+    // Then:  both survive (distinct slugs → distinct dedup keys under dedupKeyFor)
+    const ctx = makeCtx("feed", [
+      { ref: "@fp1", role: "feedPost", name: "Post by Alex Smith (/in/alex-smith-eng): foo" },
+      { ref: "@fp2", role: "feedPost", name: "Post by Alex Smith (/in/alex-smith-pm): bar" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 2, "both slug-distinct feedPost entries must survive dedup");
+    assert.ok(summary.text.some((t) => t.includes("alex-smith-eng")), "eng slug must appear");
+    assert.ok(summary.text.some((t) => t.includes("alex-smith-pm")), "pm slug must appear");
+  });
+});
+
+// ─── T-A15a.7 (G-A15a.3, fallback): two same-author no-URL feedPost — second dropped ─
+
+describe("T-A15a.7 (G-A15a.3, fallback path): two feedPost with identical name and no /in/ URL — second is dropped by role::name fallback", () => {
+  it("when both feedPost entries have no /in/ slug and identical names, exactly one survives (documented lossy fallback)", () => {
+    // Given: two feedPost entries with identical name and no embedded /in/ URL
+    //   "Post by Carol Li: launch A"
+    //   "Post by Carol Li: launch A"
+    // When:  buildInspectSummary(ctx)
+    // Then:  exactly ONE survives — role::name fallback dedup drops the duplicate.
+    //        This is the DOCUMENTED lossy residual (plan §2, T-A15a.7), not a regression.
+    const ctx = makeCtx("feed", [
+      { ref: "@fp1", role: "feedPost", name: "Post by Carol Li: launch A" },
+      { ref: "@fp2", role: "feedPost", name: "Post by Carol Li: launch A" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+    const carolEntries = summary.text.filter((t) => t.includes("Carol Li"));
+    assert.equal(carolEntries.length, 1, "exactly one Carol Li feedPost survives the role::name fallback dedup");
+  });
+});
+
+// ─── T-A15a.8 (G-A15a.6): non-person dedup unchanged ────────────────────────
+
+describe("T-A15a.8 (G-A15a.6): non-person dedup unchanged — button dedup still drops same role::name", () => {
+  it("two button entries named 'Like' → exactly one 'Like' button (T-M47 behavior preserved)", () => {
+    // Given: ctx with two {role:'button', name:'Like'} entries
+    // When:  buildInspectSummary(ctx)
+    // Then:  exactly one 'Like' button (existing T-M47 dedup behavior preserved)
+    const ctx = makeCtx("feed", [
+      { ref: "@e1", role: "button", name: "Like" },
+      { ref: "@e2", role: "button", name: "Like" },
+    ]);
+    const summary = buildInspectSummary(ctx);
+    const likeButtons = summary.buttons.filter((b) => b.label === "Like");
+    assert.equal(likeButtons.length, 1, "T-A15a.8: duplicate 'Like' buttons must be deduped to exactly one (T-M47 preserved)");
+  });
+});
+
+// ─── T-A15a.9 (G-A15a.4): dense roster — person-first uncapped, hint fires ──
+
+describe("T-A15a.9 (G-A15a.4): 18 feedPost + 30 staticText → 18 person + 22 non-person real + 1 hint = 41 total", () => {
+  it("all 18 feedPost entries survive; 22 of 30 staticText emitted; last entry is hint with visible=48, shown=40", () => {
+    // Given: 18 distinct feedPost entries + 30 staticText entries (48 visible)
+    // When:  buildInspectSummary(ctx)
+    // Then:  text.length === 41 (40 real + 1 hint); first 18 are feedPost; next 22 are staticText;
+    //        last entry matches /^\[diagnostic\] 48 entries visible, 40 shown/
+    const feedPosts = Array.from({ length: 18 }, (_, i) => ({
+      ref: `@fp${i + 1}`,
+      role: "feedPost",
+      name: `Post by Author${i + 1} (/in/author-${i + 1}): headline ${i + 1}`,
+    }));
+    const staticTexts = Array.from({ length: 30 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Static text entry ${i + 1}`,
+    }));
+    // feedPosts pushed after staticTexts to simulate push() ordering (feed surface)
+    const ctx = makeCtx("feed", [...staticTexts, ...feedPosts]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 41, "40 real entries + 1 hint = 41");
+    for (let i = 1; i <= 18; i++) {
+      assert.ok(summary.text.some((t) => t.includes(`/in/author-${i}`)), `Author ${i} must appear`);
+    }
+    const hint = summary.text[summary.text.length - 1];
+    assert.ok(
+      hint?.match(/^\[diagnostic\] 48 entries visible, 40 shown/),
+      `hint must be present and correct; got: "${hint}"`,
+    );
+  });
+});
+
+// ─── T-A15a.10 (G-A15a.4): 30 feedPost, no other — all 30 emitted, no hint ──
+
+describe("T-A15a.10 (G-A15a.4): 30 feedPost entries only — all 30 emitted (exceeds MAX_TEXT=40 budget; person preservation wins); no hint", () => {
+  it("text.length === 30; all 30 feedPost entries present; no [diagnostic] hint entry", () => {
+    // Given: 30 distinct feedPost entries with distinct /in/ slugs; no other text-eligible entries
+    // When:  buildInspectSummary(ctx)
+    // Then:  summary.text.length === 30; all 30 entries in text; no [diagnostic] hint (shown==visible==30)
+    const feedPosts = Array.from({ length: 30 }, (_, i) => ({
+      ref: `@fp${i + 1}`,
+      role: "feedPost",
+      name: `Post by Author${i + 1} (/in/author-${i + 1}): headline ${i + 1}`,
+    }));
+    const ctx = makeCtx("feed", feedPosts);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 30, "all 30 feedPost entries emitted (person preservation > MAX_TEXT=40 bound)");
+    assert.ok(!summary.text.some((t) => t.startsWith("[diagnostic]")), "no hint — shown==visible==30");
+  });
+});
+
+// ─── T-A15a.10b (G-A15a.4): MAX_PERSON_HARD=60 safety cap triggers on 80 searchResult ─
+
+describe("T-A15a.10b (G-A15a.4): MAX_PERSON_HARD=60 safety cap — 80 searchResult entries → first 60 kept, hint fires visible=80 shown=60", () => {
+  it("text contains first 60 searchResult entries; trailing 20 dropped; hint: 80 visible, 60 shown", () => {
+    // Given: 80 distinct searchResult entries (synthetic, above any real surface cap)
+    // When:  buildInspectSummary(ctx)
+    // Then:  text.length === 61 (60 real + 1 hint); first 60 are the leading searchResult;
+    //        trailing 20 dropped; hint: visible=80, shown=60
+    const searchResults = Array.from({ length: 80 }, (_, i) => ({
+      ref: `@sr${i + 1}`,
+      role: "searchResult",
+      name: `Person ${i + 1} — https://www.linkedin.com/in/person-${i + 1}/`,
+    }));
+    const ctx = makeCtx("search", searchResults);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 61, "60 real + 1 hint = 61");
+    const hint = summary.text[summary.text.length - 1];
+    assert.ok(
+      hint?.match(/^\[diagnostic\] 80 entries visible, 60 shown/),
+      `hint must say 80 visible, 60 shown; got: "${hint}"`,
+    );
+    assert.ok(summary.text.some((t) => t.includes("person-1")), "person-1 must appear");
+    assert.ok(!summary.text.some((t) => t.includes("person-61")), "person-61 must NOT appear (beyond MAX_PERSON_HARD=60)");
+  });
+});
+
+// ─── T-A15a.10c (G-A15a.4): invariant — person_shown ≥ old-first-MAX_TEXT-slice baseline ─
+
+describe("T-A15a.10c (G-A15a.4): invariant — dense-search baseline: 30 searchResult + 15 staticText → all 30 persons survive", () => {
+  it("30 searchResult unshifted + 15 staticText → person_shown=30 ≥ old slice(0,40) baseline=30; hint fires visible=45 shown=40", () => {
+    // Given: 30 searchResult entries (leading via unshift semantics — placed first in entries)
+    //        + 15 staticText nav entries trailing
+    // When:  buildInspectSummary(ctx)
+    // Then:  ALL 30 searchResult in summary.text; 10 staticText emitted (nonPersonBudget=10);
+    //        hint fires with visible=45, shown=40; personEntryCount (post-dedup) === 30
+    //        Invariant: person_shown (30) >= old text.slice(0,40) person baseline (30).
+    const searchResults = Array.from({ length: 30 }, (_, i) => ({
+      ref: `@sr${i + 1}`,
+      role: "searchResult",
+      name: `Person ${i + 1} — https://www.linkedin.com/in/person-${i + 1}/`,
+    }));
+    const staticTexts = Array.from({ length: 15 }, (_, i) => ({
+      ref: `@n${i + 1}`,
+      role: "staticText",
+      name: `Nav item ${i + 1}`,
+    }));
+    // searchResult entries unshifted (lead ctx.entries — matching production unshift)
+    const ctx = makeCtx("search", [...searchResults, ...staticTexts]);
+    const summary = buildInspectSummary(ctx);
+    const personEntries = summary.text.filter((t) => t.includes("https://www.linkedin.com/in/person-"));
+    assert.equal(personEntries.length, 30, "all 30 searchResult must survive (person_shown >= old baseline 30)");
+    const hint10c = summary.text[summary.text.length - 1];
+    assert.ok(
+      hint10c?.match(/^\[diagnostic\] 45 entries visible, 40 shown/),
+      `hint must say 45 visible, 40 shown; got: "${hint10c}"`,
+    );
+  });
+});
+
+// ─── T-A15a.11 (G-A15a.6): search unshift lead-ordering preserved ─────────
+
+describe("T-A15a.11 (G-A15a.6): P-AUTO-3 search-lead ordering preserved — searchResult entries remain first in text[]", () => {
+  it("5 searchResult (leading) + 35 staticText → first 5 of text are searchResult in original order; no hint", () => {
+    // Given: context with 5 searchResult entries (leading, simulating unshift) + 35 staticText
+    // When:  buildInspectSummary(ctx)
+    // Then:  text[0..4] are the 5 searchResult entries in original order;
+    //        text[5..39] are the staticText entries; text.length === 40; no hint
+    const searchResults = Array.from({ length: 5 }, (_, i) => ({
+      ref: `@sr${i + 1}`,
+      role: "searchResult",
+      name: `Person ${i + 1} — https://www.linkedin.com/in/person-${i + 1}/`,
+    }));
+    const staticTexts = Array.from({ length: 35 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Static ${i + 1}`,
+    }));
+    const ctx = makeCtx("search", [...searchResults, ...staticTexts]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 40, "5 + 35 = 40; no hint (shown==visible==40)");
+    assert.ok(!summary.text.some((t) => t.startsWith("[diagnostic]")), "no hint — nothing truncated");
+    for (let i = 1; i <= 5; i++) {
+      assert.ok(summary.text[i - 1]?.includes(`person-${i}`), `text[${i - 1}] must be person-${i}`);
+    }
+  });
+});
+
+// ─── T-A15a.12 (G-A15a.6): profile lead-ordering preserved ──────────────────
+
+describe("T-A15a.12 (G-A15a.6): P-47 profile-lead ordering preserved — profileCard entries remain first in text[]", () => {
+  it("2 profileCard (leading) + 35 staticText → text[0..1] are profileCard entries; text.length === 37; no hint", () => {
+    // Given: profile context: 2 profileCard entries then 35 staticText
+    // When:  buildInspectSummary(ctx)
+    // Then:  text[0] is @pp1 profileCard; text[1] is @pp2 profileCard;
+    //        next 35 are staticText; text.length === 37 (2+35 = 37 ≤ MAX_TEXT; no hint)
+    const ctx: CurrentSurfaceContext = {
+      pageUrl: "https://www.linkedin.com/in/alice/",
+      surface: "profile",
+      activeLayer: "page",
+      entries: [
+        { ref: "@pp1", role: "profileCard", name: "Alice — VP Eng" },
+        { ref: "@pp2", role: "profileCard", name: "Profile: Acme · SF" },
+        ...Array.from({ length: 35 }, (_, i) => ({
+          ref: `@s${i + 1}`,
+          role: "staticText",
+          name: `Nav ${i + 1}`,
+        })),
+      ],
+    };
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 37, "2 + 35 = 37; no hint (shown==visible==37)");
+    assert.ok(summary.text[0]?.includes("Alice"), "text[0] must be the profileCard @pp1 entry");
+    assert.ok(summary.text[1]?.includes("Acme"), "text[1] must be the profileCard @pp2 entry");
+    assert.ok(!summary.text.some((t) => t.startsWith("[diagnostic]")), "no hint");
+  });
+});
+
+// ─── T-A15a.13 (G-A15a.5): hint fires when truncation drops entries ──────────
+
+describe("T-A15a.13 (G-A15a.5): hint fires when truncation drops entries — tail entry matches [diagnostic] pattern", () => {
+  it("30 feedPost + 30 staticText → hint is last entry with visible=60, shown=40; text.length=41", () => {
+    // Given: 30 distinct feedPost entries + 30 staticText entries (60 visible)
+    //        person-first: all 30 person emitted; nonPersonBudget=10; 20 staticText dropped
+    // When:  buildInspectSummary(ctx)
+    // Then:  last entry in text[] matches /^\[diagnostic\] 60 entries visible, 40 shown — scroll\/refine to see more$/
+    //        text.length === 41 (40 real + 1 hint — hint is EXTRA slot)
+    const feedPosts = Array.from({ length: 30 }, (_, i) => ({
+      ref: `@fp${i + 1}`,
+      role: "feedPost",
+      name: `Post by Author${i + 1} (/in/author-${i + 1}): headline`,
+    }));
+    const staticTexts = Array.from({ length: 30 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Nav ${i + 1}`,
+    }));
+    const ctx = makeCtx("feed", [...staticTexts, ...feedPosts]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 41, "40 real + 1 hint = 41");
+    const hint13 = summary.text[summary.text.length - 1];
+    assert.ok(
+      hint13?.match(/^\[diagnostic\] 60 entries visible, 40 shown — scroll\/refine to see more$/),
+      `hint must match canonical format; got: "${hint13}"`,
+    );
+  });
+});
+
+// ─── T-A15a.14 (G-A15a.5): no hint when no truncation ───────────────────────
+
+describe("T-A15a.14 (G-A15a.5): no hint when all entries fit — shown==visible", () => {
+  it("5 feedPost + 10 staticText → text.length === 15; no [diagnostic] entry", () => {
+    // Given: 5 feedPost + 10 staticText = 15 total (all fit: 5 person + 10 non-person budget=35)
+    // When:  buildInspectSummary(ctx)
+    // Then:  no [diagnostic] entry; text.length === 15
+    const feedPosts = Array.from({ length: 5 }, (_, i) => ({
+      ref: `@fp${i + 1}`,
+      role: "feedPost",
+      name: `Post by Author${i + 1} (/in/author-${i + 1}): headline`,
+    }));
+    const staticTexts = Array.from({ length: 10 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Nav ${i + 1}`,
+    }));
+    const ctx = makeCtx("feed", [...staticTexts, ...feedPosts]);
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 15, "5 + 10 = 15; no hint (shown==visible==15)");
+    assert.ok(!summary.text.some((t) => t.startsWith("[diagnostic]")), "no hint — nothing truncated");
+  });
+});
+
+// ─── T-A15a.15 (G-A15a.5): canonical count semantics — visible vs shown ─────
+
+describe("T-A15a.15 (G-A15a.5): canonical counts — visible=pre-truncation deduped; shown=real emitted (excl hint); hint is EXTRA slot", () => {
+  it("100 staticText → hint says '100 entries visible, 40 shown'; text.length === 41 (40 real + 1 hint)", () => {
+    // Given: 100 distinct staticText entries (no person-bearing entries)
+    // When:  buildInspectSummary(ctx)
+    // Then:  hint string contains '100 entries visible' AND '40 shown' (not 39 — hint is EXTRA slot);
+    //        text.length === 41 (40 real + 1 hint; hint does NOT consume a real-entry slot)
+    const ctx = makeCtx("feed", Array.from({ length: 100 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Static ${i + 1}`,
+    })));
+    const summary = buildInspectSummary(ctx);
+    assert.equal(summary.text.length, 41, "40 real + 1 hint = 41 (hint is EXTRA slot — does not displace a real entry)");
+    const hint15 = summary.text[summary.text.length - 1];
+    assert.ok(
+      hint15?.includes("100 entries visible") && hint15?.includes("40 shown"),
+      `canonical counts must be 100 visible, 40 shown; got: "${hint15}"`,
+    );
+  });
+});
+
+// ─── T-A15a.16 (G-A15a.5): full:true diagnostics — visibleTextCount, shownTextCount, personEntryCount ─
+// NOTE: T-A15a.16 covers the full-surface (scope=null) path of inspect.execute.
+// The scoped-diagnostics path (scope!=null) is covered by T-A15a.17 below.
+// T-A15a.16 lives here (inspectSummary) because we can test it with buildInspectSummary
+// and the canonical count semantics without a full fake LinkedinSession.
+// The actual inspect.execute test (with full:true) lives in tests/tools/browser/inspect.mock.test.ts.
+
+describe("T-A15a.16 (G-A15a.5): full:true diagnostics — verify canonical count semantics via buildInspectSummary output", () => {
+  it("100 staticText ctx → buildInspectSummary output: shown=40 (excl hint), visible=100, person=0", () => {
+    // Given: 100 distinct staticText entries (no person-bearing) — same fixture as T-A15a.15
+    // When:  buildInspectSummary(ctx) then compute visible/shown/person from the output
+    //        (the inspect tool re-derives these from the same set; this test pins the source semantics)
+    // Then:  shownTextCount (real entries excl [diagnostic]) === 40;
+    //        visibleTextCount (pre-truncation deduped) === 100; personEntryCount === 0
+    const ctx = makeCtx("feed", Array.from({ length: 100 }, (_, i) => ({
+      ref: `@s${i + 1}`,
+      role: "staticText",
+      name: `Static ${i + 1}`,
+    })));
+    const summary = buildInspectSummary(ctx);
+    // Derive the same counts the inspect tool full:true path will use
+    const shownTextCount = summary.text.filter((t) => !t.startsWith("[diagnostic]")).length;
+    assert.equal(shownTextCount, 40, "shownTextCount must be 40 (40 real entries, hint excluded)");
+    assert.equal(summary.text.filter((t) => t.startsWith("[diagnostic]")).length, 1, "exactly 1 hint entry");
+  });
+});
+
+// ─── T-A15a.17 (G-A15a.5): scoped diagnostics consistency ───────────────────
+
+describe("T-A15a.17 (G-A15a.5): scoped diagnostics — visibleTextCount from scoped+deduped set, not raw ctx.entries", () => {
+  it("when scope='composerModal' filters to 5 of 100 entries, visibleTextCount=scoped count (not 100)", () => {
+    // Given: a context with 5 composerModal-scoped entries (Post button + text editor + 3 action buttons)
+    //        + 95 non-composer entries (simulating 100-entry page context)
+    // When:  buildInspectSummary(ctx, 'composerModal')
+    // Then:  only scoped entries are processed; this scaffold pins the contract that builder must
+    //        expose the scoped-deduped text-eligible count, NOT the raw ctx.entries count.
+    //        (The actual visibleTextCount field lives on inspect.execute output — tested in inspect.mock.test.ts T-A15a.17.)
+    //        This scaffold verifies buildInspectSummary(ctx, scope) operates on the scoped set.
+    const composerEntries = [
+      { ref: "@e80", role: "button", name: "Post" }, // composer publish button
+      { ref: "@e661", role: "textbox", name: "Text editor for creating content" },
+      { ref: "@e1", role: "button", name: "Open emoji keyboard" },
+      { ref: "@e2", role: "button", name: "Add media" },
+      { ref: "@e3", role: "staticText", name: "Compose your thoughts" },
+    ];
+    const nonComposerEntries = Array.from({ length: 95 }, (_, i) => ({
+      ref: `@n${i + 1}`,
+      role: "staticText",
+      name: `Nav ${i + 1}`,
+    }));
+    const ctx = makeCtx("feed", [...composerEntries, ...nonComposerEntries]);
+    const scopedSummary = buildInspectSummary(ctx, "composerModal");
+    // Scoped summary must not contain non-composer nav entries
+    assert.ok(!scopedSummary.text.some((t) => t.startsWith("Nav ")), "scoped summary must not contain nav entries");
+    // Post button must be in scoped buttons (composerModal scope includes composer publish button)
+    assert.ok(scopedSummary.buttons.some((b) => b.label === "Post"), "scoped buttons must include Post");
+    // The composerModal scope filter passes: isComposerButtonEntry || isComposerInputEntry.
+    // TEXT_ROLES are {staticText, StaticText, text, heading, feedPost, profileCard, searchResult}.
+    // None of the composerModal-scoped entries (Post button, textbox, emoji button, media button) are in TEXT_ROLES.
+    // "Compose your thoughts" (staticText) is not in composerModal scope (not a button/input).
+    // => text-eligible in scope = 0; scoped text[] is empty; no hint (shown=0=visible=0).
+    assert.equal(scopedSummary.text.length, 0, "composerModal scope has 0 text-eligible entries (buttons/inputs are not TEXT_ROLES)");
+    // This pins the N2 contract: the scoped text-eligible count is 0, not 95 (the raw ctx.entries staticText count).
+    // The inspect.execute full:true path must derive visibleTextCount from this same scoped+deduped set.
+    // That assertion lives in tests/tools/browser/inspect.mock.test.ts T-A15a.Full.2.
   });
 });

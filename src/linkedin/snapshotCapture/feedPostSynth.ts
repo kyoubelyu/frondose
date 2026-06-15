@@ -2,7 +2,11 @@
  *  post author/body in the AX tree. Heuristic is TEXT-SIGNAL-PRIMARY (OQ-2):
  *  the post container is the nearest ancestor whose innerText carries a
  *  post-action signal — NOT the `feed-shared-update-v2` BEM class (which churns).
- *  Capped at 5 posts (the feed renders ~5-7 visible per scroll). */
+ *  P-AUTO-15a (CAP-3): cap raised from 5 → FEED_POST_CAP=15; the JS-internal
+ *  cap + the snapshotCapture.ts wrapper cap both read FEED_POST_CAP (single
+ *  source of truth, no double-cap). */
+export const FEED_POST_CAP = 15;
+
 export const FEED_POST_SYNTH_JS = `(() => {
   const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
   const visible = (el) => {
@@ -15,7 +19,7 @@ export const FEED_POST_SYNTH_JS = `(() => {
   const SIGNALS = ["comment", "repost", "reaction"];
   const anchors = Array.from(document.querySelectorAll("button,[role='button']"))
     .filter((b) => /^Open control menu for post by /i.test(norm(b.getAttribute("aria-label") || b.innerText)) && visible(b))
-    .slice(0, 5);
+    .slice(0, ${FEED_POST_CAP});
   const out = [];
   for (const a of anchors) {
     const author = norm(a.getAttribute("aria-label") || a.innerText)

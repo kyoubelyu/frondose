@@ -4,11 +4,12 @@
  * P-59 D-G6 Layer-2 — T-G6.1..T-G6.5: retry-with-delay + [data-test-modal] selector.
  *   Step 4a scaffolds — all assertion bodies are TODO; all 5 intentionally FAIL.
  *   Assertions filled at Step 5 after builder 4b lands.
+ * P-AUTO-15a Step 3 — T-A15a.SC1: wrapper-cap + JS-internal-cap single-source pin.
  *
  * Tests captureCurrentSurfaceContext() using a fake CdpClient built via
  * CdpClient.fromHandle(). No real Chrome required.
  *
- * Source-text assertions (T-G6.*) read snapshotCapture.ts directly — no CDP needed.
+ * Source-text assertions (T-G6.*, T-A15a.SC1) read snapshotCapture.ts directly — no CDP needed.
  */
 
 import assert from "node:assert/strict";
@@ -673,6 +674,28 @@ describe("T-P10: 2nd-degree modal inner-button enumeration (Phase 10)", () => {
       SNAPSHOT_CAPTURE_SRC.includes("removeAttribute('data-mai-ov')") &&
         SNAPSHOT_CAPTURE_SRC.includes("i--"),
       "T-P10.4: OVERLAY_SYNTH_JS must roll back the index + remove the data-mai-ov attribute when an inner button has no usable label — without this the agent gets noisy unnamed refs",
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-AUTO-15a Step 3 — T-A15a.SC1: wrapper-cap + JS-internal-cap single-source pin
+// (Source-structural; reads snapshotCapture.ts. Gates: G-A15a.1, G-A15a.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("T-A15a.SC1 (G-A15a.1, G-A15a.2): snapshotCapture.ts wrapper-cap references FEED_POST_CAP (not hardcoded 5)", () => {
+  it("snapshotCapture.ts source contains 'posts.slice(0, FEED_POST_CAP)' AND does NOT contain stale 'posts.slice(0, 5)'", () => {
+    // Given: SNAPSHOT_CAPTURE_SRC = src/linkedin/snapshotCapture.ts source text (read at top of file)
+    // When:  static string assertions run on the source
+    // Then:  source contains 'posts.slice(0, FEED_POST_CAP)' (wrapper cap uses the named const);
+    //        source does NOT contain 'posts.slice(0, 5)' (stale hardcoded cap removed)
+    assert.ok(
+      SNAPSHOT_CAPTURE_SRC.includes("posts.slice(0, FEED_POST_CAP)"),
+      "wrapper cap must reference FEED_POST_CAP const, not hardcoded 5",
+    );
+    assert.ok(
+      !SNAPSHOT_CAPTURE_SRC.includes("posts.slice(0, 5)"),
+      "stale 'posts.slice(0, 5)' must be removed (single source of truth = FEED_POST_CAP)",
     );
   });
 });

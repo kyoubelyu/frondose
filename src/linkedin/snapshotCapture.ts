@@ -1,6 +1,6 @@
 import type { CdpClient } from "../cdp/client.js";
 import { inferSurface } from "./scopeResolver.js";
-import { FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
+import { FEED_POST_CAP, FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
 import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
@@ -280,7 +280,7 @@ async function synthesizeFeedPostEntries(client: CdpClient): Promise<SnapshotEnt
   } catch {
     return []; // best-effort — a feed with no extractable posts yields no entries
   }
-  return posts.slice(0, 5).map((p, i) => ({
+  return posts.slice(0, FEED_POST_CAP).map((p, i) => ({
     ref: `@fp${i + 1}`,
     role: "feedPost",
     name: p.profileUrl ? `Post by ${p.author} (${p.profileUrl}): ${p.headline}` : `Post by ${p.author}: ${p.headline}`,

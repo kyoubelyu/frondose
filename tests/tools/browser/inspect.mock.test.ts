@@ -1,8 +1,12 @@
 /**
  * P-3 mock tests — T-M59..T-M61: inspect tool.
+ * P-AUTO-15a Step 3 — T-A15a.Full.1, T-A15a.Full.2: full:true diagnostic counter fields.
  *
  * Tests makeInspectTool() schema, execute dispatch, and failure path.
  * No Chrome or LLM required.
+ *
+ * T-A15a.Full.1 = T-A15a.16 (full-surface path, scope=null): visibleTextCount, shownTextCount, personEntryCount
+ * T-A15a.Full.2 = T-A15a.17 (scoped path, scope!=null): counts from scoped+deduped set, not raw ctx
  */
 
 import assert from "node:assert/strict";
@@ -213,6 +217,84 @@ test("T-Inspect.4: full flag with scope filter returns debug fields alongside st
   assert.ok(Array.isArray(data.text), "text must be present");
   assert.ok(Array.isArray(data.availableScopes), "availableScopes must be present");
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P-AUTO-15a Step 3 — T-A15a.Full.1 (T-A15a.16) + T-A15a.Full.2 (T-A15a.17)
+// Scaffolds: compileable, all assertion bodies are TODO, all intentionally fail.
+// Gate: G-A15a.5 (full:true diagnostics — visibleTextCount, shownTextCount, personEntryCount)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── T-A15a.Full.1 / T-A15a.16 (G-A15a.5): full:true exposes canonical counter fields ─
+
+test("T-A15a.Full.1 (T-A15a.16, G-A15a.5): inspect full:true returns visibleTextCount, shownTextCount, personEntryCount with canonical semantics", async () => {
+  // Given: session whose AX snapshot yields 100 distinct staticText entries (no person-bearing entries)
+  // When:  inspect.execute({ full: true }) — no scope
+  // Then:  data.visibleTextCount === 100; data.shownTextCount === 40; data.personEntryCount === 0
+  //        (visibleTextCount = deduped text-eligible before truncation;
+  //         shownTextCount = real source entries emitted, EXCLUDING the hint;
+  //         personEntryCount = person-bearing entries in that same set = 0)
+  const session = makeFakeSession({
+    axNodes: Array.from({ length: 100 }, (_, i) => ({
+      nodeId: `ax${i + 1}`,
+      role: "staticText",
+      name: `Static entry ${i + 1}`,
+      backendDOMNodeId: i + 1,
+    })),
+    pageUrl: "https://www.linkedin.com/feed/",
+  });
+  const tool = makeInspectTool(session);
+  const result = await tool.execute({ full: true }, { toolCallId: "ta16", messages: [], abortSignal });
+  assert.equal(result.ok, true, "T-A15a.Full.1: inspect must succeed");
+  // biome-ignore lint/suspicious/noExplicitAny: test shape assertion on new fields
+  const data = (result as any).data;
+  assert.equal(data.visibleTextCount, 100, "visibleTextCount must be 100 (all deduped staticText before truncation)");
+  assert.equal(data.shownTextCount, 40, "shownTextCount must be 40 (real entries emitted, excl hint)");
+  assert.equal(data.personEntryCount, 0, "personEntryCount must be 0 (no feedPost/searchResult/profileCard)");
+});
+
+// ─── T-A15a.Full.2 / T-A15a.17 (G-A15a.5): scoped diagnostics from scoped set ─
+
+test("T-A15a.Full.2 (T-A15a.17, G-A15a.5): inspect full:true with scope='composerModal' — visibleTextCount reflects scope-filtered set, NOT raw entry count", async () => {
+  // Given: session with 100 AX entries: 1 staticText in-scope for composerModal
+  //        (The composerModal scope filter keeps composer buttons + composer text inputs.
+  //         Out of 100 entries: the Post publish button + the text editor — those are in-scope.
+  //         No staticText entries are in composerModal scope; 0 text-eligible scoped entries.)
+  //        Then a "Post" button AND "Text editor for creating content" textbox.
+  //        Plus 98 ordinary staticText entries not in composerModal scope.
+  // When:  inspect.execute({ scope: 'composerModal', full: true })
+  // Then:  data.visibleTextCount reflects only the composerModal-scoped text-eligible entries
+  //        (NOT 100 from raw ctx.entries). personEntryCount === 0.
+  //        This pins the N2 contract: scoped diagnostics cannot diverge from the scoped partition.
+  const session = makeFakeSession({
+    axNodes: [
+      { nodeId: "ax1", role: "button", name: "Post", backendDOMNodeId: 1 }, // composerModal publish
+      { nodeId: "ax2", role: "textbox", name: "Text editor for creating content", backendDOMNodeId: 2 },
+      ...Array.from({ length: 98 }, (_, i) => ({
+        nodeId: `ax${i + 3}`,
+        role: "staticText",
+        name: `Nav entry ${i + 1}`,
+        backendDOMNodeId: i + 3,
+      })),
+    ],
+    pageUrl: "https://www.linkedin.com/feed/",
+  });
+  const tool = makeInspectTool(session);
+  const result = await tool.execute({ scope: "composerModal", full: true }, { toolCallId: "ta17", messages: [], abortSignal });
+  assert.equal(result.ok, true, "T-A15a.Full.2: scoped inspect must succeed");
+  // biome-ignore lint/suspicious/noExplicitAny: test shape assertion on new fields
+  const data = (result as any).data;
+  assert.ok(typeof data.visibleTextCount === "number", "visibleTextCount must be a number");
+  assert.ok(data.visibleTextCount < 100, "visibleTextCount must be the SCOPED count (< 100 raw entries) — N2 contract");
+  // composerModal scope filters to isComposerButtonEntry || isComposerInputEntry entries only.
+  // TEXT_ROLES = {staticText, StaticText, text, heading, feedPost, profileCard, searchResult} — none
+  // of button/textbox roles qualify, so text-eligible in composerModal scope = 0.
+  assert.equal(data.visibleTextCount, 0, "visibleTextCount=0: composerModal scope has no TEXT_ROLES entries (buttons+inputs are not TEXT_ROLES)");
+  assert.equal(typeof data.shownTextCount, "number", "shownTextCount must be a number");
+  assert.equal(data.shownTextCount, 0, "shownTextCount=0: no text-eligible entries in composerModal scope");
+  assert.equal(data.personEntryCount, 0, "personEntryCount must be 0 in composerModal scope");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 test("T-M61: inspect tool execute returns fail envelope when CDP snapshot throws", async () => {
   const session = makeFakeSession({ failSnapshot: true });
