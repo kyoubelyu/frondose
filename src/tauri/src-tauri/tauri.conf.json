@@ -32,6 +32,14 @@
       "signingIdentity": "-",
       "hardenedRuntime": false
     },
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "languages": ["English"]
+      }
+    },
     "resources": {
       "../../../build/runtime/": "runtime/"
     },

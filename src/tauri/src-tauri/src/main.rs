@@ -627,6 +627,14 @@ async fn shutdown_sidecar(state: &MaiServeState) {
         unsafe {
             libc::kill(pid as i32, libc::SIGTERM);
         }
+        #[cfg(windows)]
+        {
+            // Windows has no SIGTERM — graceful tree-terminate by PID (WIN-3).
+            let _ = tokio::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T"])
+                .output()
+                .await;
+        }
         // Brief wait for graceful exit; force-kill if still alive.
         tokio::time::sleep(Duration::from_millis(800)).await;
         let still_alive = state.child_pid.load(Ordering::SeqCst) > 0;
@@ -634,6 +642,13 @@ async fn shutdown_sidecar(state: &MaiServeState) {
             #[cfg(unix)]
             unsafe {
                 libc::kill(pid as i32, libc::SIGKILL);
+            }
+            #[cfg(windows)]
+            {
+                let _ = tokio::process::Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .output()
+                    .await;
             }
         }
     }
@@ -912,16 +927,28 @@ async fn main() {
         run_sse_subscriber(app_handle_sse, state_for_sse).await;
     });
 
-    // SIGTERM handler.
+    // Graceful-quit signal handler. Unix: SIGTERM. Windows: Ctrl+C / console-close
+    // (Windows has no SIGTERM) — cfg-split so the unix-only `tokio::signal::unix`
+    // import does not leak into the windows-msvc build (WIN-3).
     let app_handle_sigterm = app_handle.clone();
     tokio::spawn(async move {
-        use tokio::signal::unix::{signal, SignalKind};
-        match signal(SignalKind::terminate()) {
-            Ok(mut sig) => {
-                sig.recv().await;
-                app_handle_sigterm.exit(0);
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            match signal(SignalKind::terminate()) {
+                Ok(mut sig) => {
+                    sig.recv().await;
+                    app_handle_sigterm.exit(0);
+                }
+                Err(e) => eprintln!("[mai-tauri] SIGTERM handler init failed: {}", e),
             }
-            Err(e) => eprintln!("[mai-tauri] SIGTERM handler init failed: {}", e),
+        }
+        #[cfg(windows)]
+        {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => app_handle_sigterm.exit(0),
+                Err(e) => eprintln!("[mai-tauri] ctrl_c handler init failed: {}", e),
+            }
         }
     });
 
