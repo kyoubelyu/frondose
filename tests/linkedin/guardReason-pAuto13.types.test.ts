@@ -70,9 +70,9 @@ describe("G-A13.2 — CommandFailure.reason? typed as GuardReason (P-AUTO-13)", 
 // ─── G-A13.8 — failWithReason parameter typing rejects unlisted reason literals ────────────
 describe("G-A13.8 — failWithReason parameter typing rejects typos (P-AUTO-13)", () => {
   // ─── T-A13.Type.3 ─────────────────────────────────────────────────────────────
-  it("T-A13.Type.3: when envelope.ts exports failWithReason, each of the 9 valid GuardReason tokens is accepted", async () => {
+  it("T-A13.Type.3: when envelope.ts exports failWithReason, each of the 9 valid GuardReason tokens is accepted (P-AUTO-17: 10th token unresolvable_ref_on_outbound_surface also accepted)", async () => {
     // Given: src/linkedin/envelope.ts exports failWithReason(command, kind, message, reason: GuardReason)
-    // When:  called with each of the 9 valid tokens
+    // When:  called with each of the 10 valid tokens (9 original + unresolvable_ref_on_outbound_surface added by P-AUTO-17)
     // Then:  each call returns ok:false envelope with top-level reason matching the token;
     //        a call with "not_a_real_reason" would fail tsc (asserted via @ts-expect-error in
     //        the static-check companion block below)
@@ -99,14 +99,41 @@ describe("G-A13.8 — failWithReason parameter typing rejects typos (P-AUTO-13)"
       "connect_note_required",
       "approval_required",
       "ledger_write_failed",
+      // P-AUTO-17 §6.4.D (G-A17.19): 10th token added to GuardReason union
+      "unresolvable_ref_on_outbound_surface",
     ] as const;
 
-    // TODO: assert each token call returns {ok:false, reason===token} (filled at Step 5)
+    // Assert each token call returns {ok:false, reason===token}
     for (const token of VALID_TOKENS) {
       const result = failWithReason("click", "invalid_input", "test message", token);
-      // TODO: assert result.ok === false && result.reason === token
-      assert.ok(result, `T-A13.Type.3: failWithReason("click","invalid_input","msg","${token}") must return a non-null envelope`);
+      assert.ok(result !== null, `T-A13.Type.3: failWithReason("click","invalid_input","msg","${token}") must return a non-null envelope`);
+      assert.equal(result.ok, false, `T-A13.Type.3: failWithReason result must have ok:false for token '${token}'`);
+      assert.equal(result.reason, token, `T-A13.Type.3: top-level reason must equal the token; got '${result.reason}' for token '${token}'`);
     }
+
+    // G-A17.19 (P-AUTO-17 Round-2 ND-4 typecheck): runtime probe specifically for the new 10th
+    // token. This assertion FAILS pre-impl because "unresolvable_ref_on_outbound_surface" is NOT
+    // yet in the GuardReason union — failWithReason's TypeScript parameter typing rejects it at
+    // compile time AND the runtime behavior is the same production-code codepath that Codex (Step 4)
+    // must unlock by adding the token to types.ts:145-154.
+    //
+    // Given: failWithReason is exported from envelope.ts AND GuardReason union in types.ts does NOT
+    //        yet contain "unresolvable_ref_on_outbound_surface" (pre-Step-4 state)
+    // When:  failWithReason("click", "invalid_input", "msg", "unresolvable_ref_on_outbound_surface")
+    //        is called at runtime
+    // Then:  returns a non-null ok:false envelope with top-level reason === the new token
+    //        (compiles without @ts-expect-error after Codex adds it to the union; fails TODO until then)
+    // G-A17.19: no longer needs `as any` — the token is now in the GuardReason union (Codex Step 4 added it).
+    const newTokenResult = failWithReason("click", "invalid_input", "msg for G-A17.19", "unresolvable_ref_on_outbound_surface");
+    assert.ok(newTokenResult !== null, "G-A17.19: failWithReason with 10th token must return a non-null envelope");
+    assert.equal(newTokenResult.ok, false, "G-A17.19: failWithReason must return ok:false");
+    assert.equal(
+      newTokenResult.reason,
+      "unresolvable_ref_on_outbound_surface",
+      `G-A17.19: top-level reason must equal the new token; got '${newTokenResult.reason}'`,
+    );
+    // Also verify the existing 9 tokens in the loop above are all returning proper envelopes
+    // (the loop already ran; this verifies the newToken specifically with a fully typed call)
 
     // Static-check companion: the following line would fail tsc WITHOUT @ts-expect-error.
     // The @ts-expect-error below proves the producer rejects a typo at compile time.
@@ -126,6 +153,9 @@ describe("G-A13.8 — failWithReason parameter typing rejects typos (P-AUTO-13)"
       failWithReason("click", "invalid_input", "msg", "auto_cap_reached");
       failWithReason("click", "invalid_input", "msg", "connect_note_required");
       failWithReason("click", "invalid_input", "msg", "ledger_write_failed");
+      // P-AUTO-17 §6.4.D (G-A17.19): 10th token — must compile WITHOUT @ts-expect-error after
+      // Codex adds it to the GuardReason union at types.ts:145-154.
+      failWithReason("click", "invalid_input", "msg", "unresolvable_ref_on_outbound_surface");
     }
   });
 });
