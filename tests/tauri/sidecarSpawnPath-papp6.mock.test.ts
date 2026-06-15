@@ -3,11 +3,11 @@
  *
  * Covers:
  *   T-Sidecar.Spawn.1 — main.rs references dist/app/sidecarMain.js in resolve_sidecar_bin
- *                        and spawn_mai_serve uses resolve_sidecar_bin (not resolve_mai_bin);
- *                        "serve" positional arg is NOT passed by spawn_mai_serve
- *   T-Sidecar.Spawn.2 — spawn_mai_serve still passes MAI_AUTOUPDATE=skip + MAI_SIDECAR_OWNER=frondose-app
- *   T-Sidecar.Spawn.3 — MAI_SIDECAR_BIN_PATH env override exists in resolve_sidecar_bin
- *   T-Sidecar.Spawn.4 — resolve_mai_bin is kept with #[allow(dead_code)] annotation
+ *                        and spawn_frondose_serve uses resolve_sidecar_bin (not resolve_frondose_bin);
+ *                        "serve" positional arg is NOT passed by spawn_frondose_serve
+ *   T-Sidecar.Spawn.2 — spawn_frondose_serve still passes MAI_AUTOUPDATE=skip + MAI_SIDECAR_OWNER=frondose-app
+ *   T-Sidecar.Spawn.3 — FRONDOSE_SIDECAR_BIN_PATH env override exists in resolve_sidecar_bin
+ *   T-Sidecar.Spawn.4 — resolve_frondose_bin is kept with #[allow(dead_code)] annotation
  *
  * Strategy: source-scan src/tauri/src-tauri/src/main.rs as text.
  * These tests fail pre-impl because main.rs has not been edited yet.
@@ -34,32 +34,32 @@ function extractRustFn(name: string): string | null {
   return match ? match[0] : null;
 }
 
-/** Extract the spawn_mai_serve body (multi-line, ends at the final Ok(child) + closing brace). */
+/** Extract the spawn_frondose_serve body (multi-line, ends at the final Ok(child) + closing brace). */
 function spawnMaiServeSource(): string {
-  const match = MAIN_RS.match(/async fn spawn_mai_serve[\s\S]*?Ok\(child\)\s*\n}/);
-  assert.ok(match, "main.rs must contain spawn_mai_serve");
+  const match = MAIN_RS.match(/async fn spawn_frondose_serve[\s\S]*?Ok\(child\)\s*\n}/);
+  assert.ok(match, "main.rs must contain spawn_frondose_serve");
   return match[0];
 }
 
 describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
-  it("T-Sidecar.Spawn.1: main.rs spawn_mai_serve uses resolve_sidecar_bin + dist/app/sidecarMain.js path + no 'serve' positional arg", () => {
+  it("T-Sidecar.Spawn.1: main.rs spawn_frondose_serve uses resolve_sidecar_bin + dist/app/sidecarMain.js path + no 'serve' positional arg", () => {
     // Given: main.rs has been edited by Codex builder (Step 4)
-    // When:  validator reads spawn_mai_serve source + resolve_sidecar_bin function
-    // Then:  spawn_mai_serve calls resolve_sidecar_bin() (not resolve_mai_bin());
+    // When:  validator reads spawn_frondose_serve source + resolve_sidecar_bin function
+    // Then:  spawn_frondose_serve calls resolve_sidecar_bin() (not resolve_frondose_bin());
     //        resolve_sidecar_bin contains "dist/app/sidecarMain.js";
-    //        spawn_mai_serve does NOT pass .arg("serve") as the third arg after the bin
+    //        spawn_frondose_serve does NOT pass .arg("serve") as the third arg after the bin
     const spawnSrc = spawnMaiServeSource();
 
-    // Must reference resolve_sidecar_bin, not resolve_mai_bin
+    // Must reference resolve_sidecar_bin, not resolve_frondose_bin
     assert.match(
       spawnSrc,
       /resolve_sidecar_bin\s*\(\s*\)/,
-      "spawn_mai_serve must call resolve_sidecar_bin()",
+      "spawn_frondose_serve must call resolve_sidecar_bin()",
     );
     assert.doesNotMatch(
       spawnSrc,
-      /resolve_mai_bin\s*\(\s*\)/,
-      "spawn_mai_serve must NOT call resolve_mai_bin() after P-APP-6",
+      /resolve_frondose_bin\s*\(\s*\)/,
+      "spawn_frondose_serve must NOT call resolve_frondose_bin() after P-APP-6",
     );
 
     // "serve" positional arg must be gone from spawn arg list
@@ -68,7 +68,7 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     assert.doesNotMatch(
       spawnSrc,
       /\.arg\s*\(\s*"serve"\s*\)/,
-      'spawn_mai_serve must NOT pass .arg("serve") — sidecarMain.ts has no subcommand routing',
+      'spawn_frondose_serve must NOT pass .arg("serve") — sidecarMain.ts has no subcommand routing',
     );
 
     // dist/app/sidecarMain.js must appear somewhere in main.rs (in resolve_sidecar_bin)
@@ -78,9 +78,9 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     );
   });
 
-  it("T-Sidecar.Spawn.2: spawn_mai_serve preserves FRONDOSE_AUTOUPDATE=skip and FRONDOSE_SIDECAR_OWNER=frondose-app (F-REN-3 Group B flip)", () => {
-    // Given: main.rs spawn_mai_serve body after F-REN-3 Group B Rust SET rename
-    // When:  validator greps spawn_mai_serve body
+  it("T-Sidecar.Spawn.2: spawn_frondose_serve preserves FRONDOSE_AUTOUPDATE=skip and FRONDOSE_SIDECAR_OWNER=frondose-app (F-REN-3 Group B flip)", () => {
+    // Given: main.rs spawn_frondose_serve body after F-REN-3 Group B Rust SET rename
+    // When:  validator greps spawn_frondose_serve body
     // Then:  .env("FRONDOSE_AUTOUPDATE", "skip") present (defense in depth; F-REN-3 renamed)
     //        .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") present (marker for overlay; F-REN-3 renamed)
     const spawnSrc = spawnMaiServeSource();
@@ -88,45 +88,45 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     assert.match(
       spawnSrc,
       /\.env\s*\(\s*"FRONDOSE_AUTOUPDATE"\s*,\s*"skip"\s*\)/,
-      'spawn_mai_serve must set .env("FRONDOSE_AUTOUPDATE", "skip") (F-REN-3 Group B rename)',
+      'spawn_frondose_serve must set .env("FRONDOSE_AUTOUPDATE", "skip") (F-REN-3 Group B rename)',
     );
     assert.match(
       spawnSrc,
       /\.env\s*\(\s*"FRONDOSE_SIDECAR_OWNER"\s*,\s*"frondose-app"\s*\)/,
-      'spawn_mai_serve must set .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") (F-REN-3 Group B rename)',
+      'spawn_frondose_serve must set .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") (F-REN-3 Group B rename)',
     );
   });
 
-  it("T-Sidecar.Spawn.3: resolve_sidecar_bin reads MAI_SIDECAR_BIN_PATH env override", () => {
+  it("T-Sidecar.Spawn.3: resolve_sidecar_bin reads FRONDOSE_SIDECAR_BIN_PATH env override", () => {
     // Given: main.rs after P-APP-6 adds resolve_sidecar_bin
     // When:  validator reads resolve_sidecar_bin source
-    // Then:  MAI_SIDECAR_BIN_PATH env var override is present
+    // Then:  FRONDOSE_SIDECAR_BIN_PATH env var override is present
     assert.ok(
       MAIN_RS.includes("resolve_sidecar_bin"),
       "main.rs must define resolve_sidecar_bin (pre-impl: intentional scaffold failure)",
     );
     assert.ok(
-      MAIN_RS.includes("MAI_SIDECAR_BIN_PATH"),
-      'main.rs must reference MAI_SIDECAR_BIN_PATH in resolve_sidecar_bin (pre-impl: intentional scaffold failure)',
+      MAIN_RS.includes("FRONDOSE_SIDECAR_BIN_PATH"),
+      'main.rs must reference FRONDOSE_SIDECAR_BIN_PATH in resolve_sidecar_bin (pre-impl: intentional scaffold failure)',
     );
   });
 
-  it("T-Sidecar.Spawn.4: resolve_mai_bin is kept with #[allow(dead_code)] for P-APP-11 transition", () => {
-    // Given: main.rs after P-APP-6; resolve_mai_bin is no longer called by spawn_mai_serve
+  it("T-Sidecar.Spawn.4: resolve_frondose_bin is kept with #[allow(dead_code)] for P-APP-11 transition", () => {
+    // Given: main.rs after P-APP-6; resolve_frondose_bin is no longer called by spawn_frondose_serve
     // When:  validator reads the main.rs source
-    // Then:  resolve_mai_bin function is still present (not deleted);
+    // Then:  resolve_frondose_bin function is still present (not deleted);
     //        #[allow(dead_code)] annotation appears above it
     assert.ok(
-      MAIN_RS.includes("fn resolve_mai_bin"),
-      "main.rs must retain resolve_mai_bin function (kept for P-APP-11 transition)",
+      MAIN_RS.includes("fn resolve_frondose_bin"),
+      "main.rs must retain resolve_frondose_bin function (kept for P-APP-11 transition)",
     );
-    // Check that allow(dead_code) appears near (within 3 lines of) resolve_mai_bin
+    // Check that allow(dead_code) appears near (within 3 lines of) resolve_frondose_bin
     const deadCodeIdx = MAIN_RS.indexOf("#[allow(dead_code)]");
-    const resolveMaiBinIdx = MAIN_RS.indexOf("fn resolve_mai_bin");
+    const resolveMaiBinIdx = MAIN_RS.indexOf("fn resolve_frondose_bin");
     assert.ok(deadCodeIdx !== -1, "#[allow(dead_code)] must be present in main.rs");
     assert.ok(
       resolveMaiBinIdx !== -1 && Math.abs(deadCodeIdx - resolveMaiBinIdx) < 200,
-      "#[allow(dead_code)] must appear close to resolve_mai_bin",
+      "#[allow(dead_code)] must appear close to resolve_frondose_bin",
     );
   });
 });
