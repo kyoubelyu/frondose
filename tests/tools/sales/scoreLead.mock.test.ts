@@ -155,11 +155,16 @@ describe("T-SP-B.Lead — score_lead tool", () => {
 
   it("T-SP-B.Lead.3: when score_lead is called with all nullable narrative fields null, row is inserted with nulls preserved and scored event is written", async () => {
     // Given: raw_candidates row id=c1 (status='new'); all narrative fields omitted/null
-    // When:  score_lead.execute called with totalScore=42, confidence=0.25, nextAction='research_more',
+    // When:  score_lead.execute called with totalScore=30, confidence=0.25, nextAction='research_more',
     //        all nullable narrative fields null, leadId=null
-    // Then:  lead_scores row inserted (total_score=42, confidence=0.25, nullable cols=SQL NULL);
+    // Then:  lead_scores row inserted (total_score=30, confidence=0.25, nullable cols=SQL NULL);
     //        lead_timeline has a 'scored' event (even on thin-evidence path);
-    //        envelope = {ok:true, data:{scoreId, candidateId, totalScore:42}}
+    //        envelope = {ok:true, data:{scoreId, candidateId, totalScore:30}}
+    //
+    // P-AUTO-15b MR-2 (Step 3, 2026-06-15): totalScore lowered from 42→30 (tracked band) so the test
+    // remains a valid "thin-evidence nullable-fields" test without being blocked by the new QS-5 gate
+    // (which fires at totalScore>=40 when evidenceJson=null). The test INTENT is unchanged — it verifies
+    // nullable columns are persisted correctly, not the qualified-band gate behavior.
 
     const path = `/tmp/sp-b-lead-3-${randomUUID()}.sqlite`;
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
@@ -170,9 +175,9 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       const tool = makeScoreLeadTool(path);
       const result = await tool.execute({
         candidateId,
-        // P-AUTO-5: qualification required; totalScore:42 is in partial_match band [40,59]
-        qualification: "partial_match",
-        totalScore: 42,
+        // P-AUTO-5: qualification required; totalScore:30 is in tracked band [0,39]
+        qualification: "tracked",
+        totalScore: 30,
         confidence: 0.25,
         nextAction: "research_more",
         icpFit: null,
@@ -186,12 +191,12 @@ describe("T-SP-B.Lead — score_lead tool", () => {
       });
 
       assert.equal(result.ok, true, "thin-evidence score must return ok:true");
-      assert.equal(result.data.totalScore, 42, "data.totalScore must be 42");
+      assert.equal(result.data.totalScore, 30, "data.totalScore must be 30");
 
       // Nullable cols must be SQL NULL
       const row = db.prepare("SELECT * FROM lead_scores WHERE id = ?").get(result.data.scoreId);
       assert.ok(row, "lead_scores row must exist");
-      assert.equal(row.total_score, 42);
+      assert.equal(row.total_score, 30);
       assert.equal(row.confidence, 0.25);
       assert.equal(row.icp_fit, null, "icp_fit must be SQL NULL (thin-evidence)");
       assert.equal(row.pain_hypothesis, null, "pain_hypothesis must be SQL NULL");
@@ -280,6 +285,9 @@ describe("T-SP-B.Lead — score_lead tool", () => {
         qualification: "qualified",
         totalScore: 80,
         confidence: 0.8,
+        // P-AUTO-15b MR-2 (Step 3, 2026-06-15): add evidenceJson so the QS-5 gate (totalScore>=40
+        // requires evidenceJson) passes. The test intent is leadId FK, not thin-evidence behavior.
+        evidenceJson: '{"source":"lead5-fixture","role":"test"}',
       });
 
       assert.equal(result.ok, true, "execute must return ok:true envelope");

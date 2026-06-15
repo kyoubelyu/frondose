@@ -95,7 +95,8 @@ describe("T-A5.Persist — icp_qualification persisted and retrieved on the scor
     const db = openSalesDatabase(path) as AnyDb;
     try {
       const candidateId = seedFreshCandidate(db);
-      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "qualified", totalScore: 70, confidence: 0.7 });
+      // P-AUTO-15b MR-2 (Step 3, 2026-06-15): add evidenceJson so QS-5 gate passes (totalScore=70>=40).
+      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "qualified", totalScore: 70, confidence: 0.7, evidenceJson: '{"source":"a5-persist1-fixture"}' });
       assert.equal(result.ok, true, `score_lead must succeed; got ${JSON.stringify(result)}`);
       const row = db.prepare("SELECT icp_qualification AS q FROM lead_scores WHERE candidate_id = ?").get(candidateId) as { q: string };
       assert.equal(row.q, "qualified", "lead_scores.icp_qualification must be 'qualified'");
@@ -153,7 +154,8 @@ describe("T-A5.Band — QUALIFICATION_BAND totalScore-consistency validation", (
     const db = openSalesDatabase(path) as AnyDb;
     try {
       const candidateId = seedFreshCandidate(db);
-      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "qualified", totalScore: 60, confidence: 0.65 });
+      // P-AUTO-15b MR-2 (Step 3, 2026-06-15): add evidenceJson so QS-5 gate passes (totalScore=60>=40).
+      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "qualified", totalScore: 60, confidence: 0.65, evidenceJson: '{"source":"a5-band3-fixture"}' });
       assert.equal(result.ok, true, `qualified+60 (floor) must succeed; got ${JSON.stringify(result)}`);
       assert.equal(scoreCount(db, candidateId), 1, "a lead_scores row must be written");
     } finally {
@@ -166,7 +168,8 @@ describe("T-A5.Band — QUALIFICATION_BAND totalScore-consistency validation", (
     const db = openSalesDatabase(path) as AnyDb;
     try {
       const candidateId = seedFreshCandidate(db);
-      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "partial_match", totalScore: 50, confidence: 0.5 });
+      // P-AUTO-15b MR-2 (Step 3, 2026-06-15): add evidenceJson so QS-5 gate passes (totalScore=50>=40).
+      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "partial_match", totalScore: 50, confidence: 0.5, evidenceJson: '{"source":"a5-band4-fixture"}' });
       assert.equal(result.ok, true, `partial_match+50 must succeed; got ${JSON.stringify(result)}`);
     } finally {
       closeSalesDatabase(path);
@@ -216,7 +219,8 @@ describe("T-A5.Band — QUALIFICATION_BAND totalScore-consistency validation", (
     const db = openSalesDatabase(path) as AnyDb;
     try {
       const candidateId = seedFreshCandidate(db);
-      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "unknown", totalScore: 95, confidence: 0.2 });
+      // P-AUTO-15b MR-2 (Step 3, 2026-06-15): add evidenceJson so QS-5 gate passes (totalScore=95>=40).
+      const result = await makeScoreLeadTool(path).execute({ candidateId, qualification: "unknown", totalScore: 95, confidence: 0.2, evidenceJson: '{"source":"a5-band6-fixture"}' });
       assert.equal(result.ok, true, `unknown+95 must succeed (no constraint); got ${JSON.stringify(result)}`);
     } finally {
       closeSalesDatabase(path);
