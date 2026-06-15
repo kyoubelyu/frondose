@@ -195,3 +195,138 @@ describe("T-A17 — resolveByLabel: exact-match preference + dialog-scope narrow
     assert.equal(result.name, "Connect");
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P-AUTO-18 Step 5 — T-A18.1..T-A18.5 (assertion bodies filled)
+// `as any` casts removed — SnapshotEntry.region?: "aside" is now in the type
+// after Codex Step 4 landed the widening.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("T-A18 — connect-family region preference (P-AUTO-18)", () => {
+  // ─── T-A18.1 ───────────────────────────────────────────────────────────────
+  it(
+    "T-A18.1: when subject @pa1 has no region and sidebar @e* entries have region:'aside', resolveByLabel('Connect') returns @pa1 only (G-A18.1)",
+    () => {
+      // Given: entries = [{ref:"@pa1", role:"link", name:"Invite Jane Subject to connect" /* no region */},
+      //                   {ref:"@e147", role:"button", name:"Invite Fernando Sienkiewicz Luz to connect", region:"aside"},
+      //                   {ref:"@e149", role:"button", name:"Invite Matt Kavanagh to connect", region:"aside"},
+      //                   {ref:"@e151", role:"button", name:"Invite Viktor Idhammar to connect", region:"aside"}]
+      // When:  resolveByLabel(entries, "Connect", {kind:"click"}) called
+      // Then:  returns @pa1 (sole non-aside substring match); no ambiguous_target throw
+      const entries: SnapshotEntry[] = [
+        { ref: "@pa1", role: "link", name: "Invite Jane Subject to connect" },
+        { ref: "@e147", role: "button", name: "Invite Fernando Sienkiewicz Luz to connect", region: "aside" },
+        { ref: "@e149", role: "button", name: "Invite Matt Kavanagh to connect", region: "aside" },
+        { ref: "@e151", role: "button", name: "Invite Viktor Idhammar to connect", region: "aside" },
+      ];
+      const result = resolveByLabel(entries, "Connect", { kind: "click" });
+      assert.equal(result.ref, "@pa1", "connect-family region preference must drop aside entries; only @pa1 (no region) remains");
+      assert.equal(result.name, "Invite Jane Subject to connect");
+    },
+  );
+
+  // ─── T-A18.2 ───────────────────────────────────────────────────────────────
+  it(
+    "T-A18.2: when ALL candidates have region:'aside' (sidebar-only — 0 non-aside), resolveByLabel still throws ambiguous_target (fallback keeps aside set visible) (G-A18.2)",
+    () => {
+      // Given: entries = [{ref:"@e147", role:"button", name:"Invite A to connect", region:"aside"},
+      //                   {ref:"@e149", role:"button", name:"Invite B to connect", region:"aside"}]
+      //        (1st-degree profile — no primary connect button in main region)
+      // When:  resolveByLabel(entries, "Connect", {kind:"click"}) called
+      // Then:  throws ambiguous_target with both @e147 and @e149 in the error message
+      //        (region preference DOES NOT engage when 0 non-aside candidates exist)
+      const entries: SnapshotEntry[] = [
+        { ref: "@e147", role: "button", name: "Invite A to connect", region: "aside" },
+        { ref: "@e149", role: "button", name: "Invite B to connect", region: "aside" },
+      ];
+      assert.throws(
+        () => resolveByLabel(entries, "Connect", { kind: "click" }),
+        (err: unknown) => {
+          if (!(err instanceof Error)) return false;
+          // Must be ambiguous (not no-match) — both aside entries kept in the candidate set
+          const msg = err.message.toLowerCase();
+          return (
+            msg.includes("ambiguous") &&
+            err.message.includes("@e147") &&
+            err.message.includes("@e149")
+          );
+        },
+        "when 0 non-aside candidates exist, region preference must NOT engage — both aside entries stay → ambiguous_target",
+      );
+    },
+  );
+
+  // ─── T-A18.3 ───────────────────────────────────────────────────────────────
+  it(
+    "T-A18.3: when label is 'Message' (non-connect), region preference is no-op and resolveByLabel throws ambiguous_target for both main+aside candidates (G-A18.3)",
+    () => {
+      // Given: entries = [{ref:"@pa2", role:"button", name:"Message Jane" /* no region */},
+      //                   {ref:"@e88", role:"button", name:"Message in aside", region:"aside"}]
+      // When:  resolveByLabel(entries, "Message", {kind:"click"}) called
+      // Then:  throws ambiguous_target with BOTH @pa2 and @e88 (CONNECT_OPEN_RE does not match
+      //        "Message" → region clause is never activated)
+      const entries: SnapshotEntry[] = [
+        { ref: "@pa2", role: "button", name: "Message Jane" },
+        { ref: "@e88", role: "button", name: "Message in aside", region: "aside" },
+      ];
+      assert.throws(
+        () => resolveByLabel(entries, "Message", { kind: "click" }),
+        (err: unknown) => {
+          if (!(err instanceof Error)) return false;
+          // Must be ambiguous with BOTH candidates present (region clause did NOT fire)
+          const msg = err.message.toLowerCase();
+          return (
+            msg.includes("ambiguous") &&
+            err.message.includes("@pa2") &&
+            err.message.includes("@e88")
+          );
+        },
+        "non-connect label 'Message' must not activate region preference — both @pa2 (main) and @e88 (aside) stay → ambiguous_target",
+      );
+    },
+  );
+
+  // ─── T-A18.4 ───────────────────────────────────────────────────────────────
+  it(
+    "T-A18.4: when an exact 'Connect' match exists alongside aside 'Invite … to connect' entries, exact-match wins before region preference fires (G-A18.4 — T-A17.1 regression gate)",
+    () => {
+      // Given: entries = [{ref:"@e1", role:"button", name:"Connect" /* exact match, no region */},
+      //                   {ref:"@e147", role:"button", name:"Invite Fernando to connect", region:"aside"},
+      //                   {ref:"@e149", role:"button", name:"Invite Matt to connect", region:"aside"}]
+      // When:  resolveByLabel(entries, "Connect", {kind:"click"}) called
+      // Then:  returns @e1 (exact match set has length 1 → exact wins; region preference never activates)
+      const entries: SnapshotEntry[] = [
+        { ref: "@e1", role: "button", name: "Connect" },
+        { ref: "@e147", role: "button", name: "Invite Fernando to connect", region: "aside" },
+        { ref: "@e149", role: "button", name: "Invite Matt to connect", region: "aside" },
+      ];
+      const result = resolveByLabel(entries, "Connect", { kind: "click" });
+      assert.equal(result.ref, "@e1", "exact match @e1 must win before region preference fires — exact set has length 1");
+      assert.equal(result.name, "Connect");
+    },
+  );
+
+  // ─── T-A18.5 ───────────────────────────────────────────────────────────────
+  it(
+    "T-A18.5: when region preference drops aside and overlay narrowing reduces to @ov4, the order is: substring → region-drops-aside → overlay-wins (G-A18.5 — T-A17.3 regression gate)",
+    () => {
+      // Given: entries = [{ref:"@e7",   role:"button", name:"Invite Jane to connect"      /* main region, no region field */},
+      //                   {ref:"@e147", role:"button", name:"Invite Fernando to connect", region:"aside" /* sidebar */},
+      //                   {ref:"@ov4",  role:"button", name:"Invite Jane to connect"      /* modal inner-button, @ov prefix */}]
+      // When:  resolveByLabel(entries, "Connect", {kind:"click", activeLayer:"overlay"}) called
+      //        ("Connect" satisfies CONNECT_OPEN_RE — triggers the region preference clause)
+      // Then:  returns @ov4
+      //        Order: substring matches all 3 ("connect" appears in every name)
+      //        → CONNECT_OPEN_RE.test("Connect")=true → region preference drops @e147 (aside)
+      //        → 2 left (@e7, @ov4) → overlay narrowing keeps only @ov → returns @ov4
+      const entries: SnapshotEntry[] = [
+        { ref: "@e7", role: "button", name: "Invite Jane to connect" },
+        { ref: "@e147", role: "button", name: "Invite Fernando to connect", region: "aside" },
+        { ref: "@ov4", role: "button", name: "Invite Jane to connect" },
+      ];
+      const result = resolveByLabel(entries, "Connect", { kind: "click", activeLayer: "overlay" });
+      assert.equal(result.ref, "@ov4", "order must be: substr(all3) → region-drops-@e147 → overlay-keeps-@ov4; got " + result.ref);
+      assert.equal(result.name, "Invite Jane to connect");
+    },
+  );
+});

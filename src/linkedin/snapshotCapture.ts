@@ -2,6 +2,7 @@ import type { CdpClient } from "../cdp/client.js";
 import { inferSurface } from "./scopeResolver.js";
 import { FEED_POST_CAP, FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
+import { tagAsideClickables } from "./snapshotCapture/regionTag.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
 import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
 
@@ -134,10 +135,12 @@ const PROFILE_ACTIONS_SYNTH_JS = `(() => {
 export async function captureCurrentSurfaceContext(client: CdpClient): Promise<CurrentSurfaceContext> {
   await client.snapshot();
   const refMap = client.currentRefMap;
+  const asideIds = await tagAsideClickables(client);
   const entries: SnapshotEntry[] = Object.entries(refMap).map(([key, e]) => ({
     ref: `@${key}`,
     role: e.role,
     name: e.name ?? "",
+    region: asideIds.has(e.backendNodeId) ? "aside" : undefined,
   }));
 
   const pageUrl = await client.getCurrentUrl();
