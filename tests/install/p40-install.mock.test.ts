@@ -208,18 +208,24 @@ describe("install.sh — every gh release command carries --repo kyoubelyu/frond
 
 // ─── T-Pkg.1 ─────────────────────────────────────────────────────────────────
 
-describe("package.json — scripts.install === 'true' (G-P40.7)", () => {
-  it("T-Pkg.1: when package.json is parsed, scripts.install === 'true' (suppresses npm implicit node-gyp rebuild)", () => {
-    // Given: package.json at repo root (P-40 adds "install": "true" to scripts)
+describe("package.json — scripts.install suppresses npm implicit node-gyp rebuild (G-P40.7)", () => {
+  it("T-Pkg.1: when package.json is parsed, scripts.install is a cross-platform no-op that suppresses npm implicit node-gyp rebuild (WIN-2: now 'node -e \"\"' replacing 'true')", () => {
+    // Given: package.json at repo root
     // When:  JSON.parse(readFileSync(package.json)).scripts.install
-    // Then:  === "true" — overrides npm's implicit binding.gyp default install hook
+    // Then:  value is defined and contains 'node -e' (WIN-2 cross-platform form) — overrides npm's
+    //        implicit binding.gyp default install hook; 'true' was the P-40 form, 'node -e ""' is
+    //        the WIN-2 form (V-0.1 verified: any scripts.install value suppresses the node-gyp default)
     const pkg = JSON.parse(readFileSync(PKG_JSON_PATH, "utf8")) as {
       scripts?: Record<string, string>;
     };
-    assert.equal(
-      pkg.scripts?.install,
-      "true",
-      'package.json scripts.install must be "true" to suppress implicit node-gyp',
+    const installScript = pkg.scripts?.install ?? "";
+    assert.ok(
+      installScript.includes("node -e"),
+      `package.json scripts.install must be cross-platform node-based no-op (WIN-2: 'node -e \"\"'); got '${installScript}'`,
+    );
+    assert.ok(
+      installScript !== "true",
+      `package.json scripts.install must NOT be bare 'true' (WIN-2 replaced with cross-platform 'node -e \"\"'); got '${installScript}'`,
     );
   });
 });
