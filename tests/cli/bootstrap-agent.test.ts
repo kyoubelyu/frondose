@@ -78,7 +78,7 @@ const T_BOOTSTRAP_3_MATRIX: ReadonlyArray<readonly [string | undefined, number]>
 ];
 
 describe("bootstrapTimeoutMs() env-parser default + invalid-env fallback (G-P52.5, CONCERN-1)", () => {
-  it("T-Bootstrap.3: when MAI_BOOTSTRAP_TIMEOUT_MS is set to each of the 9 matrix values [undefined, '60000', '5000', 'abc', '', '  ', '-1', '500', '3.14'], bootstrapTimeoutMs() returns [60000, 60000, 5000, 60000, 60000, 60000, 60000, 60000, 60000] (locks the 60s default + invalid-env fallback + sub-1s minimum)", async () => {
+  it("T-Bootstrap.3: when FRONDOSE_BOOTSTRAP_TIMEOUT_MS is set to each of the 9 matrix values [undefined, '60000', '5000', 'abc', '', '  ', '-1', '500', '3.14'], bootstrapTimeoutMs() returns [60000, 60000, 5000, 60000, 60000, 60000, 60000, 60000, 60000] (locks the 60s default + invalid-env fallback + sub-1s minimum)", async () => {
     // Given: the exported `bootstrapTimeoutMs()` helper from
     //        `src/cli/bootstrap-agent.ts` (Codex adds the export at Step 4b §6.8(a)).
     // When:  the helper is called under each of the 9 matrix env states above.
@@ -87,13 +87,13 @@ describe("bootstrapTimeoutMs() env-parser default + invalid-env fallback (G-P52.
     //        accidentally defaults to 30s or 120s, or silently accepts sub-1s
     //        values, fails this test.
     //
-    // VALIDATOR NOTE (Step 5 fill): save+restore process.env.MAI_BOOTSTRAP_TIMEOUT_MS
+    // VALIDATOR NOTE (Step 5 fill): save+restore process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS
     // around the test; iterate T_BOOTSTRAP_3_MATRIX; await bootstrapMod(); call
     // mod.bootstrapTimeoutMs(); assert.equal returned value to expected.
-    const priorEnv = process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+    const priorEnv = process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
     const restore = (): void => {
-      if (priorEnv === undefined) delete process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
-      else process.env.MAI_BOOTSTRAP_TIMEOUT_MS = priorEnv;
+      if (priorEnv === undefined) delete process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
+      else process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = priorEnv;
     };
     try {
       const mod = await bootstrapMod();
@@ -106,15 +106,15 @@ describe("bootstrapTimeoutMs() env-parser default + invalid-env fallback (G-P52.
 
       for (const [input, expected] of T_BOOTSTRAP_3_MATRIX) {
         if (input === undefined) {
-          delete process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+          delete process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
         } else {
-          process.env.MAI_BOOTSTRAP_TIMEOUT_MS = input;
+          process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = input;
         }
         const got = fn();
         assert.equal(
           got,
           expected,
-          `bootstrapTimeoutMs() with MAI_BOOTSTRAP_TIMEOUT_MS=${JSON.stringify(input)} must return ${expected}; got ${got}`,
+          `bootstrapTimeoutMs() with FRONDOSE_BOOTSTRAP_TIMEOUT_MS=${JSON.stringify(input)} must return ${expected}; got ${got}`,
         );
       }
     } finally {
@@ -126,8 +126,8 @@ describe("bootstrapTimeoutMs() env-parser default + invalid-env fallback (G-P52.
 // ─── T-Bootstrap.1 (timeout fires) ───────────────────────────────────────────
 
 describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled streamText (G-P52.5)", () => {
-  it("T-Bootstrap.1: when MAI_BOOTSTRAP_TIMEOUT_MS='200' AND the MockLanguageModelV1's doStream returns a stream that never produces a chunk, runBootstrapAgent rejects within ~300ms with a BootstrapTimeoutError whose message contains 'stalled' + one of ['network', 'proxy', 'retry']", async () => {
-    // Given: process.env.MAI_BOOTSTRAP_TIMEOUT_MS='200' (fast test).
+  it("T-Bootstrap.1: when FRONDOSE_BOOTSTRAP_TIMEOUT_MS='200' AND the MockLanguageModelV1's doStream returns a stream that never produces a chunk, runBootstrapAgent rejects within ~300ms with a BootstrapTimeoutError whose message contains 'stalled' + one of ['network', 'proxy', 'retry']", async () => {
+    // Given: process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS='200' (fast test).
     //        A MockLanguageModelV1 whose doStream returns a stream that
     //        yields no chunks for ≥5 seconds (simulating a stalled LLM).
     //        A `BootstrapAgentOpts` with identityPath / wipPath set to tmp paths.
@@ -142,15 +142,15 @@ describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled s
     // that registers `abortSignal.onabort` and resolves only after the abort
     // fires (or never). Use tmp paths for identityPath / wipPath. Wrap the
     // call in `assert.rejects(() => runBootstrapAgent(opts), (e) => {...})`.
-    const priorEnv = process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+    const priorEnv = process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
     const restore = (): void => {
-      if (priorEnv === undefined) delete process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
-      else process.env.MAI_BOOTSTRAP_TIMEOUT_MS = priorEnv;
+      if (priorEnv === undefined) delete process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
+      else process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = priorEnv;
     };
     const paths = makeTmpBootstrapPaths();
     const restoreStdin = shimClosedStdin();
     try {
-      process.env.MAI_BOOTSTRAP_TIMEOUT_MS = "200";
+      process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = "200";
       const mod = await bootstrapMod();
       assert.ok(mod.BootstrapTimeoutError, "bootstrap-agent must export `BootstrapTimeoutError`");
 
@@ -271,8 +271,8 @@ describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled s
     }
   });
 
-  it("T-Bootstrap.2: when MAI_BOOTSTRAP_TIMEOUT_MS='5000' AND the MockLanguageModelV1 emits a short response immediately, runBootstrapAgent resolves cleanly within the timeout — no BootstrapTimeoutError, timer cleared (no leaked handles)", async () => {
-    // Given: process.env.MAI_BOOTSTRAP_TIMEOUT_MS='5000' (generous timeout).
+  it("T-Bootstrap.2: when FRONDOSE_BOOTSTRAP_TIMEOUT_MS='5000' AND the MockLanguageModelV1 emits a short response immediately, runBootstrapAgent resolves cleanly within the timeout — no BootstrapTimeoutError, timer cleared (no leaked handles)", async () => {
+    // Given: process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS='5000' (generous timeout).
     //        A MockLanguageModelV1 that immediately emits one text-delta
     //        chunk then finishes.
     //        BootstrapAgentOpts with tmp paths AND stdin that emits "/done"
@@ -287,15 +287,15 @@ describe("runBootstrapAgent timeout — BootstrapTimeoutError fires on stalled s
     // VALIDATOR NOTE (Step 5 fill): use Node's `process._getActiveHandles`
     // OR `--test-force-exit` behavior to verify no leaked timer (or just
     // assert the runBootstrapAgent promise resolves within ~1s well below the 5s budget).
-    const priorEnv = process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
+    const priorEnv = process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
     const restore = (): void => {
-      if (priorEnv === undefined) delete process.env.MAI_BOOTSTRAP_TIMEOUT_MS;
-      else process.env.MAI_BOOTSTRAP_TIMEOUT_MS = priorEnv;
+      if (priorEnv === undefined) delete process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS;
+      else process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = priorEnv;
     };
     const paths = makeTmpBootstrapPaths();
     const restoreStdin = shimClosedStdin();
     try {
-      process.env.MAI_BOOTSTRAP_TIMEOUT_MS = "5000";
+      process.env.FRONDOSE_BOOTSTRAP_TIMEOUT_MS = "5000";
       const mod = await bootstrapMod();
 
       // Immediate finishing doStream — emits a short text-delta then finish.

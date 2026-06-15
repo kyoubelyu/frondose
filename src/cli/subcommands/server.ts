@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { frondoseEnv } from "../../env.js";
 import { type ConfigJson, readConfig } from "../../persistence/config.js";
-import { bootMigrateOrExit } from "../../persistence/dataDirMigration.js";
 import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { isAlive, readPid } from "../../persistence/processLock.js";
 import { readServerIdentity, writeServerIdentity } from "../../persistence/serverIdentity.js";
@@ -57,8 +56,6 @@ export interface ServerSubcommandOpts {
 // ─── Dispatcher ────────────────────────────────────────────────────────────────
 
 export async function runServerSubcommand(action: ServerAction, opts: ServerSubcommandOpts): Promise<void> {
-  bootMigrateOrExit(getHomeBase());
-
   switch (action) {
     case "repl":
       return runServerRepl();
@@ -125,7 +122,7 @@ async function runServerBind(opts: ServerSubcommandOpts): Promise<void> {
   if (!token) {
     process.stderr.write(
       "[server bind] FRONDOSE_SERVER_TELEGRAM_TOKEN env var is unset. " +
-        "Set it (or legacy MAI_SERVER_TELEGRAM_TOKEN) to your server bot token before running `mai server bind`.\n",
+        "Set it to your server bot token before running `mai server bind`.\n",
     );
     process.exit(1);
   }
@@ -163,9 +160,7 @@ async function runServerInstall(opts: ServerSubcommandOpts): Promise<void> {
   }
   const token = frondoseEnv("SERVER_TELEGRAM_TOKEN");
   if (!token) {
-    process.stderr.write(
-      "[server install] FRONDOSE_SERVER_TELEGRAM_TOKEN env var must be set (legacy MAI_SERVER_TELEGRAM_TOKEN still accepted)\n",
-    );
+    process.stderr.write("[server install] FRONDOSE_SERVER_TELEGRAM_TOKEN env var must be set\n");
     process.exit(1);
   }
   const configPath = opts.serverConfigPath ?? SERVER_CONFIG_PATH();

@@ -57,12 +57,12 @@ describe("readSecrets — missing file → default empty shape (G-P24.8)", () =>
     // When:  readSecrets(secretsPath) is called
     // Then:  returns {schema_version:1}; no file written to disk
     const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       // Prevent fallback reads from real legacy files (operator may have auth.json / github.json)
-      process.env.MAI_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.MAI_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
       const result = readSecrets(secretsPath);
       assert.deepEqual(result, { schema_version: 1 }, "T-SECRETS.1: empty defaults must match {schema_version:1}");
@@ -128,13 +128,13 @@ describe("readSecrets — malformed JSON → stderr + defaults (G-P24.8)", () =>
     // When:  readSecrets(secretsPath) — stderr captured
     // Then:  stderr contains 'secrets.json corrupt or invalid'; returns {schema_version:1}; no throw
     const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(secretsPath, "{not json", "utf-8");
       // Prevent fallback reads from real legacy files
-      process.env.MAI_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.MAI_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);
@@ -172,13 +172,13 @@ describe("readSecrets — schema_version forward-compat → stderr + defaults (G
     // When:  readSecrets(secretsPath)
     // Then:  stderr warning emitted; returns {schema_version:1} defaults; no throw
     const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(secretsPath, JSON.stringify({ schema_version: 99, providers: {} }), "utf-8");
       // Prevent fallback reads from real legacy files
-      process.env.MAI_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.MAI_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);

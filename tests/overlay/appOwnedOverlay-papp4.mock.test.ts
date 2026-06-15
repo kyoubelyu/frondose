@@ -40,9 +40,9 @@ function freshHostModuleUrl(): string {
 }
 
 async function captureInstallSource(owner: string | undefined): Promise<string> {
-  const previousOwner = process.env.MAI_SIDECAR_OWNER;
-  if (owner === undefined) delete process.env.MAI_SIDECAR_OWNER;
-  else process.env.MAI_SIDECAR_OWNER = owner;
+  const previousOwner = process.env.FRONDOSE_SIDECAR_OWNER;
+  if (owner === undefined) delete process.env.FRONDOSE_SIDECAR_OWNER;
+  else process.env.FRONDOSE_SIDECAR_OWNER = owner;
 
   let capturedSource = "";
   const client: FakeCdpClient = {
@@ -70,8 +70,8 @@ async function captureInstallSource(owner: string | undefined): Promise<string> 
     assert.ok(capturedSource.length > 0, "installOverlay must inject non-empty bootstrap source");
     return capturedSource;
   } finally {
-    if (previousOwner === undefined) delete process.env.MAI_SIDECAR_OWNER;
-    else process.env.MAI_SIDECAR_OWNER = previousOwner;
+    if (previousOwner === undefined) delete process.env.FRONDOSE_SIDECAR_OWNER;
+    else process.env.FRONDOSE_SIDECAR_OWNER = previousOwner;
   }
 }
 
@@ -82,11 +82,11 @@ function assertNoOwnerPlaceholders(source: string): void {
 
 describe("P-APP-4 overlay owner substitution", () => {
   afterEach(() => {
-    delete process.env.MAI_SIDECAR_OWNER;
+    delete process.env.FRONDOSE_SIDECAR_OWNER;
   });
 
-  it("T-PAPP4.Overlay.1: installOverlay substitutes app owner when MAI_SIDECAR_OWNER=frondose-app", async () => {
-    // Given: the Tauri app sidecar marks itself with MAI_SIDECAR_OWNER=frondose-app.
+  it("T-PAPP4.Overlay.1: installOverlay substitutes app owner when FRONDOSE_SIDECAR_OWNER=frondose-app", async () => {
+    // Given: the Tauri app sidecar marks itself with FRONDOSE_SIDECAR_OWNER=frondose-app.
     // When:  installOverlay assembles the injected overlay bootstrap.
     // Then:  the injected source carries app owner/version markers and no unresolved placeholders.
     const source = await captureInstallSource("frondose-app");

@@ -12,7 +12,7 @@ import {
 } from "../../src/agent/modelResolver.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
-// T-M1..T-M4: MAI_MODEL precedence chain + parseModelSpec contract
+// T-M1..T-M4: FRONDOSE_MODEL precedence chain + parseModelSpec contract
 
 /**
  * Helpers: save/restore process.env properties in try/finally for test isolation.
@@ -35,10 +35,10 @@ function restoreEnv(saved: Record<string, string | undefined>): void {
 
 test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm1-"));
-  const saved = saveEnv("HOME", "MAI_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
   try {
     process.env.HOME = tmpHome;
-    process.env.MAI_MODEL = "openai:gpt-4o";
+    process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ factory: "anthropic:claude-sonnet-4-5", cli: "openai:deepseek-chat" });
     assert.equal(spec, "anthropic:claude-sonnet-4-5", "factory must beat cli/env/auth.json/default");
   } finally {
@@ -51,10 +51,10 @@ test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
 
 test("T-M2: cli takes precedence over env/auth.json/default when factory absent", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm2-"));
-  const saved = saveEnv("HOME", "MAI_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
   try {
     process.env.HOME = tmpHome;
-    process.env.MAI_MODEL = "openai:gpt-4o";
+    process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ cli: "openai:deepseek-chat" });
     assert.equal(spec, "openai:deepseek-chat", "cli must beat env/auth.json/default");
   } finally {
@@ -67,13 +67,13 @@ test("T-M2: cli takes precedence over env/auth.json/default when factory absent"
 
 test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", async (t) => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm3-"));
-  const saved = saveEnv("HOME", "MAI_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
 
   try {
     // (a) factory wins over cli + env + auth.json + default
     await t.test("(a) factory wins", () => {
       process.env.HOME = tmpHome;
-      process.env.MAI_MODEL = "openai:env-model";
+      process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({ factory: "anthropic:factory-model", cli: "openai:cli-model" });
       assert.equal(result, "anthropic:factory-model");
     });
@@ -81,7 +81,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     // (b) cli wins over env + auth.json + default (no factory)
     await t.test("(b) cli wins when factory absent", () => {
       process.env.HOME = tmpHome;
-      process.env.MAI_MODEL = "openai:env-model";
+      process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({ cli: "openai:cli-model" });
       assert.equal(result, "openai:cli-model");
     });
@@ -89,7 +89,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     // (c) env wins over auth.json + default (no factory, no cli)
     await t.test("(c) env wins when factory and cli absent", () => {
       process.env.HOME = tmpHome; // no auth.json in tmpHome
-      process.env.MAI_MODEL = "openai:env-model";
+      process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({});
       assert.equal(result, "openai:env-model");
     });
@@ -97,7 +97,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     // (d) auth.json default wins when factory/cli/env absent
     await t.test("(d) auth.json default wins when factory/cli/env absent", () => {
       process.env.HOME = tmpHome;
-      delete process.env.MAI_MODEL;
+      delete process.env.FRONDOSE_MODEL;
       const maiDir = join(tmpHome, ".frondose");
       mkdirSync(maiDir, { recursive: true });
       writeFileSync(join(maiDir, "auth.json"), '{"default":"openai:auth-model"}', "utf-8");
@@ -115,7 +115,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     // P-71: default changed from anthropic:claude-sonnet-4-5 to deepseek:deepseek-v4-flash
     await t.test("(e) hardcoded fallback deepseek:deepseek-v4-flash when all unset", () => {
       process.env.HOME = tmpHome; // no auth.json (removed in (d))
-      delete process.env.MAI_MODEL;
+      delete process.env.FRONDOSE_MODEL;
       const result = resolveModelSpec({});
       assert.equal(result, DEFAULT_MODEL_SPEC);
       assert.equal(DEFAULT_MODEL_SPEC, "deepseek:deepseek-v4-flash");
@@ -532,10 +532,10 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
     // When:  makeAllTools builds the exposed ToolSet for worker/server consumer+power tiers.
     // Then:  counts match the P-Y3 contract and only operator-output tools are power-only.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-tools-contract-"));
-    const saved = saveEnv("HOME", "MAI_TIER");
+    const saved = saveEnv("HOME", "FRONDOSE_TIER");
     try {
       process.env.HOME = tmpHome;
-      delete process.env.MAI_TIER;
+      delete process.env.FRONDOSE_TIER;
       const persistence = {
         memoryDbPath: join(tmpHome, "memory.sqlite"),
         identityPath: join(tmpHome, "identity.json"),

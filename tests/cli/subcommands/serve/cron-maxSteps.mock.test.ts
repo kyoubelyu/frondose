@@ -174,7 +174,7 @@ describe("T-CronMaxSteps.2: FRONDOSE_CRON_MAX_STEPS=15 overrides the default 40 
   after(() => {
     if (savedFrondose === undefined) delete process.env.FRONDOSE_CRON_MAX_STEPS;
     else process.env.FRONDOSE_CRON_MAX_STEPS = savedFrondose;
-    if (savedMai === undefined) delete process.env.MAI_CRON_MAX_STEPS;
+    if (savedMai === undefined) delete process.env.FRONDOSE_CRON_MAX_STEPS;
     else process.env.MAI_CRON_MAX_STEPS = savedMai;
   });
 

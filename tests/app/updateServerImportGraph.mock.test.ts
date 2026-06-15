@@ -136,14 +136,13 @@ describe("T-UpdateSrv.Imports — entry import graph", () => {
 
   it(
     "T-UpdateSrv.Imports.2: src/app/updateServerMain.ts top-level static import specifiers are exactly " +
-      "{ node:url, ../cli/crashLogger.js, ../persistence/dataDirMigration.js, ../persistence/paths.js } — dynamic body NOT in static set (updated F-REN-4a: bootMigrateOrExit + getHomeBase added)",
+      "{ node:url, ../cli/crashLogger.js } — dynamic body NOT in static set (F-REN-4e: dataDirMigration.js removed — DATA_DIR_NAME is now in paths.ts, bootMigrateOrExit call removed)",
     () => {
       // Given: src/app/updateServerMain.ts exists
       // When:  validator collects top-level static import specifiers from the source
       // Then:  specifier set is exactly {
-      //          "node:url", "../cli/crashLogger.js",
-      //          "../persistence/dataDirMigration.js", "../persistence/paths.js"
-      //        } (F-REN-4a added bootMigrateOrExit + getHomeBase imports);
+      //          "node:url", "../cli/crashLogger.js"
+      //        } (F-REN-4e removed bootMigrateOrExit + dataDirMigration.js + paths.js imports);
       //        "../cli/subcommands/updateServer.js" must NOT appear in the static set
       assert.ok(
         existsSync(SRC_ENTRY),
@@ -155,19 +154,17 @@ describe("T-UpdateSrv.Imports — entry import graph", () => {
       const specifiers = extractStaticImportSpecifiers(src);
       const specSet = new Set(specifiers);
 
-      // Exactly these four specifiers — no more, no less
-      // (F-REN-4a added ../persistence/dataDirMigration.js + ../persistence/paths.js
-      //  for bootMigrateOrExit(getHomeBase()) call)
+      // Exactly these two specifiers — no more, no less
+      // (F-REN-4e removed ../persistence/dataDirMigration.js + ../persistence/paths.js;
+      //  bootMigrateOrExit call deleted — DATA_DIR_NAME = ".frondose" is now in paths.ts)
       const expected = new Set([
         "node:url",
         "../cli/crashLogger.js",
-        "../persistence/dataDirMigration.js",
-        "../persistence/paths.js",
       ]);
       assert.deepEqual(
         specSet,
         expected,
-        `Static import specifier set must be exactly the 4 expected specifiers (F-REN-4a). ` +
+        `Static import specifier set must be exactly the 2 expected specifiers (F-REN-4e). ` +
           `Got: ${JSON.stringify([...specSet])}`,
       );
 

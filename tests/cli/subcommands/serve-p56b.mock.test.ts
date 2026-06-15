@@ -237,9 +237,9 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t5-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
 
-    process.env.MAI_HOME_BASE = tmpDir;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // 2s sleep gives us plenty of time for (2)→(3) overlap
@@ -307,7 +307,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     assert.notEqual(turnId2, turnId1, `(4) second turnId must differ from first; both are ${turnId1}`);
 
     // Restore env (server keeps running until --test-force-exit)
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -327,9 +327,9 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t6-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
 
-    process.env.MAI_HOME_BASE = tmpDir;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 200; // quick turn so done frame arrives within 800ms collect window
@@ -385,7 +385,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
       `SSE text must include 'data: ' frame prefix; got: ${JSON.stringify(sse.text.slice(0, 400))}`,
     );
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -405,9 +405,9 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t7-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
 
-    process.env.MAI_HOME_BASE = tmpDir;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 5000; // long sleep so abort fires before turn completes
@@ -459,7 +459,7 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
       `scenario 3: SSE text must include '"finishReason":"aborted"'; got: ${JSON.stringify(sse.text.slice(0, 500))}`,
     );
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -473,7 +473,7 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     //          r2: valid OverlayEvent (kind:"overlay-event", ts:<number>, ...)
     //          r3: literal string '{not valid json' (malformed — JSON.parse throws)
     //          r4: valid AuditEntry (toolCallId:"b", toolName:"launch", ...)
-    //        process.env.MAI_HOME_BASE = baseDir; runServeSubcommand started
+    //        process.env.FRONDOSE_HOME_BASE = baseDir; runServeSubcommand started
     // When:  (1) GET /audit/tail?n=10 with Authorization: Bearer tok
     //        (2) GET /audit/tail?n=2  with Authorization: Bearer tok
     // Then:  (1) {ok:true, rows:[r1_obj, r2_obj, r4_obj], total:3}
@@ -483,9 +483,9 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-serve-t8-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
 
-    process.env.MAI_HOME_BASE = tmpDir;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     const agentDir = join(tmpDir, ".frondose", "agent");
     mkdirSync(agentDir, { recursive: true });
 
@@ -557,6 +557,6 @@ describe("runServeSubcommand — GET /audit/tail: last N valid rows; malformed s
     );
     assert.deepEqual(resp2.body.rows[1], r4, "?n=2: rows[1] must be r4 (AuditEntry)");
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });

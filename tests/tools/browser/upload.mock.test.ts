@@ -19,7 +19,7 @@ import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeUploadTool } from "../../../src/tools/browser/upload.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
-process.env.MAI_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 
@@ -169,8 +169,8 @@ test("T-M72: upload tool fails when no upload trigger button found in entries", 
 
   const { filePath, cleanup } = makeTempUploadFile();
   try {
-    const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = path.dirname(filePath);
+    const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = path.dirname(filePath);
     try {
       const result = await tool.execute({ file: filePath }, { toolCallId: "t2", messages: [], abortSignal });
       assert.equal(result.ok, false, "missing upload trigger must fail");
@@ -182,9 +182,9 @@ test("T-M72: upload tool fails when no upload trigger button found in entries", 
       );
     } finally {
       if (prevAllowlist !== undefined) {
-        process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+        process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
       } else {
-        delete process.env.MAI_UPLOAD_ALLOWLIST;
+        delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       }
     }
   } finally {
@@ -214,8 +214,8 @@ test(
       });
       const tool = makeUploadTool(session);
 
-      const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-      process.env.MAI_UPLOAD_ALLOWLIST = path.dirname(filePath);
+      const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+      process.env.FRONDOSE_UPLOAD_ALLOWLIST = path.dirname(filePath);
       try {
         const result = await tool.execute(
           { file: filePath, scope: "composerInput" },
@@ -234,9 +234,9 @@ test(
         );
       } finally {
         if (prevAllowlist !== undefined) {
-          process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+          process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
         } else {
-          delete process.env.MAI_UPLOAD_ALLOWLIST;
+          delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
         }
       }
     } finally {
@@ -261,8 +261,8 @@ test(
       const session = makeFakeSession({ setFileInputCalled }); // has trigger button by default
       const tool = makeUploadTool(session);
 
-      const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-      process.env.MAI_UPLOAD_ALLOWLIST = path.dirname(filePath);
+      const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+      process.env.FRONDOSE_UPLOAD_ALLOWLIST = path.dirname(filePath);
       try {
         const result = await tool.execute({ file: filePath }, { toolCallId: "t-u4", messages: [], abortSignal });
 
@@ -274,9 +274,9 @@ test(
         assert.equal(setFileInputCalled.length, 1, "setFileInputFiles must be called once");
       } finally {
         if (prevAllowlist !== undefined) {
-          process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+          process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
         } else {
-          delete process.env.MAI_UPLOAD_ALLOWLIST;
+          delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
         }
       }
     } finally {
@@ -303,8 +303,8 @@ test("T-Upload.5: 50MB ceiling rejection returns runtime_error with size-exceede
     const session = makeFakeSession({});
     const tool = makeUploadTool(session);
 
-    const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = uploadDir;
+    const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = uploadDir;
     try {
       const result = await tool.execute(
         { file: filePath, scope: "composerInput" },
@@ -323,9 +323,9 @@ test("T-Upload.5: 50MB ceiling rejection returns runtime_error with size-exceede
       );
     } finally {
       if (prevAllowlist !== undefined) {
-        process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+        process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
       } else {
-        delete process.env.MAI_UPLOAD_ALLOWLIST;
+        delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       }
     }
   } finally {
@@ -392,8 +392,8 @@ test("T-Upload.6: 6012px edge preflight rejection returns runtime_error with dim
     const session = makeFakeSession({});
     const tool = makeUploadTool(session);
 
-    const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = uploadDir;
+    const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = uploadDir;
     try {
       const result = await tool.execute({ file: filePath }, { toolCallId: "t-u6", messages: [], abortSignal });
 
@@ -408,9 +408,9 @@ test("T-Upload.6: 6012px edge preflight rejection returns runtime_error with dim
       );
     } finally {
       if (prevAllowlist !== undefined) {
-        process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+        process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
       } else {
-        delete process.env.MAI_UPLOAD_ALLOWLIST;
+        delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       }
     }
   } finally {
@@ -435,8 +435,8 @@ test("T-Upload.7: malformed image header rejection returns runtime_error with ma
     const session = makeFakeSession({});
     const tool = makeUploadTool(session);
 
-    const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = uploadDir;
+    const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = uploadDir;
     try {
       const result = await tool.execute({ file: filePath }, { toolCallId: "t-u7", messages: [], abortSignal });
 
@@ -451,9 +451,9 @@ test("T-Upload.7: malformed image header rejection returns runtime_error with ma
       );
     } finally {
       if (prevAllowlist !== undefined) {
-        process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+        process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
       } else {
-        delete process.env.MAI_UPLOAD_ALLOWLIST;
+        delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       }
     }
   } finally {
@@ -477,8 +477,8 @@ test("T-Upload.8: preflight skipped for non-image files, upload proceeds to setF
     const session = makeFakeSession({ setFileInputCalled });
     const tool = makeUploadTool(session);
 
-    const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = uploadDir;
+    const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = uploadDir;
     try {
       const result = await tool.execute({ file: filePath }, { toolCallId: "t-u8", messages: [], abortSignal });
 
@@ -491,9 +491,9 @@ test("T-Upload.8: preflight skipped for non-image files, upload proceeds to setF
       );
     } finally {
       if (prevAllowlist !== undefined) {
-        process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+        process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
       } else {
-        delete process.env.MAI_UPLOAD_ALLOWLIST;
+        delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       }
     }
   } finally {
@@ -512,8 +512,8 @@ test(
 
       const tool = makeUploadTool(session);
 
-      const prevAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-      process.env.MAI_UPLOAD_ALLOWLIST = path.dirname(filePath);
+      const prevAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+      process.env.FRONDOSE_UPLOAD_ALLOWLIST = path.dirname(filePath);
       try {
         const result = await tool.execute({ file: filePath }, { toolCallId: "t3", messages: [], abortSignal });
 
@@ -536,9 +536,9 @@ test(
         );
       } finally {
         if (prevAllowlist !== undefined) {
-          process.env.MAI_UPLOAD_ALLOWLIST = prevAllowlist;
+          process.env.FRONDOSE_UPLOAD_ALLOWLIST = prevAllowlist;
         } else {
-          delete process.env.MAI_UPLOAD_ALLOWLIST;
+          delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
         }
       }
     } finally {

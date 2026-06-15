@@ -15,7 +15,7 @@ import type { CurrentSurfaceContext, SnapshotEntry } from "../../../src/linkedin
 import { makeClickTool, resolveByLabelWithRetry } from "../../../src/tools/browser/click.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
-process.env.MAI_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 

@@ -32,9 +32,9 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
 
-process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 const TEST_HOME_BASE = mkdtempSync(join(tmpdir(), "mai-tools-index-"));
-process.env.MAI_HOME_BASE = TEST_HOME_BASE;
+process.env.FRONDOSE_HOME_BASE = TEST_HOME_BASE;
 
 after(() => {
   rmSync(TEST_HOME_BASE, { recursive: true, force: true });
@@ -456,7 +456,7 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
   //
   // Pre-builder state: makeSalesTools does NOT yet register score_lead / score_account
   // → assert.ok(false, …) immediately fails (expected at Step 4a).
-  process.env.MAI_TIER = "power";
+  process.env.FRONDOSE_TIER = "power";
   // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
   const control = { requestStop: () => {}, auditPath: "/tmp/p-sp-b-wiring1-audit.jsonl" } as any;
   // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
@@ -580,7 +580,7 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
   // Then:  'get_sales_report' is present AND has .description (string) + .parameters + .execute (fn)
   //
   // Pre-builder state: makeSalesTools does NOT yet register get_sales_report → fails
-  process.env.MAI_TIER = "power";
+  process.env.FRONDOSE_TIER = "power";
   // biome-ignore lint/suspicious/noExplicitAny: test assertion on dynamic registry
   const t = makeAllTools() as any;
   assert.ok(
@@ -616,7 +616,7 @@ test("T-F.Wire.2: post-P-73 tool count docs — CLAUDE.md contains worker 53/51 
   //
   // Pre-builder: makeAllTools() returns 23 keys (no get_sales_report yet) → fails
 
-  process.env.MAI_TIER = "power";
+  process.env.FRONDOSE_TIER = "power";
   // biome-ignore lint/suspicious/noExplicitAny: test assertion
   const t = makeAllTools() as any;
   const baseCount = Object.keys(t).length;

@@ -122,9 +122,9 @@ describe("runGhSubcommand (G-P15.5)", () => {
     const { cfgPath, cleanup } = makeTmpDir();
     // Stub isInteractive to return true
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = true;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       const mp = makeMockPrompter();
       await captureStdout(() => runGhSubcommand("set", { cfgPath }, mp));
@@ -136,8 +136,8 @@ describe("runGhSubcommand (G-P15.5)", () => {
       assert.equal(content.token, "mock-key-from-prompt", "token from prompt must be written to file");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -150,9 +150,9 @@ describe("runGhSubcommand (G-P15.5)", () => {
     const { cfgPath, cleanup } = makeTmpDir();
     // Stub isInteractive to return false
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
 
     let exitCode: number | undefined;
     const origExit = process.exit.bind(process);
@@ -172,8 +172,8 @@ describe("runGhSubcommand (G-P15.5)", () => {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });

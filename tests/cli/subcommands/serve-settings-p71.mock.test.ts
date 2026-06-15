@@ -28,7 +28,7 @@ function withSettingsHome<T>(fn: () => T): T {
   const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "mai-p71-settings-"));
   const saved = saveEnv();
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   try {
     return fn();
   } finally {

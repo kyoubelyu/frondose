@@ -5,7 +5,6 @@ import { ExitPromptError } from "@inquirer/core";
 import { Command } from "commander";
 import { frondoseEnv } from "../env.js";
 import { DEFAULT_AUTH_PATH } from "../persistence/auth.js";
-import { bootMigrateOrExit } from "../persistence/dataDirMigration.js";
 import { DATA_DIR_NAME, getHomeBase } from "../persistence/paths.js";
 import { resolveTier } from "../tier.js";
 import { registerCrashHandlers } from "./crashLogger.js";
@@ -76,7 +75,6 @@ function maybePrintTransitionalBanner(): void {
 async function main(): Promise<void> {
   // CRITICAL: load .env BEFORE any code reads process.env (modelResolver, persistence).
   loadDotenv(process.cwd());
-  bootMigrateOrExit(getHomeBase());
 
   // [Phase 15] Surface the transitional-CLI banner before any further work.
   maybePrintTransitionalBanner();
@@ -99,14 +97,17 @@ async function main(): Promise<void> {
   const profileDir = frondoseEnv("PROFILE_DIR") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
 
   // P-4 env reads (persistence layer): memory DB + identity JSON paths.
-  const memoryDbPath = frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
-  const identityPath = frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json");
+  const memoryDbPath =
+    frondoseEnv("MEMORY_DB_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
+  const identityPath =
+    frondoseEnv("IDENTITY_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "identity.json");
 
   // P-6 env read (audit layer): JSONL audit log path; default ~/.frondose/agent/audit.jsonl.
   const auditPath = frondoseEnv("AUDIT_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "audit.jsonl");
 
   // P-10 (D-9 / D-13) env read: schedule.jsonl path for /cron persistence.
-  const schedulePath = frondoseEnv("SCHEDULE_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
+  const schedulePath =
+    frondoseEnv("SCHEDULE_PATH") ?? path.join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
 
   // P-11 (D-9 / D-13) env read: telegram.json path for /telegram persistence.
   const telegramConfigPath =
@@ -122,15 +123,12 @@ async function main(): Promise<void> {
     .name("mai")
     .description("LinkedIn autonomous agent")
     .version(pkg.version)
-    .option("--model <spec>", "LLM model spec (provider:modelId); overrides FRONDOSE_MODEL (legacy MAI_MODEL still accepted)")
+    .option("--model <spec>", "LLM model spec (provider:modelId); overrides FRONDOSE_MODEL")
     .option("--prompt <text>", "one-shot prompt; exits after response")
     .option("--new-session", "start a fresh session (discard prior context)", false)
     .option("--cwd <dir>", "working directory for session storage", process.cwd())
     .option("--reset-identity", "delete identity.json and re-run first-run bootstrap", false)
-    .option(
-      "--max-steps <n>",
-      "max agent-loop tool-call steps per turn (overrides FRONDOSE_MAX_STEPS [legacy MAI_MAX_STEPS still accepted]; default 200)",
-    )
+    .option("--max-steps <n>", "max agent-loop tool-call steps per turn (overrides FRONDOSE_MAX_STEPS; default 200)")
     // P-5 Step 5a (FAILURE-1 fix): Commander v12 requires a root .action() handler whenever
     // any subcommand is registered, otherwise root-level invocations like `mai --prompt "..."`
     // fall through to the usage screen and exit 1. The full REPL / one-shot body lives here.
@@ -544,7 +542,9 @@ async function main(): Promise<void> {
   // P-38: `mai uninstall` — remove the global install. fs-only; --purge wipes ~/.frondose/.
   program
     .command("uninstall")
-    .description("Remove the global mai install (bin + package symlink + release dirs); --purge also removes ~/.frondose/")
+    .description(
+      "Remove the global mai install (bin + package symlink + release dirs); --purge also removes ~/.frondose/",
+    )
     .option("--purge", "Also remove ~/.frondose/ — credentials, sessions, Chrome-profile symlink (irreversible)", false)
     .option("--yes", "Skip the interactive confirmation prompts", false)
     .action(async (cliOpts: { purge?: boolean; yes?: boolean }) => {

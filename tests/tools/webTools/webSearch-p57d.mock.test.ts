@@ -17,13 +17,13 @@ async function withIsolatedHome(fn: () => Promise<void>): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "mai-p57d-pbrave-"));
   const saved = {
     HOME: process.env.HOME,
-    MAI_HOME_BASE: process.env.MAI_HOME_BASE,
+    FRONDOSE_HOME_BASE: process.env.FRONDOSE_HOME_BASE,
     MCP_SEARCH_URL: process.env.MCP_SEARCH_URL,
     BRAVE_API_KEY: process.env.BRAVE_API_KEY,
     TAVILY_API_KEY: process.env.TAVILY_API_KEY,
   };
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   delete process.env.MCP_SEARCH_URL;
   delete process.env.BRAVE_API_KEY;
   delete process.env.TAVILY_API_KEY;

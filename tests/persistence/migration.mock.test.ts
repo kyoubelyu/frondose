@@ -5,8 +5,8 @@
  * search.json → secrets.json, telegram.json → config.json migrations.
  * Also covers precedence (secrets wins over legacy) + partial migration.
  *
- * DI: legacy paths injected via MAI_LEGACY_AUTH_PATH / MAI_LEGACY_GITHUB_PATH /
- *     MAI_LEGACY_SEARCH_PATH env overrides (plan §6.1 B-3 fix).
+ * DI: legacy paths injected via FRONDOSE_LEGACY_AUTH_PATH / FRONDOSE_LEGACY_GITHUB_PATH /
+ *     FRONDOSE_LEGACY_SEARCH_PATH env overrides (plan §6.1 B-3 fix).
  *     Config migration: pass optional tcPath to migrateTelegramIntoConfig.
  *
  * Gate coverage:
@@ -59,22 +59,22 @@ describe("readSecrets — migrates auth.json on first call when secrets.json abs
   it("T-MIGRATE.AUTH.1: when auth.json has providers + default, and secrets.json absent, readSecrets writes secrets.json and returns merged shape; auth.json unchanged", () => {
     // Given: auth.json = {default:'anthropic:claude-sonnet-4-5', providers:{anthropic:{key:'sk-ant-test'}}}
     //        secrets.json absent
-    //        MAI_LEGACY_AUTH_PATH = authPath (DI injection)
+    //        FRONDOSE_LEGACY_AUTH_PATH = authPath (DI injection)
     // When:  readSecrets(secretsPath)
     // Then:  secrets.json written with schema_version:1 + providers + default
     //        returned struct has providers.anthropic.key === 'sk-ant-test'
     //        auth.json UNCHANGED on disk (legacy file retained)
     const { authPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(
         authPath,
         JSON.stringify({ default: "anthropic:claude-sonnet-4-5", providers: { anthropic: { key: "sk-ant-test" } } }),
         "utf-8",
       );
-      process.env.MAI_LEGACY_AUTH_PATH = authPath;
-      process.env.MAI_LEGACY_GITHUB_PATH = join(authPath + ".no-github");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(authPath + ".no-search");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = authPath;
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(authPath + ".no-github");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(authPath + ".no-search");
 
       const result = readSecrets(secretsPath);
 
@@ -99,16 +99,16 @@ describe("readSecrets — migrates auth.json on first call when secrets.json abs
 describe("readSecrets — migrates github.json into secrets.json.github (G-P24.1)", () => {
   it("T-MIGRATE.GH.1: when github.json has {token, repo} and secrets.json absent, readSecrets writes secrets.json.github with those fields", () => {
     // Given: github.json = {token:'ghp_test', repo:'kyoubelyu/mai-agent'}; secrets.json absent
-    //        MAI_LEGACY_GITHUB_PATH = githubPath
+    //        FRONDOSE_LEGACY_GITHUB_PATH = githubPath
     // When:  readSecrets(secretsPath)
     // Then:  secrets.json.github = {token:'ghp_test', repo:'kyoubelyu/mai-agent'}
     const { githubPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(githubPath, JSON.stringify({ token: "ghp_test", repo: "kyoubelyu/mai-agent" }), "utf-8");
-      process.env.MAI_LEGACY_AUTH_PATH = join(secretsPath + ".no-auth");
-      process.env.MAI_LEGACY_GITHUB_PATH = githubPath;
-      process.env.MAI_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(secretsPath + ".no-auth");
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = githubPath;
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
 
       const result = readSecrets(secretsPath);
 
@@ -127,16 +127,16 @@ describe("readSecrets — migrates github.json into secrets.json.github (G-P24.1
 describe("readSecrets — migrates search.json into secrets.json.search (G-P24.1)", () => {
   it("T-MIGRATE.SEARCH.1: when search.json has both API keys and secrets.json absent, readSecrets writes secrets.json.search with both keys", () => {
     // Given: search.json = {braveApiKey:'bsa_test', tavilyApiKey:'tv_test'}; secrets.json absent
-    //        MAI_LEGACY_SEARCH_PATH = searchPath
+    //        FRONDOSE_LEGACY_SEARCH_PATH = searchPath
     // When:  readSecrets(secretsPath)
     // Then:  secrets.json.search.braveApiKey === 'bsa_test' AND tavilyApiKey === 'tv_test'
     const { searchPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(searchPath, JSON.stringify({ braveApiKey: "bsa_test", tavilyApiKey: "tv_test" }), "utf-8");
-      process.env.MAI_LEGACY_AUTH_PATH = join(secretsPath + ".no-auth");
-      process.env.MAI_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
-      process.env.MAI_LEGACY_SEARCH_PATH = searchPath;
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(secretsPath + ".no-auth");
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = searchPath;
 
       const result = readSecrets(secretsPath);
 
@@ -155,12 +155,12 @@ describe("readSecrets — secrets.json wins over legacy when both exist (G-P24.2
   it("T-MIGRATE.MIXED.1: when secrets.json has anthropic key K1 and auth.json has anthropic key K2, readSecrets returns K1 (secrets wins); auth.json unchanged", () => {
     // Given: secrets.json = {schema_version:1, providers:{anthropic:{key:'K1',...}}}
     //        auth.json = {providers:{anthropic:{key:'K2'}}} (different key)
-    //        MAI_LEGACY_AUTH_PATH = authPath
+    //        FRONDOSE_LEGACY_AUTH_PATH = authPath
     // When:  readSecrets(secretsPath)
     // Then:  returned providers.anthropic.key === 'K1' (secrets.json wins; legacy never consulted)
     //        auth.json remains unchanged on disk
     const { authPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(
         secretsPath,
@@ -168,9 +168,9 @@ describe("readSecrets — secrets.json wins over legacy when both exist (G-P24.2
         "utf-8",
       );
       writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "K2" } } }), "utf-8");
-      process.env.MAI_LEGACY_AUTH_PATH = authPath;
-      process.env.MAI_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = authPath;
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
 
       const result = readSecrets(secretsPath);
 
@@ -201,16 +201,16 @@ describe("readSecrets — partial migration (only auth.json present) (G-P24.1)",
   it("T-MIGRATE.PARTIAL.1: when auth.json exists but github.json + search.json absent, migrated secrets.json has providers but no github/search keys", () => {
     // Given: auth.json = {providers:{anthropic:{key:'sk-ant'}}}
     //        github.json absent; search.json absent; secrets.json absent
-    //        MAI_LEGACY_AUTH_PATH = authPath; MAI_LEGACY_GITHUB_PATH / SEARCH_PATH = non-existent
+    //        FRONDOSE_LEGACY_AUTH_PATH = authPath; FRONDOSE_LEGACY_GITHUB_PATH / SEARCH_PATH = non-existent
     // When:  readSecrets(secretsPath)
     // Then:  secrets.json.providers populated; secrets.json.github === undefined; secrets.json.search === undefined
     const { authPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-ant" } } }), "utf-8");
-      process.env.MAI_LEGACY_AUTH_PATH = authPath;
-      process.env.MAI_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = authPath;
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
 
       const result = readSecrets(secretsPath);
 
@@ -299,17 +299,17 @@ describe("migrateTelegramIntoConfig — telegram.json without proxyUrl migrates 
 describe("readSecrets — concurrent migrations produce valid result (G-P24.1)", () => {
   it("T-MIGRATE.RACE.1: when two concurrent readSecrets calls trigger migration simultaneously, final secrets.json contains exactly one valid blob; no corruption", async () => {
     // Given: secrets.json absent; auth.json present with providers
-    //        MAI_LEGACY_AUTH_PATH = authPath
+    //        FRONDOSE_LEGACY_AUTH_PATH = authPath
     // When:  Promise.all([readSecrets(secretsPath), readSecrets(secretsPath)])
     // Then:  both resolve; secrets.json exists + valid JSON + schema_version === 1
     //        content is byte-identical from both concurrent readers (same legacy source)
     const { authPath, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("MAI_LEGACY_AUTH_PATH", "MAI_LEGACY_GITHUB_PATH", "MAI_LEGACY_SEARCH_PATH");
+    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
     try {
       writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-ant-race" } } }), "utf-8");
-      process.env.MAI_LEGACY_AUTH_PATH = authPath;
-      process.env.MAI_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
+      process.env.FRONDOSE_LEGACY_AUTH_PATH = authPath;
+      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(secretsPath + ".no-github");
+      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(secretsPath + ".no-search");
 
       // readSecrets is synchronous; Promise.all resolves both synchronously before first I/O yield
       const [r1, r2] = await Promise.all([

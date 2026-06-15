@@ -48,14 +48,14 @@ before(async () => {
 
 /** Run `fn` with MAI_HOME_BASE → a fresh temp dir (DEFAULT_*_PATH resolve under it). */
 function withTempHome<T>(fn: (home: string) => T): T {
-  const prev = process.env.MAI_HOME_BASE;
+  const prev = process.env.FRONDOSE_HOME_BASE;
   const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pY6-"));
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   try {
     return fn(home);
   } finally {
-    if (prev === undefined) delete process.env.MAI_HOME_BASE;
-    else process.env.MAI_HOME_BASE = prev;
+    if (prev === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = prev;
   }
 }
 /** Seed secrets.json (the LLM store) with a deepseek provider + default. */

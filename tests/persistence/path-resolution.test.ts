@@ -161,34 +161,34 @@ const T_PATHS_2_PRIVATE_MATRIX = [
 ] as const;
 
 describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-P52.1, CONCERN-2)", () => {
-  it("T-Paths.2: when MAI_HOME_BASE='/tmp/p52-b', the 11 exported default factories return paths under '/tmp/p52-b/.frondose…'; when MAI_HOME_BASE unset / empty, each returns a path under os.homedir() (BLOCKER-5 propagated). The 4 module-private getters (crashLogger.DEFAULT_LOG_PATH + autoUpdate.{RELEASES_DIR,UPDATE_LOCK,UPDATE_LOG}) are verified by source-grep — body contains getHomeBase() AND DATA_DIR_NAME AND file imports both.", async () => {
-    // Given: MAI_HOME_BASE set/unset/empty across three env states AND the 15
+  it("T-Paths.2: when FRONDOSE_HOME_BASE='/tmp/p52-b', the 11 exported default factories return paths under '/tmp/p52-b/.frondose…'; when FRONDOSE_HOME_BASE unset / empty, each returns a path under os.homedir() (BLOCKER-5 propagated). The 4 module-private getters (crashLogger.DEFAULT_LOG_PATH + autoUpdate.{RELEASES_DIR,UPDATE_LOCK,UPDATE_LOG}) are verified by source-grep — body contains getHomeBase() AND DATA_DIR_NAME AND file imports both.", async () => {
+    // Given: FRONDOSE_HOME_BASE set/unset/empty across three env states AND the 15
     //        factories listed above (11 exported + 4 source-grepped).
     // When:  each factory is invoked OR its source file is inspected.
     // Then:  every assertion matches the expected redirect/fallback shape.
     // (F-REN-4a: DATA_DIR_NAME = ".frondose" — factories now resolve under .frondose)
-    const priorEnv = process.env.MAI_HOME_BASE;
+    const priorEnv = process.env.FRONDOSE_HOME_BASE;
     const restore = (): void => {
-      if (priorEnv === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = priorEnv;
+      if (priorEnv === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = priorEnv;
     };
     try {
       const exported = await loadExportedFactories();
 
-      // (i) MAI_HOME_BASE set → factories resolve under '/tmp/p52-b/.frondose…'
-      process.env.MAI_HOME_BASE = "/tmp/p52-b";
+      // (i) FRONDOSE_HOME_BASE set → factories resolve under '/tmp/p52-b/.frondose…'
+      process.env.FRONDOSE_HOME_BASE = "/tmp/p52-b";
       for (const row of exported) {
         const got = row.getter();
         const expected = path.join("/tmp/p52-b", row.expectedRelative);
         assert.equal(
           got,
           expected,
-          `[MAI_HOME_BASE=/tmp/p52-b] ${row.name} (${row.modulePath}) must return '${expected}', got '${got}'`,
+          `[FRONDOSE_HOME_BASE=/tmp/p52-b] ${row.name} (${row.modulePath}) must return '${expected}', got '${got}'`,
         );
       }
 
-      // (ii) MAI_HOME_BASE unset → factories resolve under real homedir()/.frondose…
-      delete process.env.MAI_HOME_BASE;
+      // (ii) FRONDOSE_HOME_BASE unset → factories resolve under real homedir()/.frondose…
+      delete process.env.FRONDOSE_HOME_BASE;
       const realHome = homedir();
       for (const row of exported) {
         const got = row.getter();
@@ -196,19 +196,19 @@ describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-
         assert.equal(
           got,
           expected,
-          `[MAI_HOME_BASE unset] ${row.name} must resolve under real os.homedir() (=${realHome}); got '${got}'`,
+          `[FRONDOSE_HOME_BASE unset] ${row.name} must resolve under real os.homedir() (=${realHome}); got '${got}'`,
         );
       }
 
-      // (iii) MAI_HOME_BASE='' → fallback to homedir() (BLOCKER-5 propagated).
-      process.env.MAI_HOME_BASE = "";
+      // (iii) FRONDOSE_HOME_BASE='' → fallback to homedir() (BLOCKER-5 propagated).
+      process.env.FRONDOSE_HOME_BASE = "";
       for (const row of exported) {
         const got = row.getter();
         const expected = path.join(realHome, row.expectedRelative);
         assert.equal(
           got,
           expected,
-          `[MAI_HOME_BASE=''] ${row.name} must fall back to homedir() — BLOCKER-5 propagated from §6.1; got '${got}'`,
+          `[FRONDOSE_HOME_BASE=''] ${row.name} must fall back to homedir() — BLOCKER-5 propagated from §6.1; got '${got}'`,
         );
       }
 

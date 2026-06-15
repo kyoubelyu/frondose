@@ -28,7 +28,7 @@ export function parsePaceMs(raw: string | undefined): number | null {
 
 /**
  * Resolve the effective pacing band from env (precedence: env var > default).
- * Setting either MAI_PACE_MIN_MS or MAI_PACE_MAX_MS to 0 disables pacing.
+ * Setting either FRONDOSE_PACE_MIN_MS or FRONDOSE_PACE_MAX_MS to 0 disables pacing.
  * A min>max misconfiguration is normalized (lo/hi swapped).
  */
 export function resolvePaceBand(): { minMs: number; maxMs: number; disabled: boolean } {
@@ -40,7 +40,7 @@ export function resolvePaceBand(): { minMs: number; maxMs: number; disabled: boo
 
 /**
  * Apply a jittered delay between LinkedIn/browser interactions (audit-only output).
- * Default band ~0.8–2.5 s; tunable via MAI_PACE_MIN_MS / MAI_PACE_MAX_MS; either
+ * Default band ~0.8–2.5 s; tunable via FRONDOSE_PACE_MIN_MS / FRONDOSE_PACE_MAX_MS; either
  * set to 0 disables pacing (waitedMs:0, no sleep). Read-only tools never call this.
  */
 export async function applyPacing(): Promise<PacingResult> {

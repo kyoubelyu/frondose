@@ -410,8 +410,8 @@ describe("createRequestHandler — GET /settings returns masked settings (G-P72s
     // Then: 200 + {ok:true, ...} where llm.maskedKey is not a raw key AND llm.hasKey is boolean
 
     const home = makeTempHome();
-    const prevHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = home;
+    const prevHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = home;
     try {
       const deps = makeDeps();
       const state = makeState();
@@ -440,8 +440,8 @@ describe("createRequestHandler — GET /settings returns masked settings (G-P72s
         assert.ok(maskedKey.length < 50, "maskedKey is masked (not raw long key)");
       }
     } finally {
-      if (prevHome === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = prevHome;
+      if (prevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = prevHome;
     }
   });
 });
@@ -455,8 +455,8 @@ describe("createRequestHandler — POST /settings valid patch → validate→wri
     // Then: 200 + restartRequired boolean + identity.fullName:Alice in response + deps.emitFrame NOT called
 
     const home = makeTempHome();
-    const prevHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = home;
+    const prevHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = home;
     try {
       const emitFrameSpy = makeSpy();
       const deps = makeDeps({ emitFrame: emitFrameSpy });
@@ -482,8 +482,8 @@ describe("createRequestHandler — POST /settings valid patch → validate→wri
       // NO emitFrame calls (pre-split L103 comment: "NO emitFrame/auditWriter")
       assert.equal(emitFrameSpy.calls.length, 0, "emitFrame NOT called on settings POST");
     } finally {
-      if (prevHome === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = prevHome;
+      if (prevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = prevHome;
     }
   });
 
@@ -493,8 +493,8 @@ describe("createRequestHandler — POST /settings valid patch → validate→wri
     // Then: 400 + {ok:false, error:...} + settings file UNCHANGED
 
     const home = makeTempHome();
-    const prevHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = home;
+    const prevHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = home;
     try {
       const deps = makeDeps();
       const state = makeState();
@@ -515,8 +515,8 @@ describe("createRequestHandler — POST /settings valid patch → validate→wri
       assert.equal(body?.ok, false, "ok:false");
       assert.ok(typeof body?.error === "string", "error field is string");
     } finally {
-      if (prevHome === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = prevHome;
+      if (prevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = prevHome;
     }
   });
 });

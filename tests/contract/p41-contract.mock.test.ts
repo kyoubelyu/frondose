@@ -16,7 +16,7 @@ import { describe, it } from "node:test";
 import { secretsJsonSchema } from "../../src/persistence/secrets.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
-process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
 const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
 

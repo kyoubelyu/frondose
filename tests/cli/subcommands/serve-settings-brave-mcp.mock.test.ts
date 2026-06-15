@@ -12,16 +12,16 @@ const RAW_BRAVE_KEY = "bsa_live_value_1234567890";
 
 async function withSettingsHome<T>(fn: () => T | Promise<T>): Promise<T> {
   const home = mkdtempSync(join(tmpdir(), "mai-pbrave-settings-"));
-  const saved = { HOME: process.env.HOME, MAI_HOME_BASE: process.env.MAI_HOME_BASE };
+  const saved = { HOME: process.env.HOME, FRONDOSE_HOME_BASE: process.env.FRONDOSE_HOME_BASE };
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   try {
     return await fn();
   } finally {
     if (saved.HOME === undefined) delete process.env.HOME;
     else process.env.HOME = saved.HOME;
-    if (saved.MAI_HOME_BASE === undefined) delete process.env.MAI_HOME_BASE;
-    else process.env.MAI_HOME_BASE = saved.MAI_HOME_BASE;
+    if (saved.FRONDOSE_HOME_BASE === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = saved.FRONDOSE_HOME_BASE;
     rmSync(home, { recursive: true, force: true });
   }
 }

@@ -4,7 +4,7 @@
  *
  * Mock tests for P-57b extensions to `src/overlay/inject.ts`:
  *   T-Passive.1  — `installOverlay` env-internal read substitutes `__MAI_PASSIVE_ENABLED__`
- *                  token from process.env.MAI_PASSIVE_SUGGEST (OQ-PLAN.29 rev-2 Option C).
+ *                  token from process.env.FRONDOSE_PASSIVE_SUGGEST (OQ-PLAN.29 rev-2 Option C).
  *   T-Passive.6  — Click listener registered with capture-phase + passive:true + 300ms
  *                  debounce + #__mai_root self-feedback filter + 100-char targetText slice +
  *                  emits `{type:"observe", event_type:"click", ctx:{url,targetTag,targetText,x,y}}`.
@@ -48,10 +48,10 @@ import { installOverlay, OVERLAY_BOOTSTRAP_JS } from "../../src/overlay/inject.j
 
 // ─── T-Passive.1 — installOverlay env-internal substitution ─────────────────
 
-describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.env.MAI_PASSIVE_SUGGEST at install site (G-P57b.2)", () => {
-  it("T-Passive.1: given OVERLAY_BOOTSTRAP_JS contains __MAI_PASSIVE_ENABLED__ placeholder + fake CdpHandle whose Page.addScriptToEvaluateOnNewDocument captures the {source} arg, WHEN installOverlay called twice (MAI_PASSIVE_SUGGEST='on' then 'off'), THEN first captured source contains 'MAI_PASSIVE_ENABLED = true' AND does NOT contain '__MAI_PASSIVE_ENABLED__'; second captured source contains 'MAI_PASSIVE_ENABLED = false' AND does NOT contain '__MAI_PASSIVE_ENABLED__'", async () => {
+describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.env.FRONDOSE_PASSIVE_SUGGEST at install site (G-P57b.2)", () => {
+  it("T-Passive.1: given OVERLAY_BOOTSTRAP_JS contains __MAI_PASSIVE_ENABLED__ placeholder + fake CdpHandle whose Page.addScriptToEvaluateOnNewDocument captures the {source} arg, WHEN installOverlay called twice (FRONDOSE_PASSIVE_SUGGEST='on' then 'off'), THEN first captured source contains 'MAI_PASSIVE_ENABLED = true' AND does NOT contain '__MAI_PASSIVE_ENABLED__'; second captured source contains 'MAI_PASSIVE_ENABLED = false' AND does NOT contain '__MAI_PASSIVE_ENABLED__'", async () => {
     // Given: OVERLAY_BOOTSTRAP_JS contains the placeholder verbatim
-    // When:  installOverlay invoked twice with different MAI_PASSIVE_SUGGEST values
+    // When:  installOverlay invoked twice with different FRONDOSE_PASSIVE_SUGGEST values
     // Then:  captured sources have substituted boolean literals + zero remaining placeholders
 
     // Sanity: baseline placeholder exists exactly once
@@ -80,11 +80,11 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
       },
     };
 
-    const origEnv = process.env.MAI_PASSIVE_SUGGEST;
+    const origEnv = process.env.FRONDOSE_PASSIVE_SUGGEST;
 
     try {
-      // (1) MAI_PASSIVE_SUGGEST=on → substitutes to `true`
-      process.env.MAI_PASSIVE_SUGGEST = "on";
+      // (1) FRONDOSE_PASSIVE_SUGGEST=on → substitutes to `true`
+      process.env.FRONDOSE_PASSIVE_SUGGEST = "on";
       await installOverlay(fakeHandle);
       assert.equal(capturedSources.length, 1, "(1) first install should have produced 1 captured source");
       const src1 = capturedSources[0] ?? "";
@@ -97,8 +97,8 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
         "(1) source 'on' must NOT contain '__MAI_PASSIVE_ENABLED__' (placeholder consumed)",
       );
 
-      // (2) MAI_PASSIVE_SUGGEST=off → substitutes to `false`
-      process.env.MAI_PASSIVE_SUGGEST = "off";
+      // (2) FRONDOSE_PASSIVE_SUGGEST=off → substitutes to `false`
+      process.env.FRONDOSE_PASSIVE_SUGGEST = "off";
       await installOverlay(fakeHandle);
       assert.equal(capturedSources.length, 2, "(2) second install should have produced 2 captured sources total");
       const src2 = capturedSources[1] ?? "";
@@ -116,9 +116,9 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
     } finally {
       // Restore env so other tests don't see leaked state
       if (origEnv === undefined) {
-        delete process.env.MAI_PASSIVE_SUGGEST;
+        delete process.env.FRONDOSE_PASSIVE_SUGGEST;
       } else {
-        process.env.MAI_PASSIVE_SUGGEST = origEnv;
+        process.env.FRONDOSE_PASSIVE_SUGGEST = origEnv;
       }
     }
   });

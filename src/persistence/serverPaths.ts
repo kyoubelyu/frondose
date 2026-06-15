@@ -1,6 +1,6 @@
 /** P-25: path constants for the server's independent directory tree.
  *  All constants are getter functions so getHomeBase() is evaluated lazily
- *  (important for test isolation: tests can set process.env.MAI_HOME_BASE before calling). */
+ *  (important for test isolation: tests can set process.env.FRONDOSE_HOME_BASE before calling). */
 import { join } from "node:path";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
