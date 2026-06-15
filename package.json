@@ -22,6 +22,7 @@
     "build:tauri-ui": "tsc -p src/tauri/ui/tsconfig.json",
     "build:tauri": "npm run build:overlay-assets && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:tauri-ui",
     "build:release": "bash scripts/build-release.sh",
+    "build:release:win": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "assert-dist": "node --import tsx scripts/assert-dist.ts",
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
