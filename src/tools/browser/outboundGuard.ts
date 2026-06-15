@@ -67,6 +67,16 @@ export function classifyOutboundLabel(label: string): OutboundClass {
   return "benign";
 }
 
+/** P-AUTO-17 §6.4: classify the resolved element's current accessible name. */
+export function classifyOutboundEntry(
+  entry: { name: string; role: string } | null | undefined,
+  surface: string,
+): OutboundClass {
+  if (!LINKEDIN_OUTBOUND_SURFACES.has(surface)) return "benign";
+  if (!entry) return "benign";
+  return classifyOutboundLabel(entry.name);
+}
+
 /** P-AUTO-10 (M3): the inner-cleanup chain from personNameFromInviteLabel,
  *  exported so promote-time same-person dedup can normalize a bare name
  *  (not just a captured invite-label group). The order is identical to the

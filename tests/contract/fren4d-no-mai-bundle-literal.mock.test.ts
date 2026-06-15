@@ -7,7 +7,7 @@
  *   T-FREN4d.Socket.1     — src/tauri/src-tauri/src/main.rs text scan:
  *                            contains "frondose-com.kyoube.frondose-" AND "frondose.sock";
  *                            does NOT contain "mai-com.kyoube.mai-" or the literal "mai.sock"
- *   T-FREN4d.Quad.1       — all 5 quad sites === "0.5.0-alpha.55":
+ *   T-FREN4d.Quad.1       — all 5 quad sites === "0.5.0-alpha.56":
  *                            package.json .version; package-lock.json root .version +
  *                            .packages[""].version; tauri.conf.json .version; Cargo.toml
  *                            [package].version; Cargo.lock mai-tauri block version
@@ -22,7 +22,7 @@
  * Outside-in TDD pre-flip red state (current = com.kyoube.mai / mai.sock / alpha.54):
  *   T-FREN4d.Identifier.1  — FAILS (identifier is still "com.kyoube.mai")
  *   T-FREN4d.Socket.1      — FAILS (main.rs still has "mai-com.kyoube.mai-" + "mai.sock")
- *   T-FREN4d.Quad.1        — FAILS (version is "0.5.0-alpha.54", not "0.5.0-alpha.55")
+ *   T-FREN4d.Quad.1        — FAILS (version is "0.5.0-alpha.54", not "0.5.0-alpha.56")
  *   T-FREN4d.NoLeak.1      — FAILS with exactly 2 hits:
  *                              src/tauri/src-tauri/src/main.rs:313
  *                              src/tauri/src-tauri/tauri.conf.json:5
@@ -115,7 +115,7 @@ function cargoLockMaiTauriVersion(): string {
 // ---------------------------------------------------------------------------
 
 const EXPECTED_IDENTIFIER = "com.kyoube.frondose";
-const EXPECTED_VERSION = "0.5.0-alpha.55";
+const EXPECTED_VERSION = "0.5.0-alpha.56";
 
 const SCAN_EXCLUDED_PREFIXES = [
   "src/tauri/src-tauri/target/", // Rust build artifacts
@@ -213,13 +213,13 @@ describe("port-file identity — frondose-com.kyoube.frondose-* / frondose.port 
 // T-FREN4d.Quad.1 — version bump to alpha.55 (all 5 quad sites)
 // ---------------------------------------------------------------------------
 
-describe("version quad — all 5 sites === '0.5.0-alpha.55' (T-FREN4d.Quad)", () => {
+describe("version quad — all 5 sites === '0.5.0-alpha.56' (T-FREN4d.Quad)", () => {
   it(
-    "T-FREN4d.Quad.1: package.json, package-lock.json root + packages[''], tauri.conf.json, Cargo.toml, Cargo.lock mai-tauri all share '0.5.0-alpha.55'",
+    "T-FREN4d.Quad.1: package.json, package-lock.json root + packages[''], tauri.conf.json, Cargo.toml, Cargo.lock mai-tauri all share '0.5.0-alpha.56'",
     () => {
       // Given: the 5 quad files at their post-Step-4 state
       // When:  each version field is read
-      // Then:  all 5 sites === "0.5.0-alpha.55" (the F-REN-4d version bump)
+      // Then:  all 5 sites === "0.5.0-alpha.56" (the F-REN-4d version bump)
 
       const pkgJson = JSON.parse(
         readFileSync(join(REPO, "package.json"), "utf-8"),

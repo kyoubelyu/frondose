@@ -14,7 +14,7 @@ import {
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/auto-run.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
-import { classifyOutboundLabel, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
+import { classifyOutboundEntry, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
 
 /** [P-75 D-11 round 3] When click is called by `label` (not `ref`), the current ctx may be stale
  *  by 500–1500ms vs the live DOM — Chrome's AX tree lags after DOM mutations, especially
@@ -24,16 +24,16 @@ import { classifyOutboundLabel, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } f
  *  without a dedicated `linkedin_connect` primitive (which was brittle to UI variance). Retries
  *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
 export async function resolveByLabelWithRetry(
-  session: { getLastContext: () => { entries: SnapshotEntry[] } | undefined },
+  session: { getLastContext: () => { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" } | undefined },
   label: string,
   scope: string | undefined,
-  capture: () => Promise<{ entries: SnapshotEntry[] }>,
+  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
   opts: { timeoutMs?: number; stepMs?: number } = {},
 ): Promise<SnapshotEntry> {
   const ctx0 = session.getLastContext();
   if (ctx0) {
     try {
-      return resolveByLabel(ctx0.entries, label, { kind: "click", scope });
+      return resolveByLabel(ctx0.entries, label, { kind: "click", scope, activeLayer: ctx0.activeLayer });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
@@ -44,7 +44,7 @@ export async function resolveByLabelWithRetry(
   let lastErr: unknown = new Error(`click: no label '${label}' visible`);
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, stepMs));
-    let fresh: { entries: SnapshotEntry[] };
+    let fresh: { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" };
     try {
       fresh = await capture();
     } catch (e) {
@@ -53,7 +53,7 @@ export async function resolveByLabelWithRetry(
       continue;
     }
     try {
-      return resolveByLabel(fresh.entries, label, { kind: "click", scope });
+      return resolveByLabel(fresh.entries, label, { kind: "click", scope, activeLayer: fresh.activeLayer });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
@@ -85,6 +85,7 @@ export function makeClickTool(session: LinkedinSession) {
         if (!r.ok) return r;
         const { client } = r;
         let target: string;
+        let targetEntry: SnapshotEntry | undefined;
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
         } else {
@@ -95,6 +96,7 @@ export function makeClickTool(session: LinkedinSession) {
             return next;
           });
           target = entry.ref;
+          targetEntry = entry;
         }
         // P-Y2.3: paint the agent cursor + highlight on the resolved target before acting. Best-effort,
         // visual-only (a getBox/overlay failure must NEVER block the click); the injected driver Auto-gates
@@ -108,9 +110,29 @@ export function makeClickTool(session: LinkedinSession) {
         }
         // Outbound guard — checked before any CDP dispatch
         const clickContext = session.getLastContext();
-        const targetEntry = clickContext?.entries?.find((e) => e.ref === target);
+        targetEntry ??= clickContext?.entries?.find((e) => e.ref === target);
+        let clickSurface = clickContext?.surface ?? "";
+        if (ref && target.startsWith("@") && !targetEntry) {
+          try {
+            const fresh = await captureCurrentSurfaceContext(client);
+            session.setLastContext(fresh);
+            targetEntry = fresh.entries.find((e) => e.ref === target);
+            clickSurface = fresh.surface;
+          } catch {
+            // Fail closed below on LinkedIn outbound surfaces; preserve general-web dispatch.
+          }
+        }
+        if (ref && target.startsWith("@") && !targetEntry && LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)) {
+          return failWithReason(
+            "click",
+            "invalid_input",
+            `Unresolvable ref on outbound surface: ${target} is not in the current snapshot and a fresh recapture also could not find it (surface=${clickSurface}). ` +
+              "Refusing to dispatch an unclassifiable click on a LinkedIn outbound surface. " +
+              "Call inspect again to refresh refs, then retry with a fresh ref or with a label.",
+            "unresolvable_ref_on_outbound_surface",
+          );
+        }
         const clickLabel = (targetEntry?.name ?? "").trim();
-        const clickSurface = clickContext?.surface ?? "";
         if (!LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)) {
           // P-33 general-web carve-out: not a LinkedIn outbound surface -> skip guard
         } else if (session.canClickOutbound && requiresApproval(clickLabel, clickSurface)) {
@@ -130,9 +152,7 @@ export function makeClickTool(session: LinkedinSession) {
         // `connect_send` ONLY (the final invite-send button) — counting the `connect_open` modal-
         // open click would overcount. The existing per-run cap stays attached to BOTH connect_open
         // and connect_send so the agent's first `Connect` click is still blocked when sent>=max.
-        const outboundClass = LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)
-          ? classifyOutboundLabel(clickLabel)
-          : "benign";
+        const outboundClass = classifyOutboundEntry(targetEntry, clickSurface);
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
         if (outboundClass === "connect_send" && session.outboundDisabled === true) {
