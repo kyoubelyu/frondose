@@ -29,7 +29,7 @@ use tokio::sync::{Mutex, Notify};
 /// the supervisor observes `shutting_down=true` after the wait returns and exits
 /// without respawning. Both fields are atomics so all Arc-clones share them
 /// (Tauri's `manage()` copies the Arc handles via `.clone()`, not the inner data).
-struct MaiServeState {
+struct FrondoseServeState {
     token: String,
     /// WIN-1: the sidecar's current loopback TCP port (0 = not ready). Shared
     /// Arc<AtomicU16> across all state clones so a supervised respawn (which gets a
@@ -52,7 +52,7 @@ fn build_uri(port: u16, path: &str) -> Uri {
 
 /// One-shot loopback-TCP HTTP request (no keepalive). Returns response body as Value.
 async fn uds_request(
-    state: &MaiServeState,
+    state: &FrondoseServeState,
     method: Method,
     path: &str,
     body: Option<Value>,
@@ -81,7 +81,7 @@ async fn uds_request(
         .await
         .map_err(|e| e.to_string())?;
     let parsed: Value =
-        serde_json::from_slice(&buf).map_err(|e| format!("invalid JSON from mai serve: {}", e))?;
+        serde_json::from_slice(&buf).map_err(|e| format!("invalid JSON from frondose serve: {}", e))?;
     if status != StatusCode::OK {
         return Err(format!("HTTP {}: {}", status, parsed));
     }
@@ -89,30 +89,30 @@ async fn uds_request(
 }
 
 #[tauri::command]
-async fn frondose_health(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_health(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/health", None).await
 }
 
 #[tauri::command]
-async fn frondose_identity(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_identity(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/identity", None).await
 }
 
 #[tauri::command]
-async fn frondose_chrome_ensure(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_chrome_ensure(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/chrome/ensure", Some(json!({}))).await
 }
 
 // P-Y6 — in-app settings (auth/identity/soul). Mirror frondose_identity → GET /settings;
 // frondose_set_settings POSTs the masked-safe patch. The serve handler returns a masked view.
 #[tauri::command]
-async fn frondose_get_settings(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_get_settings(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/settings", None).await
 }
 
 #[tauri::command]
 async fn frondose_set_settings(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     settings: Value,
 ) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/settings", Some(settings)).await
@@ -148,25 +148,25 @@ async fn frondose_check_update(app: tauri::AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 async fn frondose_agent_turn(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     prompt: String,
 ) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/turn", Some(json!({"prompt": prompt}))).await
 }
 
 #[tauri::command]
-async fn frondose_agent_abort(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_agent_abort(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
 }
 
 #[tauri::command]
-async fn frondose_agent_retry(state: tauri::State<'_, MaiServeState>) -> Result<Value, String> {
+async fn frondose_agent_retry(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/retry", Some(json!({}))).await
 }
 
 #[tauri::command]
 async fn frondose_set_cron_mode(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     enabled: bool,
 ) -> Result<Value, String> {
     uds_request(
@@ -181,7 +181,7 @@ async fn frondose_set_cron_mode(
 // P-57g — passive auto-react toggle (mirrors frondose_set_cron_mode).
 #[tauri::command]
 async fn frondose_set_passive_mode(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     enabled: bool,
 ) -> Result<Value, String> {
     uds_request(
@@ -195,7 +195,7 @@ async fn frondose_set_passive_mode(
 
 #[tauri::command]
 async fn frondose_workflow_approve(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     workflow_id: String,
     step_id: String,
 ) -> Result<Value, String> {
@@ -210,7 +210,7 @@ async fn frondose_workflow_approve(
 
 #[tauri::command]
 async fn frondose_workflow_decline(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     workflow_id: String,
     step_id: String,
     reason: Option<String>,
@@ -226,7 +226,7 @@ async fn frondose_workflow_decline(
 
 #[tauri::command]
 async fn frondose_workflow_handoff(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     workflow_id: String,
 ) -> Result<Value, String> {
     uds_request(
@@ -240,7 +240,7 @@ async fn frondose_workflow_handoff(
 
 #[tauri::command]
 async fn frondose_workflow_cancel(
-    state: tauri::State<'_, MaiServeState>,
+    state: tauri::State<'_, FrondoseServeState>,
     workflow_id: String,
 ) -> Result<Value, String> {
     uds_request(
@@ -253,7 +253,7 @@ async fn frondose_workflow_cancel(
 }
 
 /// P-56b SSE subscriber: reconnecting UDS stream reader forwarding data frames to the WebView.
-async fn run_sse_subscriber(app: AppHandle, state: Arc<MaiServeState>) {
+async fn run_sse_subscriber(app: AppHandle, state: Arc<FrondoseServeState>) {
     loop {
         let port = state.port.load(Ordering::SeqCst);
         if port == 0 {
@@ -335,7 +335,7 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
 }
 
 /// [P-58d.3] Resource dir WITHOUT an AppHandle — resolve_* run before Tauri is built.
-/// macOS: Contents/MacOS/mai-tauri -> Contents -> Contents/Resources.
+/// macOS: Contents/MacOS/Frondose -> Contents -> Contents/Resources.
 fn bundled_resource_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.parent()?.parent()?.join("Resources").into()
@@ -347,14 +347,14 @@ fn bundled_resource_dir() -> Option<PathBuf> {
 /// Finder (BLOCKER-RISK #1). Probe an ordered candidate list; fall back to bare
 /// "node" for the `cargo tauri dev` shell-PATH case.
 fn resolve_node() -> String {
-    if let Ok(p) = std::env::var("FRONDOSE_NODE_PATH").or_else(|_| std::env::var("MAI_NODE_PATH")) {
+    if let Ok(p) = std::env::var("FRONDOSE_NODE_PATH") {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
             eprintln!(
-                "[frondose] ignoring FRONDOSE_NODE_PATH/MAI_NODE_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_NODE_PATH={} (not a file)",
                 p
             );
         }
@@ -383,16 +383,14 @@ fn resolve_node() -> String {
 /// Contents/Resources/runtime/dist/app/sidecarMain.js. CLI `serve` stays in
 /// parallel during P-APP-11 migration; it is not the spawn target.
 fn resolve_sidecar_bin() -> String {
-    if let Ok(p) =
-        std::env::var("FRONDOSE_SIDECAR_BIN_PATH").or_else(|_| std::env::var("MAI_SIDECAR_BIN_PATH"))
-    {
+    if let Ok(p) = std::env::var("FRONDOSE_SIDECAR_BIN_PATH") {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
             eprintln!(
-                "[frondose] ignoring FRONDOSE_SIDECAR_BIN_PATH/MAI_SIDECAR_BIN_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_SIDECAR_BIN_PATH={} (not a file)",
                 p
             );
         }
@@ -406,9 +404,6 @@ fn resolve_sidecar_bin() -> String {
     for candidate in [
         "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js",
         "/usr/local/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js",
-        // F-REN-4b transition: legacy @kyoube/mai-agent install fallback
-        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
-        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js",
     ] {
         if std::path::Path::new(candidate).is_file() {
             return candidate.to_string();
@@ -418,7 +413,7 @@ fn resolve_sidecar_bin() -> String {
 }
 
 /// Resolve the install.sh-installed `mai` CLI entry. install.sh symlinks the
-/// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/frondose` (legacy: @kyoube/mai-agent) →
+/// npm-global package at `<brew-prefix>/lib/node_modules/@kyoube/frondose` →
 /// `~/.frondose/agent/releases/<tag>`; the runnable entry is `dist/cli/main.js` inside.
 /// `FRONDOSE_BIN_PATH` overrides (dev / `cargo tauri dev`). Fall back to the dev
 /// relative path so `cargo tauri dev` (CWD = src-tauri) keeps working.
@@ -427,15 +422,15 @@ fn resolve_sidecar_bin() -> String {
 /// timeout — DEFERRED to P-58c (self-contained bundle).
 // Kept for the P-APP-11 transition; delete with the CLI entrypoint.
 #[allow(dead_code)]
-fn resolve_mai_bin() -> String {
-    if let Ok(p) = std::env::var("FRONDOSE_BIN_PATH").or_else(|_| std::env::var("MAI_BIN_PATH")) {
+fn resolve_frondose_bin() -> String {
+    if let Ok(p) = std::env::var("FRONDOSE_BIN_PATH") {
         let p = p.trim();
         if !p.is_empty() {
             if std::path::Path::new(p).is_file() {
                 return p.to_string();
             }
             eprintln!(
-                "[frondose] ignoring FRONDOSE_BIN_PATH/MAI_BIN_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_BIN_PATH={} (not a file)",
                 p
             );
         }
@@ -447,11 +442,8 @@ fn resolve_mai_bin() -> String {
         }
     }
     for candidate in [
-        "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js", // Apple Silicon (4b)
-        "/usr/local/lib/node_modules/@kyoube/frondose/dist/cli/main.js",    // Intel (4b)
-        // F-REN-4b transition: legacy @kyoube/mai-agent install fallback
-        "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",
-        "/usr/local/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js",
+        "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js", // Apple Silicon
+        "/usr/local/lib/node_modules/@kyoube/frondose/dist/cli/main.js",    // Intel
     ] {
         if std::path::Path::new(candidate).is_file() {
             return candidate.to_string();
@@ -560,7 +552,7 @@ async fn run_update_check(app: AppHandle) {
 }
 
 /// Spawn `node <sidecar_bin> --port-file <path> --token <tok>` as a child process.
-async fn spawn_mai_serve(port_file: &PathBuf, token: &str) -> Result<Child, String> {
+async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Result<Child, String> {
     // P-APP-6: resolve node + the dedicated app sidecar entrypoint by absolute
     // path so a Finder-launched bundle (launchd minimal PATH) can spawn it.
     let sidecar_bin = PathBuf::from(resolve_sidecar_bin());
@@ -589,7 +581,7 @@ async fn spawn_mai_serve(port_file: &PathBuf, token: &str) -> Result<Child, Stri
 /// GET /health on that port returns ok; on success store the port into `state.port`
 /// (so requests/SSE target it) and return. Used at boot AND after every supervised
 /// respawn (each respawn binds a NEW ephemeral port).
-async fn await_serve_ready(state: &MaiServeState, timeout_ms: u64) -> Result<(), String> {
+async fn await_serve_ready(state: &FrondoseServeState, timeout_ms: u64) -> Result<(), String> {
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
     while std::time::Instant::now() < deadline {
         if let Ok(s) = std::fs::read_to_string(&state.port_file) {
@@ -606,7 +598,7 @@ async fn await_serve_ready(state: &MaiServeState, timeout_ms: u64) -> Result<(),
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     state.port.store(0, Ordering::SeqCst);
-    Err(format!("mai serve not ready within {}ms", timeout_ms))
+    Err(format!("frondose serve not ready within {}ms", timeout_ms))
 }
 
 /// Tear down sidecar process + clean up UDS dir.
@@ -617,7 +609,7 @@ async fn await_serve_ready(state: &MaiServeState, timeout_ms: u64) -> Result<(),
 /// `shutting_down` flag (read by the supervisor on wait-return) and SIGTERM/SIGKILLs
 /// by PID directly via `state.child_pid`. The supervisor then sees the flag and
 /// returns without respawning. UDS dir cleanup runs unconditionally.
-async fn shutdown_sidecar(state: &MaiServeState) {
+async fn shutdown_sidecar(state: &FrondoseServeState) {
     // Mark shutdown FIRST so any pending respawn iteration sees it.
     state.shutting_down.store(true, Ordering::SeqCst);
 
@@ -675,7 +667,7 @@ async fn shutdown_sidecar(state: &MaiServeState) {
 /// Race protection: `shutdown_sidecar` does NOT take from `state.child`; the
 /// supervisor is the sole owner of the Child during its lifetime. Shutdown
 /// signals via SIGTERM-by-PID + the `shutting_down` flag.
-async fn supervise_sidecar(state: Arc<MaiServeState>) {
+async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
     const INITIAL_BACKOFF_MS: u64 = 500;
     const MAX_BACKOFF_MS: u64 = 30_000;
     const MAX_CONSECUTIVE_SPAWN_FAILURES: u32 = 8;
@@ -731,7 +723,7 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
         state.port.store(0, Ordering::SeqCst);
         let _ = std::fs::remove_file(&state.port_file);
 
-        match spawn_mai_serve(&state.port_file, &state.token).await {
+        match spawn_frondose_serve(&state.port_file, &state.token).await {
             Ok(new_child) => {
                 let new_pid = new_child.id().unwrap_or(0);
                 state.child_pid.store(new_pid, Ordering::SeqCst);
@@ -772,7 +764,7 @@ async fn main() {
     let (token, port_file, parent_dir) = provision_state().expect("provision sidecar state");
     // P-58d.1 [3b/CMR-2]: best-effort spawn — a missing/broken sidecar must NOT panic
     // before the updater gets a turn (the updater is the recovery path).
-    let child = spawn_mai_serve(&port_file, &token).await.ok();
+    let child = spawn_frondose_serve(&port_file, &token).await.ok();
 
     // [P-75 D-24] Atomics for the watchdog: shared by the outer `state` Arc AND the
     // Tauri-managed state (via Arc::clone in `manage()` below). The supervisor reads/
@@ -784,7 +776,7 @@ async fn main() {
     let child_pid = Arc::new(AtomicU32::new(child.as_ref().and_then(|c| c.id()).unwrap_or(0)));
     let port = Arc::new(AtomicU16::new(0));
 
-    let state = Arc::new(MaiServeState {
+    let state = Arc::new(FrondoseServeState {
         token,
         port: port.clone(),
         port_file: port_file.clone(),
@@ -807,7 +799,7 @@ async fn main() {
     }
 
     let app = tauri::Builder::default()
-        .manage(MaiServeState {
+        .manage(FrondoseServeState {
             token: state.token.clone(),
             port: state.port.clone(),
             port_file: state.port_file.clone(),
@@ -862,7 +854,7 @@ async fn main() {
                     }
                 }
                 "quit" => {
-                    let state = app.state::<MaiServeState>();
+                    let state = app.state::<FrondoseServeState>();
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async {
                             shutdown_sidecar(&state).await;
@@ -958,7 +950,7 @@ async fn main() {
     // recover a bad release instead of the app silently exiting.
     if let Err(e) = await_serve_ready(&state, 10_000).await {
         eprintln!(
-            "[frondose] mai serve not ready: {} — UI degraded; updater may recover a bad release",
+            "[frondose] frondose serve not ready: {} — UI degraded; updater may recover a bad release",
             e
         );
     }
@@ -985,7 +977,7 @@ async fn main() {
             }
             // D-RUN-1 (safety): macOS does NOT auto-exit when the last window closes
             // (NSApplication convention), so RunEvent::ExitRequested never fires on a
-            // window-close — the spawned `mai serve` sidecar (+ agent loop + Chrome
+            // window-close — the spawned `frondose serve` sidecar (+ agent loop + Chrome
             // control) would survive and keep driving the browser. Kill the sidecar and
             // force the app to exit so app-close reliably stops the agent.
             RunEvent::WindowEvent {

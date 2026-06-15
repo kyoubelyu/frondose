@@ -105,8 +105,8 @@ function cargoTomlPackageVersion(): string {
 }
 
 function cargoLockMaiTauriVersion(): string {
-  const version = cargoLock.match(/\[\[package\]\]\s*\nname = "mai-tauri"\s*\nversion = "([^"]+)"/)?.[1];
-  assert.ok(version, 'Cargo.lock [[package]] name = "mai-tauri" version must be present');
+  const version = cargoLock.match(/\[\[package\]\]\s*\nname = "frondose"\s*\nversion = "([^"]+)"/)?.[1];
+  assert.ok(version, 'Cargo.lock [[package]] name = "frondose" version must be present');
   return version;
 }
 

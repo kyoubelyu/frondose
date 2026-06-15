@@ -1,12 +1,12 @@
 [package]
-name = "mai-tauri"
+name = "frondose"
 version = "0.5.0-alpha.56"
 description = "frondose v0.5 hover-pivot Tauri shell (M-1 demo skeleton)"
 edition = "2021"
 rust-version = "1.75"
 
 [[bin]]
-name = "mai-tauri"
+name = "frondose"
 path = "src/main.rs"
 
 [build-dependencies]

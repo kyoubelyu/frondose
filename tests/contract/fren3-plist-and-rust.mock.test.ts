@@ -2,7 +2,7 @@
  * F-REN-3 Step 5 — Filled assertions: T-FREN3.8, T-FREN3.12, T-FREN3.13
  *
  * Covers:
- *   T-FREN3.8  — main.rs spawn_mai_serve .env() calls emit FRONDOSE_AUTOUPDATE +
+ *   T-FREN3.8  — main.rs spawn_frondose_serve .env() calls emit FRONDOSE_AUTOUPDATE +
  *                FRONDOSE_SIDECAR_OWNER (no MAI_ remains); cargo check 0
  *   T-FREN3.12 — renderPlist + renderServerPlist with an EnvSnapshot containing
  *                FRONDOSE_MODEL emit <key>FRONDOSE_MODEL</key> NOT <key>MAI_MODEL</key>
@@ -38,10 +38,10 @@ const MAIN_RS = readFileSync(MAIN_RS_PATH, "utf8");
 
 // ─── Rust source helpers ──────────────────────────────────────────────────────
 
-/** Extract spawn_mai_serve body (ends at Ok(child) + closing brace). */
+/** Extract spawn_frondose_serve body (ends at Ok(child) + closing brace). */
 function spawnMaiServeSource(): string {
-  const match = MAIN_RS.match(/async fn spawn_mai_serve[\s\S]*?Ok\(child\)\s*\n}/);
-  assert.ok(match, "main.rs must contain spawn_mai_serve");
+  const match = MAIN_RS.match(/async fn spawn_frondose_serve[\s\S]*?Ok\(child\)\s*\n}/);
+  assert.ok(match, "main.rs must contain spawn_frondose_serve");
   return match[0];
 }
 
@@ -75,10 +75,10 @@ function saveEnv(...keys: string[]): () => void {
 
 // ─── T-FREN3.8 ────────────────────────────────────────────────────────────────
 
-describe("Rust SET sites — spawn_mai_serve emits FRONDOSE_* env-var names after Group B rename (G-FREN3.rust-set)", () => {
-  it("T-FREN3.8: main.rs spawn_mai_serve sets FRONDOSE_AUTOUPDATE + FRONDOSE_SIDECAR_OWNER; no MAI_AUTOUPDATE / MAI_SIDECAR_OWNER remains in spawn body", () => {
+describe("Rust SET sites — spawn_frondose_serve emits FRONDOSE_* env-var names after Group B rename (G-FREN3.rust-set)", () => {
+  it("T-FREN3.8: main.rs spawn_frondose_serve sets FRONDOSE_AUTOUPDATE + FRONDOSE_SIDECAR_OWNER; no MAI_AUTOUPDATE / MAI_SIDECAR_OWNER remains in spawn body", () => {
     // Given: src/tauri/src-tauri/src/main.rs after Group B Rust SET rename
-    // When:  spawn_mai_serve function body is extracted and scanned
+    // When:  spawn_frondose_serve function body is extracted and scanned
     // Then:  .env("FRONDOSE_AUTOUPDATE", "skip") present;
     //        .env("FRONDOSE_SIDECAR_OWNER", "frondose-app") present;
     //        .env("MAI_AUTOUPDATE"...) absent;
@@ -89,22 +89,22 @@ describe("Rust SET sites — spawn_mai_serve emits FRONDOSE_* env-var names afte
     assert.match(
       spawnBody,
       /\.env\s*\(\s*"FRONDOSE_AUTOUPDATE"\s*,\s*"skip"\s*\)/,
-      'spawn_mai_serve must set .env("FRONDOSE_AUTOUPDATE", "skip")',
+      'spawn_frondose_serve must set .env("FRONDOSE_AUTOUPDATE", "skip")',
     );
     assert.match(
       spawnBody,
       /\.env\s*\(\s*"FRONDOSE_SIDECAR_OWNER"\s*,\s*"frondose-app"\s*\)/,
-      'spawn_mai_serve must set .env("FRONDOSE_SIDECAR_OWNER", "frondose-app")',
+      'spawn_frondose_serve must set .env("FRONDOSE_SIDECAR_OWNER", "frondose-app")',
     );
     assert.doesNotMatch(
       spawnBody,
       /\.env\s*\(\s*"MAI_AUTOUPDATE"/,
-      'spawn_mai_serve must NOT contain legacy .env("MAI_AUTOUPDATE"...)',
+      'spawn_frondose_serve must NOT contain legacy .env("MAI_AUTOUPDATE"...)',
     );
     assert.doesNotMatch(
       spawnBody,
       /\.env\s*\(\s*"MAI_SIDECAR_OWNER"/,
-      'spawn_mai_serve must NOT contain legacy .env("MAI_SIDECAR_OWNER"...)',
+      'spawn_frondose_serve must NOT contain legacy .env("MAI_SIDECAR_OWNER"...)',
     );
   });
 });

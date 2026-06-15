@@ -420,51 +420,25 @@ describe(
   "Tauri path resolution — dual-name candidate arrays in main.rs (T-FREN4b.TauriPathResolution)",
   () => {
     it(
-      "T-FREN4b.MainRs.1: main.rs candidate arrays contain both @kyoube/frondose (first) AND @kyoube/mai-agent (second) for sidecarMain.js and cli/main.js paths; @kyoube/frondose /opt/homebrew path precedes @kyoube/mai-agent /opt/homebrew path",
+      "T-FREN4b.MainRs.1: full rebrand — main.rs candidate arrays contain ONLY @kyoube/frondose paths for sidecarMain.js and cli/main.js; the @kyoube/mai-agent fallback paths are fully removed",
       () => {
-        // Given: post-Step-4 src/tauri/src-tauri/src/main.rs
+        // Given: full-rebrand src/tauri/src-tauri/src/main.rs (operator directive 2026-06-15 — drop mai-agent back-compat)
         // When:  file text is read and searched for candidate path substrings
-        // Then:  all four expected @kyoube/frondose paths present BEFORE the @kyoube/mai-agent fallback paths;
-        //        doc-comment at lines ~406-408 names @kyoube/frondose first (2a C-2)
+        // Then:  the @kyoube/frondose paths are present AND no @kyoube/mai-agent path remains
 
         const text = readFileSync(join(REPO, "src/tauri/src-tauri/src/main.rs"), "utf-8");
 
-        // Sidecar candidates
+        // Sidecar + CLI frondose candidates (the only ones that should remain)
         const SIDECAR_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js";
-        const SIDECAR_MAI_AGENT = "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/app/sidecarMain.js";
-        // CLI candidates
         const CLI_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js";
-        const CLI_MAI_AGENT = "/opt/homebrew/lib/node_modules/@kyoube/mai-agent/dist/cli/main.js";
 
-        // All four substrings must be present
         assert.ok(text.includes(SIDECAR_FRONDOSE), `T-FREN4b.MainRs.1: sidecar @kyoube/frondose path must be present`);
-        assert.ok(text.includes(SIDECAR_MAI_AGENT), `T-FREN4b.MainRs.1: sidecar @kyoube/mai-agent fallback path must be present`);
         assert.ok(text.includes(CLI_FRONDOSE), `T-FREN4b.MainRs.1: CLI @kyoube/frondose path must be present`);
-        assert.ok(text.includes(CLI_MAI_AGENT), `T-FREN4b.MainRs.1: CLI @kyoube/mai-agent fallback path must be present`);
 
-        // frondose paths must appear BEFORE the mai-agent fallback paths
+        // No @kyoube/mai-agent fallback may remain anywhere in main.rs
         assert.ok(
-          text.indexOf(SIDECAR_FRONDOSE) < text.indexOf(SIDECAR_MAI_AGENT),
-          `T-FREN4b.MainRs.1: sidecar @kyoube/frondose path must appear BEFORE @kyoube/mai-agent (frondose-first order)`,
-        );
-        assert.ok(
-          text.indexOf(CLI_FRONDOSE) < text.indexOf(CLI_MAI_AGENT),
-          `T-FREN4b.MainRs.1: CLI @kyoube/frondose path must appear BEFORE @kyoube/mai-agent (frondose-first order)`,
-        );
-
-        // doc-comment must name @kyoube/frondose first (2a C-2):
-        // Find the doc-comment line containing @kyoube/ and confirm frondose appears before mai-agent.
-        // The line is: /// npm-global package at `.../@kyoube/frondose` (legacy: @kyoube/mai-agent) →
-        const docCommentLine = text.split("\n").find(
-          (line) => line.startsWith("///") && line.includes("@kyoube/frondose") && line.includes("@kyoube/mai-agent"),
-        );
-        assert.ok(
-          docCommentLine !== undefined,
-          "T-FREN4b.MainRs.1: a doc-comment line with both @kyoube/frondose and @kyoube/mai-agent must be present (2a C-2)",
-        );
-        assert.ok(
-          docCommentLine.indexOf("@kyoube/frondose") < docCommentLine.indexOf("@kyoube/mai-agent"),
-          `T-FREN4b.MainRs.1: doc-comment must name @kyoube/frondose BEFORE @kyoube/mai-agent (frondose-first per 2a C-2); got: ${docCommentLine}`,
+          !text.includes("@kyoube/mai-agent"),
+          `T-FREN4b.MainRs.1: main.rs must no longer contain any @kyoube/mai-agent fallback path after full rebrand`,
         );
       },
     );
