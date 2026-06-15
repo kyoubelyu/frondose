@@ -102,21 +102,33 @@ const REACT_SAFE_CLEAR_ACTIVE_INPUT_JS = `(() => {
 })()`;
 
 /**
- * P-47 G-2 / OQ-1: per-character typing delay in ms. Produces human keystroke
- * timing while bounding total typing time at ~8s for any text length.
- *  - `budget` = min(8000 / textLength, 150): the per-char time slice. For text
- *    longer than ~54 chars this shrinks so `textLength × budget ≤ ~8000`.
- *  - jitter: `rand` in [0,1] maps to a 0.3..1.0 multiplier — variable timing is
- *    the anti-bot keystroke-fingerprint signal. Jitter only VARIES the delay for
- *    short/medium text; once `textLength > ~266` the floor equals the budget so
- *    the per-char delay is budget-pinned (constant) and the ~8s cap dominates.
- *  - floor = min(30, budget): a 30ms floor for short/medium text, but never
- *    above `budget`, so the ~8s cap is preserved for long text (see plan §0.3).
+ * P-47 G-2 / OQ-1 / P-AUTO-16 PSA-4a: per-character typing delay in ms (UNCLAMPED).
+ * Produces human keystroke timing including inter-word thinking pauses. The 8000ms
+ * worst-case total bound is enforced by the cdp LOOP's cumulative clamp (NOT by
+ * shrinking the per-char base — uniformly-faster typing is its OWN anti-bot tell;
+ * the round-2 design keeps the OLD ~8s budget as the BASELINE for normal text and
+ * lets the loop clamp the pathological all-boundary tail).
+ *  - `budget` = min(8000 / textLength, 150): the per-char time slice (the OLD base).
+ *    For normal text, sum-of-raws stays under 8000ms naturally; the loop clamp is
+ *    inactive and the OLD pacing is observed verbatim.
+ *  - jitter: `rand` in [0,1] maps to a 0.3..1.0 multiplier — variable timing is the
+ *    anti-bot keystroke-fingerprint signal.
+ *  - word-boundary multiplier `wbMul`:
+ *      prevChar === " "                    → wbMul = 2.0 (thinking pause after word)
+ *      prevChar in { ".", "!", "?" }       → wbMul = 2.5 (sentence-end pause)
+ *      otherwise (incl. prevChar=undefined) → wbMul = 1.0 (mid-word; first char too)
+ *  - floor = min(30, budget): a 30ms floor for short/medium text, never above `budget`.
+ *  - Worst-case bound is enforced by the LOOP, not this function. Pathological text
+ *    where sum-of-raws > 8000ms gets the tail clamped by the LOOP's `elapsed`
+ *    accumulator (see caller below).
  */
-export function computeCharDelay(textLength: number, rand: number): number {
+export function computeCharDelay(textLength: number, rand: number, prevChar: string | undefined): number {
   const budget = Math.min(8000 / Math.max(1, textLength), 150);
   const floor = Math.min(30, budget);
-  return Math.max(floor, Math.floor(budget * (0.3 + rand * 0.7)));
+  let wbMul = 1.0;
+  if (prevChar === " ") wbMul = 2.0;
+  else if (prevChar === "." || prevChar === "!" || prevChar === "?") wbMul = 2.5;
+  return Math.max(floor, Math.floor(budget * (0.3 + rand * 0.7) * wbMul));
 }
 
 async function clearActiveInput(client: CdpClient): Promise<void> {
@@ -280,6 +292,12 @@ export function makeTypeTool(session: LinkedinSession) {
           // event. Jittered inter-char delays give a human keystroke-timing
           // fingerprint; computeCharDelay caps the total at ~8s for long text.
           if (text.length > 0) {
+            let prevChar: string | undefined;
+            // P-AUTO-16 PSA-4a round-2: cumulative-clamp accumulator. Caps total
+            // per-char sleep at 8000ms regardless of text shape. For normal text the
+            // clamp is inactive (sum-of-raws < 8000); for pathological all-boundary
+            // text it truncates the tail to 0.
+            let elapsed = 0;
             for (const ch of text) {
               if (ch === "\n") {
                 await client.handle.Input.dispatchKeyEvent({
@@ -297,7 +315,11 @@ export function makeTypeTool(session: LinkedinSession) {
               } else {
                 await client.handle.Input.insertText({ text: ch });
               }
-              await sleep(computeCharDelay(text.length, Math.random()));
+              const raw = computeCharDelay(text.length, Math.random(), prevChar);
+              const d = Math.min(raw, Math.max(0, 8000 - elapsed));
+              elapsed += d;
+              await sleep(d);
+              prevChar = ch;
             }
           }
         }
