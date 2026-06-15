@@ -210,7 +210,7 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
     //        variant B → 200 {ok:false, reason:"identity not set; open Frondose → Settings to complete setup"}
 
     const { runServeSubcommand } = await import("../../../src/cli/subcommands/serve.js");
-    const origHome = process.env.MAI_HOME_BASE;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
 
     // ── Variant A: identity set ──────────────────────────────────────────────
     const homeDirA = mkdtempSync(join(tmpdir(), "p56a-t2a-"));
@@ -226,7 +226,7 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
     const portFileA = join(homeDirA, "a.port");
 
     try {
-      process.env.MAI_HOME_BASE = homeDirA;
+      process.env.FRONDOSE_HOME_BASE = homeDirA;
       void runServeSubcommand({ portFile: portFileA, bearerToken: "tok456" });
 
       const portA = await pollForPort(portFileA, 2000);
@@ -251,7 +251,7 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
     const portFileB = join(homeDirB, "b.port");
 
     try {
-      process.env.MAI_HOME_BASE = homeDirB;
+      process.env.FRONDOSE_HOME_BASE = homeDirB;
       void runServeSubcommand({ portFile: portFileB, bearerToken: "tok456" });
 
       const portB = await pollForPort(portFileB, 2000);
@@ -270,9 +270,9 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
       rmSync(portFileB, { force: true });
       rmSync(homeDirB, { recursive: true, force: true });
       if (origHome !== undefined) {
-        process.env.MAI_HOME_BASE = origHome;
+        process.env.FRONDOSE_HOME_BASE = origHome;
       } else {
-        delete process.env.MAI_HOME_BASE;
+        delete process.env.FRONDOSE_HOME_BASE;
       }
     }
   });

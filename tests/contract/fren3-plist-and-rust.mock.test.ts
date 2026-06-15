@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { resolveModelSpec } from "../../src/agent/modelResolver.js";
+import { DEFAULT_MODEL_SPEC, resolveModelSpec } from "../../src/agent/modelResolver.js";
 import type { EnvSnapshot, PlistArgs } from "../../src/cli/subcommands/launchd.js";
 import { renderPlist } from "../../src/cli/subcommands/launchd.js";
 import { renderServerPlist } from "../../src/cli/subcommands/serverLaunchd.js";
@@ -161,23 +161,23 @@ describe("launchd plist renderers — newly-rendered plist emits <key>FRONDOSE_M
 
 // ─── T-FREN3.13 ───────────────────────────────────────────────────────────────
 
-describe("plist back-compat — legacy <key>MAI_MODEL</key> from an existing on-disk plist still resolves via shim (G-FREN3.plist-back-compat)", () => {
+describe("plist shim REMOVED — legacy <key>MAI_MODEL</key> from an existing on-disk plist is no longer honored (F-REN-4e shim removal)", () => {
   let restore: () => void;
   beforeEach(() => {
     restore = saveEnv("MAI_MODEL", "FRONDOSE_MODEL");
   });
   afterEach(() => restore());
 
-  it("T-FREN3.13: when daemon env carries MAI_MODEL='deepseek:legacy-installed' (from old plist) + FRONDOSE_MODEL unset, resolveModelSpec({}) returns the legacy value", () => {
+  it("T-FREN3.13: when daemon env carries MAI_MODEL='deepseek:legacy-installed' (from old plist) + FRONDOSE_MODEL unset, resolveModelSpec({}) returns DEFAULT_MODEL_SPEC (shim removed F-REN-4e — operator must update plist to FRONDOSE_MODEL)", () => {
     // Given: process.env.MAI_MODEL = "deepseek:legacy-installed" (simulates launchd injecting
     //        the legacy plist key into the daemon's process env); FRONDOSE_MODEL unset
-    // When:  resolveModelSpec({}) is called (reads via frondoseEnv("MODEL") after Step 4 swap)
-    // Then:  returns "deepseek:legacy-installed" — plist back-compat holds; operator need not
-    //        re-run 'mai telegram on' for existing launchd plists to keep working
+    // When:  resolveModelSpec({}) is called (reads frondoseEnv("MODEL") = FRONDOSE_MODEL only)
+    // Then:  returns DEFAULT_MODEL_SPEC — MAI_MODEL is no longer consulted (shim gone F-REN-4e);
+    //        operator must update plist from MAI_MODEL → FRONDOSE_MODEL key
 
     delete process.env.FRONDOSE_MODEL;
     process.env.MAI_MODEL = "deepseek:legacy-installed";
 
-    assert.equal(resolveModelSpec({}), "deepseek:legacy-installed");
+    assert.equal(resolveModelSpec({}), DEFAULT_MODEL_SPEC);
   });
 });

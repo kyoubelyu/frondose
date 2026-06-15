@@ -756,7 +756,7 @@ let _savedHome: string | undefined;
 let _tempHome: string;
 
 function setupTempHome(): void {
-  _savedHome = process.env.MAI_HOME_BASE;
+  _savedHome = process.env.FRONDOSE_HOME_BASE;
   _tempHome  = mkdtempSync(join(tmpdir(), "p-app-7-mask-"));
   mkdirSync(join(_tempHome, ".frondose", "agent"), { recursive: true });
 
@@ -771,14 +771,14 @@ function setupTempHome(): void {
     },
   });
   writeFileSync(join(_tempHome, ".frondose", "auth.json"), authJson, "utf-8");
-  process.env.MAI_HOME_BASE = _tempHome;
+  process.env.FRONDOSE_HOME_BASE = _tempHome;
 }
 
 function teardownTempHome(): void {
   if (_savedHome === undefined) {
-    delete process.env.MAI_HOME_BASE;
+    delete process.env.FRONDOSE_HOME_BASE;
   } else {
-    process.env.MAI_HOME_BASE = _savedHome;
+    process.env.FRONDOSE_HOME_BASE = _savedHome;
   }
 }
 

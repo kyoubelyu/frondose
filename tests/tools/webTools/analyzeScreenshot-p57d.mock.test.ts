@@ -6,15 +6,15 @@
  *   - src/tools/webTools/analyzeScreenshot.ts L12: DEFAULT_VISION_MODEL = "" (empty).
  *   - L60-71: when visionSpec === "" → return {ok:false, error:{kind:"vision_unavailable",
  *     message: "Vision unavailable — current MAI_MODEL doesn't support vision. " +
- *              "Set MAI_VISION_MODEL to a custom-URL vision-capable provider OR use the inspect tool instead. " +
- *              "operator scope: MAI_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled."}}
+ *              "Set FRONDOSE_VISION_MODEL to a custom-URL vision-capable provider OR use the inspect tool instead. " +
+ *              "operator scope: FRONDOSE_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled."}}
  *   - tool description at L46-50: contains "vision-capable provider", "inspect", "operator scope",
- *     "vision_unavailable", "MAI_VISION_MODEL".
+ *     "vision_unavailable", "FRONDOSE_VISION_MODEL".
  *   - boundary.ts L30: contains "Tool-preference hints (P-57d scope lock)" with vision keywords.
  *
  * Test strategy:
  *   - T-Vision.1: write tmp PNG fixture under os.tmpdir() (passes assertFileReadable allowlist);
- *     clear process.env.MAI_VISION_MODEL; point MAI_HOME_BASE to tmp dir (no auth.json so readAuth → null);
+ *     clear process.env.FRONDOSE_VISION_MODEL; point FRONDOSE_HOME_BASE to tmp dir (no auth.json so readAuth → null);
  *     invoke execute(); assert envelope shape.
  *   - T-Vision.2: pure substring grep against BOUNDARY constant.
  *
@@ -35,12 +35,12 @@ import { makeAnalyzeScreenshotTool } from "../../../src/tools/webTools/analyzeSc
 // ─── T-Vision.1 — analyze_screenshot graceful vision_unavailable envelope ────
 
 describe("analyze_screenshot tool — graceful vision_unavailable envelope when FRONDOSE_VISION_MODEL unset (G-P57d.1 + F-REN-3 flip)", () => {
-  it("T-Vision.1: given process.env.MAI_VISION_MODEL cleared + MAI_HOME_BASE pointed at tmp dir (no auth.json, so readAuth returns null + auth.visionModel undefined) + tmp PNG fixture in os.tmpdir() (passes assertFileReadable allowlist), WHEN analyze_screenshot.execute({path:<tmp-png>, prompt:'describe'}) is called, THEN result is {ok:false, error:{kind:'vision_unavailable', message: contains 'Vision unavailable' + 'FRONDOSE_VISION_MODEL' + 'inspect' + 'operator scope'}}; tool.description contains 'operator scope', 'inspect', 'vision-capable' substrings (P-57d scope-lock messaging per plan §5.1.3; F-REN-3: MAI_VISION_MODEL → FRONDOSE_VISION_MODEL)", async () => {
+  it("T-Vision.1: given process.env.FRONDOSE_VISION_MODEL cleared + FRONDOSE_HOME_BASE pointed at tmp dir (no auth.json, so readAuth returns null + auth.visionModel undefined) + tmp PNG fixture in os.tmpdir() (passes assertFileReadable allowlist), WHEN analyze_screenshot.execute({path:<tmp-png>, prompt:'describe'}) is called, THEN result is {ok:false, error:{kind:'vision_unavailable', message: contains 'Vision unavailable' + 'FRONDOSE_VISION_MODEL' + 'inspect' + 'operator scope'}}; tool.description contains 'operator scope', 'inspect', 'vision-capable' substrings (P-57d scope-lock messaging per plan §5.1.3; F-REN-3: FRONDOSE_VISION_MODEL → FRONDOSE_VISION_MODEL)", async () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-vision-"));
-    const origHome = process.env.MAI_HOME_BASE;
-    const origVisionModel = process.env.MAI_VISION_MODEL;
-    process.env.MAI_HOME_BASE = tmpDir;
-    delete process.env.MAI_VISION_MODEL;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
+    const origVisionModel = process.env.FRONDOSE_VISION_MODEL;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
+    delete process.env.FRONDOSE_VISION_MODEL;
 
     try {
       // Write minimal PNG fixture under os.tmpdir() (allowlist OK; just needs to exist + readable)
@@ -89,10 +89,10 @@ describe("analyze_screenshot tool — graceful vision_unavailable envelope when 
         `error message must reference 'operator scope'; got: ${message}`,
       );
     } finally {
-      if (origHome === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = origHome;
-      if (origVisionModel === undefined) delete process.env.MAI_VISION_MODEL;
-      else process.env.MAI_VISION_MODEL = origVisionModel;
+      if (origHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = origHome;
+      if (origVisionModel === undefined) delete process.env.FRONDOSE_VISION_MODEL;
+      else process.env.FRONDOSE_VISION_MODEL = origVisionModel;
     }
   });
 });

@@ -9,7 +9,7 @@
  * T-AnalyzeScreenshot.4 — PNG MIME type detection: .png → image/png
  * T-AnalyzeScreenshot.5 — JPEG MIME type detection: .jpg and .jpeg → image/jpeg
  * T-AnalyzeScreenshot.6 — Happy path via mock fetch: ok envelope with description
- * T-AnalyzeScreenshot.7 — MAI_VISION_MODEL env override used for model spec
+ * T-AnalyzeScreenshot.7 — FRONDOSE_VISION_MODEL env override used for model spec
  *
  * Gate coverage: G-P9.9 (analyze_screenshot), G-P9.10 (file sandbox)
  *
@@ -44,7 +44,7 @@ function withSeededVisionProvider(fn: () => Promise<void>): Promise<void> {
   writeAuth({
     providers: { mockvision: { key: "test-key", baseUrl: "https://vision.test/v1", type: "openai" } },
   });
-  return withEnv("MAI_VISION_MODEL", SEEDED_VISION_SPEC, fn).finally(() => {
+  return withEnv("FRONDOSE_VISION_MODEL", SEEDED_VISION_SPEC, fn).finally(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
     rmSync(home, { recursive: true, force: true });
@@ -113,7 +113,7 @@ test("T-AnalyzeScreenshot.1: path outside file sandbox → fail envelope (assert
 test("T-AnalyzeScreenshot.2: unknown provider spec → model resolution fails → fail envelope", async () => {
   const tool = makeAnalyzeScreenshotTool();
 
-  await withEnv("MAI_VISION_MODEL", "nonexistent_provider:some-model", async () => {
+  await withEnv("FRONDOSE_VISION_MODEL", "nonexistent_provider:some-model", async () => {
     const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
       ok: boolean;
       error: { kind: string; message: string };
@@ -140,7 +140,7 @@ test(
     ac.abort("test-abort"); // Pre-abort before call
 
     await withEnv("ANTHROPIC_API_KEY", "test-key-dummy", async () =>
-      withEnv("MAI_VISION_MODEL", "anthropic:claude-sonnet-4-5", async () =>
+      withEnv("FRONDOSE_VISION_MODEL", "anthropic:claude-sonnet-4-5", async () =>
         withMockFetch(
           async (_url, init) => {
             // Check if the signal was passed and already aborted
@@ -267,14 +267,14 @@ test("T-AnalyzeScreenshot.6: happy path via mock fetch → ok envelope with desc
   );
 });
 
-// ─── T-AnalyzeScreenshot.7: MAI_VISION_MODEL env override ────────────────────
+// ─── T-AnalyzeScreenshot.7: FRONDOSE_VISION_MODEL env override ────────────────────
 
-test("T-AnalyzeScreenshot.7: MAI_VISION_MODEL env override reflected in result.visionModel", async () => {
+test("T-AnalyzeScreenshot.7: FRONDOSE_VISION_MODEL env override reflected in result.visionModel", async () => {
   const tool = makeAnalyzeScreenshotTool();
 
   // Use openai:gpt-4o as the vision model override
   await withEnv("OPENAI_API_KEY", "test-openai-key", async () =>
-    withEnv("MAI_VISION_MODEL", "openai:gpt-4o", async () =>
+    withEnv("FRONDOSE_VISION_MODEL", "openai:gpt-4o", async () =>
       withMockFetch(
         async () =>
           new Response(
@@ -298,14 +298,14 @@ test("T-AnalyzeScreenshot.7: MAI_VISION_MODEL env override reflected in result.v
 
           // If the call succeeds, visionModel must reflect the override
           if (result.ok) {
-            assert.equal(result.data?.visionModel, "openai:gpt-4o", "visionModel must use MAI_VISION_MODEL override");
+            assert.equal(result.data?.visionModel, "openai:gpt-4o", "visionModel must use FRONDOSE_VISION_MODEL override");
             console.log("  T-AnalyzeScreenshot.7: openai:gpt-4o mock succeeded ✓");
           } else {
             // OpenAI SDK may have different response shape; log and accept
             console.log(
               `  T-AnalyzeScreenshot.7: openai mock returned fail (response shape mismatch): ${result.error?.message?.slice(0, 100)}`,
             );
-            // The test still passes — we verified MAI_VISION_MODEL was used (fail message includes "openai:gpt-4o" or similar)
+            // The test still passes — we verified FRONDOSE_VISION_MODEL was used (fail message includes "openai:gpt-4o" or similar)
             assert.ok(
               result.error?.message.includes("gpt-4o") || result.error?.message.length > 0,
               "fail must reference the model spec or have a message",
@@ -319,8 +319,8 @@ test("T-AnalyzeScreenshot.7: MAI_VISION_MODEL env override reflected in result.v
 
 // ─── T-Auth.5 — visionModel fallback from auth.json (P-15, G-P15.4) ────────────
 
-test("T-Auth.5: when MAI_VISION_MODEL unset, visionModel from auth.json is used as fallback; env var wins", async () => {
-  // Given: auth.json with { visionModel: "deepseek:deepseek-chat" }; MAI_VISION_MODEL env var unset
+test("T-Auth.5: when FRONDOSE_VISION_MODEL unset, visionModel from auth.json is used as fallback; env var wins", async () => {
+  // Given: auth.json with { visionModel: "deepseek:deepseek-chat" }; FRONDOSE_VISION_MODEL env var unset
   // When:  readAuth returns visionModel; then env var set, env override wins
   // Then:  auth.json fallback works; hermes precedence (env > file > default) holds
 
@@ -335,25 +335,25 @@ test("T-Auth.5: when MAI_VISION_MODEL unset, visionModel from auth.json is used 
     assert.equal(raw.visionModel, "deepseek:deepseek-chat", "visionModel must be writable to auth.json");
 
     // Simulate the precedence used by analyzeScreenshot.ts:
-    // process.env.MAI_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL
-    const savedEnv = process.env.MAI_VISION_MODEL;
+    // process.env.FRONDOSE_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL
+    const savedEnv = process.env.FRONDOSE_VISION_MODEL;
 
     // Env set → env wins
-    process.env.MAI_VISION_MODEL = "anthropic:claude-sonnet-4-5";
-    const withEnv = process.env.MAI_VISION_MODEL ?? raw.visionModel ?? "default";
+    process.env.FRONDOSE_VISION_MODEL = "anthropic:claude-sonnet-4-5";
+    const withEnv = process.env.FRONDOSE_VISION_MODEL ?? raw.visionModel ?? "default";
     assert.equal(withEnv, "anthropic:claude-sonnet-4-5", "env var must win over auth.json visionModel");
 
     // Env unset → auth.json value used
-    delete process.env.MAI_VISION_MODEL;
-    const withoutEnv = process.env.MAI_VISION_MODEL ?? raw.visionModel ?? "default";
+    delete process.env.FRONDOSE_VISION_MODEL;
+    const withoutEnv = process.env.FRONDOSE_VISION_MODEL ?? raw.visionModel ?? "default";
     assert.equal(withoutEnv, "deepseek:deepseek-chat", "auth.json visionModel used when env unset");
 
     // Both unset → default (simulate undefined ?? "default")
     const bothUnset: string | undefined = undefined;
     assert.equal(bothUnset ?? "default", "default", "default used when neither env nor file has value");
 
-    if (savedEnv !== undefined) process.env.MAI_VISION_MODEL = savedEnv;
-    else delete process.env.MAI_VISION_MODEL;
+    if (savedEnv !== undefined) process.env.FRONDOSE_VISION_MODEL = savedEnv;
+    else delete process.env.FRONDOSE_VISION_MODEL;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

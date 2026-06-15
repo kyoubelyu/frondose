@@ -147,10 +147,10 @@ describe("runSshProvision — maiPrefix UNDEFINED → commands use ~/.frondose/a
 // ─── T-Prefix.2 ───────────────────────────────────────────────────────────────
 
 describe("runSshProvision — maiPrefix set → install command prefixed (G-P42.2)", () => {
-  it("T-Prefix.2: when deps.maiPrefix='/tmp/mai-p42-x', command 1 is 'MAI_PREFIX=/tmp/mai-p42-x bash -s'", async () => {
+  it("T-Prefix.2: when deps.maiPrefix='/tmp/mai-p42-x', command 1 is 'FRONDOSE_PREFIX=/tmp/mai-p42-x bash -s'", async () => {
     // Given: deps = { execImpl, installShPath, maiPrefix: "/tmp/mai-p42-x" }
     // When:  runSshProvision(ctx, { personaId:"p1", hostname:"h1" }, deps)
-    // Then:  calls[0].command === "MAI_PREFIX=/tmp/mai-p42-x bash -s" (exact)
+    // Then:  calls[0].command === "FRONDOSE_PREFIX=/tmp/mai-p42-x bash -s" (exact)
     const { dir, cleanup } = makeTmpDir();
     try {
       const installShPath = writeInstallShFixture(dir);
@@ -169,8 +169,8 @@ describe("runSshProvision — maiPrefix set → install command prefixed (G-P42.
       assert.ok(result.ok, `T-Prefix.2: expected ok:true; got: ${JSON.stringify(result)}`);
       assert.equal(
         calls[0].command,
-        "MAI_PREFIX=/tmp/mai-p42-x bash -s",
-        `T-Prefix.2: call-1 command must be 'MAI_PREFIX=/tmp/mai-p42-x bash -s'; got: ${calls[0]?.command}`,
+        "FRONDOSE_PREFIX=/tmp/mai-p42-x bash -s",
+        `T-Prefix.2: call-1 command must be 'FRONDOSE_PREFIX=/tmp/mai-p42-x bash -s'; got: ${calls[0]?.command}`,
       );
     } finally {
       cleanup();

@@ -34,60 +34,60 @@ async function getHomeBaseHelper(): Promise<() => string> {
 // ─── T-Paths.1 ───────────────────────────────────────────────────────────────
 
 describe("getHomeBase() precedence + empty/whitespace fallback (G-P52.1)", () => {
-  it("T-Paths.1: when MAI_HOME_BASE is set to a non-empty value, getHomeBase()===that value; when unset or empty / whitespace-only, getHomeBase()===os.homedir() (BLOCKER-5 empty-string trap closed)", async () => {
+  it("T-Paths.1: when FRONDOSE_HOME_BASE is set to a non-empty value, getHomeBase()===that value; when unset or empty / whitespace-only, getHomeBase()===os.homedir() (BLOCKER-5 empty-string trap closed)", async () => {
     // Given: the exported `getHomeBase()` helper from `src/persistence/paths.ts`
-    //        AND a saved snapshot of `process.env.MAI_HOME_BASE` (the test
+    //        AND a saved snapshot of `process.env.FRONDOSE_HOME_BASE` (the test
     //        mutates the env between calls — restore in `finally`).
     // When:  the helper is called under four env states:
-    //          (a) MAI_HOME_BASE = "/tmp/p52-a"   → "/tmp/p52-a"
-    //          (b) MAI_HOME_BASE deleted          → os.homedir()
-    //          (c) MAI_HOME_BASE = ""             → os.homedir() (Step-3b BLOCKER-5)
-    //          (d) MAI_HOME_BASE = "   "          → os.homedir()
+    //          (a) FRONDOSE_HOME_BASE = "/tmp/p52-a"   → "/tmp/p52-a"
+    //          (b) FRONDOSE_HOME_BASE deleted           → os.homedir()
+    //          (c) FRONDOSE_HOME_BASE = ""              → os.homedir() (Step-3b BLOCKER-5)
+    //          (d) FRONDOSE_HOME_BASE = "   "           → os.homedir()
     // Then:  each call returns the expected value (per row above).
     //        Lazy-getter pattern: each call re-reads env, so mutating between
     //        calls within a single test is the correct verification surface.
-    const priorEnv = process.env.MAI_HOME_BASE;
+    const priorEnv = process.env.FRONDOSE_HOME_BASE;
     const restore = (): void => {
       if (priorEnv === undefined) {
-        delete process.env.MAI_HOME_BASE;
+        delete process.env.FRONDOSE_HOME_BASE;
       } else {
-        process.env.MAI_HOME_BASE = priorEnv;
+        process.env.FRONDOSE_HOME_BASE = priorEnv;
       }
     };
     try {
       const getHomeBase = await getHomeBaseHelper();
 
       // (a) Set to a non-empty value → returned as-is.
-      process.env.MAI_HOME_BASE = "/tmp/p52-a";
-      assert.equal(getHomeBase(), "/tmp/p52-a", "MAI_HOME_BASE='/tmp/p52-a' → getHomeBase()==='/tmp/p52-a'");
+      process.env.FRONDOSE_HOME_BASE = "/tmp/p52-a";
+      assert.equal(getHomeBase(), "/tmp/p52-a", "FRONDOSE_HOME_BASE='/tmp/p52-a' → getHomeBase()==='/tmp/p52-a'");
 
       // (b) Deleted → fallback to homedir().
-      delete process.env.MAI_HOME_BASE;
-      assert.equal(getHomeBase(), homedir(), "MAI_HOME_BASE unset → getHomeBase()===os.homedir()");
+      delete process.env.FRONDOSE_HOME_BASE;
+      assert.equal(getHomeBase(), homedir(), "FRONDOSE_HOME_BASE unset → getHomeBase()===os.homedir()");
 
       // (c) Empty string → fallback to homedir() (Step-3b BLOCKER-5 closed).
-      process.env.MAI_HOME_BASE = "";
+      process.env.FRONDOSE_HOME_BASE = "";
       assert.equal(
         getHomeBase(),
         homedir(),
-        "MAI_HOME_BASE='' → getHomeBase()===os.homedir() (BLOCKER-5 empty-string trap closed)",
+        "FRONDOSE_HOME_BASE='' → getHomeBase()===os.homedir() (BLOCKER-5 empty-string trap closed)",
       );
 
       // (d) Whitespace-only → fallback to homedir().
-      process.env.MAI_HOME_BASE = "   ";
+      process.env.FRONDOSE_HOME_BASE = "   ";
       assert.equal(
         getHomeBase(),
         homedir(),
-        "MAI_HOME_BASE='   ' → getHomeBase()===os.homedir() (whitespace-only trim fallback)",
+        "FRONDOSE_HOME_BASE='   ' → getHomeBase()===os.homedir() (whitespace-only trim fallback)",
       );
 
       // (e) Lazy-getter sanity: setting BACK to a non-empty value after the
       // empty/whitespace runs must observe the new value (proves each call re-reads env).
-      process.env.MAI_HOME_BASE = "/tmp/p52-a-relset";
+      process.env.FRONDOSE_HOME_BASE = "/tmp/p52-a-relset";
       assert.equal(
         getHomeBase(),
         "/tmp/p52-a-relset",
-        "lazy-getter pattern: re-set MAI_HOME_BASE between calls is observed (no module-load-time caching)",
+        "lazy-getter pattern: re-set FRONDOSE_HOME_BASE between calls is observed (no module-load-time caching)",
       );
     } finally {
       restore();

@@ -17,7 +17,7 @@ import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeLaunchTool } from "../../../src/tools/linkedin/launch.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
-process.env.MAI_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 

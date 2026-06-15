@@ -187,8 +187,8 @@ async function spinHarness(
   const tmpDir = mkdtempSync(join(tmpdir(), `p57e-${testName}-`));
   const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
-  const origHome = process.env.MAI_HOME_BASE;
-  process.env.MAI_HOME_BASE = tmpDir;
+  const origHome = process.env.FRONDOSE_HOME_BASE;
+  process.env.FRONDOSE_HOME_BASE = tmpDir;
   mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
   writeFileSync(
     join(tmpDir, ".frondose", "agent", "identity.json"),
@@ -225,8 +225,8 @@ async function spinHarness(
     bearer,
     tmpDir,
     restoreEnv: () => {
-      if (origHome === undefined) delete process.env.MAI_HOME_BASE;
-      else process.env.MAI_HOME_BASE = origHome;
+      if (origHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = origHome;
     },
   };
 }

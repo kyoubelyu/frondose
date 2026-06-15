@@ -471,11 +471,11 @@ describe("autoUpdate split-barrel — all helpers reachable", () => {
 
       // Smoke 3: acquireUpdateLock + releaseUpdateLock round-trip (reuses the MAI_HOME_BASE pattern
       // from the characterization file — here we use a one-off tmp via MAI_HOME_BASE override)
-      const prevHome = process.env.MAI_HOME_BASE;
+      const prevHome = process.env.FRONDOSE_HOME_BASE;
       const { mkdtempSync, rmSync: rmSyncLocal } = await import("node:fs");
       const { tmpdir } = await import("node:os");
       const tmpHome = mkdtempSync(join(tmpdir(), "p72s9-helpers-"));
-      process.env.MAI_HOME_BASE = tmpHome;
+      process.env.FRONDOSE_HOME_BASE = tmpHome;
       try {
         const acquireFs = barrel.acquireUpdateLock as (nowMs: number) => number;
         const releaseFs = barrel.releaseUpdateLock as (fd: number) => void;
@@ -483,8 +483,8 @@ describe("autoUpdate split-barrel — all helpers reachable", () => {
         assert.ok(typeof fd === "number" && fd > 0, "[TODO Step 4] acquireUpdateLock smoke: fd > 0");
         releaseFs(fd);
       } finally {
-        if (prevHome === undefined) delete process.env.MAI_HOME_BASE;
-        else process.env.MAI_HOME_BASE = prevHome;
+        if (prevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+        else process.env.FRONDOSE_HOME_BASE = prevHome;
         rmSyncLocal(tmpHome, { recursive: true, force: true });
       }
     },

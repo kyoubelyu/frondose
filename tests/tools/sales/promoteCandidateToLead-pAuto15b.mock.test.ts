@@ -64,15 +64,15 @@ const toolOpts = { messages: [] as never[], toolCallId: "test" };
  * so readIdentity() returns null and the QS-7.a gate skips (backward-compat).
  *
  * Returns: { tmpHome, restore }
- *   tmpHome — the temp directory path (also used as MAI_HOME_BASE)
+ *   tmpHome — the temp directory path (also used as FRONDOSE_HOME_BASE)
  *   restore — call in finally to undo env overrides and rm the temp dir
  */
 function setupTempHome(identityRecord: Record<string, unknown> | null): { tmpHome: string; restore: () => void } {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-pAuto15b-home-"));
   const origHome = process.env.HOME;
-  const origHomeBase = process.env.MAI_HOME_BASE;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
   process.env.HOME = tmpHome;
-  process.env.MAI_HOME_BASE = tmpHome;
+  process.env.FRONDOSE_HOME_BASE = tmpHome;
 
   // Write the identity.json into the legacy fallback path.
   // readIdentity() checks config.json first; if absent/invalid, falls back to
@@ -90,8 +90,8 @@ function setupTempHome(identityRecord: Record<string, unknown> | null): { tmpHom
     restore: () => {
       if (origHome !== undefined) process.env.HOME = origHome;
       else delete process.env.HOME;
-      if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
-      else delete process.env.MAI_HOME_BASE;
+      if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
+      else delete process.env.FRONDOSE_HOME_BASE;
       rmSync(tmpHome, { recursive: true, force: true });
     },
   };

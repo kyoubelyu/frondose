@@ -1,7 +1,7 @@
 /**
  * P-13 Step 4a — T-Prompts.1..4 scaffolds
  *
- * Covers G-P13.1: isInteractive() correctness across TTY × MAI_NO_INTERACTIVE
+ * Covers G-P13.1: isInteractive() correctness across TTY × FRONDOSE_NO_INTERACTIVE
  * matrix + sanitizePasted strips markers.
  *
  * NOTE: Imports from src/cli/subcommands/_prompts.ts which does NOT exist at
@@ -18,60 +18,60 @@ import { isInteractive, sanitizePasted } from "../../src/cli/subcommands/_prompt
 // ─── T-Prompts.1 ─────────────────────────────────────────────────────────────
 
 describe("isInteractive() — TTY detection", () => {
-  it("T-Prompts.1: when stdin.isTTY === true AND MAI_NO_INTERACTIVE unset, returns true", async () => {
-    // Given: test stubs process.stdin.isTTY = true and MAI_NO_INTERACTIVE is unset
+  it("T-Prompts.1: when stdin.isTTY === true AND FRONDOSE_NO_INTERACTIVE unset, returns true", async () => {
+    // Given: test stubs process.stdin.isTTY = true and FRONDOSE_NO_INTERACTIVE is unset
     // When:  isInteractive() is called
     // Then:  returns true (TTY + no override flag)
 
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       (process.stdin as { isTTY?: boolean }).isTTY = true;
-      delete process.env.MAI_NO_INTERACTIVE;
+      delete process.env.FRONDOSE_NO_INTERACTIVE;
 
       const result = isInteractive();
       assert.equal(result, true, "T-Prompts.1: isInteractive() must return true when TTY and flag unset");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
     }
   });
 
-  it("T-Prompts.2: when stdin.isTTY === true AND MAI_NO_INTERACTIVE === '1', returns false", async () => {
-    // Given: TTY is true but MAI_NO_INTERACTIVE flag is set to "1"
+  it("T-Prompts.2: when stdin.isTTY === true AND FRONDOSE_NO_INTERACTIVE === '1', returns false", async () => {
+    // Given: TTY is true but FRONDOSE_NO_INTERACTIVE flag is set to "1"
     // When:  isInteractive() is called
     // Then:  returns false (flag overrides TTY)
 
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       (process.stdin as { isTTY?: boolean }).isTTY = true;
-      process.env.MAI_NO_INTERACTIVE = "1";
+      process.env.FRONDOSE_NO_INTERACTIVE = "1";
 
       const result = isInteractive();
       assert.equal(
         result,
         false,
-        "T-Prompts.2: isInteractive() must return false when MAI_NO_INTERACTIVE=1 overrides TTY",
+        "T-Prompts.2: isInteractive() must return false when FRONDOSE_NO_INTERACTIVE=1 overrides TTY",
       );
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
     }
   });
 
-  it("T-Prompts.3: when stdin.isTTY is undefined (piped stdin), returns false regardless of MAI_NO_INTERACTIVE", async () => {
+  it("T-Prompts.3: when stdin.isTTY is undefined (piped stdin), returns false regardless of FRONDOSE_NO_INTERACTIVE", async () => {
     // Given: process.stdin.isTTY is undefined (non-TTY/piped environment)
     // When:  isInteractive() is called
     // Then:  returns false (undefined !== true)
 
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-      delete process.env.MAI_NO_INTERACTIVE;
+      delete process.env.FRONDOSE_NO_INTERACTIVE;
 
       const result = isInteractive();
       assert.equal(
@@ -81,8 +81,8 @@ describe("isInteractive() — TTY detection", () => {
       );
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
     }
   });
 });

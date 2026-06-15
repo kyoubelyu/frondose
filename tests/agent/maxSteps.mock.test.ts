@@ -1,7 +1,7 @@
 /**
  * P-46 mock tests — T-MaxSteps.1–2: parseMaxSteps + resolveMaxSteps unit tests.
  *
- * T-MaxSteps.1 — resolver precedence: CLI flag > MAI_MAX_STEPS > DEFAULT_MAX_STEPS.
+ * T-MaxSteps.1 — resolver precedence: CLI flag > FRONDOSE_MAX_STEPS > DEFAULT_MAX_STEPS.
  * T-MaxSteps.2 — invalid inputs rejected: non-positive, non-integer, exponent-notation,
  *                leading-zero, plus-prefixed, whitespace, empty, negative, fraction.
  *                Also: parseMaxSteps accepts surrounding whitespace + "42" → 42.
@@ -9,7 +9,7 @@
  *
  * P-AUTO-12 extension — T-CronMaxSteps resolver unit tests (G-A12.3, G-A12.4) +
  *                       T-CronNoProgress resolver unit tests (G-A12.22):
- * T-CronMaxSteps.3 — legacy MAI_CRON_MAX_STEPS=25 honored when FRONDOSE_ unset.
+ * T-CronMaxSteps.3 — MAI_CRON_MAX_STEPS=25 NOT honored when FRONDOSE_ unset (shim removed F-REN-4e).
  * T-CronMaxSteps.4 — invalid FRONDOSE_CRON_MAX_STEPS falls through to default 40.
  * T-CronNoProgress.17 — invalid FRONDOSE_CRON_NOPROGRESS_LIMIT falls through to default 10.
  *
@@ -49,39 +49,39 @@ before(async () => {
 
 // ─── T-MaxSteps.1: resolver precedence ──────────────────────────────────────
 
-describe("T-MaxSteps.1: resolveMaxSteps precedence — flag > MAI_MAX_STEPS env > default", () => {
+describe("T-MaxSteps.1: resolveMaxSteps precedence — flag > FRONDOSE_MAX_STEPS env > default", () => {
   let prevEnv: string | undefined;
 
   before(() => {
-    prevEnv = process.env.MAI_MAX_STEPS;
+    prevEnv = process.env.FRONDOSE_MAX_STEPS;
   });
 
   after(() => {
-    if (prevEnv === undefined) delete process.env.MAI_MAX_STEPS;
-    else process.env.MAI_MAX_STEPS = prevEnv;
+    if (prevEnv === undefined) delete process.env.FRONDOSE_MAX_STEPS;
+    else process.env.FRONDOSE_MAX_STEPS = prevEnv;
   });
 
-  it("when cliFlag='50' and MAI_MAX_STEPS='80', resolveMaxSteps returns 50 (flag wins)", () => {
-    // Given: CLI flag "50" passed; MAI_MAX_STEPS env set to "80"
+  it("when cliFlag='50' and FRONDOSE_MAX_STEPS='80', resolveMaxSteps returns 50 (flag wins)", () => {
+    // Given: CLI flag "50" passed; FRONDOSE_MAX_STEPS env set to "80"
     // When:  resolveMaxSteps("50") is called
     // Then:  result is 50 (CLI flag takes precedence over env var)
-    process.env.MAI_MAX_STEPS = "80";
-    assert.equal(resolveMaxSteps("50"), 50, "CLI flag '50' must win over MAI_MAX_STEPS='80'");
+    process.env.FRONDOSE_MAX_STEPS = "80";
+    assert.equal(resolveMaxSteps("50"), 50, "CLI flag '50' must win over FRONDOSE_MAX_STEPS='80'");
   });
 
-  it("when cliFlag=undefined and MAI_MAX_STEPS='80', resolveMaxSteps returns 80 (env wins)", () => {
-    // Given: no CLI flag; MAI_MAX_STEPS env set to "80"
+  it("when cliFlag=undefined and FRONDOSE_MAX_STEPS='80', resolveMaxSteps returns 80 (env wins)", () => {
+    // Given: no CLI flag; FRONDOSE_MAX_STEPS env set to "80"
     // When:  resolveMaxSteps(undefined) is called
     // Then:  result is 80 (env var takes precedence over default)
-    process.env.MAI_MAX_STEPS = "80";
-    assert.equal(resolveMaxSteps(undefined), 80, "MAI_MAX_STEPS='80' must win when no CLI flag");
+    process.env.FRONDOSE_MAX_STEPS = "80";
+    assert.equal(resolveMaxSteps(undefined), 80, "FRONDOSE_MAX_STEPS='80' must win when no CLI flag");
   });
 
-  it("when cliFlag=undefined and MAI_MAX_STEPS unset, resolveMaxSteps returns DEFAULT_MAX_STEPS (200)", () => {
-    // Given: no CLI flag; MAI_MAX_STEPS env not set
+  it("when cliFlag=undefined and FRONDOSE_MAX_STEPS unset, resolveMaxSteps returns DEFAULT_MAX_STEPS (200)", () => {
+    // Given: no CLI flag; FRONDOSE_MAX_STEPS env not set
     // When:  resolveMaxSteps(undefined) is called
     // Then:  result is DEFAULT_MAX_STEPS = 200 (hardcoded default)
-    delete process.env.MAI_MAX_STEPS;
+    delete process.env.FRONDOSE_MAX_STEPS;
     assert.equal(
       resolveMaxSteps(undefined),
       DEFAULT_MAX_STEPS,
@@ -97,13 +97,13 @@ describe("T-MaxSteps.2: parseMaxSteps rejects invalid inputs; accepts valid posi
   let prevEnv: string | undefined;
 
   before(() => {
-    prevEnv = process.env.MAI_MAX_STEPS;
-    delete process.env.MAI_MAX_STEPS;
+    prevEnv = process.env.FRONDOSE_MAX_STEPS;
+    delete process.env.FRONDOSE_MAX_STEPS;
   });
 
   after(() => {
-    if (prevEnv === undefined) delete process.env.MAI_MAX_STEPS;
-    else process.env.MAI_MAX_STEPS = prevEnv;
+    if (prevEnv === undefined) delete process.env.FRONDOSE_MAX_STEPS;
+    else process.env.FRONDOSE_MAX_STEPS = prevEnv;
   });
 
   it("DEFAULT_MAX_STEPS constant equals 200 (D-1 hardcoded default)", () => {
@@ -141,8 +141,8 @@ describe("T-MaxSteps.2: parseMaxSteps rejects invalid inputs; accepts valid posi
     assert.equal(parseMaxSteps(" 42 "), 42, "parseMaxSteps(' 42 ') must return 42 (whitespace trimmed)");
   });
 
-  it("resolveMaxSteps falls back to DEFAULT_MAX_STEPS for each invalid input when MAI_MAX_STEPS unset", () => {
-    // Given: MAI_MAX_STEPS not set; cliFlag = invalid string
+  it("resolveMaxSteps falls back to DEFAULT_MAX_STEPS for each invalid input when FRONDOSE_MAX_STEPS unset", () => {
+    // Given: FRONDOSE_MAX_STEPS not set; cliFlag = invalid string
     // When:  resolveMaxSteps(invalidString) is called for each invalid input
     // Then:  result is DEFAULT_MAX_STEPS = 200 for all
     const invalids = ["abc", "0", "-5", "3.5", "", "1e3", "007", "+5", " "];
@@ -150,15 +150,15 @@ describe("T-MaxSteps.2: parseMaxSteps rejects invalid inputs; accepts valid posi
       assert.equal(
         resolveMaxSteps(inv),
         DEFAULT_MAX_STEPS,
-        `resolveMaxSteps('${inv}') must return DEFAULT_MAX_STEPS=200 when MAI_MAX_STEPS unset`,
+        `resolveMaxSteps('${inv}') must return DEFAULT_MAX_STEPS=200 when FRONDOSE_MAX_STEPS unset`,
       );
     }
   });
 });
 
-// ─── P-AUTO-12: T-CronMaxSteps.3 — legacy MAI_ env back-compat (G-A12.3) ─────
+// ─── P-AUTO-12: T-CronMaxSteps.3 — MAI_ shim REMOVED (F-REN-4e) (G-A12.3) ─────
 
-describe("T-CronMaxSteps.3: legacy MAI_CRON_MAX_STEPS=25 is honored when FRONDOSE_CRON_MAX_STEPS unset (env shim)", () => {
+describe("T-CronMaxSteps.3: MAI_CRON_MAX_STEPS=25 is NOT honored when FRONDOSE_CRON_MAX_STEPS unset (shim removed F-REN-4e)", () => {
   let savedFrondose: string | undefined;
   let savedMai: string | undefined;
 
@@ -176,13 +176,12 @@ describe("T-CronMaxSteps.3: legacy MAI_CRON_MAX_STEPS=25 is honored when FRONDOS
     else process.env.MAI_CRON_MAX_STEPS = savedMai;
   });
 
-  it("resolveCronMaxSteps() returns 25 when MAI_CRON_MAX_STEPS='25' and FRONDOSE_CRON_MAX_STEPS unset", () => {
-    // Given: FRONDOSE_CRON_MAX_STEPS not set; MAI_CRON_MAX_STEPS='25' (legacy back-compat via env.ts shim)
+  it("resolveCronMaxSteps() returns DEFAULT_CRON_MAX_STEPS=40 when MAI_CRON_MAX_STEPS='25' and FRONDOSE_CRON_MAX_STEPS unset (shim removed)", () => {
+    // Given: FRONDOSE_CRON_MAX_STEPS not set; MAI_CRON_MAX_STEPS='25' (shim was removed in F-REN-4e)
     // When:  resolveCronMaxSteps() is called
-    // Then:  result is 25 (the legacy env var is honored)
-    assert.ok(resolveCronMaxSteps !== null, "resolveCronMaxSteps must be exported from maxSteps.ts (not yet shipped at Step 3)");
-    // TODO (Step 5): assert.equal(resolveCronMaxSteps(), 25)
-    assert.equal(resolveCronMaxSteps!(), 25, "resolveCronMaxSteps() must return 25 when MAI_CRON_MAX_STEPS='25'");
+    // Then:  result is DEFAULT_CRON_MAX_STEPS=40 (MAI_ prefix is not read; shim gone)
+    assert.ok(resolveCronMaxSteps !== null, "resolveCronMaxSteps must be exported from maxSteps.ts");
+    assert.equal(resolveCronMaxSteps!(), 40, "resolveCronMaxSteps() must return DEFAULT=40 when MAI_CRON_MAX_STEPS='25' only (shim removed)");
   });
 });
 

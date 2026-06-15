@@ -238,8 +238,8 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t9-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = tmpDir;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     mockTurnSleepMs = 1500;
@@ -278,7 +278,7 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
     assert.equal(r2.body.reason, "turn_in_progress", "(r2) reason must be turn_in_progress");
     assert.equal(r2.body.turnId, turnId1, `(r2) 409 turnId must match running turn; got ${String(r2.body.turnId)}`);
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -297,8 +297,8 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t10-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = tmpDir;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // mockRunAgentLoop captures onStepFinish + then resolves after 500ms (so we have
@@ -377,7 +377,7 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
       "next-actions frame must carry the nextActions.summary payload",
     );
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -395,8 +395,8 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t11-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = tmpDir;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     // 500ms sleep gives time for #2→#3 overlap
@@ -470,7 +470,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
     // Sanity: prompt also includes the URL
     assert.ok(last.content.includes(targetUrl), "last user message must include the target URL");
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });
 
@@ -485,8 +485,8 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t12-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
-    const origHome = process.env.MAI_HOME_BASE;
-    process.env.MAI_HOME_BASE = tmpDir;
+    const origHome = process.env.FRONDOSE_HOME_BASE;
+    process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
     void runServeSubcommand({ portFile, bearerToken: bearer });
@@ -547,6 +547,6 @@ describe("runServeSubcommand — POST /agent/cron-mode flips cronEnabled flag + 
       `SSE must contain cron-mode frame with cronEnabled:true; got: ${sse.text.slice(0, 500)}`,
     );
 
-    process.env.MAI_HOME_BASE = origHome;
+    process.env.FRONDOSE_HOME_BASE = origHome;
   });
 });

@@ -30,7 +30,7 @@ export function parseMaxSteps(raw: string | undefined): number | null {
 
 /**
  * Resolve the effective step budget.
- * Precedence: CLI flag > MAI_MAX_STEPS env var > DEFAULT_MAX_STEPS.
+ * Precedence: CLI flag > FRONDOSE_MAX_STEPS env var > DEFAULT_MAX_STEPS.
  */
 export function resolveMaxSteps(cliFlag?: string): number {
   return parseMaxSteps(cliFlag) ?? parseMaxSteps(frondoseEnv("MAX_STEPS")) ?? DEFAULT_MAX_STEPS;
@@ -47,8 +47,8 @@ export const DEFAULT_CRON_MAX_STEPS = 40;
 
 /**
  * Resolve the cron step budget.
- * Precedence: FRONDOSE_CRON_MAX_STEPS env (back-compat MAI_CRON_MAX_STEPS
- * via src/env.ts:12) > DEFAULT_CRON_MAX_STEPS. Reuses parseMaxSteps so
+ * Precedence: FRONDOSE_CRON_MAX_STEPS env > DEFAULT_CRON_MAX_STEPS.
+ * Reuses parseMaxSteps so
  * invalid input (`"0"`, `"-5"`, `"abc"`, `""`, `"1.5"`) falls through to
  * the default — never a silent zero.
  */

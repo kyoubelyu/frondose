@@ -188,7 +188,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     unsubscribeOverlayEvents: undefined,
     cronEnabled: cronEnabledAtBoot,
     // P-57g (D-DOGFOOD-07): passive auto-react HIDDEN by default — opt in via MAI.app toggle
-    // (frondose_set_passive_mode → POST /agent/passive-mode) OR MAI_PASSIVE_SUGGEST=on env.
+    // (frondose_set_passive_mode → POST /agent/passive-mode) OR FRONDOSE_PASSIVE_SUGGEST=on env.
     passiveEnabled: passiveEnabledAtBoot,
     autoRunId: null,
     // P-AUTO-12 (b): cron no-progress tracking — in-memory only.

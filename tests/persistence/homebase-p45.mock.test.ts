@@ -30,29 +30,29 @@ function makeSandbox(prefix: string): { dir: string; cleanup: () => void } {
 }
 
 function setHomeBase(val: string | undefined): string | undefined {
-  const prior = process.env.MAI_HOME_BASE;
-  if (val === undefined) delete process.env.MAI_HOME_BASE;
-  else process.env.MAI_HOME_BASE = val;
+  const prior = process.env.FRONDOSE_HOME_BASE;
+  if (val === undefined) delete process.env.FRONDOSE_HOME_BASE;
+  else process.env.FRONDOSE_HOME_BASE = val;
   return prior;
 }
 
 function restoreHomeBase(prior: string | undefined): void {
-  if (prior === undefined) delete process.env.MAI_HOME_BASE;
-  else process.env.MAI_HOME_BASE = prior;
+  if (prior === undefined) delete process.env.FRONDOSE_HOME_BASE;
+  else process.env.FRONDOSE_HOME_BASE = prior;
 }
 
 // ─── G-P45.2 — homedir() → getHomeBase() migration ───────────────────────────
 
 describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
-  it("T-HB.1: GIVEN MAI_HOME_BASE=/tmp/p45-sandbox-1 AND MAI_SCHEDULE_PATH unset, WHEN schedule_task schedulePath is probed, THEN path is under /tmp/p45-sandbox-1/.mai/agent/", async () => {
-    // Given: MAI_HOME_BASE set to a sandbox dir; MAI_SCHEDULE_PATH unset
+  it("T-HB.1: GIVEN FRONDOSE_HOME_BASE=/tmp/p45-sandbox-1 AND FRONDOSE_SCHEDULE_PATH unset, WHEN schedule_task schedulePath is probed, THEN path is under /tmp/p45-sandbox-1/.frondose/agent/", async () => {
+    // Given: FRONDOSE_HOME_BASE set to a sandbox dir; FRONDOSE_SCHEDULE_PATH unset
     // When:  makeAllTools in worker mode is invoked; schedulePath fallback observed
     // Then:  scheduleTask's effective path contains sandbox root, NOT real homedir()
     //        (verifies src/tools/index.ts:213 uses getHomeBase() post-P-45)
     const { dir, cleanup } = makeSandbox("1");
     const prior = setHomeBase(dir);
-    const savedSchedulePath = process.env.MAI_SCHEDULE_PATH;
-    delete process.env.MAI_SCHEDULE_PATH;
+    const savedSchedulePath = process.env.FRONDOSE_SCHEDULE_PATH;
+    delete process.env.FRONDOSE_SCHEDULE_PATH;
     try {
       // Verify getHomeBase() returns the sandbox value at runtime + the source line
       // at src/tools/index.ts uses `join(getHomeBase(), ...)` for the schedulePath fallback.
@@ -75,20 +75,20 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       );
     } finally {
       restoreHomeBase(prior);
-      if (savedSchedulePath !== undefined) process.env.MAI_SCHEDULE_PATH = savedSchedulePath;
+      if (savedSchedulePath !== undefined) process.env.FRONDOSE_SCHEDULE_PATH = savedSchedulePath;
       cleanup();
     }
   });
 
-  it("T-HB.2: GIVEN MAI_HOME_BASE=/tmp/p45-sandbox-2 AND MAI_UPLOAD_ALLOWLIST unset, WHEN resolveUploadAllowlist() is called, THEN the first entry MUST equal /tmp/p45-sandbox-2/.mai/agent/uploads", async () => {
-    // Given: MAI_HOME_BASE set; MAI_UPLOAD_ALLOWLIST not set (uses DEFAULTS())
+  it("T-HB.2: GIVEN FRONDOSE_HOME_BASE=/tmp/p45-sandbox-2 AND FRONDOSE_UPLOAD_ALLOWLIST unset, WHEN resolveUploadAllowlist() is called, THEN the first entry MUST equal /tmp/p45-sandbox-2/.frondose/agent/uploads", async () => {
+    // Given: FRONDOSE_HOME_BASE set; FRONDOSE_UPLOAD_ALLOWLIST not set (uses DEFAULTS())
     // When:  resolveUploadAllowlist() invoked
     // Then:  first allowlist entry is sandbox-rooted, not real homedir()
     //        (verifies src/linkedin/uploadAllowlist.ts:11 uses getHomeBase() post-P-45)
     const { dir, cleanup } = makeSandbox("2");
     const prior = setHomeBase(dir);
-    const savedAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    delete process.env.MAI_UPLOAD_ALLOWLIST;
+    const savedAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
     try {
       const { resolveUploadAllowlist } = await import("../../src/linkedin/uploadAllowlist.js");
       const allowlist = resolveUploadAllowlist();
@@ -108,20 +108,20 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       }
     } finally {
       restoreHomeBase(prior);
-      if (savedAllowlist !== undefined) process.env.MAI_UPLOAD_ALLOWLIST = savedAllowlist;
+      if (savedAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = savedAllowlist;
       cleanup();
     }
   });
 
-  it("T-HB.3: GIVEN MAI_HOME_BASE=/tmp/p45-sandbox-3, WHEN assertFileReadable called with sandboxed path, THEN it MUST NOT throw; AND real-homedir path MUST throw", async () => {
-    // Given: MAI_HOME_BASE set; sandbox mai-agent dir created with a test file
+  it("T-HB.3: GIVEN FRONDOSE_HOME_BASE=/tmp/p45-sandbox-3, WHEN assertFileReadable called with sandboxed path, THEN it MUST NOT throw; AND real-homedir path MUST throw", async () => {
+    // Given: FRONDOSE_HOME_BASE set; sandbox mai-agent dir created with a test file
     // When:  assertFileReadable(sandboxed-path) called; then assertFileReadable(real-home-path)
     // Then:  sandboxed path passes; real home path fails (not in sandbox allowlist)
     //        (verifies src/linkedin/uploadAllowlist.ts:56 uses getHomeBase() post-P-45)
     const { dir, cleanup } = makeSandbox("3");
     const prior = setHomeBase(dir);
-    const savedAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    delete process.env.MAI_UPLOAD_ALLOWLIST;
+    const savedAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
     try {
       const agentUploadsDir = join(dir, ".frondose", "agent", "uploads");
       mkdirSync(agentUploadsDir, { recursive: true });
@@ -148,20 +148,20 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       );
     } finally {
       restoreHomeBase(prior);
-      if (savedAllowlist !== undefined) process.env.MAI_UPLOAD_ALLOWLIST = savedAllowlist;
+      if (savedAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = savedAllowlist;
       cleanup();
     }
   });
 
-  it("T-HB.4: GIVEN MAI_HOME_BASE=/tmp/p45-sandbox-4 AND MAI_PROFILE_DIR unset, WHEN CDP launcher resolves profileDir, THEN resolved dir MUST be under /tmp/p45-sandbox-4/.mai/agent/chrome-profile", async () => {
-    // Given: MAI_HOME_BASE set; MAI_PROFILE_DIR not set (uses DEFAULT_PROFILE_DIR)
+  it("T-HB.4: GIVEN FRONDOSE_HOME_BASE=/tmp/p45-sandbox-4 AND FRONDOSE_PROFILE_DIR unset, WHEN CDP launcher resolves profileDir, THEN resolved dir MUST be under /tmp/p45-sandbox-4/.frondose/agent/chrome-profile", async () => {
+    // Given: FRONDOSE_HOME_BASE set; FRONDOSE_PROFILE_DIR not set (uses DEFAULT_PROFILE_DIR)
     // When:  ensureChrome with no profileDir option; __setLaunchFn intercepts opts
     // Then:  opts.userDataDir seen by launch fn contains sandbox root (not real home)
     //        (verifies src/cdp/launcher.ts:10 uses getHomeBase() post-P-45)
     const { dir, cleanup } = makeSandbox("4");
     const prior = setHomeBase(dir);
-    const savedProfileDir = process.env.MAI_PROFILE_DIR;
-    delete process.env.MAI_PROFILE_DIR;
+    const savedProfileDir = process.env.FRONDOSE_PROFILE_DIR;
+    delete process.env.FRONDOSE_PROFILE_DIR;
     try {
       // biome-ignore lint/suspicious/noExplicitAny: dynamic import for DI hook
       const launcherMod = (await import("../../src/cdp/launcher.js")) as any;
@@ -187,13 +187,13 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
       }
     } finally {
       restoreHomeBase(prior);
-      if (savedProfileDir !== undefined) process.env.MAI_PROFILE_DIR = savedProfileDir;
+      if (savedProfileDir !== undefined) process.env.FRONDOSE_PROFILE_DIR = savedProfileDir;
       cleanup();
     }
   });
 
-  it("T-HB.5: GIVEN MAI_HOME_BASE=/tmp/p45-sandbox-5 AND hooks.json exists in sandbox, WHEN HookRunner() constructed with no path, THEN it loads hooks from sandbox not real home", async () => {
-    // Given: MAI_HOME_BASE set; sandbox/.mai/agent/hooks.json created with a known matcher
+  it("T-HB.5: GIVEN FRONDOSE_HOME_BASE=/tmp/p45-sandbox-5 AND hooks.json exists in sandbox, WHEN HookRunner() constructed with no path, THEN it loads hooks from sandbox not real home", async () => {
+    // Given: FRONDOSE_HOME_BASE set; sandbox/.frondose/agent/hooks.json created with a known matcher
     // When:  new HookRunner() constructed with no explicit path arg
     // Then:  the runner's hooksJsonPath resolves to sandbox path (observable via matcher firing)
     //        (verifies src/agent/hooks.ts:46 uses getHomeBase() post-P-45)

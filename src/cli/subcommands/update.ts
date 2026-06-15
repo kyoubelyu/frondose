@@ -189,7 +189,7 @@ export async function runUpdateSubcommand(opts: UpdateSubcommandOpts = {}): Prom
     // when FRONDOSE_AUTOUPDATE=skip do we point the operator at manual recovery.
     if (frondoseEnv("AUTOUPDATE") === "skip") {
       process.stdout.write(
-        `Update available: ${latestWithV} — auto-update is disabled (FRONDOSE_AUTOUPDATE=skip). Run \`mai\` to apply, or unset FRONDOSE_AUTOUPDATE (or legacy MAI_AUTOUPDATE).\n`,
+        `Update available: ${latestWithV} — auto-update is disabled (FRONDOSE_AUTOUPDATE=skip). Run \`mai\` to apply, or unset FRONDOSE_AUTOUPDATE.\n`,
       );
     } else {
       process.stdout.write(`Update available: ${latestWithV} — mai will auto-update on next startup.\n`);

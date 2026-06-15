@@ -4,7 +4,7 @@
  * B5: analyze_screenshot vision failure → improved error + name-capability-gated fallback.
  *
  * Gate coverage:
- *   G-P37.7 (error message names MAI_VISION_MODEL; tool description mentions it),
+ *   G-P37.7 (error message names FRONDOSE_VISION_MODEL; tool description mentions it),
  *   G-P37.8 (fallback fires for vision-capable main model; no fallback for non-vision-capable)
  *
  * DI: globalThis.fetch mocked to simulate generateText throw (first call → throw).
@@ -96,8 +96,8 @@ async function withMockFetch(mockFn: typeof globalThis.fetch, fn: () => Promise<
 
 describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)", () => {
   it("T-B5.1: when vision generateText throws AND main modelId matches vision-capable pattern (claude-*), a second generateText runs with the main model; ok result visionModel reflects the fallback", async () => {
-    // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7' (vision spec, different from main);
-    //        MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable — matches /claude/);
+    // Given: FRONDOSE_VISION_MODEL='anthropic:claude-opus-4-7' (vision spec, different from main);
+    //        FRONDOSE_MODEL='anthropic:claude-sonnet-4-5' (vision-capable — matches /claude/);
     //        first fetch throws; second fetch returns success
     // When:  analyze_screenshot.execute is called
     // Then:  result.ok === true; result.data.visionModel === 'anthropic:claude-sonnet-4-5' (fallback main spec)
@@ -116,8 +116,8 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
     await withSeededVisionProvider(async () =>
       withEnvMulti(
         {
-          MAI_VISION_MODEL: "vis:claude-opus-4-7",
-          MAI_MODEL: "vis:claude-sonnet-4-5",
+          FRONDOSE_VISION_MODEL: "vis:claude-opus-4-7",
+          FRONDOSE_MODEL: "vis:claude-sonnet-4-5",
           ANTHROPIC_API_KEY: undefined,
           OPENAI_API_KEY: undefined,
           DEEPSEEK_API_KEY: undefined,
@@ -151,7 +151,7 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
   });
 
   it("T-B5.2: when vision generateText throws AND main modelId is 'deepseek-v4-flash' (not vision-capable), NO retry; fail envelope names FRONDOSE_VISION_MODEL", async () => {
-    // Given: MAI_VISION_MODEL='anthropic:claude-sonnet-4-5'; MAI_MODEL='deepseek:deepseek-v4-flash' (not vision-capable);
+    // Given: FRONDOSE_VISION_MODEL='anthropic:claude-sonnet-4-5'; FRONDOSE_MODEL='deepseek:deepseek-v4-flash' (not vision-capable);
     //        all fetch calls throw
     // When:  analyze_screenshot.execute is called
     // Then:  result.ok === false; result.error.message contains "FRONDOSE_VISION_MODEL" (F-REN-3 flip); no second fetch
@@ -160,12 +160,12 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
 
     // P-Z3: seed "vis" so resolveModel(vision) succeeds → the vision call runs (always-throws) →
     // fallback decision: main modelId "deepseek-v4-flash" fails VISION_CAPABLE_MODEL_RE → NO fallback →
-    // runtime_error naming MAI_VISION_MODEL + the non-vision-capable main spec (L110-116).
+    // runtime_error naming FRONDOSE_VISION_MODEL + the non-vision-capable main spec (L110-116).
     await withSeededVisionProvider(async () =>
       withEnvMulti(
         {
-          MAI_VISION_MODEL: "vis:claude-sonnet-4-5",
-          MAI_MODEL: "vis:deepseek-v4-flash",
+          FRONDOSE_VISION_MODEL: "vis:claude-sonnet-4-5",
+          FRONDOSE_MODEL: "vis:deepseek-v4-flash",
           ANTHROPIC_API_KEY: undefined,
           DEEPSEEK_API_KEY: undefined,
           OPENAI_API_KEY: undefined,
@@ -197,7 +197,7 @@ describe("B5: analyze_screenshot — name-gated fallback to main model (G-P37.8)
 
 describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () => {
   it("T-B5.3: when resolveModel throws (no provider key configured for vision spec), the pre-generateText fail envelope message names FRONDOSE_VISION_MODEL", async () => {
-    // Given: MAI_VISION_MODEL='unknown_provider_b53:some-model'; no key for that provider
+    // Given: FRONDOSE_VISION_MODEL='unknown_provider_b53:some-model'; no key for that provider
     // When:  analyze_screenshot.execute is called (resolveModel fails before generateText)
     // Then:  result.ok === false; result.error.message contains "FRONDOSE_VISION_MODEL" (F-REN-3 flip)
 
@@ -205,7 +205,7 @@ describe("B5: analyze_screenshot — resolveModel failure path (G-P37.7)", () =>
 
     await withEnvMulti(
       {
-        MAI_VISION_MODEL: "unknown_provider_b53:some-model",
+        FRONDOSE_VISION_MODEL: "unknown_provider_b53:some-model",
         ANTHROPIC_API_KEY: undefined,
         OPENAI_API_KEY: undefined,
         DEEPSEEK_API_KEY: undefined,
@@ -250,7 +250,7 @@ describe("B5: analyze_screenshot — tool description mentions FRONDOSE_VISION_M
 
 describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.8 double-fail)", () => {
   it("T-B5.5: when both the vision call AND the fallback main-model call throw, the fail envelope names FRONDOSE_VISION_MODEL and both specs", async () => {
-    // Given: MAI_VISION_MODEL='anthropic:claude-opus-4-7'; MAI_MODEL='anthropic:claude-sonnet-4-5' (vision-capable);
+    // Given: FRONDOSE_VISION_MODEL='anthropic:claude-opus-4-7'; FRONDOSE_MODEL='anthropic:claude-sonnet-4-5' (vision-capable);
     //        ALL fetch calls throw (vision fails AND fallback fails)
     // When:  analyze_screenshot.execute is called
     // Then:  result.ok === false; error message references both specs and FRONDOSE_VISION_MODEL (F-REN-3 flip)
@@ -260,8 +260,8 @@ describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.
     await withEnvMulti(
       {
         ANTHROPIC_API_KEY: "test-key-b5-5",
-        MAI_VISION_MODEL: "anthropic:claude-opus-4-7",
-        MAI_MODEL: "anthropic:claude-sonnet-4-5",
+        FRONDOSE_VISION_MODEL: "anthropic:claude-opus-4-7",
+        FRONDOSE_MODEL: "anthropic:claude-sonnet-4-5",
         OPENAI_API_KEY: undefined,
         DEEPSEEK_API_KEY: undefined,
       },
@@ -277,7 +277,7 @@ describe("B5: analyze_screenshot — both vision and fallback calls fail (G-P37.
             result.error?.message.includes("FRONDOSE_VISION_MODEL"),
             `error must reference FRONDOSE_VISION_MODEL (F-REN-3 flip); got: "${result.error?.message}"`,
           );
-          // Either the visionSpec or the fallback MAI_VISION_MODEL guidance must be present
+          // Either the visionSpec or the fallback FRONDOSE_VISION_MODEL guidance must be present
           const msg = result.error?.message ?? "";
           assert.ok(
             msg.includes("claude-opus-4-7") || msg.includes("claude-sonnet-4-5") || msg.includes("fallback"),

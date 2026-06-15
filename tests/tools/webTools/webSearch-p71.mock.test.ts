@@ -12,7 +12,7 @@ const FAKE_OPTS: ToolExecutionOptions = {
   messages: [] as CoreMessage[],
   abortSignal: new AbortController().signal,
 };
-const SEARCH_ENV_KEYS = ["HOME", "MAI_HOME_BASE", "MCP_SEARCH_URL", "BRAVE_API_KEY", "TAVILY_API_KEY"] as const;
+const SEARCH_ENV_KEYS = ["HOME", "FRONDOSE_HOME_BASE", "MCP_SEARCH_URL", "BRAVE_API_KEY", "TAVILY_API_KEY"] as const;
 type SearchEnvKey = (typeof SEARCH_ENV_KEYS)[number];
 type WebSearchTool = {
   description?: string;
@@ -90,7 +90,7 @@ async function withIsolatedSearchHome(fn: () => Promise<void>): Promise<void> {
   const home = mkdtempSync(resolve(tmpdir(), "mai-pbrave-search-"));
   const saved = saveEnv();
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   delete process.env.MCP_SEARCH_URL;
   delete process.env.BRAVE_API_KEY;
   delete process.env.TAVILY_API_KEY;

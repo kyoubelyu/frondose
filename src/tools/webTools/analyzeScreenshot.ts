@@ -45,7 +45,7 @@ export function makeAnalyzeScreenshotTool() {
       "Analyze a screenshot file via a vision-capable LLM. " +
       "Pass an absolute path to a PNG/JPEG file (typically the path returned by the screenshot tool). " +
       "Returns a text description. P-57d: default unset — operator must set `FRONDOSE_VISION_MODEL` " +
-      "(legacy `MAI_VISION_MODEL` still accepted) " +
+      " " +
       "to a custom-URL vision-capable provider to enable this tool. Otherwise prefer `inspect` " +
       "(accessibility tree primitive). External vision APIs (anthropic-direct/openai-direct) " +
       "are scope-disabled per `project_llm_scope_custom_url_only`. " +
@@ -66,7 +66,7 @@ export function makeAnalyzeScreenshotTool() {
               kind: "vision_unavailable",
               message:
                 "Vision unavailable — current FRONDOSE_MODEL doesn't support vision. " +
-                "Set FRONDOSE_VISION_MODEL to a custom-URL vision-capable provider (legacy MAI_VISION_MODEL still accepted) OR use the inspect tool instead. " +
+                "Set FRONDOSE_VISION_MODEL to a custom-URL vision-capable provider OR use the inspect tool instead. " +
                 "operator scope: FRONDOSE_VISION_MODEL not configured; external vision APIs (Anthropic/OpenAI direct) are disabled.",
             },
           };

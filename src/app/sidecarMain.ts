@@ -12,8 +12,6 @@
 //   - NO maybePrintTransitionalBanner (banner already short-circuits on `serve`).
 //   - NO runStartupAutoUpdate (the Tauri updater owns app updates).
 // What we DO need:
-//   - bootMigrateOrExit() FIRST (F-REN-4a B-1) — the data-dir migration runs
-//     before registerCrashHandlers (which mkdirs the log dir) and any data read.
 //   - registerCrashHandlers() (static import) so any throw — including a
 //     subsequent import-time throw inside the serve graph — hits
 //     ~/.frondose/agent/logs/crash.log [CONCERN-MR-1].
@@ -27,8 +25,6 @@
 import { pathToFileURL } from "node:url";
 import { registerCrashHandlers } from "../cli/crashLogger.js";
 import { frondoseEnv } from "../env.js";
-import { bootMigrateOrExit } from "../persistence/dataDirMigration.js";
-import { getHomeBase } from "../persistence/paths.js";
 
 export function parseArgs(argv: string[]): { portFile: string; bearerToken: string } {
   let portFile: string | undefined;
@@ -71,7 +67,6 @@ export async function main(): Promise<void> {
   // 3) DYNAMIC import of the serve graph (any import-time throw now hits
   //    the registered handlers + the unhandled-rejection sink).
   const { portFile, bearerToken } = parseArgs(process.argv.slice(2));
-  bootMigrateOrExit(getHomeBase());
   registerCrashHandlers();
   const { runServeSubcommand } = await import("../cli/subcommands/serve.js");
   await runServeSubcommand({ portFile, bearerToken });

@@ -16,7 +16,7 @@ import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { computeCharDelay, makeTypeTool } from "../../../src/tools/browser/type.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
-process.env.MAI_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 const FAKE_BORDER = [0, 0, 10, 0, 10, 10, 0, 10]; // center: x=5, y=5
@@ -707,7 +707,7 @@ function makeFakeSessionOnProfile(slug: string, entries: Array<{ ref: string; ro
 /** Seed a temp sales.sqlite under MAI_HOME_BASE/<tmp>/.mai/agent/ with one candidate→lead→draft chain. */
 function seedSalesDb(slug: string, draftText: string): string {
   const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-"));
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   const dbPath = pathJoin(home, ".frondose", "agent", "sales.sqlite");
   // getSalesDb takes care of mkdir + schema init on first open.
   const db = getSalesDb(dbPath);
@@ -770,7 +770,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(result.ok, true, "exact match must pass");
       assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });
@@ -796,7 +796,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.ok(/rewritten|Expected|saved draft/i.test(err.message), "error mentions fidelity violation");
       assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0, "no insertText fired");
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });
@@ -807,7 +807,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
   it("REJECTS when no saved draft exists for the lead (no approval trail)", async () => {
     // No seedSalesDb — DB lookup returns null
     const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-nodraft-"));
-    process.env.MAI_HOME_BASE = home;
+    process.env.FRONDOSE_HOME_BASE = home;
     try {
       const session = makeFakeSessionOnProfile("no-draft-lead", modalEntries);
       const tool = makeTypeTool(session);
@@ -820,7 +820,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       const err = (result as any).error;
       assert.ok(/no saved.*draft|save_message_draft/i.test(err.message), "error directs to save_message_draft first");
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });
@@ -856,7 +856,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       );
       assert.equal(result.ok, true, "vanityName preload URL must resolve the lead and pass on exact match");
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });
@@ -900,7 +900,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(result.ok, true, "2nd-deg exact match must pass — modal-detection vocabulary is variant-agnostic");
       assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });
@@ -925,7 +925,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(err.kind, "invalid_input");
       assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0);
     } finally {
-      delete process.env.MAI_HOME_BASE;
+      delete process.env.FRONDOSE_HOME_BASE;
       if (existsSync(home)) rmSync(home, { recursive: true, force: true });
     }
   });

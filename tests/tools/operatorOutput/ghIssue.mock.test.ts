@@ -20,17 +20,17 @@ import { makeGhIssueTool } from "../../../src/tools/operatorOutput/ghIssue.js";
 // P-Z2 (bucket 2): isolate HOME so ghIssue's readGithubConfig() fallback reads an
 // empty tmp ~/.mai/agent/github.json instead of the operator's real config (which
 // would make T-M_p6.9's "GH_REPO missing" deterministic only by luck). getHomeBase()
-// prefers MAI_HOME_BASE; set it for the whole file.
+// prefers FRONDOSE_HOME_BASE; set it for the whole file.
 let pZ2PrevHome: string | undefined;
 let pZ2TmpHome: string;
 before(() => {
-  pZ2PrevHome = process.env.MAI_HOME_BASE;
+  pZ2PrevHome = process.env.FRONDOSE_HOME_BASE;
   pZ2TmpHome = mkdtempSync(join(tmpdir(), "pZ2-ghissue-"));
-  process.env.MAI_HOME_BASE = pZ2TmpHome;
+  process.env.FRONDOSE_HOME_BASE = pZ2TmpHome;
 });
 after(() => {
-  if (pZ2PrevHome === undefined) delete process.env.MAI_HOME_BASE;
-  else process.env.MAI_HOME_BASE = pZ2PrevHome;
+  if (pZ2PrevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+  else process.env.FRONDOSE_HOME_BASE = pZ2PrevHome;
   rmSync(pZ2TmpHome, { recursive: true, force: true });
 });
 

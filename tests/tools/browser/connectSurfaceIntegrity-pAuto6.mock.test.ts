@@ -20,8 +20,8 @@ import { personNameFromInviteLabel } from "../../../src/tools/browser/outboundGu
 import { connectNoteRequiredForLabel } from "../../../src/cli/subcommands/serve.js";
 
 // Disable pacing noise
-process.env.MAI_PACE_MIN_MS = "0";
-process.env.MAI_PACE_MAX_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MAX_MS = "0";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer A — personNameFromInviteLabel parser (T-AUTO6.7)

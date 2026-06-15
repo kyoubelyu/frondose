@@ -45,8 +45,8 @@ type AnyObj = Record<string, any>;
 type AnyFn = (...args: any[]) => any;
 
 // Disable pacing so tests don't sleep 0.8-2.5s per click.
-process.env.MAI_PACE_MIN_MS = "0";
-process.env.MAI_PACE_MAX_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MAX_MS = "0";
 
 // ─── Recapture stub state ─────────────────────────────────────────────────────
 // Tests T-A17.10/11/17/18 set this before executing the click tool.

@@ -38,13 +38,13 @@ const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "s
 
 /** Run `fn` with MAI_HOME_BASE pointed at a fresh temp dir (so DEFAULT_MODE_PATH → temp mode.json). */
 function withTempHome<T>(fn: () => T): T {
-  const prev = process.env.MAI_HOME_BASE;
-  process.env.MAI_HOME_BASE = mkdtempSync(join(tmpdir(), "p58a-mode-home-"));
+  const prev = process.env.FRONDOSE_HOME_BASE;
+  process.env.FRONDOSE_HOME_BASE = mkdtempSync(join(tmpdir(), "p58a-mode-home-"));
   try {
     return fn();
   } finally {
-    if (prev === undefined) delete process.env.MAI_HOME_BASE;
-    else process.env.MAI_HOME_BASE = prev;
+    if (prev === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = prev;
   }
 }
 const tmpModePath = (): string => join(mkdtempSync(join(tmpdir(), "p58a-mode-")), "mode.json");

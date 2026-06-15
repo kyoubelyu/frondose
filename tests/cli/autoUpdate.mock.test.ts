@@ -48,13 +48,13 @@ import {
 let pZ2PrevHome: string | undefined;
 let pZ2TmpHome: string;
 beforeEach(() => {
-  pZ2PrevHome = process.env.MAI_HOME_BASE;
+  pZ2PrevHome = process.env.FRONDOSE_HOME_BASE;
   pZ2TmpHome = mkdtempSync(join(tmpdir(), "pZ2-autoupd-"));
-  process.env.MAI_HOME_BASE = pZ2TmpHome;
+  process.env.FRONDOSE_HOME_BASE = pZ2TmpHome;
 });
 afterEach(() => {
-  if (pZ2PrevHome === undefined) delete process.env.MAI_HOME_BASE;
-  else process.env.MAI_HOME_BASE = pZ2PrevHome;
+  if (pZ2PrevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+  else process.env.FRONDOSE_HOME_BASE = pZ2PrevHome;
   rmSync(pZ2TmpHome, { recursive: true, force: true });
 });
 
@@ -76,7 +76,7 @@ const NEWER_TAG = `v${_localParts[0]}.${Number(_localParts[1]) + 1}.0`;
 // P-Z2: mirror production getHomeBase() (MAI_HOME_BASE ?? homedir()) so the test's
 // fixture paths match where autoUpdate.ts actually reads/writes.
 function pZ2HomeBase(): string {
-  return process.env.MAI_HOME_BASE ?? homedir();
+  return process.env.FRONDOSE_HOME_BASE ?? homedir();
 }
 function updateLockPath(): string {
   return join(pZ2HomeBase(), ".frondose", "agent", "update.lock");
@@ -219,12 +219,12 @@ function makeSymlinkSetup(dir: string, devLink: boolean): { argv1: string; pkgSy
 // ─── T-AUTO.1..6, T-AUTO.15: skip conditions ─────────────────────────────────
 
 describe("autoUpdate — skip conditions", () => {
-  it("T-AUTO.1: when MAI_AUTOUPDATE='skip', runStartupAutoUpdate → {action:'skipped',reason:'opt_out'}; no fetch, no spawn", async () => {
-    // Given: process.env.MAI_AUTOUPDATE === 'skip'; DI provides tracked fetchImpl + spawnSyncImpl
+  it("T-AUTO.1: when FRONDOSE_AUTOUPDATE='skip', runStartupAutoUpdate → {action:'skipped',reason:'opt_out'}; no fetch, no spawn", async () => {
+    // Given: process.env.FRONDOSE_AUTOUPDATE === 'skip'; DI provides tracked fetchImpl + spawnSyncImpl
     // When:  runStartupAutoUpdate({ fetchImpl, spawnSyncImpl, nowMs }) called
     // Then:  returns {action:'skipped',reason:'opt_out'}; fetchImpl call count = 0; spawnSyncImpl call count = 0
-    const origMai = process.env.MAI_AUTOUPDATE;
-    process.env.MAI_AUTOUPDATE = "skip";
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
+    process.env.FRONDOSE_AUTOUPDATE = "skip";
     let fetchCallCount = 0;
     const trackingFetch: AutoUpdateDI["fetchImpl"] = async () => {
       fetchCallCount++;
@@ -235,11 +235,11 @@ describe("autoUpdate — skip conditions", () => {
       const result = await runStartupAutoUpdate({ fetchImpl: trackingFetch, spawnSyncImpl: spawnFn });
       assert.equal(result.action, "skipped", "action must be skipped");
       assert.equal(result.reason, "opt_out", "reason must be opt_out");
-      assert.equal(fetchCallCount, 0, "fetchImpl must not be called when MAI_AUTOUPDATE=skip");
-      assert.equal(spawnCalls.length, 0, "spawnSyncImpl must not be called when MAI_AUTOUPDATE=skip");
+      assert.equal(fetchCallCount, 0, "fetchImpl must not be called when FRONDOSE_AUTOUPDATE=skip");
+      assert.equal(spawnCalls.length, 0, "spawnSyncImpl must not be called when FRONDOSE_AUTOUPDATE=skip");
     } finally {
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -252,11 +252,11 @@ describe("autoUpdate — skip conditions", () => {
     // Without HOME isolation, the fallback reads real ~/.mai/agent/secrets.json which may contain
     // a real GitHub token, causing 'network' instead of 'no_token'. We override HOME to an empty
     // tmpDir so readGithubConfig() finds no token anywhere in the fallback chain.
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
     const origHome = process.env.HOME;
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p22-t2-home-"));
-    delete process.env.MAI_AUTOUPDATE; // ensure opt_out doesn't fire first
+    delete process.env.FRONDOSE_AUTOUPDATE; // ensure opt_out doesn't fire first
     delete process.env.GH_TOKEN;
     process.env.HOME = tmpHome;
     let fetchCallCount = 0;
@@ -273,8 +273,8 @@ describe("autoUpdate — skip conditions", () => {
       process.env.HOME = origHome;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(tmpHome, { recursive: true, force: true });
       } catch {
@@ -287,9 +287,9 @@ describe("autoUpdate — skip conditions", () => {
     // Given: GH_TOKEN set; fetchImpl returns { tag_name: LOCAL_TAG }; local pkg.version == LOCAL_VER
     // When:  runStartupAutoUpdate({ fetchImpl }) called
     // Then:  returns {action:'skipped',reason:'up_to_date'}; no spawnSync calls; no fs writes
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-3";
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
     try {
@@ -303,8 +303,8 @@ describe("autoUpdate — skip conditions", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       // lock is released by runStartupAutoUpdate's finally block
     }
   });
@@ -313,9 +313,9 @@ describe("autoUpdate — skip conditions", () => {
     // Given: fetchImpl returns { tag_name: 'v0.4.0' }; local version is newer
     // When:  runStartupAutoUpdate called
     // Then:  returns {action:'skipped',reason:'local_ahead'}
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-4";
     try {
       const result = await runStartupAutoUpdate({
@@ -326,8 +326,8 @@ describe("autoUpdate — skip conditions", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -336,9 +336,9 @@ describe("autoUpdate — skip conditions", () => {
     // When:  runStartupAutoUpdate called; stderr captured
     // Then:  returns {action:'skipped',reason:'major_bump',latestTag:'v1.0.0'};
     //        process.stderr received "[frondose] Major version available..." one-liner
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-5";
     let result: AutoUpdateResult | undefined;
     let stderr = "";
@@ -351,8 +351,8 @@ describe("autoUpdate — skip conditions", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
     assert.ok(result !== undefined, "result must be defined");
     assert.equal(result.action, "skipped", "action must be skipped");
@@ -371,9 +371,9 @@ describe("autoUpdate — skip conditions", () => {
     // Then:  returns {action:'skipped',reason:'dev_link'};
     //        process.stderr contains "dev source (npm link)" advisory message
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-6";
     let result: AutoUpdateResult | undefined;
     let stderr = "";
@@ -389,8 +389,8 @@ describe("autoUpdate — skip conditions", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       cleanup();
     }
     assert.ok(result !== undefined, "result must be defined");
@@ -404,9 +404,9 @@ describe("autoUpdate — skip conditions", () => {
     // When:  runStartupAutoUpdate({ fetchImpl, argv1Override }) called
     // Then:  returns {action:'skipped',reason:'not_global_install'}; no spawnSync
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-15";
     // Create a real (non-symlink) file
     const realFilePath = join(dir, "mai-not-symlink");
@@ -428,8 +428,8 @@ describe("autoUpdate — skip conditions", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       cleanup();
     }
   });
@@ -448,10 +448,10 @@ describe("autoUpdate — full update flow", () => {
     //        spawnSyncImpl calls include: tar -xzf, npm install --prefer-offline, npm run build, re-exec;
     //        process.exit called with child.status (0)
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
     const origExit = process.exit.bind(process);
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-7";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -492,8 +492,8 @@ describe("autoUpdate — full update flow", () => {
       (process as any).exit = origExit;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       // Clean up release dir created in real homedir
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
@@ -511,9 +511,9 @@ describe("autoUpdate — full update flow", () => {
     // Then:  returns {action:'failed',reason:'extract'};
     //        releaseDir removed (cleanupPartial called); spawnSyncImpl NOT called for npm or re-exec
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-8";
     const { impl: spawnFn, calls: spawnCalls } = makePartialFailSpawn("tar", ["-xzf"], 1);
     try {
@@ -534,8 +534,8 @@ describe("autoUpdate — full update flow", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
@@ -551,9 +551,9 @@ describe("autoUpdate — full update flow", () => {
     // When:  runStartupAutoUpdate called
     // Then:  returns {action:'failed',reason:'install'}; release dir cleaned up
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-9";
     // Fail npm install (status 137, OOM); tar and npm run build pass
     const { impl: spawnFn, calls: spawnCalls } = makePartialFailSpawn("npm", ["install", "--prefer-offline"], 137);
@@ -582,8 +582,8 @@ describe("autoUpdate — full update flow", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
@@ -599,9 +599,9 @@ describe("autoUpdate — full update flow", () => {
     // When:  runStartupAutoUpdate called
     // Then:  returns {action:'failed',reason:'build'}; release dir cleaned up; no re-exec
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-10";
     // Fail npm run build (status 2); tar and npm install pass
     const { impl: spawnFn, calls: spawnCalls } = makePartialFailSpawn("npm", ["run", "build"], 2);
@@ -631,8 +631,8 @@ describe("autoUpdate — full update flow", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
@@ -647,9 +647,9 @@ describe("autoUpdate — full update flow", () => {
     // Given: fetchImpl throws network error (AbortError / timeout)
     // When:  runStartupAutoUpdate called with GH_TOKEN set
     // Then:  returns {action:'skipped',reason:'network'}; no spawnSync calls
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-11";
     const networkError = Object.assign(new Error("The operation was aborted due to timeout"), { name: "AbortError" });
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
@@ -664,8 +664,8 @@ describe("autoUpdate — full update flow", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 });
@@ -678,9 +678,9 @@ describe("autoUpdate — lock handling", () => {
     //        LOCK_STALE_MS = 45*60*1000 so it is NOT stale; we did not acquire it
     // When:  runStartupAutoUpdate({ nowMs: () => Date.now() }) called
     // Then:  returns {action:'skipped',reason:'lock_busy'}; fetchImpl NOT called; spawnSyncImpl NOT called
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-12";
     // Pre-create the lock file so acquireUpdateLock sees EEXIST
     mkdirSync(dirname(updateLockPath()), { recursive: true });
@@ -708,8 +708,8 @@ describe("autoUpdate — lock handling", () => {
       } catch {}
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -718,9 +718,9 @@ describe("autoUpdate — lock handling", () => {
     //        fetchImpl returns up_to_date so flow terminates at version check
     // When:  runStartupAutoUpdate({ nowMs: () => Date.now() + 50min }) called
     // Then:  stale lock unlinked; new lock created; returns non-lock_busy result (up_to_date)
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-13";
     mkdirSync(dirname(updateLockPath()), { recursive: true });
     writeFileSync(updateLockPath(), "stale");
@@ -741,8 +741,8 @@ describe("autoUpdate — lock handling", () => {
       } catch {}
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 });
@@ -788,10 +788,10 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     //        dev_link reason NOT returned (isDevLink check skipped by force=true);
     //        all spawn steps (tar, npm install, npm run build, re-exec) invoked
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
     const origExit = process.exit.bind(process);
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-boot1";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -835,8 +835,8 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       (process as any).exit = origExit;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
@@ -853,10 +853,10 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
     // When:  runStartupAutoUpdate({ force: true, source: 'bootstrap', fetchImpl, spawnSyncImpl, argv1Override }) called
     // Then:  returns {action:'updated',...}; same as T-AUTO.7 — idempotent behavior
     const { dir, cleanup } = makeTmpDir();
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origToken = process.env.GH_TOKEN;
     const origExit = process.exit.bind(process);
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p22-boot2";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -881,8 +881,8 @@ describe("autoUpdate — bootstrap (--bootstrap flag)", () => {
       (process as any).exit = origExit;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}
@@ -1021,8 +1021,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     // When:  runStartupAutoUpdate({ channel:"stable", fetchImpl }) is called
     // Then:  the FIRST fetched URL is …/releases/latest (NOT …/releases?…)
     const origToken = process.env.GH_TOKEN;
-    const origMai = process.env.MAI_AUTOUPDATE;
-    delete process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p58b-1";
     const { impl: fetchImpl, urls } = makeTrackingFetch({ stableTag: LOCAL_TAG });
     try {
@@ -1034,8 +1034,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -1045,8 +1045,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     // When:  runStartupAutoUpdate({ channel:"prerelease", fetchImpl }) is called
     // Then:  the FIRST fetched URL contains "/releases?per_page=" (NOT /releases/latest)
     const origToken = process.env.GH_TOKEN;
-    const origMai = process.env.MAI_AUTOUPDATE;
-    delete process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p58b-2";
     const { impl: fetchImpl, urls } = makeTrackingFetch({ prereleaseList: prereleaseListWith(LOCAL_TAG) });
     try {
@@ -1058,8 +1058,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -1069,8 +1069,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     // When:  runStartupAutoUpdate({ channel:"prerelease", fetchImpl, spawnSyncImpl })
     // Then:  result == {action:"skipped",reason:"up_to_date"} AND spawn NEVER called
     const origToken = process.env.GH_TOKEN;
-    const origMai = process.env.MAI_AUTOUPDATE;
-    delete process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p58b-3";
     const { impl: fetchImpl } = makeTrackingFetch({ prereleaseList: prereleaseListWith(LOCAL_TAG) });
     const { impl: spawnFn, calls: spawnCalls } = makeSuccessSpawn();
@@ -1086,8 +1086,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     } finally {
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
     }
   });
 
@@ -1099,9 +1099,9 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
     // Then:  it does NOT short-circuit — result.reason ∉ {"up_to_date","local_ahead"}
     const { dir, cleanup } = makeTmpDir();
     const origToken = process.env.GH_TOKEN;
-    const origMai = process.env.MAI_AUTOUPDATE;
+    const origMai = process.env.FRONDOSE_AUTOUPDATE;
     const origExit = process.exit.bind(process);
-    delete process.env.MAI_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     process.env.GH_TOKEN = "test-gh-token-p58b-4";
     let exitCode: number | undefined;
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -1133,8 +1133,8 @@ describe("autoUpdate — P-58b channel selection (T-AutoChannel)", () => {
       (process as any).exit = origExit;
       if (origToken !== undefined) process.env.GH_TOKEN = origToken;
       else delete process.env.GH_TOKEN;
-      if (origMai !== undefined) process.env.MAI_AUTOUPDATE = origMai;
-      else delete process.env.MAI_AUTOUPDATE;
+      if (origMai !== undefined) process.env.FRONDOSE_AUTOUPDATE = origMai;
+      else delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         rmSync(join(releasesDirPath(), NEWER_TAG), { recursive: true, force: true });
       } catch {}

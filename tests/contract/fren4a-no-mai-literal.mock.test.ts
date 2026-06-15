@@ -77,18 +77,15 @@ function findMaiLiterals(text: string): Array<{ lineNo: number; line: string }> 
 // ---------------------------------------------------------------------------
 
 /**
- * After Step 4, the ONLY non-test production files permitted to contain `.mai\b` are:
+ * After F-REN-4e, the ONLY non-test production files permitted to contain `.mai\b` are:
  *
- *   1. src/persistence/dataDirMigration.ts — the LEGACY_DATA_DIR_NAME = ".mai" source constant
- *      AND any internal reference to `.mai` paths within the migration logic (the source arg)
- *      AND prose comments that mention ".mai" as context.
- *
- *   2. src/tauri/src-tauri/src/main.rs — the back-compat fallback lines (both code literals
+ *   1. src/tauri/src-tauri/src/main.rs — the back-compat fallback lines (both code literals
  *      and prose doc-comments) inside read_update_server_url + read_update_check_interval_sec.
  *      These are the ONLY Rust allowlist entries. (§6.4 R-1 design)
+ *
+ *   NOTE: src/persistence/dataDirMigration.ts was deleted in F-REN-4e — no longer allowlisted.
  */
 const ALLOWLISTED_RELATIVE_PATHS = new Set<string>([
-  "src/persistence/dataDirMigration.ts",
   "src/tauri/src-tauri/src/main.rs",
 ]);
 
@@ -133,27 +130,14 @@ describe("source-scan guard — no .mai path literals outside allowlist after St
 // T-FREN4a.NoBashSafe — dataDirMigration.ts has no child_process/exec
 // ---------------------------------------------------------------------------
 
-describe("NoBashSafe: src/persistence/dataDirMigration.ts uses only node:fs (T-FREN4a.NoBashSafe)", () => {
+describe("NoBashSafe: src/persistence/dataDirMigration.ts was deleted in F-REN-4e (T-FREN4a.NoBashSafe)", () => {
   it("T-FREN4a.NoBashSafe: dataDirMigration.ts contains no child_process, spawnSync, execSync, exec, or spawn call", () => {
-    // Given: src/persistence/dataDirMigration.ts exists (after Step 4)
-    // When:  the file text is scanned for child_process / spawnSync / exec patterns
-    // Then:  zero matches — the migration is node:fs-only (no shell-out)
+    // Given: F-REN-4e deleted src/persistence/dataDirMigration.ts entirely
+    // When:  the file path is checked for existence
+    // Then:  the file does NOT exist — bash-safety is guaranteed by deletion
     const migrationPath = join(REPO, "src/persistence/dataDirMigration.ts");
 
-    assert.ok(existsSync(migrationPath),
-      "src/persistence/dataDirMigration.ts must exist (Step 4 not applied if missing)");
-
-    const text = readFileSync(migrationPath, "utf-8");
-    const bashPattern = /child_process|spawnSync|execSync\(|exec\(|spawn\(/;
-    const lines = text.split("\n");
-    const violations: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (bashPattern.test(lines[i] ?? "")) {
-        violations.push(`  line ${i + 1}: ${(lines[i] ?? "").trim()}`);
-      }
-    }
-
-    assert.deepEqual(violations, [],
-      `NoBashSafe violation: dataDirMigration.ts contains shell-out patterns:\n${violations.join("\n")}`);
+    assert.ok(!existsSync(migrationPath),
+      "src/persistence/dataDirMigration.ts must NOT exist after F-REN-4e deletion (migration logic was removed)");
   });
 });

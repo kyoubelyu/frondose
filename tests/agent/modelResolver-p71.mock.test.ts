@@ -8,8 +8,8 @@ import { readAuth, writeAuth } from "../../src/persistence/auth.js";
 
 const MODEL_ENV_KEYS = [
   "HOME",
-  "MAI_HOME_BASE",
-  "MAI_MODEL",
+  "FRONDOSE_HOME_BASE",
+  "FRONDOSE_MODEL",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "DEEPSEEK_API_KEY",
@@ -36,8 +36,8 @@ function withIsolatedModelHome<T>(fn: (home: string) => T): T {
   const home = mkdtempSync(join(tmpdir(), "mai-p71-model-"));
   const saved = saveEnv();
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
-  delete process.env.MAI_MODEL;
+  process.env.FRONDOSE_HOME_BASE = home;
+  delete process.env.FRONDOSE_MODEL;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
@@ -166,7 +166,7 @@ describe("P-71 provider scope consolidation", () => {
       // Given: no persisted secrets, MAI_MODEL=deepseek:<model>, DEEPSEEK_API_KEY, and DEEPSEEK_BASE_URL.
       // When: resolveModel({}) runs.
       // Then: a DeepSeek OpenAI-compatible LanguageModel is returned without writing secrets.
-      process.env.MAI_MODEL = "deepseek:deepseek-v4-flash";
+      process.env.FRONDOSE_MODEL = "deepseek:deepseek-v4-flash";
       process.env.DEEPSEEK_API_KEY = "sk-deepseek-env";
       process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
@@ -309,7 +309,7 @@ describe("P-71 provider scope consolidation", () => {
     // When: resolveModel({}) runs
     // Then: defaults to https://api.deepseek.com/v1 without throwing
     withIsolatedModelHome(() => {
-      process.env.MAI_MODEL = "deepseek:deepseek-v4-flash";
+      process.env.FRONDOSE_MODEL = "deepseek:deepseek-v4-flash";
       process.env.DEEPSEEK_API_KEY = "sk-deepseek-only";
       // DEEPSEEK_BASE_URL intentionally unset — should use DEFAULT_DEEPSEEK_BASE_URL
       const model = resolveModel({});

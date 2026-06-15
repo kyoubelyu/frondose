@@ -404,20 +404,20 @@ describe("Eager Chrome init at REPL boot (G-P52.2)", () => {
   });
 
   it("T-EagerChrome.2: when MAI_NO_EAGER_CHROME==='1' is set, the eager init is SKIPPED — linkedinSession.getOrInitClient is NOT called", async () => {
-    // Given: same setup as T-EagerChrome.1 but process.env.MAI_NO_EAGER_CHROME='1'.
+    // Given: same setup as T-EagerChrome.1 but process.env.FRONDOSE_NO_EAGER_CHROME='1'.
     // When:  runRepl settles.
     // Then:  callCount() === 0 (the gate at §6.4(c) skipped the eager call).
     //
-    // VALIDATOR NOTE (Step 5 fill): save+restore process.env.MAI_NO_EAGER_CHROME
+    // VALIDATOR NOTE (Step 5 fill): save+restore process.env.FRONDOSE_NO_EAGER_CHROME
     // around the test; pattern matches the env-restore pattern in paths.test.ts.
     const { tmpHome, cleanup } = withTmpHome();
-    const priorEnv = process.env.MAI_NO_EAGER_CHROME;
+    const priorEnv = process.env.FRONDOSE_NO_EAGER_CHROME;
     const restore = (): void => {
-      if (priorEnv === undefined) delete process.env.MAI_NO_EAGER_CHROME;
-      else process.env.MAI_NO_EAGER_CHROME = priorEnv;
+      if (priorEnv === undefined) delete process.env.FRONDOSE_NO_EAGER_CHROME;
+      else process.env.FRONDOSE_NO_EAGER_CHROME = priorEnv;
     };
     try {
-      process.env.MAI_NO_EAGER_CHROME = "1";
+      process.env.FRONDOSE_NO_EAGER_CHROME = "1";
       const { session, callCount } = makeFakeLinkedinSession();
 
       const model = new MockLanguageModelV1({

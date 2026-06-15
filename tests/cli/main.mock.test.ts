@@ -99,33 +99,33 @@ test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns th
 
 // ─── T-Cli.1 (P-46 G-P46.6): --max-steps flag threads to resolveMaxSteps ────
 
-test("T-Cli.1: MAI_MAX_STEPS env + --max-steps flag wiring — resolveMaxSteps precedence (P-46 D-1b)", async () => {
-  // Given: resolveMaxSteps("42") with MAI_MAX_STEPS unset → should return 42 (flag wins);
-  //        resolveMaxSteps(undefined) with MAI_MAX_STEPS="99" → should return 99 (env wins);
-  //        resolveMaxSteps(undefined) with MAI_MAX_STEPS unset → should return 200 (default)
+test("T-Cli.1: FRONDOSE_MAX_STEPS env + --max-steps flag wiring — resolveMaxSteps precedence (P-46 D-1b)", async () => {
+  // Given: resolveMaxSteps("42") with FRONDOSE_MAX_STEPS unset → should return 42 (flag wins);
+  //        resolveMaxSteps(undefined) with FRONDOSE_MAX_STEPS="99" → should return 99 (env wins);
+  //        resolveMaxSteps(undefined) with FRONDOSE_MAX_STEPS unset → should return 200 (default)
   // When:  main.ts root action resolves opts.maxSteps via resolveMaxSteps(opts.maxSteps)
   //        (tested here by importing resolveMaxSteps directly — same logic as main.ts)
   // Then:  flag=42+env=99 → 42; flag=undefined+env=99 → 99; flag=undefined+env=unset → 200
   //
   // NOTE (Step 4a): dynamic import — src/agent/maxSteps.ts created at Step 4b.
-  const prevEnv = process.env.MAI_MAX_STEPS;
+  const prevEnv = process.env.FRONDOSE_MAX_STEPS;
   try {
     // Dynamic import so a missing module fails this test only (not the whole file).
     const { resolveMaxSteps } = await import("../../src/agent/maxSteps.js");
 
-    // 1. CLI flag wins over MAI_MAX_STEPS env
-    process.env.MAI_MAX_STEPS = "99";
-    assert.equal(resolveMaxSteps("42"), 42, "CLI flag '42' must win over MAI_MAX_STEPS='99'");
+    // 1. CLI flag wins over FRONDOSE_MAX_STEPS env
+    process.env.FRONDOSE_MAX_STEPS = "99";
+    assert.equal(resolveMaxSteps("42"), 42, "CLI flag '42' must win over FRONDOSE_MAX_STEPS='99'");
 
-    // 2. MAI_MAX_STEPS wins when no CLI flag
-    assert.equal(resolveMaxSteps(undefined), 99, "MAI_MAX_STEPS='99' must be used when no CLI flag");
+    // 2. FRONDOSE_MAX_STEPS wins when no CLI flag
+    assert.equal(resolveMaxSteps(undefined), 99, "FRONDOSE_MAX_STEPS='99' must be used when no CLI flag");
 
     // 3. DEFAULT_MAX_STEPS=200 when neither set
-    delete process.env.MAI_MAX_STEPS;
+    delete process.env.FRONDOSE_MAX_STEPS;
     assert.equal(resolveMaxSteps(undefined), 200, "DEFAULT_MAX_STEPS=200 when no flag and no env (D-1 raise from 10)");
   } finally {
-    if (prevEnv === undefined) delete process.env.MAI_MAX_STEPS;
-    else process.env.MAI_MAX_STEPS = prevEnv;
+    if (prevEnv === undefined) delete process.env.FRONDOSE_MAX_STEPS;
+    else process.env.FRONDOSE_MAX_STEPS = prevEnv;
   }
 });
 

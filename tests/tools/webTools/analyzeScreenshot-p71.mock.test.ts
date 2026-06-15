@@ -11,9 +11,9 @@ const FIXTURE_PNG = join(process.cwd(), "tests", "fixtures", "test-screenshot.pn
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "p71-analyze-screenshot", messages: [] as CoreMessage[] };
 const VISION_ENV_KEYS = [
   "HOME",
-  "MAI_HOME_BASE",
-  "MAI_MODEL",
-  "MAI_VISION_MODEL",
+  "FRONDOSE_HOME_BASE",
+  "FRONDOSE_MODEL",
+  "FRONDOSE_VISION_MODEL",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "DEEPSEEK_API_KEY",
@@ -38,9 +38,9 @@ async function withIsolatedVisionHome(fn: () => Promise<void>): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "mai-p71-vision-"));
   const saved = saveEnv();
   process.env.HOME = home;
-  process.env.MAI_HOME_BASE = home;
-  process.env.MAI_MODEL = "deepseek:deepseek-chat";
-  delete process.env.MAI_VISION_MODEL;
+  process.env.FRONDOSE_HOME_BASE = home;
+  process.env.FRONDOSE_MODEL = "deepseek:deepseek-chat";
+  delete process.env.FRONDOSE_VISION_MODEL;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
@@ -88,10 +88,10 @@ function assertNoDirectKeyGuidance(message: string): void {
 describe("P-71 analyze_screenshot provider scope", () => {
   it("T-P71.Vision.1: direct Anthropic vision specs are blocked", async () => {
     await withIsolatedVisionHome(async () => {
-      // Given: MAI_VISION_MODEL is anthropic:* and legacy Anthropic provider data exists.
+      // Given: FRONDOSE_VISION_MODEL is anthropic:* and legacy Anthropic provider data exists.
       // When: analyze_screenshot resolves its vision model.
       // Then: it fails with custom-URL/DeepSeek guidance before any direct Anthropic fetch.
-      process.env.MAI_VISION_MODEL = "anthropic:claude-sonnet-4-5";
+      process.env.FRONDOSE_VISION_MODEL = "anthropic:claude-sonnet-4-5";
       writeAuth({
         providers: {
           anthropic: { key: "sk-ant-legacy", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
@@ -119,10 +119,10 @@ describe("P-71 analyze_screenshot provider scope", () => {
 
   it("T-P71.Vision.2: direct OpenAI vision specs are blocked", async () => {
     await withIsolatedVisionHome(async () => {
-      // Given: MAI_VISION_MODEL is openai:* and legacy OpenAI provider data exists.
+      // Given: FRONDOSE_VISION_MODEL is openai:* and legacy OpenAI provider data exists.
       // When: analyze_screenshot resolves its vision model.
       // Then: it fails with custom-URL guidance before any direct OpenAI fetch.
-      process.env.MAI_VISION_MODEL = "openai:gpt-4o";
+      process.env.FRONDOSE_VISION_MODEL = "openai:gpt-4o";
       writeAuth({
         providers: {
           openai: { key: "sk-openai-legacy", baseUrl: "https://api.openai.com/v1", type: "openai" },
@@ -150,10 +150,10 @@ describe("P-71 analyze_screenshot provider scope", () => {
 
   it("T-P71.Vision.3: custom non-official vision providers are preserved", async () => {
     await withIsolatedVisionHome(async () => {
-      // Given: MAI_VISION_MODEL points to an allowed custom provider with a non-official baseUrl and key.
+      // Given: FRONDOSE_VISION_MODEL points to an allowed custom provider with a non-official baseUrl and key.
       // When: analyze_screenshot resolves and calls the vision model.
       // Then: the custom OpenAI-compatible path still succeeds.
-      process.env.MAI_VISION_MODEL = "vision:vision-1";
+      process.env.FRONDOSE_VISION_MODEL = "vision:vision-1";
       writeAuth({
         providers: {
           vision: { key: "sk-vision", baseUrl: "https://vision.example/v1", type: "openai" },
@@ -187,10 +187,10 @@ describe("P-71 analyze_screenshot provider scope", () => {
 
   it("T-P71.Vision.4: vision failure guidance does not point at direct provider keys", async () => {
     await withIsolatedVisionHome(async () => {
-      // Given: MAI_VISION_MODEL names an unconfigured custom provider.
+      // Given: FRONDOSE_VISION_MODEL names an unconfigured custom provider.
       // When: analyze_screenshot returns configuration guidance.
       // Then: the message does not tell the operator to set direct Anthropic/OpenAI keys.
-      process.env.MAI_VISION_MODEL = "missingvision:vision-1";
+      process.env.FRONDOSE_VISION_MODEL = "missingvision:vision-1";
       const tool = makeAnalyzeScreenshotTool();
       const result = (await tool.execute?.({ path: FIXTURE_PNG, prompt: "describe" }, FAKE_OPTS)) as {
         ok: boolean;

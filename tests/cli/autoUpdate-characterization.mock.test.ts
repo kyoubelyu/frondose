@@ -28,29 +28,29 @@ import {
   releaseUpdateLock,
 } from "../../src/cli/autoUpdate.js";
 
-// ─── isolation: each test gets its own MAI_HOME_BASE tmpdir ──────────────────
+// ─── isolation: each test gets its own FRONDOSE_HOME_BASE tmpdir ──────────────────
 // Mirrors the pZ2 pattern from autoUpdate.mock.test.ts — lock/releases paths
-// resolve via getHomeBase() = MAI_HOME_BASE ?? homedir(), so we override it
+// resolve via getHomeBase() = FRONDOSE_HOME_BASE ?? homedir(), so we override it
 // per-test to avoid cross-test update.lock contamination and real ~/.mai touches.
 
 let prevHome: string | undefined;
 let tmpHome: string;
 
 beforeEach(() => {
-  prevHome = process.env.MAI_HOME_BASE;
+  prevHome = process.env.FRONDOSE_HOME_BASE;
   tmpHome = mkdtempSync(join(tmpdir(), "p72s9-char-"));
-  process.env.MAI_HOME_BASE = tmpHome;
+  process.env.FRONDOSE_HOME_BASE = tmpHome;
 });
 
 afterEach(() => {
-  if (prevHome === undefined) delete process.env.MAI_HOME_BASE;
-  else process.env.MAI_HOME_BASE = prevHome;
+  if (prevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
+  else process.env.FRONDOSE_HOME_BASE = prevHome;
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
 // Helper: resolve the update.lock path the same way production code does.
 function updateLockPath(): string {
-  return join(process.env.MAI_HOME_BASE!, ".frondose", "agent", "update.lock");
+  return join(process.env.FRONDOSE_HOME_BASE!, ".frondose", "agent", "update.lock");
 }
 
 // ─── T-autoUpdate.Lock.1 ─────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ describe("autoUpdate — lock primitives", () => {
   it(
     "T-autoUpdate.Lock.1: when acquireUpdateLock is called on a fresh dir, returns positive fd; releaseUpdateLock removes the lock; a second acquire succeeds",
     () => {
-      // Given: fresh MAI_HOME_BASE tmpdir (no pre-existing update.lock)
+      // Given: fresh FRONDOSE_HOME_BASE tmpdir (no pre-existing update.lock)
       // When:  acquireUpdateLock(nowMs) called → fd returned; releaseUpdateLock; second acquire
       // Then:  first fd > 0; lock file exists after first acquire; gone after release; second acquire succeeds
 
@@ -97,7 +97,7 @@ describe("autoUpdate — lock primitives", () => {
       // Edge:  44 min (< 45 min LOCK_STALE_MS) must throw EEXIST
 
       const lockPath = updateLockPath();
-      mkdirSync(join(process.env.MAI_HOME_BASE!, ".frondose", "agent"), { recursive: true });
+      mkdirSync(join(process.env.FRONDOSE_HOME_BASE!, ".frondose", "agent"), { recursive: true });
 
       // Create the stale lock file (its mtime is "now" but nowMs will be 50 min in the future)
       writeFileSync(lockPath, "stale-marker");

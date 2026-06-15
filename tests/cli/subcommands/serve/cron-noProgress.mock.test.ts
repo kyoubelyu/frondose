@@ -463,7 +463,7 @@ describe("T-CronNoProgress.8: truly-stuck run closes at threshold 10 with exactl
   before(() => {
     savedLimit = process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
     delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
-    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
   });
 
   after(() => {
@@ -530,7 +530,7 @@ describe("T-CronNoProgress.9: [AUTO_CONNECTS=0] discovery-only run survives 12 t
   before(() => {
     savedLimit = process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
     delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
-    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
   });
 
   after(() => {
@@ -587,7 +587,7 @@ describe("T-CronNoProgress.10: cooldown-heavy run survives 20 ticks (counter HEL
   before(() => {
     savedLimit = process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
     delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
-    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
   });
 
   after(() => {

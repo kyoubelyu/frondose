@@ -115,17 +115,17 @@ export function makeMockPrompter(overrides: MockPrompterOverrides = {}): Prompte
 /** Stub process.stdin.isTTY + MAI_NO_INTERACTIVE for interactive-path tests. */
 export function stubInteractive(tty: boolean, noInteractiveFlag?: string): () => void {
   const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-  const savedFlag = process.env.MAI_NO_INTERACTIVE;
+  const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
   (process.stdin as { isTTY?: boolean }).isTTY = tty ? true : undefined;
   if (noInteractiveFlag !== undefined) {
-    process.env.MAI_NO_INTERACTIVE = noInteractiveFlag;
+    process.env.FRONDOSE_NO_INTERACTIVE = noInteractiveFlag;
   } else {
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
   }
   return () => {
     (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-    if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-    else delete process.env.MAI_NO_INTERACTIVE;
+    if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+    else delete process.env.FRONDOSE_NO_INTERACTIVE;
   };
 }
 
