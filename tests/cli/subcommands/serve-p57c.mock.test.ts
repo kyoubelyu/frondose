@@ -277,8 +277,8 @@ async function spinHarness(
   const tmpDir = mkdtempSync(join(tmpdir(), `p57c-${testName}-`));
   const portFile = join(tmpDir, "frondose.port");
   const bearer = "tok";
-  const origHome = process.env.MAI_HOME_BASE;
-  process.env.MAI_HOME_BASE = tmpDir;
+  const origHome = process.env.FRONDOSE_HOME_BASE;
+  process.env.FRONDOSE_HOME_BASE = tmpDir;
   mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
   // Write minimal identity.json with updatedAt (required by schema)
   writeFileSync(
@@ -316,9 +316,9 @@ async function spinHarness(
     tmpDir,
     restoreEnv: () => {
       if (origHome === undefined) {
-        delete process.env.MAI_HOME_BASE;
+        delete process.env.FRONDOSE_HOME_BASE;
       } else {
-        process.env.MAI_HOME_BASE = origHome;
+        process.env.FRONDOSE_HOME_BASE = origHome;
       }
     },
   };

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # P-34: standalone frondose installer for a fresh macOS machine.
-# P-40: gh-native release fetch (no GITHUB_TOKEN); MAI_PREFIX sandbox override.
+# P-40: gh-native release fetch (no GITHUB_TOKEN); FRONDOSE_PREFIX sandbox override.
 # Usage:  bash install.sh
-#         MAI_PREFIX=/tmp/test bash install.sh   # sandbox install — overrides $HOME + brew prefix
+#         FRONDOSE_PREFIX=/tmp/test bash install.sh   # sandbox install — overrides $HOME + brew prefix
 # Requires: macOS, Homebrew, gh CLI (authenticated via `gh auth login`).
 # Installs Chrome + Node@20 + frondose from the latest GitHub Release.
 set -euo pipefail
@@ -71,9 +71,9 @@ fi
 
 # 6. Install frondose
 echo "Installing frondose from the latest GitHub Release..."
-# P-40 FINDING-I1: MAI_PREFIX overrides BOTH base paths → sandbox-testable installs.
-HOME_BASE="${MAI_PREFIX:-$HOME}"
-BREW_BASE="${MAI_PREFIX:-$(brew --prefix)}"
+# P-40 FINDING-I1: FRONDOSE_PREFIX overrides BOTH base paths → sandbox-testable installs.
+HOME_BASE="${FRONDOSE_PREFIX:-$HOME}"
+BREW_BASE="${FRONDOSE_PREFIX:-$(brew --prefix)}"
 
 # --- install-core: latest GitHub Release → tarball → build → npm-global symlink ---
 if [[ -n "$REQ_VERSION" ]]; then

@@ -165,7 +165,7 @@ function configuredProviderList(auth: AuthJson | null): string {
 
 function specSource(spec: string): string {
   return spec === frondoseEnv("MODEL")
-    ? "the FRONDOSE_MODEL env var (or legacy MAI_MODEL)"
+    ? "the FRONDOSE_MODEL env var"
     : spec === readAuthJsonDefault()
       ? "the auth.json / secrets.json default"
       : "a CLI flag or the built-in default";

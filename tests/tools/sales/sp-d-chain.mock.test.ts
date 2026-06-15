@@ -65,9 +65,9 @@ const toolOpts = { messages: [] as never[], toolCallId: "test" };
 function setupNoIcpHome(): { restore: () => void } {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-spd-chain-home-"));
   const origHome = process.env.HOME;
-  const origHomeBase = process.env.MAI_HOME_BASE;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
   process.env.HOME = tmpHome;
-  process.env.MAI_HOME_BASE = tmpHome;
+  process.env.FRONDOSE_HOME_BASE = tmpHome;
   mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
   writeFileSync(
     join(tmpHome, ".frondose", "agent", "config.json"),
@@ -77,8 +77,8 @@ function setupNoIcpHome(): { restore: () => void } {
     restore: () => {
       if (origHome !== undefined) process.env.HOME = origHome;
       else delete process.env.HOME;
-      if (origHomeBase !== undefined) process.env.MAI_HOME_BASE = origHomeBase;
-      else delete process.env.MAI_HOME_BASE;
+      if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
+      else delete process.env.FRONDOSE_HOME_BASE;
       rmSync(tmpHome, { recursive: true, force: true });
     },
   };

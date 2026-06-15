@@ -5,7 +5,7 @@ import { readIdentity } from "../persistence/identity.js";
 import { type BootstrapToolsOpts, makeBootstrapTools, readWipFile, writeWipFile } from "./bootstrap-tools.js";
 
 /** P-52 B-5: thrown when a `streamText` round-trip inside the identity bootstrap
- *  exceeds MAI_BOOTSTRAP_TIMEOUT_MS (default 60s). The operator sees an actionable
+ *  exceeds FRONDOSE_BOOTSTRAP_TIMEOUT_MS (default 60s). The operator sees an actionable
  *  message — they can adjust network/proxy, verify Frondose → Settings, and retry
  *  the first-run setup. */
 export class BootstrapTimeoutError extends Error {
@@ -15,7 +15,7 @@ export class BootstrapTimeoutError extends Error {
   }
 }
 
-/** Parse MAI_BOOTSTRAP_TIMEOUT_MS — positive integer ms; default 60_000.
+/** Parse FRONDOSE_BOOTSTRAP_TIMEOUT_MS — positive integer ms; default 60_000.
  *  Exported (CONCERN-1, Step-3b) so the validator can unit-test the default
  *  + invalid-env fallback paths without spinning a real 60s wall-clock test. */
 export function bootstrapTimeoutMs(): number {
@@ -202,7 +202,7 @@ export async function runBootstrapAgent(opts: BootstrapAgentOpts): Promise<void>
   const runOneTurn = async (): Promise<void> => {
     // P-52 B-5: hard timeout per round-trip so a stalled LLM (network / proxy
     // misconfiguration) surfaces as a clear error within ~60s rather than an
-    // indefinite REPL hang. Default 60s; overridable via MAI_BOOTSTRAP_TIMEOUT_MS
+    // indefinite REPL hang. Default 60s; overridable via FRONDOSE_BOOTSTRAP_TIMEOUT_MS
     // (validator uses a small value for fast tests).
     const timeoutMs = bootstrapTimeoutMs();
     const abortController = new AbortController();

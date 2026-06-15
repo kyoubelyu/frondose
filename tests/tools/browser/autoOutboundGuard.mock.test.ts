@@ -18,8 +18,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 // Disable pacing so tests don't sleep 0.8-2.5s per click
-process.env.MAI_PACE_MIN_MS = "0";
-process.env.MAI_PACE_MAX_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MAX_MS = "0";
 
 // ─── Classifier helpers ────────────────────────────────────────────────────────
 

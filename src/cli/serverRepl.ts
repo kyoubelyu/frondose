@@ -161,7 +161,7 @@ export async function runServerRepl(deps: ServerReplDeps = {}): Promise<void> {
       soul: composeServerSoulBand(identity),
       checkpoint: CHECKPOINT,
     });
-    // P-46 D-1b: `mai server` has no --max-steps flag — env-only (MAI_MAX_STEPS) or default 200.
+    // P-46 D-1b: `mai server` has no --max-steps flag — env-only (FRONDOSE_MAX_STEPS) or default 200.
     const serverMaxSteps = resolveMaxSteps();
 
     // Start Telegram poller if bound.

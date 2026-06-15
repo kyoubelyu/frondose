@@ -145,9 +145,9 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
     // When:  runServerSubcommand("bind", {userId:42, serverConfigPath})
     // Then:  config.json.telegram.boundUserId === 42
     const { dir, cleanup } = makeTmpDir();
-    const savedToken = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+    const savedToken = process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN;
     try {
-      process.env.MAI_SERVER_TELEGRAM_TOKEN = "bot1";
+      process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN = "bot1";
       const cfgPath = join(dir, "config.json");
 
       await runServerSubcommand("bind", { userId: 42, serverConfigPath: cfgPath });
@@ -155,8 +155,8 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
       const cfg = readConfig(cfgPath);
       assert.equal(cfg.telegram.boundUserId, 42, "boundUserId must be 42 after bind");
     } finally {
-      if (savedToken !== undefined) process.env.MAI_SERVER_TELEGRAM_TOKEN = savedToken;
-      else delete process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      if (savedToken !== undefined) process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN = savedToken;
+      else delete process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN;
       cleanup();
     }
   });
@@ -166,11 +166,11 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
     // When:  runServerSubcommand("bind", {userId:42, ...})
     // Then:  process.exit(1) called; stderr mentions "FRONDOSE_SERVER_TELEGRAM_TOKEN" (F-REN-3 flip)
     const { dir, cleanup } = makeTmpDir();
-    const savedToken = process.env.MAI_SERVER_TELEGRAM_TOKEN;
+    const savedToken = process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN;
     const { captured, restore } = mockProcessExit();
     let stderr = "";
     try {
-      delete process.env.MAI_SERVER_TELEGRAM_TOKEN;
+      delete process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN;
       const cfgPath = join(dir, "config.json");
       stderr = await captureStderr(() =>
         runServerSubcommand("bind", { userId: 42, serverConfigPath: cfgPath }).catch(() => {}),
@@ -182,7 +182,7 @@ describe("runServerSubcommand: bind (G-P25.10)", () => {
       );
     } finally {
       restore();
-      if (savedToken !== undefined) process.env.MAI_SERVER_TELEGRAM_TOKEN = savedToken;
+      if (savedToken !== undefined) process.env.FRONDOSE_SERVER_TELEGRAM_TOKEN = savedToken;
       cleanup();
     }
   });

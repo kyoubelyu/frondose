@@ -4,7 +4,7 @@
  * REPLACES the pre-P-Y5 T-M45 test, which hardcoded the OLD 400-800ms contract
  * (waitedMs>=400, <=800, jitterMs<400, waitedMs===400+jitterMs). The R4 change
  * (docs/phase-Y5-drun24-plan.md §6.4-R4) moves the default band to 800-2500ms and
- * makes it env-tunable (MAI_PACE_MIN_MS / MAI_PACE_MAX_MS, "0" disables), so the old
+ * makes it env-tunable (FRONDOSE_PACE_MIN_MS / FRONDOSE_PACE_MAX_MS, "0" disables), so the old
  * assertions are intentionally GONE (guardian CONCERN-MR-1).
  *
  * Outside-in TDD (CLAUDE.md § Test Discipline):
@@ -43,18 +43,18 @@ import {
  * Step 5 uses this so each T-Pace case is hermetic (resolvePaceBand reads env per call).
  */
 function withPaceEnv(vars: { min?: string; max?: string }, fn: () => void | Promise<void>): void | Promise<void> {
-  const prevMin = process.env.MAI_PACE_MIN_MS;
-  const prevMax = process.env.MAI_PACE_MAX_MS;
+  const prevMin = process.env.FRONDOSE_PACE_MIN_MS;
+  const prevMax = process.env.FRONDOSE_PACE_MAX_MS;
   const restore = () => {
-    if (prevMin === undefined) delete process.env.MAI_PACE_MIN_MS;
-    else process.env.MAI_PACE_MIN_MS = prevMin;
-    if (prevMax === undefined) delete process.env.MAI_PACE_MAX_MS;
-    else process.env.MAI_PACE_MAX_MS = prevMax;
+    if (prevMin === undefined) delete process.env.FRONDOSE_PACE_MIN_MS;
+    else process.env.FRONDOSE_PACE_MIN_MS = prevMin;
+    if (prevMax === undefined) delete process.env.FRONDOSE_PACE_MAX_MS;
+    else process.env.FRONDOSE_PACE_MAX_MS = prevMax;
   };
-  if (vars.min === undefined) delete process.env.MAI_PACE_MIN_MS;
-  else process.env.MAI_PACE_MIN_MS = vars.min;
-  if (vars.max === undefined) delete process.env.MAI_PACE_MAX_MS;
-  else process.env.MAI_PACE_MAX_MS = vars.max;
+  if (vars.min === undefined) delete process.env.FRONDOSE_PACE_MIN_MS;
+  else process.env.FRONDOSE_PACE_MIN_MS = vars.min;
+  if (vars.max === undefined) delete process.env.FRONDOSE_PACE_MAX_MS;
+  else process.env.FRONDOSE_PACE_MAX_MS = vars.max;
   try {
     const r = fn();
     if (r instanceof Promise) return r.finally(restore);
@@ -68,10 +68,10 @@ function withPaceEnv(vars: { min?: string; max?: string }, fn: () => void | Prom
 // ─── T-Pace.1 — default band when env unset ──────────────────────────────────
 
 describe("resolvePaceBand — default band (D-RUN-2 / R4)", () => {
-  // Given: neither MAI_PACE_MIN_MS nor MAI_PACE_MAX_MS is set.
+  // Given: neither FRONDOSE_PACE_MIN_MS nor FRONDOSE_PACE_MAX_MS is set.
   // When:  resolvePaceBand() is called.
   // Then:  returns { minMs: 800, maxMs: 2500, disabled: false } (DEFAULT_PACE_* consts).
-  it("T-Pace.1: when MAI_PACE_MIN_MS and MAI_PACE_MAX_MS are both unset, resolvePaceBand() returns { minMs: 800, maxMs: 2500, disabled: false }", () => {
+  it("T-Pace.1: when FRONDOSE_PACE_MIN_MS and FRONDOSE_PACE_MAX_MS are both unset, resolvePaceBand() returns { minMs: 800, maxMs: 2500, disabled: false }", () => {
     // Default consts are the documented band (D-RUN-2 / OQ-D2.1).
     assert.equal(DEFAULT_PACE_MIN_MS, 800);
     assert.equal(DEFAULT_PACE_MAX_MS, 2500);
@@ -88,10 +88,10 @@ describe("resolvePaceBand — default band (D-RUN-2 / R4)", () => {
 // ─── T-Pace.2 — env override honored (precedence env > default) ───────────────
 
 describe("resolvePaceBand — env override precedence (D-RUN-2 / R4)", () => {
-  // Given: MAI_PACE_MIN_MS="1000", MAI_PACE_MAX_MS="1200".
+  // Given: FRONDOSE_PACE_MIN_MS="1000", FRONDOSE_PACE_MAX_MS="1200".
   // When:  resolvePaceBand() is called.
   // Then:  returns { minMs: 1000, maxMs: 1200, disabled: false } (env beats default).
-  it("T-Pace.2: when MAI_PACE_MIN_MS='1000' and MAI_PACE_MAX_MS='1200', resolvePaceBand() returns { minMs: 1000, maxMs: 1200, disabled: false }", () => {
+  it("T-Pace.2: when FRONDOSE_PACE_MIN_MS='1000' and FRONDOSE_PACE_MAX_MS='1200', resolvePaceBand() returns { minMs: 1000, maxMs: 1200, disabled: false }", () => {
     withPaceEnv({ min: "1000", max: "1200" }, () => {
       assert.deepEqual(resolvePaceBand(), { minMs: 1000, maxMs: 1200, disabled: false });
     });
@@ -101,10 +101,10 @@ describe("resolvePaceBand — env override precedence (D-RUN-2 / R4)", () => {
 // ─── T-Pace.3 — invalid env falls back to default per-var ─────────────────────
 
 describe("resolvePaceBand — invalid env falls through to default (D-RUN-2 / R4)", () => {
-  // Given: MAI_PACE_MIN_MS ∈ {"abc","-5","3.5","1e3","","  "} (each in turn), MAI_PACE_MAX_MS unset.
+  // Given: FRONDOSE_PACE_MIN_MS ∈ {"abc","-5","3.5","1e3","","  "} (each in turn), FRONDOSE_PACE_MAX_MS unset.
   // When:  resolvePaceBand() is called.
   // Then:  minMs === 800 (that var fell through to default) AND maxMs === 2500.
-  it("T-Pace.3: when MAI_PACE_MIN_MS is invalid ('abc'|'-5'|'3.5'|'1e3'|''|'  ') and MAI_PACE_MAX_MS unset, resolvePaceBand() yields minMs===800 (default) and maxMs===2500", () => {
+  it("T-Pace.3: when FRONDOSE_PACE_MIN_MS is invalid ('abc'|'-5'|'3.5'|'1e3'|''|'  ') and FRONDOSE_PACE_MAX_MS unset, resolvePaceBand() yields minMs===800 (default) and maxMs===2500", () => {
     for (const badMin of ["abc", "-5", "3.5", "1e3", "", "  "]) {
       withPaceEnv({ min: badMin }, () => {
         const band = resolvePaceBand();
@@ -121,11 +121,11 @@ describe("resolvePaceBand — invalid env falls through to default (D-RUN-2 / R4
 // ─── T-Pace.4 — `=0` disables pacing (no sleep) ──────────────────────────────
 
 describe("resolvePaceBand + applyPacing — '0' disables pacing (D-RUN-2 / R4)", () => {
-  // Given: MAI_PACE_MIN_MS="0" (and, separately, MAI_PACE_MAX_MS="0").
+  // Given: FRONDOSE_PACE_MIN_MS="0" (and, separately, FRONDOSE_PACE_MAX_MS="0").
   // When:  resolvePaceBand() then applyPacing().
   // Then:  resolvePaceBand().disabled === true; applyPacing() resolves to
   //        { waitedMs: 0, jitterMs: 0, serial: true } WITHOUT sleeping (elapsed < ~50ms).
-  it("T-Pace.4: when MAI_PACE_MIN_MS='0' (or MAI_PACE_MAX_MS='0'), resolvePaceBand().disabled===true and applyPacing() resolves { waitedMs:0, jitterMs:0, serial:true } without sleeping (elapsed < ~50ms)", async () => {
+  it("T-Pace.4: when FRONDOSE_PACE_MIN_MS='0' (or FRONDOSE_PACE_MAX_MS='0'), resolvePaceBand().disabled===true and applyPacing() resolves { waitedMs:0, jitterMs:0, serial:true } without sleeping (elapsed < ~50ms)", async () => {
     // Both disable forms: MIN=0 and (separately) MAX=0.
     for (const vars of [{ min: "0" }, { max: "0" }] as const) {
       await withPaceEnv(vars, async () => {
@@ -143,7 +143,7 @@ describe("resolvePaceBand + applyPacing — '0' disables pacing (D-RUN-2 / R4)",
 // ─── T-Pace.5 — applyPacing delay ∈ [min,max] + jitter present (DETERMINISTIC) ─
 
 describe("applyPacing — delay ∈ [min,max] with jitter (deterministic, NIT-1) (D-RUN-2 / R4)", () => {
-  // Given: a small fast band (MAI_PACE_MIN_MS="10", MAI_PACE_MAX_MS="14") + Math.random stubbed
+  // Given: a small fast band (FRONDOSE_PACE_MIN_MS="10", FRONDOSE_PACE_MAX_MS="14") + Math.random stubbed
   //        to a known sequence (NIT-1: deterministic, no flake).
   // When:  applyPacing() is called for each stubbed random value.
   // Then:  waitedMs ∈ [10,14] AND waitedMs === jitterMs + 10 (min) for every call,
@@ -189,10 +189,10 @@ describe("applyPacing — delay ∈ [min,max] with jitter (deterministic, NIT-1)
 // ─── T-Pace.6 — min>max misconfiguration normalized (swap) ────────────────────
 
 describe("resolvePaceBand — min>max normalized via swap (D-RUN-2 / R4)", () => {
-  // Given: MAI_PACE_MIN_MS="3000", MAI_PACE_MAX_MS="2500".
+  // Given: FRONDOSE_PACE_MIN_MS="3000", FRONDOSE_PACE_MAX_MS="2500".
   // When:  resolvePaceBand() is called.
   // Then:  returns { minMs: 2500, maxMs: 3000, disabled: false } (lo/hi swapped — no negative jitter).
-  it("T-Pace.6: when MAI_PACE_MIN_MS='3000' and MAI_PACE_MAX_MS='2500', resolvePaceBand() returns { minMs: 2500, maxMs: 3000, disabled: false }", () => {
+  it("T-Pace.6: when FRONDOSE_PACE_MIN_MS='3000' and FRONDOSE_PACE_MAX_MS='2500', resolvePaceBand() returns { minMs: 2500, maxMs: 3000, disabled: false }", () => {
     withPaceEnv({ min: "3000", max: "2500" }, () => {
       assert.deepEqual(resolvePaceBand(), { minMs: 2500, maxMs: 3000, disabled: false });
     });

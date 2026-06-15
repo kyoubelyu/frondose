@@ -21,7 +21,7 @@ import { buildPiToolBundle } from "./toolAdapter.js";
 
 /**
  * [P-PI Gate 2] Pi agent loop — a DROP-IN for runAgentLoop (same AgentLoopOpts contract),
- * selected by the MAI_AGENT_RUNTIME=pi flag. Drives DeepSeek through pi-ai's
+ * selected by the FRONDOSE_AGENT_RUNTIME=pi flag. Drives DeepSeek through pi-ai's
  * `complete()` with the adapted tools, executes tool calls via the bundle dispatcher,
  * feeds results back, and repeats until the model stops or maxSteps. Emits the SAME
  * callbacks (onText / onToolCall / onStepFinish) with Vercel-shaped step objects so the

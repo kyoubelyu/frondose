@@ -18,7 +18,7 @@ import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
 
-process.env.MAI_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
+process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
 // Known browser + LinkedIn tool names (P-33: browser primitives in src/tools/browser/, launch in src/tools/linkedin/)
 const LINKEDIN_TOOL_NAMES = [

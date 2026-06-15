@@ -135,9 +135,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        mockPrompter.calls.apiKeyInput.length === 0; exitCode === undefined
     const { dir, cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     let _exitCode: number | undefined;
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -168,8 +168,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -184,9 +184,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        readGithubConfig(cfgPath).token === "ghp_old" (NOT replaced by "FROM-PROMPT")
     const { dir, cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = true;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       seedSecrets(dir, { token: "ghp_old", repo: "own/r" });
       const mp = makeMockPrompter();
@@ -201,8 +201,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       assert.equal(cfg2.token, "ghp_old", "T-GhSet.2: token NOT replaced by FROM-PROMPT");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -217,9 +217,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        mockPrompter.calls.apiKeyInput.length === 0; exitCode === undefined
     const { dir, cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     let _exitCode: number | undefined;
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -244,8 +244,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -260,9 +260,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        (token value masked from message — existing convention preserved per plan §5.2)
     const { dir, cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       seedSecrets(dir, { token: "ghp_old", repo: "own/r" });
       const mp = makeMockPrompter();
@@ -274,8 +274,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       assert.ok(!stdout4.includes("ghp_new"), "T-GhSet.4: token value NOT leaked in stdout");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -291,9 +291,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        (Regression guard: G-P15.5 — fresh-config path still works after P-15 fix)
     const { cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     try {
       const mp = makeMockPrompter();
       const stdout5 = await captureStdout(() =>
@@ -305,8 +305,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       assert.ok(stdout5.includes("[gh] github.json updated (repo: own/r)"), "T-GhSet.5: success message");
     } finally {
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });
@@ -321,9 +321,9 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
     //        (Regression guard: missing-token-required path still works post-fix)
     const { cfgPath, cleanup } = makeTmpDir();
     const savedIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-    const savedFlag = process.env.MAI_NO_INTERACTIVE;
+    const savedFlag = process.env.FRONDOSE_NO_INTERACTIVE;
     (process.stdin as { isTTY?: boolean }).isTTY = undefined;
-    delete process.env.MAI_NO_INTERACTIVE;
+    delete process.env.FRONDOSE_NO_INTERACTIVE;
     let _exitCode: number | undefined;
     const origExit = process.exit.bind(process);
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -341,8 +341,8 @@ describe("runGhSubcommand 'set' — partial-update + no-op + guidance (P-15 bug 
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process as any).exit = origExit;
       (process.stdin as { isTTY?: boolean }).isTTY = savedIsTTY;
-      if (savedFlag !== undefined) process.env.MAI_NO_INTERACTIVE = savedFlag;
-      else delete process.env.MAI_NO_INTERACTIVE;
+      if (savedFlag !== undefined) process.env.FRONDOSE_NO_INTERACTIVE = savedFlag;
+      else delete process.env.FRONDOSE_NO_INTERACTIVE;
       cleanup();
     }
   });

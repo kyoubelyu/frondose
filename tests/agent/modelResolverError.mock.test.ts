@@ -57,11 +57,11 @@ function setupTmpHome(
 }
 
 /** Standard env vars to save/restore around model-resolution tests. */
-const MODEL_ENV_KEYS = ["HOME", "MAI_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"] as const;
+const MODEL_ENV_KEYS = ["HOME", "FRONDOSE_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"] as const;
 
 /** Clear keys that could short-circuit provider-resolution and confuse tests. */
 function clearModelEnv(): void {
-  delete process.env.MAI_MODEL;
+  delete process.env.FRONDOSE_MODEL;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
@@ -178,16 +178,16 @@ describe("buildModel error — spec-source naming: FRONDOSE_MODEL env var (G-P36
   });
 
   it(
-    "T-FA.3: when process.env.MAI_MODEL='openai:bad' and spec equals that env value, " +
+    "T-FA.3: when process.env.FRONDOSE_MODEL='openai:bad' and spec equals that env value, " +
       "buildModel error names 'the FRONDOSE_MODEL env var' as the source",
     () => {
-      // Given: MAI_MODEL env var set to failing spec (legacy setter); no matching provider configured
-      // When:  resolveModel({}) → resolveModelSpec picks up MAI_MODEL via shim → buildModel throws
+      // Given: FRONDOSE_MODEL env var set to failing spec; no matching provider configured
+      // When:  resolveModel({}) → resolveModelSpec picks up FRONDOSE_MODEL → buildModel throws
       // Then:  error message contains "FRONDOSE_MODEL" (F-REN-3: modelResolver.ts:167 updated)
       const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fa3-"));
       // Empty HOME → no secrets.json → no providers
       process.env.HOME = tmpHome;
-      process.env.MAI_MODEL = "openai:bad-model-fa3";
+      process.env.FRONDOSE_MODEL = "openai:bad-model-fa3";
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
       delete process.env.DEEPSEEK_API_KEY;
@@ -222,10 +222,10 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
   });
 
   it(
-    "T-FA.4: when spec equals readAuthJsonDefault() (and MAI_MODEL not set), " +
+    "T-FA.4: when spec equals readAuthJsonDefault() (and FRONDOSE_MODEL not set), " +
       "buildModel error names 'the auth.json / secrets.json default' as the source",
     () => {
-      // Given: MAI_MODEL unset; secrets.json default is the failing spec
+      // Given: FRONDOSE_MODEL unset; secrets.json default is the failing spec
       // When:  resolveModel({}) → resolveModelSpec picks up auth default → buildModel throws
       // Then:  error message contains "auth.json / secrets.json default"
       const { tmpHome, cleanup } = setupTmpHome(
@@ -235,7 +235,7 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
         { default: "openai:bad-model-fa4" },
       );
       process.env.HOME = tmpHome;
-      delete process.env.MAI_MODEL; // ensure MAI_MODEL is unset so auth default wins
+      delete process.env.FRONDOSE_MODEL; // ensure FRONDOSE_MODEL is unset so auth default wins
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
       delete process.env.DEEPSEEK_API_KEY;
@@ -280,7 +280,7 @@ describe("resolveModelOrNull — returns null + stderr on resolution failure (G-
     // → DEFAULT_MODEL_SPEC "anthropic:claude-sonnet-4-5" → no "anthropic" provider → throws
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fb1-"));
     process.env.HOME = tmpHome;
-    delete process.env.MAI_MODEL;
+    delete process.env.FRONDOSE_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
@@ -331,7 +331,7 @@ describe("resolveModelOrNull — returns LanguageModel on success (G-P36.5)", ()
       },
     });
     process.env.HOME = tmpHome;
-    delete process.env.MAI_MODEL;
+    delete process.env.FRONDOSE_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;

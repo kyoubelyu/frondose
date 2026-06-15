@@ -95,9 +95,9 @@ export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: Lega
 
   // (2) Legacy fallback — gather, merge, write, return.
   const merged = legacyMerged(
-    legacy?.authPath ?? process.env.MAI_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
-    legacy?.githubPath ?? process.env.MAI_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
-    legacy?.searchPath ?? process.env.MAI_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
+    legacy?.authPath ?? process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
+    legacy?.githubPath ?? process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
+    legacy?.searchPath ?? process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
   );
   // Check ALL meaningful legacy fields (P-21 `default` / `visionModel` flow
   // through `default` + `visionModel`; P-15 fields through github/search). If
@@ -119,13 +119,13 @@ export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: Lega
 /** Internal: read legacy auth/github/search and synthesize a SecretsJson.
  *
  * Step-3b B-3 DI: each legacy path defaults to its standard location BUT is
- * overridable via MAI_LEGACY_*_PATH env vars. Test-only mechanism (NOT part
+ * overridable via FRONDOSE_LEGACY_*_PATH env vars. Test-only mechanism (NOT part
  * of operator contract — see plan §8 N-1).
  */
 export function legacyMerged(
-  authPath: string = process.env.MAI_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
-  githubPath: string = process.env.MAI_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
-  searchPath: string = process.env.MAI_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
+  authPath: string = process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
+  githubPath: string = process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
+  searchPath: string = process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
 ): SecretsJson {
   const authLegacy = tryReadJson(
     authPath,

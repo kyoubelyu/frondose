@@ -41,14 +41,14 @@ export interface ProvisionDeps {
   execImpl?: typeof runSshExec;
   installShPath?: string;
   /** P-42: test-only sandbox-prefix DI. When set, the install.sh exec gets
-   *  `MAI_PREFIX=<prefix>` and config/secrets are written under `<prefix>/.frondose/agent`
+   *  `FRONDOSE_PREFIX=<prefix>` and config/secrets are written under `<prefix>/.frondose/agent`
    *  instead of `~/.frondose/agent`. NOT on the provision_worker Zod schema — undefined
    *  for every real operator provision (zero production behavior change). */
   maiPrefix?: string;
 }
 
 /** P-42: validate the test-only `maiPrefix` DI value — it is interpolated UNQUOTED
- *  into `MAI_PREFIX=<value> bash -s`, so an ALLOWLIST is used (a denylist would miss
+ *  into `FRONDOSE_PREFIX=<value> bash -s`, so an ALLOWLIST is used (a denylist would miss
  *  `;|&><()` etc. and let `/tmp/x;echo INJECTED` through). Only `a-z A-Z 0-9 . _ - /`
  *  are permitted — that subsumes every shell-injection vector. Never operator-facing
  *  → a hard throw is sufficient; plain `/tmp/mai-p42-XXXX` paths pass cleanly. */
@@ -149,7 +149,7 @@ export async function runSshProvision(
   // P-42: when maiPrefix is set, redirect BOTH the install.sh prefix env var AND the
   // config/secrets target dir into the sandbox — otherwise a localhost provision test
   // clobbers the operator's real ~/.frondose. safePrefix is validated up-front (early guard).
-  const installCmd = safePrefix !== null ? `MAI_PREFIX=${safePrefix} bash -s` : "bash -s";
+  const installCmd = safePrefix !== null ? `FRONDOSE_PREFIX=${safePrefix} bash -s` : "bash -s";
   const maiHome = safePrefix !== null ? `${safePrefix}/.frondose/agent` : "~/.frondose/agent";
   try {
     const r1 = await exec(target, installCmd, installSh);

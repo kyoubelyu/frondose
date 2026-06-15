@@ -36,14 +36,14 @@ import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../src/persi
 
 /** Run fn with MAI_HOME_BASE pointing at a fresh temp dir (DEFAULT_CONFIG_PATH resolves under it). */
 function withTempHome<T>(fn: (home: string) => T): T {
-  const prev = process.env.MAI_HOME_BASE;
+  const prev = process.env.FRONDOSE_HOME_BASE;
   const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "p58d1-settings-"));
-  process.env.MAI_HOME_BASE = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   try {
     return fn(home);
   } finally {
-    if (prev === undefined) delete process.env.MAI_HOME_BASE;
-    else process.env.MAI_HOME_BASE = prev;
+    if (prev === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = prev;
     rmSync(home, { recursive: true, force: true }); // cleanup temp dir
   }
 }

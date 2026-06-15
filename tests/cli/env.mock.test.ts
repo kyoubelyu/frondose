@@ -30,7 +30,7 @@ test("T-M5: loadDotenv populates new keys; ignores comments and blanks", () => {
   }
 });
 
-test("T-M6: loadDotenv no-clobber; MAI_DOTENV=skip; silent on missing file", async (t) => {
+test("T-M6: loadDotenv no-clobber; FRONDOSE_DOTENV=skip; silent on missing file", async (t) => {
   await t.test("6a: does NOT clobber pre-existing keys", () => {
     const dir = mkdtempSync(join(tmpdir(), "mai-env-t6a-"));
     const prevC = process.env.KEY_C;
@@ -46,19 +46,19 @@ test("T-M6: loadDotenv no-clobber; MAI_DOTENV=skip; silent on missing file", asy
     }
   });
 
-  await t.test("6b: MAI_DOTENV=skip bypasses loading entirely", () => {
+  await t.test("6b: FRONDOSE_DOTENV=skip bypasses loading entirely", () => {
     const dir = mkdtempSync(join(tmpdir(), "mai-env-t6b-"));
-    const prevSkip = process.env.MAI_DOTENV;
+    const prevSkip = process.env.FRONDOSE_DOTENV;
     const prevD = process.env.KEY_D;
     try {
-      process.env.MAI_DOTENV = "skip";
+      process.env.FRONDOSE_DOTENV = "skip";
       delete process.env.KEY_D;
       writeFileSync(join(dir, ".env"), "KEY_D=value_d\n", "utf-8");
       loadDotenv(dir);
-      assert.equal(process.env.KEY_D, undefined, "KEY_D must remain unset when MAI_DOTENV=skip");
+      assert.equal(process.env.KEY_D, undefined, "KEY_D must remain unset when FRONDOSE_DOTENV=skip");
     } finally {
-      if (prevSkip === undefined) delete process.env.MAI_DOTENV;
-      else process.env.MAI_DOTENV = prevSkip;
+      if (prevSkip === undefined) delete process.env.FRONDOSE_DOTENV;
+      else process.env.FRONDOSE_DOTENV = prevSkip;
       if (prevD === undefined) delete process.env.KEY_D;
       else process.env.KEY_D = prevD;
       rmSync(dir, { recursive: true });

@@ -167,8 +167,8 @@ describe("runUpdateSubcommand — version comparison", () => {
     );
 
     await withoutGhToken(async () => {
-      const origAutoUpdate = process.env.MAI_AUTOUPDATE;
-      delete process.env.MAI_AUTOUPDATE;
+      const origAutoUpdate = process.env.FRONDOSE_AUTOUPDATE;
+      delete process.env.FRONDOSE_AUTOUPDATE;
       try {
         const out = await captureStdout(() =>
           runUpdateSubcommand({ fetchImpl: fetch, cfgPath, localVersion: "0.4.14" }),
@@ -185,7 +185,7 @@ describe("runUpdateSubcommand — version comparison", () => {
           `unexpected old npm install hint in: ${JSON.stringify(out)}`,
         );
       } finally {
-        if (origAutoUpdate !== undefined) process.env.MAI_AUTOUPDATE = origAutoUpdate;
+        if (origAutoUpdate !== undefined) process.env.FRONDOSE_AUTOUPDATE = origAutoUpdate;
       }
     });
     cleanup();
@@ -519,8 +519,8 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
         html_url: "https://github.com/kyoubelyu/mai-agent/releases/tag/v0.4.20",
       }),
     );
-    const origAutoUpdate = process.env.MAI_AUTOUPDATE;
-    delete process.env.MAI_AUTOUPDATE;
+    const origAutoUpdate = process.env.FRONDOSE_AUTOUPDATE;
+    delete process.env.FRONDOSE_AUTOUPDATE;
     try {
       await withoutGhToken(async () => {
         const out = await captureStdout(() =>
@@ -536,7 +536,7 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
         );
       });
     } finally {
-      if (origAutoUpdate !== undefined) process.env.MAI_AUTOUPDATE = origAutoUpdate;
+      if (origAutoUpdate !== undefined) process.env.FRONDOSE_AUTOUPDATE = origAutoUpdate;
       cleanup();
     }
   });
@@ -555,8 +555,8 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
         html_url: "https://github.com/kyoubelyu/mai-agent/releases/tag/v0.4.20",
       }),
     );
-    const origAutoUpdate = process.env.MAI_AUTOUPDATE;
-    process.env.MAI_AUTOUPDATE = "skip";
+    const origAutoUpdate = process.env.FRONDOSE_AUTOUPDATE;
+    process.env.FRONDOSE_AUTOUPDATE = "skip";
     try {
       await withoutGhToken(async () => {
         const out = await captureStdout(() =>
@@ -573,9 +573,9 @@ describe("runUpdateSubcommand — P-22 message fix (update.ts:139)", () => {
       });
     } finally {
       if (origAutoUpdate !== undefined) {
-        process.env.MAI_AUTOUPDATE = origAutoUpdate;
+        process.env.FRONDOSE_AUTOUPDATE = origAutoUpdate;
       } else {
-        delete process.env.MAI_AUTOUPDATE;
+        delete process.env.FRONDOSE_AUTOUPDATE;
       }
       cleanup();
     }

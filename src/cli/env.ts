@@ -6,7 +6,7 @@ import { frondoseEnv } from "../env.js";
  * Inline .env reader — populates process.env from <cwd>/.env without clobbering
  * pre-existing keys. Silent: no logging.
  *
- * Skip via env: MAI_DOTENV=skip.
+ * Skip via env: FRONDOSE_DOTENV=skip.
  * Format: KEY=VALUE; lines starting with # are comments; blank lines OK.
  * NO quote stripping; NO ${VAR} interpolation; NO multi-line values.
  */

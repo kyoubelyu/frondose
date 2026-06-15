@@ -27,7 +27,7 @@ import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeClickTool } from "../../../src/tools/browser/click.js";
 
-process.env.MAI_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
 
 const abortSignal = new AbortController().signal;
 

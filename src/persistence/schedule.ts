@@ -1,7 +1,7 @@
 /**
  * P-10 / D-2 / D-4 / D-5 / D-7: cron schedule persistence + cron expression parser.
  *
- * Single global file at MAI_SCHEDULE_PATH (default ~/.frondose/agent/schedule.jsonl).
+ * Single global file at FRONDOSE_SCHEDULE_PATH (default ~/.frondose/agent/schedule.jsonl).
  * No per-cwd / per-session scoping (D-18). Concurrent multi-process writes
  * are out of scope (D-17 — operator runs 1 mai binary at a time).
  *

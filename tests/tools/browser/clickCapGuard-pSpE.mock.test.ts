@@ -22,8 +22,8 @@ import { describe, it } from "node:test";
 type AnyObj = Record<string, any>;
 
 // Disable pacing so tests don't sleep 0.8-2.5s per click
-process.env.MAI_PACE_MIN_MS = "0";
-process.env.MAI_PACE_MAX_MS = "0";
+process.env.FRONDOSE_PACE_MIN_MS = "0";
+process.env.FRONDOSE_PACE_MAX_MS = "0";
 
 // Helper: create a mock LinkedinSession with configurable autoRun() + CDP client spy
 // NOTE: clickSurface changed from "linkedin-connect" to "search" (a valid LINKEDIN_OUTBOUND_SURFACES member).

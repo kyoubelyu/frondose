@@ -13,7 +13,7 @@
  *   G-P40.1 — T-Grep.1 (no GITHUB_TOKEN)
  *   G-P40.2 — T-Grep.2 (gh preflight: command -v + auth status)
  *   G-P40.3 — T-Grep.3 (gh release fetch; no api.github.com / python3 / curl)
- *   G-P40.4 — T-Grep.4 (MAI_PREFIX overrides both base paths)
+ *   G-P40.4 — T-Grep.4 (FRONDOSE_PREFIX overrides both base paths)
  *   G-P40.5 — T-Grep.5 (no | tail -N suppression)
  *   G-P40.6 — T-Grep.6 (xcode-select WARNING, not exit)
  *   G-P40.7 — T-Pkg.1, T-Pkg.2 (scripts.install === "true"; node-gyp only in build:native)
@@ -130,20 +130,20 @@ describe("install.sh — gh-native release fetch; no curl/python3/api.github.com
 
 // ─── T-Grep.4 ────────────────────────────────────────────────────────────────
 
-describe("install.sh — MAI_PREFIX overrides both base paths (G-P40.4)", () => {
+describe("install.sh — FRONDOSE_PREFIX overrides both base paths (G-P40.4)", () => {
   // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional shell parameter expansion syntax
-  it("T-Grep.4: install.sh contains '${MAI_PREFIX:-$HOME}' AND '${MAI_PREFIX:-$(brew --prefix)}'", () => {
-    // Given: install.sh with D-3 MAI_PREFIX sandbox override
+  it("T-Grep.4: install.sh contains '${FRONDOSE_PREFIX:-$HOME}' AND '${FRONDOSE_PREFIX:-$(brew --prefix)}'", () => {
+    // Given: install.sh with D-3 FRONDOSE_PREFIX sandbox override
     // When:  content.includes() for both parameter-expansion forms
-    // Then:  both HOME_BASE and BREW_BASE use MAI_PREFIX; unset falls back to $HOME / brew --prefix
+    // Then:  both HOME_BASE and BREW_BASE use FRONDOSE_PREFIX; unset falls back to $HOME / brew --prefix
     const content = readFileSync(INSTALL_SH, "utf8");
     // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional shell parameter expansion syntax
-    assert.ok(content.includes("${MAI_PREFIX:-$HOME}"), "HOME_BASE must use '${MAI_PREFIX:-$HOME}'");
+    assert.ok(content.includes("${FRONDOSE_PREFIX:-$HOME}"), "HOME_BASE must use '${FRONDOSE_PREFIX:-$HOME}'");
     assert.ok(
       // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional shell parameter expansion syntax
-      content.includes("${MAI_PREFIX:-$(brew --prefix)}"),
+      content.includes("${FRONDOSE_PREFIX:-$(brew --prefix)}"),
       // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional shell parameter expansion syntax
-      "BREW_BASE must use '${MAI_PREFIX:-$(brew --prefix)}'",
+      "BREW_BASE must use '${FRONDOSE_PREFIX:-$(brew --prefix)}'",
     );
   });
 });

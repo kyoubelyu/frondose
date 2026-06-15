@@ -112,7 +112,7 @@ describe("L1-Stuck: truly-stuck run closes at threshold=10 (real cron driver, re
   before(() => {
     savedLimit = process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
     delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
-    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
   });
 
   after(() => {
@@ -184,7 +184,7 @@ describe("L1-Discovery: discovery-only run (raw_candidate upsert per tick) survi
   before(() => {
     savedLimit = process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
     delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
-    delete process.env.MAI_CRON_NOPROGRESS_LIMIT;
+    delete process.env.FRONDOSE_CRON_NOPROGRESS_LIMIT;
   });
 
   after(() => {

@@ -33,7 +33,7 @@ export function assertUploadPathAllowed(filePath: string): void {
   if (!ok) {
     throw new Error(
       `Upload path '${canonical}' is outside the allowed directories. ` +
-        `Allowed: ${allowed.join(", ")}. Set FRONDOSE_UPLOAD_ALLOWLIST=path1:path2 to override (legacy MAI_UPLOAD_ALLOWLIST still accepted).`,
+        `Allowed: ${allowed.join(", ")}. Set FRONDOSE_UPLOAD_ALLOWLIST=path1:path2 to override.`,
     );
   }
 }

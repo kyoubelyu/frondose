@@ -133,8 +133,8 @@ describe("T-Media: outbound media types (G-P11.11)", () => {
       const tmpDir = mkdtempSync(join(tmpdir(), "mai-p11-tg-media-"));
       const testFilePath = join(tmpDir, "test.jpg");
       writeFileSync(testFilePath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
-      const origAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-      process.env.MAI_UPLOAD_ALLOWLIST = tmpDir;
+      const origAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+      process.env.FRONDOSE_UPLOAD_ALLOWLIST = tmpDir;
       process.env.TELEGRAM_TOKEN = "test-tok";
       process.env.TELEGRAM_CHAT_ID = "999";
       const { mock, calls } = makeSpy();
@@ -156,8 +156,8 @@ describe("T-Media: outbound media types (G-P11.11)", () => {
       } finally {
         delete process.env.TELEGRAM_TOKEN;
         delete process.env.TELEGRAM_CHAT_ID;
-        if (origAllowlist !== undefined) process.env.MAI_UPLOAD_ALLOWLIST = origAllowlist;
-        else delete process.env.MAI_UPLOAD_ALLOWLIST;
+        if (origAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = origAllowlist;
+        else delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
         rmSync(tmpDir, { recursive: true, force: true });
       }
     });
@@ -214,8 +214,8 @@ describe("T-Media.group: sendMediaGroup (G-P11.12)", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p11-mg-"));
     const localPath = join(tmpDir, "local.jpg");
     writeFileSync(localPath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
-    const origAllowlist = process.env.MAI_UPLOAD_ALLOWLIST;
-    process.env.MAI_UPLOAD_ALLOWLIST = tmpDir;
+    const origAllowlist = process.env.FRONDOSE_UPLOAD_ALLOWLIST;
+    process.env.FRONDOSE_UPLOAD_ALLOWLIST = tmpDir;
     process.env.TELEGRAM_TOKEN = "test-tok";
     process.env.TELEGRAM_CHAT_ID = "999";
     const { mock, calls } = makeSpy();
@@ -254,8 +254,8 @@ describe("T-Media.group: sendMediaGroup (G-P11.12)", () => {
     } finally {
       delete process.env.TELEGRAM_TOKEN;
       delete process.env.TELEGRAM_CHAT_ID;
-      if (origAllowlist !== undefined) process.env.MAI_UPLOAD_ALLOWLIST = origAllowlist;
-      else delete process.env.MAI_UPLOAD_ALLOWLIST;
+      if (origAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = origAllowlist;
+      else delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
