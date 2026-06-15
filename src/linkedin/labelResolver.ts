@@ -4,6 +4,7 @@ import type { SnapshotEntry } from "./types.js";
 export interface LabelResolveOpts {
   kind: "click" | "type";
   scope?: string;
+  activeLayer?: "page" | "overlay";
 }
 
 // P-AUTO-16 OUT-6: inspectSummary.ts:199 decorates outbound action labels with a
@@ -25,7 +26,15 @@ export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: La
   const stripped = label.replace(OUTBOUND_DISPLAY_PREFIX_RE, "");
   const usable = stripped.trim().length > 0 ? stripped : label;
   const needle = usable.toLowerCase();
-  const matches = entries.filter((e) => roles.has(e.role)).filter((e) => e.name.toLowerCase().includes(needle));
+  const roleFiltered = entries.filter((e) => roles.has(e.role));
+  const exact = roleFiltered.filter((e) => e.name.toLowerCase() === needle);
+  const substr = roleFiltered.filter((e) => e.name.toLowerCase().includes(needle));
+  let matches = exact.length > 0 ? exact : substr;
+
+  if (opts.activeLayer === "overlay") {
+    const overlayOnly = matches.filter((e) => e.ref.startsWith("@ov"));
+    if (overlayOnly.length > 0) matches = overlayOnly;
+  }
 
   if (matches.length === 0) {
     throw new Error(

@@ -151,7 +151,8 @@ export type GuardReason =
   | "auto_cap_reached"
   | "connect_note_required"
   | "approval_required"
-  | "ledger_write_failed";
+  | "ledger_write_failed"
+  | "unresolvable_ref_on_outbound_surface";
 
 /** A single ambiguity candidate (e.g. when click matches multiple labels). */
 export interface CommandCandidate {
