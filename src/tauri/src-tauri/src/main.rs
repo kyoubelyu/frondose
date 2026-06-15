@@ -354,7 +354,7 @@ fn resolve_node() -> String {
                 return p.to_string();
             }
             eprintln!(
-                "[mai-tauri] ignoring FRONDOSE_NODE_PATH/MAI_NODE_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_NODE_PATH/MAI_NODE_PATH={} (not a file)",
                 p
             );
         }
@@ -392,7 +392,7 @@ fn resolve_sidecar_bin() -> String {
                 return p.to_string();
             }
             eprintln!(
-                "[mai-tauri] ignoring FRONDOSE_SIDECAR_BIN_PATH/MAI_SIDECAR_BIN_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_SIDECAR_BIN_PATH/MAI_SIDECAR_BIN_PATH={} (not a file)",
                 p
             );
         }
@@ -435,7 +435,7 @@ fn resolve_mai_bin() -> String {
                 return p.to_string();
             }
             eprintln!(
-                "[mai-tauri] ignoring FRONDOSE_BIN_PATH/MAI_BIN_PATH={} (not a file)",
+                "[frondose] ignoring FRONDOSE_BIN_PATH/MAI_BIN_PATH={} (not a file)",
                 p
             );
         }
@@ -527,7 +527,7 @@ async fn run_update_check(app: AppHandle) {
     let parsed = match endpoint.parse() {
         Ok(u) => u,
         Err(e) => {
-            eprintln!("[mai-tauri] invalid update endpoint {}: {}", endpoint, e);
+            eprintln!("[frondose] invalid update endpoint {}: {}", endpoint, e);
             return;
         }
     };
@@ -538,24 +538,24 @@ async fn run_update_check(app: AppHandle) {
     {
         Ok(u) => u,
         Err(e) => {
-            eprintln!("[mai-tauri] updater init failed: {}", e);
+            eprintln!("[frondose] updater init failed: {}", e);
             return;
         }
     };
     match updater.check().await {
         Ok(Some(update)) => {
-            eprintln!("[mai-tauri] update available: {}", update.version);
+            eprintln!("[frondose] update available: {}", update.version);
             if let Err(e) = update
                 .download_and_install(|_chunk, _total| {}, || {})
                 .await
             {
-                eprintln!("[mai-tauri] update install failed: {}", e);
+                eprintln!("[frondose] update install failed: {}", e);
                 return;
             }
             app.restart();
         }
-        Ok(None) => eprintln!("[mai-tauri] no update available"),
-        Err(e) => eprintln!("[mai-tauri] update check failed: {}", e),
+        Ok(None) => eprintln!("[frondose] no update available"),
+        Err(e) => eprintln!("[frondose] update check failed: {}", e),
     }
 }
 
@@ -566,7 +566,7 @@ async fn spawn_mai_serve(port_file: &PathBuf, token: &str) -> Result<Child, Stri
     let sidecar_bin = PathBuf::from(resolve_sidecar_bin());
     let node_path = PathBuf::from(resolve_node());
     eprintln!(
-        "[mai-tauri] node={} sidecar={}",
+        "[frondose] node={} sidecar={}",
         node_path.display(),
         sidecar_bin.display()
     );
@@ -684,7 +684,7 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
 
     loop {
         if state.shutting_down.load(Ordering::SeqCst) {
-            eprintln!("[mai-tauri] D-24 supervisor: shutdown flag set, exiting");
+            eprintln!("[frondose] D-24 supervisor: shutdown flag set, exiting");
             return;
         }
 
@@ -696,26 +696,26 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
         if let Some(mut child) = taken {
             let pid = child.id().unwrap_or(0);
             state.child_pid.store(pid, Ordering::SeqCst);
-            eprintln!("[mai-tauri] D-24 supervisor: watching sidecar pid={}", pid);
+            eprintln!("[frondose] D-24 supervisor: watching sidecar pid={}", pid);
 
             let exit = child.wait().await;
             state.child_pid.store(0, Ordering::SeqCst);
 
             if state.shutting_down.load(Ordering::SeqCst) {
                 eprintln!(
-                    "[mai-tauri] D-24 supervisor: child exited during shutdown (pid={}) — done",
+                    "[frondose] D-24 supervisor: child exited during shutdown (pid={}) — done",
                     pid
                 );
                 return;
             }
             eprintln!(
-                "[mai-tauri] D-24 sidecar (pid={}) died UNEXPECTEDLY: {:?} — respawning",
+                "[frondose] D-24 sidecar (pid={}) died UNEXPECTEDLY: {:?} — respawning",
                 pid, exit
             );
             consecutive_spawn_failures = 0;
             backoff_ms = INITIAL_BACKOFF_MS;
         } else {
-            eprintln!("[mai-tauri] D-24 supervisor: no child to wait on; attempting (re)spawn");
+            eprintln!("[frondose] D-24 supervisor: no child to wait on; attempting (re)spawn");
         }
 
         tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
@@ -735,11 +735,11 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
             Ok(new_child) => {
                 let new_pid = new_child.id().unwrap_or(0);
                 state.child_pid.store(new_pid, Ordering::SeqCst);
-                eprintln!("[mai-tauri] D-24 sidecar respawned: pid={}", new_pid);
+                eprintln!("[frondose] D-24 sidecar respawned: pid={}", new_pid);
                 // [WIN-1] Wait for the new sidecar to publish its port-file + pass /health,
                 // then `await_serve_ready` stores the NEW port so requests/SSE target it.
                 if let Err(e) = await_serve_ready(&state, 10_000).await {
-                    eprintln!("[mai-tauri] WIN-1 respawn: sidecar port not ready: {}", e);
+                    eprintln!("[frondose] WIN-1 respawn: sidecar port not ready: {}", e);
                 }
                 {
                     let mut g = state.child.lock().await;
@@ -751,12 +751,12 @@ async fn supervise_sidecar(state: Arc<MaiServeState>) {
             Err(e) => {
                 consecutive_spawn_failures += 1;
                 eprintln!(
-                    "[mai-tauri] D-24 respawn failed (#{}): {} — retry after {}ms",
+                    "[frondose] D-24 respawn failed (#{}): {} — retry after {}ms",
                     consecutive_spawn_failures, e, backoff_ms
                 );
                 if consecutive_spawn_failures >= MAX_CONSECUTIVE_SPAWN_FAILURES {
                     eprintln!(
-                        "[mai-tauri] D-24 supervisor: giving up after {} consecutive respawn failures",
+                        "[frondose] D-24 supervisor: giving up after {} consecutive respawn failures",
                         MAX_CONSECUTIVE_SPAWN_FAILURES
                     );
                     return;
@@ -940,14 +940,14 @@ async fn main() {
                     sig.recv().await;
                     app_handle_sigterm.exit(0);
                 }
-                Err(e) => eprintln!("[mai-tauri] SIGTERM handler init failed: {}", e),
+                Err(e) => eprintln!("[frondose] SIGTERM handler init failed: {}", e),
             }
         }
         #[cfg(windows)]
         {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => app_handle_sigterm.exit(0),
-                Err(e) => eprintln!("[mai-tauri] ctrl_c handler init failed: {}", e),
+                Err(e) => eprintln!("[frondose] ctrl_c handler init failed: {}", e),
             }
         }
     });
@@ -958,7 +958,7 @@ async fn main() {
     // recover a bad release instead of the app silently exiting.
     if let Err(e) = await_serve_ready(&state, 10_000).await {
         eprintln!(
-            "[mai-tauri] mai serve not ready: {} — UI degraded; updater may recover a bad release",
+            "[frondose] mai serve not ready: {} — UI degraded; updater may recover a bad release",
             e
         );
     }
