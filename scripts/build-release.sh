@@ -139,9 +139,10 @@ echo "[build-release] OK (universal-apple-darwin)"
 echo "[build-release]   $TARBALL"
 echo "[build-release]   $SIG"
 
-# [5a-fix DEFECT-1] The binary inside Contents/MacOS/ is named after the Cargo package
-# `name = "mai-tauri"` (Cargo.toml), NOT the Tauri productName ("Frondose").
-BIN="$BUNDLE_DIR/Frondose.app/Contents/MacOS/mai-tauri"
+# The bundled binary is renamed to "Frondose" via tauri.conf `mainBinaryName`
+# (was the Cargo crate name "mai-tauri" — a branding leak, user-visible as
+# mai-tauri.exe on Windows; mainBinaryName fixes it on both platforms).
+BIN="$BUNDLE_DIR/Frondose.app/Contents/MacOS/Frondose"
 SITE_DIR="${FRONDOSE_SITE_DIR:-${MAI_SITE_DIR:-$HOME/.frondose/site}}"
 UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-http://localhost:4875}"
 
