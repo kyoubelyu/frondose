@@ -36,14 +36,16 @@ const SEARCH_LEAF = join(REPO, "src/linkedin/snapshotCapture/searchResultSynth.t
 
 describe("T-snapshotCapture.PublicSurface — all 3 public exports reachable via the barrel (G-P72s10.5)", () => {
   it(
-    "T-snapshotCapture.PublicSurface.1: dynamic import of the barrel exposes FEED_POST_SYNTH_JS (string), PROFILE_SYNTH_JS (string), captureCurrentSurfaceContext (function/1-param); no extra public exports",
+    "T-snapshotCapture.PublicSurface.1: dynamic import of the barrel exposes FEED_POST_CAP (number), FEED_POST_SYNTH_JS (string), PROFILE_SYNTH_JS (string), SEARCH_RESULT_SYNTH_JS (string), captureCurrentSurfaceContext (function/1-param); no extra public exports",
     async () => {
-      // Given: the barrel src/linkedin/snapshotCapture.ts after the split (2 new export * from leaf lines added)
+      // Given: the barrel src/linkedin/snapshotCapture.ts after the split (3 export * from leaf lines)
       // When:  dynamic import of the compiled JS barrel via await import("../../src/linkedin/snapshotCapture.js")
-      // Then:  m.FEED_POST_SYNTH_JS is a string;
+      // Then:  m.FEED_POST_CAP is a number (=== 15) — [D-15a: added by plan §6.4 S1];
+      //        m.FEED_POST_SYNTH_JS is a string;
       //        m.PROFILE_SYNTH_JS is a string;
+      //        m.SEARCH_RESULT_SYNTH_JS is a string;
       //        m.captureCurrentSurfaceContext is a function with .length === 1;
-      //        Object.keys(m) matches exactly ["FEED_POST_SYNTH_JS", "PROFILE_SYNTH_JS", "captureCurrentSurfaceContext"]
+      //        Object.keys(m) matches exactly the 5 expected exports
       //        (no accidental promotion of private synths or helpers)
 
       // Both leaf files must exist for this test to run
@@ -57,6 +59,12 @@ describe("T-snapshotCapture.PublicSurface — all 3 public exports reachable via
       );
 
       const m = await import("../../src/linkedin/snapshotCapture.js");
+
+      // FEED_POST_CAP [D-15a: added by P-AUTO-15a plan §6.4 S1 — single-source-of-truth cap value]
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion on new export
+      const cap = (m as unknown as Record<string, unknown>)["FEED_POST_CAP"];
+      assert.strictEqual(typeof cap, "number", "m.FEED_POST_CAP must be typeof 'number'");
+      assert.strictEqual(cap, 15, "m.FEED_POST_CAP must be 15");
 
       // FEED_POST_SYNTH_JS
       assert.strictEqual(typeof m.FEED_POST_SYNTH_JS, "string", "m.FEED_POST_SYNTH_JS must be typeof 'string'");
@@ -79,12 +87,15 @@ describe("T-snapshotCapture.PublicSurface — all 3 public exports reachable via
         "m.captureCurrentSurfaceContext.length must be 1 (single client parameter)",
       );
 
-      // No extra public exports (no private synth promotion)
+      // No extra public exports (no private synth promotion).
+      // [D-15a / barrel update]: P-AUTO-15a added FEED_POST_CAP export to feedPostSynth.ts (plan §6.4 S1).
+      // The barrel re-exports via `export * from "./snapshotCapture/feedPostSynth.js"`, so FEED_POST_CAP
+      // now appears as a 5th public export. Budget updated from 4 to 5 to track this intentional addition.
       const exportedKeys = Object.keys(m).sort();
       assert.deepStrictEqual(
         exportedKeys,
-        ["FEED_POST_SYNTH_JS", "PROFILE_SYNTH_JS", "SEARCH_RESULT_SYNTH_JS", "captureCurrentSurfaceContext"],
-        "barrel must expose EXACTLY 4 public exports (3 synth constants + captureCurrentSurfaceContext) — no private helper promoted",
+        ["FEED_POST_CAP", "FEED_POST_SYNTH_JS", "PROFILE_SYNTH_JS", "SEARCH_RESULT_SYNTH_JS", "captureCurrentSurfaceContext"],
+        "barrel must expose EXACTLY 5 public exports (FEED_POST_CAP + 3 synth constants + captureCurrentSurfaceContext) — [D-15a: FEED_POST_CAP added by plan §6.4 S1]",
       );
     },
   );

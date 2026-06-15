@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { buildInspectSummary, captureCurrentSurfaceContext, failFromError, ok } from "../../linkedin/index.js";
+import { dedupKeyFor, filterEntriesByScope, PERSON_BEARING_ROLES, TEXT_ROLES } from "../../linkedin/inspectSummary.js";
 import type { LinkedinSession } from "../../linkedin/types.js";
 
 const inspectParams = z.object({
@@ -37,7 +38,33 @@ export function makeInspectTool(session: LinkedinSession) {
             entriesByRole[e.role] = (entriesByRole[e.role] ?? 0) + 1;
           }
           const roleDetails = Object.keys(entriesByRole);
-          return ok("inspect", { ...summary, totalEntries: ctx.entries.length, entriesByRole, roleDetails });
+          // P-AUTO-15a (CAP-3 (d) + N2 fix): structured truncation diagnostics
+          // derived from the SAME scope-filtered + deduped text-eligible set
+          // buildInspectSummary's partition + hint decision operated on. Pins
+          // consistency between the hint string and the structured fields for
+          // BOTH full-surface (scope=undefined) and scoped invocations.
+          const scopedEntries = scope ? filterEntriesByScope(ctx.entries, scope) : ctx.entries;
+          const seenForDiag = new Set<string>();
+          const dedupedTextEligible = scopedEntries.filter((e) => {
+            if (!(TEXT_ROLES.has(e.role) && e.name.length > 0)) return false;
+            const k = dedupKeyFor(e);
+            if (seenForDiag.has(k)) return false;
+            seenForDiag.add(k);
+            return true;
+          });
+          const visibleTextCount = dedupedTextEligible.length;
+          const personEntryCount = dedupedTextEligible.filter((e) => PERSON_BEARING_ROLES.has(e.role)).length;
+          // shownTextCount excludes the synthetic hint entry (always prefixed "[diagnostic]").
+          const shownTextCount = summary.text.filter((t) => !t.startsWith("[diagnostic]")).length;
+          return ok("inspect", {
+            ...summary,
+            totalEntries: ctx.entries.length,
+            entriesByRole,
+            roleDetails,
+            visibleTextCount,
+            shownTextCount,
+            personEntryCount,
+          });
         }
         return ok("inspect", { ...summary });
       } catch (e) {
