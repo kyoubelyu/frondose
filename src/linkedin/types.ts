@@ -22,6 +22,8 @@ export interface SnapshotEntry {
   role: string;
   /** Accessible name; "" if absent. */
   name: string;
+  /** DOM-region tag from capture-time. Undefined means not-aside or unknown. */
+  region?: "aside";
 }
 
 /** Compact AX tree + surface routing context for LinkedIn pages. */

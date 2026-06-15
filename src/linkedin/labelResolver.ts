@@ -1,3 +1,4 @@
+import { CONNECT_OPEN_RE } from "../tools/browser/outboundGuard.js";
 import { CLICKABLE_ROLES, INPUT_ROLES } from "./inspectSummary.js";
 import type { SnapshotEntry } from "./types.js";
 
@@ -30,6 +31,11 @@ export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: La
   const exact = roleFiltered.filter((e) => e.name.toLowerCase() === needle);
   const substr = roleFiltered.filter((e) => e.name.toLowerCase().includes(needle));
   let matches = exact.length > 0 ? exact : substr;
+
+  if (matches.length > 1 && CONNECT_OPEN_RE.test(usable)) {
+    const nonAside = matches.filter((e) => e.region !== "aside");
+    if (nonAside.length > 0) matches = nonAside;
+  }
 
   if (opts.activeLayer === "overlay") {
     const overlayOnly = matches.filter((e) => e.ref.startsWith("@ov"));

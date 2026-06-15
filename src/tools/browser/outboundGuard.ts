@@ -56,7 +56,7 @@ export type OutboundClass = "connect_open" | "connect_send" | "message_send" | "
 
 const CONNECT_SEND_RE =
   /^(?:Send\s+invitation\b|Send\s+invite\b|Send\s+without\s+a\s+note\b|Send\s+now\b|发送邀请|直接发送|立即连接)/i;
-const CONNECT_OPEN_RE = /^(?:Connect\b|Invite\b.*\bto\s+connect\b|邀请|添加好友|连接$)/i;
+export const CONNECT_OPEN_RE = /^(?:Connect\b|Invite\b.*\bto\s+connect\b|邀请|添加好友|连接$)/i;
 const MESSAGE_SEND_RE = /^Send\s*$/i;
 
 export function classifyOutboundLabel(label: string): OutboundClass {
