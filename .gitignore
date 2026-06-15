@@ -27,6 +27,8 @@ sessions/
 
 # P-32 native addon — compiled artifacts; the C source (native/) is the shipped artifact, never the .node binary.
 build/
+# WIN-2: tests/build/ holds build-script tests (chmod-dist/copy-web-assets) — must NOT be caught by build/ above.
+!tests/build/
 *.node
 
 # Claude Code local artifacts — not shipped.
