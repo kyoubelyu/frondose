@@ -64,6 +64,6 @@ Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media ta
 
 **Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**
 
-**Auto 4-stop**: \`end_auto_run\` on cap, no leads, blocked page, or no next action.`;
+**Auto 5-stop** \`end_auto_run\` on cap, no leads, blocked, (4a) User stop/cancel→stopped_by_agent, (4b) No next action→stopped_by_agent. cooldown is NOT a stop.`;
 
 export const CHECKPOINT_RESUME = CHECKPOINT.replace(CHECKPOINT_TASK_START, CHECKPOINT_TASK_START_RESUME);
