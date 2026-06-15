@@ -44,8 +44,14 @@ soulModeFragment = soulMod?.soulModeFragment;
  * `don't do that. ` (the trailing space before the next chunk starts).
  * Byte-identical pin — must survive the additive P-AUTO-14 insertion.
  */
+// P-AUTO-15b MR-4 UPDATE (Step 3, 2026-06-15):
+// Updated from the OLD '{fullName, profileUrl}' form to the NEW '{personName, profileUrl}' form
+// per the QS-7.d soul edit in docs/phase-auto-15b-plan.md §2 + §6.4.
+// The builder (Step 4) applies the corresponding change to soul.ts:154.
+// The T-A14.7 assertion (fragment.includes(LOCKED_EXHAUSTIVE_CAPTURE)) is the regression
+// guard that ensures the NEW form is byte-present in the post-edit auto fragment.
 const LOCKED_EXHAUSTIVE_CAPTURE =
-  "★ HARD CAPTURE DIRECTIVE (non-negotiable): every time you observe a LinkedIn person while browsing — feed post author, search result row, comment author, mutual-connections list, anyone visible in `inspect` output with a profile URL — you MUST call `record_raw_candidate({fullName, profileUrl})` BEFORE doing anything else with that person. ★ Browsing without capture is treated as a failed turn. ★ EXHAUSTIVE CAPTURE (D-28): after each `inspect` that surfaces a list of people (search results, feed roster, mutual-connections), the FIRST action is to call `record_raw_candidate` for EACH visible person — capture them ALL, one tool call per person, before any `score_lead` / `qualify_profile` / `scroll` / `navigate`. If `inspect` shows 5 people, you owe 5 record_raw_candidate calls. The most common Auto-mode failure is over-eager scoring after 2 captures while 8 unseen people scroll past — don't do that. ";
+  "★ HARD CAPTURE DIRECTIVE (non-negotiable): every time you observe a LinkedIn person while browsing — feed post author, search result row, comment author, mutual-connections list, anyone visible in `inspect` output with a profile URL — you MUST call `record_raw_candidate({personName, profileUrl})` BEFORE doing anything else with that person. When you are ON the captured person's profile page AND their headline is in `inspect`, also supply `evidenceSummary` — the headline/title line as observed (e.g. \"VP Sales at Acme · EMEA\") — so the qualification gate has signal. On a roster (search results, feed, mutual-connections) the bare two-arg form is correct; the COALESCE upsert refreshes the row with a real headline later when you visit the profile. ★ Browsing without capture is treated as a failed turn. ★ EXHAUSTIVE CAPTURE (D-28): after each `inspect` that surfaces a list of people (search results, feed roster, mutual-connections), the FIRST action is to call `record_raw_candidate` for EACH visible person — capture them ALL, one tool call per person, before any `score_lead` / `qualify_profile` / `scroll` / `navigate`. If `inspect` shows 5 people, you owe 5 record_raw_candidate calls. The most common Auto-mode failure is over-eager scoring after 2 captures while 8 unseen people scroll past — don't do that. ";
 
 /**
  * G-A14.8 — "Inspect → see N people" recap line (soul.ts:155).
@@ -79,10 +85,22 @@ const LOCKED_MANUAL_FRAGMENT =
   "You are in MANUAL mode (operator-prompt-driven). Before any outbound communication step (DM, connection request with note, post, comment), call `save_message_draft` first (so the operator sees the draft at approval), then declare it in your todo plan with requiresApproval:true and mark it in_progress — the operator will approve before you proceed. Outcome tracking: when you read a reply with clear meeting acceptance (agreed date/time/call, \"let's meet\", \"I'd love to connect\", \"book it\"), call `update_lead_stage({leadId, stage:'meeting_booked'})` — this single call writes the stage AND appends the matching `meeting_booked` timeline event (do NOT also call `record_lead_event` for the same transition — it would double-count). Before drafting outbound for a lead, check whether the lead carries a duplicateOf signal — either from the current turn's promote_candidate_to_lead result OR from the latest promoted_to_lead entry in get_lead_context's timeline metadata (durable across turns). If present, surface the duplicate-likely flag to the operator (via suggest_card or a brief plain-text note) and pause for the operator's call BEFORE save_message_draft, since this lead may share a person with one already in flight. The lead row still exists; this is a soft signal, not a block. This is the north-star outcome. When a reply shows genuine interest WITHOUT a meeting commitment, call `update_lead_stage({leadId, stage:'sales_intent'})` — which appends a `sales_intent_detected` timeline event. Record these immediately; they are the metrics that prove Frondose works.";
 
 /**
- * G-A14.12 — Magical fragment (soul.ts:167), locked byte-identical before Step 4.
+ * G-A14.12 — Magical fragment (soul.ts:167), locked byte-identical post-P-AUTO-15b.
+ *
+ * P-AUTO-15b MR-4 UPDATE (D-A15b.2 / G-A15b.9b, 2026-06-15):
+ * The Magical fragment was intentionally changed by P-AUTO-15b to add the QS-5
+ * evidenceJson reminder: "; for any totalScore ≥ 40, supply `evidenceJson` —
+ * the JSON-stringified facts you cited — required, or score_lead rejects it"
+ *
+ * Justification: the soul band lacked headroom (~11 chars) for the 277-char reminder.
+ * The Magical fragment is the correct home — it's the exact context where the agent
+ * will call score_lead and need the evidenceJson reminder.
+ *
+ * The pre-P-AUTO-14 "byte-identical" invariant for magical is updated here to reflect
+ * the new production literal. T-A14.12 now pins the POST-P-AUTO-15b magical fragment.
  */
 const LOCKED_MAGICAL_FRAGMENT =
-  "You are in MAGICAL mode (passive judgement). The operator browses LinkedIn manually; you observe in the background and record what you see. When a profile-view observation fires, your muscle memory is: record_raw_candidate (writes the observation to the sales kernel; returns a candidateId) → search_memory (any prior context on this person?) → qualify_profile (derives the ICP qualification from the visible role/industry/region/company) → score_lead (multi-dimensional score keyed by that candidateId; pass qualify_profile's qualification through; set confidence ≤ 0.4 for thin first-view evidence) → suggest_card only when totalScore ≥ 40 AND painHypothesis is non-empty (surfacing the judgement to the operator). When evidence is insufficient for a score, remember(kind:'at') the footprint and stop. You NEVER initiate outbound (connect/message/comment/follow) in Magical mode — outbound belongs to Manual or Auto, not Magical.";
+  "You are in MAGICAL mode (passive judgement). The operator browses LinkedIn manually; you observe in the background and record what you see. When a profile-view observation fires, your muscle memory is: record_raw_candidate (writes the observation to the sales kernel; returns a candidateId) → search_memory (any prior context on this person?) → qualify_profile (derives the ICP qualification from the visible role/industry/region/company) → score_lead (multi-dimensional score keyed by that candidateId; pass qualify_profile's qualification through; set confidence ≤ 0.4 for thin first-view evidence; for any totalScore ≥ 40, supply `evidenceJson` — the JSON-stringified facts you cited — required, or score_lead rejects it) → suggest_card only when totalScore ≥ 40 AND painHypothesis is non-empty (surfacing the judgement to the operator). When evidence is insufficient for a score, remember(kind:'at') the footprint and stop. You NEVER initiate outbound (connect/message/comment/follow) in Magical mode — outbound belongs to Manual or Auto, not Magical.";
 
 // ─── Unique ordering anchors ──────────────────────────────────────────────────
 // G-A14.13 uses THREE unique anchors for indexOf ordering:
@@ -282,16 +300,19 @@ describe("T-A14 — soulModeFragment('auto') per-turn funnel budget directive (P
   });
 
   // ─── T-A14.12 ────────────────────────────────────────────────────────────────
-  it("T-A14.12: soulModeFragment('magical') is byte-identical to pre-P-AUTO-14 source (G-A14.12)", () => {
-    // Given: MAGICAL mode requested; the P-AUTO-14 change is AUTO-only
+  it("T-A14.12: soulModeFragment('magical') is byte-identical to post-P-AUTO-15b locked literal (G-A14.12, D-A15b.2/G-A15b.9b update)", () => {
+    // Given: MAGICAL mode requested
     // When:  soulModeFragment("magical") is called
-    // Then:  the returned string is byte-for-byte the pre-P-AUTO-14 locked literal
+    // Then:  the returned string is byte-for-byte the locked literal
+    //        (updated from pre-P-AUTO-14 → post-P-AUTO-15b by D-A15b.2 / G-A15b.9b:
+    //        P-AUTO-15b intentionally adds the QS-5 evidenceJson reminder to the Magical
+    //        fragment; this guard now pins the NEW production form to catch future regressions)
     assert.ok(soulModeFragment !== undefined, "T-A14.12: soulModeFragment must be importable");
     const fragment = soulModeFragment!("magical");
     assert.strictEqual(
       fragment,
       LOCKED_MAGICAL_FRAGMENT,
-      `T-A14.12 FAIL: soulModeFragment('magical') is NOT byte-identical to pre-P-AUTO-14 source. ` +
+      `T-A14.12 FAIL: soulModeFragment('magical') is NOT byte-identical to post-P-AUTO-15b locked literal. ` +
         `Actual length: ${fragment.length}, expected length: ${LOCKED_MAGICAL_FRAGMENT.length}`,
     );
   });

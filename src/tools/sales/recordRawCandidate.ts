@@ -74,6 +74,36 @@ function firstHeadingName(entries: SnapshotEntry[]): string | undefined {
 }
 
 /**
+ * QS-7.b (P-AUTO-15b): headline entry from the captured surface — the part AFTER
+ * the first em-dash (U+2014, U+0020 on each side) in a `profileCard` entry's `name`
+ * field (snapshotCapture.ts:354 emits `${person.name} — ${person.headline}`).
+ *
+ * DISTINCT from `firstHeadingName` (NIT-1 clarification): `firstHeadingName`
+ * returns the entry's WHOLE `name` field — for a profileCard that's the combined
+ * `${name} — ${headline}` identity line; it is used by `checkIdentity` to match
+ * what `inspect` showed against the agent-supplied personName.
+ *
+ * This helper is the headline-only extraction: it scans for the first
+ * `profileCard` entry (NOT `searchResult` rows, which also use `" — "` per
+ * snapshotCapture.ts:299 but encode different content — the role filter is
+ * load-bearing) and returns the post-dash tail, trimmed, max 400 chars.
+ * Returns undefined when no profileCard has a `" — "` separator (headline-less
+ * profile, off-profile page, or the `@pp2` details line whose name has `Profile:`
+ * prefix and no em-dash).
+ */
+function firstHeadlineFromProfileCard(entries: SnapshotEntry[]): string | undefined {
+  for (const e of entries) {
+    if (e.role !== "profileCard") continue;
+    const dash = e.name.indexOf(" — ");
+    if (dash < 0) continue;
+    const tail = e.name.slice(dash + " — ".length).trim();
+    if (tail.length === 0) continue;
+    return tail.slice(0, 400);
+  }
+  return undefined;
+}
+
+/**
  * [P-75 D-30] Live identity check: when the session's current page IS this profileUrl, extract the
  * subject's heading name from the AX tree and require token-overlap with the supplied personName.
  * - Ahmed case (the bug that motivated this): linkedin.com/in/ahmed-elbanna/ resolves to a marketing
@@ -147,11 +177,17 @@ export function makeRecordRawCandidateTool(salesDbPath: string, session?: Linked
           );
         }
         // [P-75 D-30] Live identity check (skips when session unavailable or not on this profile; opt-out via bypass).
+        // QS-7.b (P-AUTO-15b): lift ctx out of the identity-check block so the headline
+        // helper below can reuse ctx.entries / ctx.pageUrl with no extra CDP roundtrip.
+        let ctxEntries: SnapshotEntry[] | undefined;
+        let ctxPageUrl: string | undefined;
         if (!parsed.bypassIdentityCheck && session) {
           try {
             const client = session.getClient();
             if (client) {
               const ctx = await captureCurrentSurfaceContext(client);
+              ctxEntries = ctx.entries;
+              ctxPageUrl = ctx.pageUrl;
               const check = checkIdentity(session, slug, parsed.personName, ctx.pageUrl, ctx.entries);
               if (!check.ok) return fail("record_raw_candidate", "invalid_input", check.reason);
             }
@@ -159,8 +195,21 @@ export function makeRecordRawCandidateTool(salesDbPath: string, session?: Linked
             // identity probe must NEVER block on a CDP hiccup — fall through to write
           }
         }
+        // QS-7.b (P-AUTO-15b): default evidenceSummary to the profile headline when
+        // unsupplied, the session is on this profile (slug match), and a
+        // `${name} — ${headline}` profileCard entry is present. A blank/whitespace-only
+        // supplied value falls through to the headline default (CONCERN-MR-1).
+        const suppliedTrim = parsed.evidenceSummary?.trim();
+        let evidenceSummary: string | undefined =
+          suppliedTrim && suppliedTrim.length > 0 ? suppliedTrim : undefined;
+        if (!evidenceSummary && ctxEntries && ctxPageUrl) {
+          const pageSlug = canonicalProfileSlug(ctxPageUrl);
+          if (pageSlug === slug) {
+            evidenceSummary = firstHeadlineFromProfileCard(ctxEntries);
+          }
+        }
         const db = getSalesDb(salesDbPath);
-        const { candidateId, inserted } = upsertRawCandidate(db, parsed);
+        const { candidateId, inserted } = upsertRawCandidate(db, { ...parsed, evidenceSummary });
         if (inserted) {
           appendTimelineEvent(db, { candidateId, eventType: "discovered", metadata: { source: parsed.source } });
         }

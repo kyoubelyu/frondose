@@ -33,6 +33,11 @@ export function upsertRawCandidate(
   },
 ): { candidateId: string; inserted: boolean } {
   const profileUrl = normalizeProfileUrl(input.profileUrl);
+  // QS-7.c (P-AUTO-15b CONCERN-MR-1): blank/whitespace-only evidenceSummary
+  // normalizes to null so the SQL stores NULL (not ''), consistent with the
+  // COALESCE conflict handler below.
+  const trimmedEvidence = input.evidenceSummary?.trim();
+  const evidenceSummary = trimmedEvidence && trimmedEvidence.length > 0 ? trimmedEvidence : null;
   const existing = db.prepare("SELECT id FROM raw_candidates WHERE profile_url = ?").get(profileUrl) as
     | { id: string }
     | undefined;
@@ -43,7 +48,9 @@ export function upsertRawCandidate(
       (id, person_name, profile_url, account_id, source, source_context,
        observed_at, last_seen_at, status, evidence_summary)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
-    ON CONFLICT(profile_url) DO UPDATE SET last_seen_at = excluded.last_seen_at
+    ON CONFLICT(profile_url) DO UPDATE SET
+      last_seen_at     = excluded.last_seen_at,
+      evidence_summary = COALESCE(NULLIF(excluded.evidence_summary, ''), evidence_summary)
   `).run(
     id,
     input.personName,
@@ -53,7 +60,7 @@ export function upsertRawCandidate(
     input.sourceContext ?? null,
     now,
     now,
-    input.evidenceSummary ?? null,
+    evidenceSummary,
   );
   const row = db.prepare("SELECT id FROM raw_candidates WHERE profile_url = ?").get(profileUrl) as { id: string };
   return { candidateId: row.id, inserted: existing === undefined };

@@ -128,14 +128,34 @@ export function makePromoteCandidateToLeadTool(salesDbPath: string) {
             `Candidate status is '${candidate.status}', must be 'scored' before promotion`,
           );
         }
+        // Read identity ONCE for both D-29 and the QS-7.a evidence-required gate
+        // (G-A15b.5c asserts this hoist — single readIdentity() call per promote).
+        const identity = readIdentity();
+        const targetRoles = identity?.icp?.targetRole;
         // [P-75 D-29] Persona-vs-ICP validation gate.
         if (!bypassPersonaCheck) {
-          const identity = readIdentity();
-          const targetRoles = identity?.icp?.targetRole;
           const personaCheck = checkPersonaMatch(candidate.evidenceSummary, targetRoles);
           if (!personaCheck.ok) {
             return fail("promote_candidate_to_lead", "invalid_input", personaCheck.reason);
           }
+        }
+        // QS-7.a (P-AUTO-15b): evidence_summary required for promotion when an ICP
+        // targetRole is configured. D-29 skips when evidence is empty — this gate
+        // catches that skip so the operator/agent is told to re-inspect first.
+        // No bypass flag (re-inspect is cheap); bypassPersonaCheck does NOT bypass
+        // this gate (G-A15b.5a) — they target distinct failure modes.
+        if (
+          (candidate.evidenceSummary == null || candidate.evidenceSummary.trim().length === 0) &&
+          targetRoles &&
+          targetRoles.length > 0
+        ) {
+          return fail(
+            "promote_candidate_to_lead",
+            "invalid_input",
+            "Cannot promote without evidence_summary on record (the D-29 persona-vs-ICP gate has no signal to validate). " +
+              "Re-inspect the profile and call record_raw_candidate again — the upsert COALESCEs new evidence into the " +
+              "existing row, then retry promote.",
+          );
         }
         const score = getLatestScoreByCandidate(db, candidateId);
         // [P-AUTO-4] Qualification gate — code-enforced; Auto can NEVER bypass.
