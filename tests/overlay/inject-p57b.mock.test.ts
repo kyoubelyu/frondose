@@ -3,29 +3,29 @@
  * (G-P57b.2, G-P57b.8, G-P57b.12)
  *
  * Mock tests for P-57b extensions to `src/overlay/inject.ts`:
- *   T-Passive.1  — `installOverlay` env-internal read substitutes `__MAI_PASSIVE_ENABLED__`
+ *   T-Passive.1  — `installOverlay` env-internal read substitutes `__FRONDOSE_PASSIVE_ENABLED__`
  *                  token from process.env.FRONDOSE_PASSIVE_SUGGEST (OQ-PLAN.29 rev-2 Option C).
  *   T-Passive.6  — Click listener registered with capture-phase + passive:true + 300ms
- *                  debounce + #__mai_root self-feedback filter + 100-char targetText slice +
+ *                  debounce + #__frondose_root self-feedback filter + 100-char targetText slice +
  *                  emits `{type:"observe", event_type:"click", ctx:{url,targetTag,targetText,x,y}}`.
  *   T-Passive.7  — Click debounce coalesces rapid bursts (`debounce(..., 300)` + `clearTimeout`
  *                  on each call replaces the pending timer, so 10 rapid clicks → 1 dispatch).
  *   T-Overlay.10 — TT-safe + click present + scroll/sampleVisibleFeedPosts absent +
- *                  collapsed-card fns + `__MAI_PASSIVE_ENABLED__` placeholder.
+ *                  collapsed-card fns + `__FRONDOSE_PASSIVE_ENABLED__` placeholder.
  *
  * Gate coverage:
  *   G-P57b.2  — passiveEnabled env-gate substitutes correctly (T-Passive.1)
  *   G-P57b.8  — Trusted Types safe DOM API only (T-Overlay.10)
- *   G-P57b.12 — Click listener metadata + #__mai_root filter + 300ms debounce coalesce
+ *   G-P57b.12 — Click listener metadata + #__frondose_root filter + 300ms debounce coalesce
  *
  * Mock strategy:
  *   - T-Passive.1: spy-style fake CdpHandle captures the {source} arg of
  *     Page.addScriptToEvaluateOnNewDocument; we verify the substitution produced
- *     `MAI_PASSIVE_ENABLED = true|false` literally via grep on the captured source.
+ *     `FRONDOSE_PASSIVE_ENABLED = true|false` literally via grep on the captured source.
  *   - T-Passive.6 + T-Passive.7: structural substring-grep against OVERLAY_BOOTSTRAP_JS
  *     — proves the click handler is registered with the right options (capture+passive),
  *     the right debounce semantics (300ms + clearTimeout on each call), the right filter
- *     (closest('#__mai_root')), the right slice (slice(0, 100)), and the right payload
+ *     (closest('#__frondose_root')), the right slice (slice(0, 100)), and the right payload
  *     shape (type:"observe", event_type:"click", ctx:{...}). Behavioral runtime verification
  *     happens at LIVE.10 (real-Chrome click-burst stress) where 20 rapid clicks compound
  *     with rate-limit + ICP pre-filter — the substring-grep here proves the source
@@ -48,19 +48,19 @@ import { installOverlay, OVERLAY_BOOTSTRAP_JS } from "../../src/overlay/inject.j
 
 // ─── T-Passive.1 — installOverlay env-internal substitution ─────────────────
 
-describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.env.FRONDOSE_PASSIVE_SUGGEST at install site (G-P57b.2)", () => {
-  it("T-Passive.1: given OVERLAY_BOOTSTRAP_JS contains __MAI_PASSIVE_ENABLED__ placeholder + fake CdpHandle whose Page.addScriptToEvaluateOnNewDocument captures the {source} arg, WHEN installOverlay called twice (FRONDOSE_PASSIVE_SUGGEST='on' then 'off'), THEN first captured source contains 'MAI_PASSIVE_ENABLED = true' AND does NOT contain '__MAI_PASSIVE_ENABLED__'; second captured source contains 'MAI_PASSIVE_ENABLED = false' AND does NOT contain '__MAI_PASSIVE_ENABLED__'", async () => {
+describe("installOverlay — substitutes __FRONDOSE_PASSIVE_ENABLED__ from process.env.FRONDOSE_PASSIVE_SUGGEST at install site (G-P57b.2)", () => {
+  it("T-Passive.1: given OVERLAY_BOOTSTRAP_JS contains __FRONDOSE_PASSIVE_ENABLED__ placeholder + fake CdpHandle whose Page.addScriptToEvaluateOnNewDocument captures the {source} arg, WHEN installOverlay called twice (FRONDOSE_PASSIVE_SUGGEST='on' then 'off'), THEN first captured source contains 'FRONDOSE_PASSIVE_ENABLED = true' AND does NOT contain '__FRONDOSE_PASSIVE_ENABLED__'; second captured source contains 'FRONDOSE_PASSIVE_ENABLED = false' AND does NOT contain '__FRONDOSE_PASSIVE_ENABLED__'", async () => {
     // Given: OVERLAY_BOOTSTRAP_JS contains the placeholder verbatim
     // When:  installOverlay invoked twice with different FRONDOSE_PASSIVE_SUGGEST values
     // Then:  captured sources have substituted boolean literals + zero remaining placeholders
 
     // Sanity: baseline placeholder exists exactly once
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("__MAI_PASSIVE_ENABLED__"),
-      "baseline OVERLAY_BOOTSTRAP_JS must contain the __MAI_PASSIVE_ENABLED__ placeholder",
+      OVERLAY_BOOTSTRAP_JS.includes("__FRONDOSE_PASSIVE_ENABLED__"),
+      "baseline OVERLAY_BOOTSTRAP_JS must contain the __FRONDOSE_PASSIVE_ENABLED__ placeholder",
     );
     // One occurrence exactly (defensive: regex global count)
-    const placeholderCount = (OVERLAY_BOOTSTRAP_JS.match(/__MAI_PASSIVE_ENABLED__/g) ?? []).length;
+    const placeholderCount = (OVERLAY_BOOTSTRAP_JS.match(/__FRONDOSE_PASSIVE_ENABLED__/g) ?? []).length;
     assert.equal(placeholderCount, 1, `placeholder must appear exactly once; got ${placeholderCount}`);
 
     // Capture-spy fake CdpHandle
@@ -89,12 +89,12 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
       assert.equal(capturedSources.length, 1, "(1) first install should have produced 1 captured source");
       const src1 = capturedSources[0] ?? "";
       assert.ok(
-        src1.includes("MAI_PASSIVE_ENABLED = true"),
-        `(1) source 'on' must contain 'MAI_PASSIVE_ENABLED = true'; got snippet: ${src1.slice(src1.indexOf("MAI_PASSIVE_ENABLED"), src1.indexOf("MAI_PASSIVE_ENABLED") + 80)}`,
+        src1.includes("FRONDOSE_PASSIVE_ENABLED = true"),
+        `(1) source 'on' must contain 'FRONDOSE_PASSIVE_ENABLED = true'; got snippet: ${src1.slice(src1.indexOf("FRONDOSE_PASSIVE_ENABLED"), src1.indexOf("FRONDOSE_PASSIVE_ENABLED") + 80)}`,
       );
       assert.ok(
-        !src1.includes("__MAI_PASSIVE_ENABLED__"),
-        "(1) source 'on' must NOT contain '__MAI_PASSIVE_ENABLED__' (placeholder consumed)",
+        !src1.includes("__FRONDOSE_PASSIVE_ENABLED__"),
+        "(1) source 'on' must NOT contain '__FRONDOSE_PASSIVE_ENABLED__' (placeholder consumed)",
       );
 
       // (2) FRONDOSE_PASSIVE_SUGGEST=off → substitutes to `false`
@@ -103,12 +103,12 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
       assert.equal(capturedSources.length, 2, "(2) second install should have produced 2 captured sources total");
       const src2 = capturedSources[1] ?? "";
       assert.ok(
-        src2.includes("MAI_PASSIVE_ENABLED = false"),
-        `(2) source 'off' must contain 'MAI_PASSIVE_ENABLED = false'; got snippet: ${src2.slice(src2.indexOf("MAI_PASSIVE_ENABLED"), src2.indexOf("MAI_PASSIVE_ENABLED") + 80)}`,
+        src2.includes("FRONDOSE_PASSIVE_ENABLED = false"),
+        `(2) source 'off' must contain 'FRONDOSE_PASSIVE_ENABLED = false'; got snippet: ${src2.slice(src2.indexOf("FRONDOSE_PASSIVE_ENABLED"), src2.indexOf("FRONDOSE_PASSIVE_ENABLED") + 80)}`,
       );
       assert.ok(
-        !src2.includes("__MAI_PASSIVE_ENABLED__"),
-        "(2) source 'off' must NOT contain '__MAI_PASSIVE_ENABLED__' (placeholder consumed)",
+        !src2.includes("__FRONDOSE_PASSIVE_ENABLED__"),
+        "(2) source 'off' must NOT contain '__FRONDOSE_PASSIVE_ENABLED__' (placeholder consumed)",
       );
 
       // (3) Sanity: also verify the boolean values are reflected differently
@@ -126,8 +126,8 @@ describe("installOverlay — substitutes __MAI_PASSIVE_ENABLED__ from process.en
 
 // ─── T-Passive.6 — Click observer structural assertions ─────────────────────
 
-describe("OVERLAY_BOOTSTRAP_JS click observer — registered with capture+passive+debounce; filters #__mai_root + #__mai_collapsed_card; emits observe payload with metadata (G-P57b.12)", () => {
-  it("T-Passive.6: given OVERLAY_BOOTSTRAP_JS exported, WHEN substring greps applied to the click-listener installation, THEN string contains documentElement.addEventListener('click', ..., { capture: true, passive: true }) + closest('#__mai_root') filter + closest('#__mai_collapsed_card') filter + slice(0, 100) on targetText + emits {type:'observe', event_type:'click', ctx:{url, targetTag, targetText, x, y}} via __maiPost", () => {
+describe("OVERLAY_BOOTSTRAP_JS click observer — registered with capture+passive+debounce; filters #__frondose_root + #__frondose_collapsed_card; emits observe payload with metadata (G-P57b.12)", () => {
+  it("T-Passive.6: given OVERLAY_BOOTSTRAP_JS exported, WHEN substring greps applied to the click-listener installation, THEN string contains documentElement.addEventListener('click', ..., { capture: true, passive: true }) + closest('#__frondose_root') filter + closest('#__frondose_collapsed_card') filter + slice(0, 100) on targetText + emits {type:'observe', event_type:'click', ctx:{url, targetTag, targetText, x, y}} via __frondosePost", () => {
     // Given: OVERLAY_BOOTSTRAP_JS as P-57b-extended baseline.
     // When:  apply substring greps for each click-observer contract piece.
     // Then:  all assertions hold; proves the production code matches plan §5.2.2.
@@ -148,12 +148,12 @@ describe("OVERLAY_BOOTSTRAP_JS click observer — registered with capture+passiv
 
     // (b) Self-feedback filters
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("closest('#__mai_root')"),
-      "(d) must filter clicks inside #__mai_root via closest('#__mai_root')",
+      OVERLAY_BOOTSTRAP_JS.includes("closest('#__frondose_root')"),
+      "(d) must filter clicks inside #__frondose_root via closest('#__frondose_root')",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("closest('#__mai_collapsed_card')"),
-      "(e) must filter clicks inside #__mai_collapsed_card via closest()",
+      OVERLAY_BOOTSTRAP_JS.includes("closest('#__frondose_collapsed_card')"),
+      "(e) must filter clicks inside #__frondose_collapsed_card via closest()",
     );
 
     // (c) targetText slice (100-char cap per plan §5.2.2)
@@ -178,8 +178,8 @@ describe("OVERLAY_BOOTSTRAP_JS click observer — registered with capture+passiv
       "(l) ctx must carry y (client coords)",
     );
 
-    // (e) Dispatch via __maiPost
-    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("window.__maiPost("), "(m) must dispatch via window.__maiPost(...)");
+    // (e) Dispatch via __frondosePost
+    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("window.__frondosePost("), "(m) must dispatch via window.__frondosePost(...)");
   });
 });
 
@@ -231,17 +231,17 @@ describe("OVERLAY_BOOTSTRAP_JS click observer — 300ms debounce with clearTimeo
 // ─── T-Overlay.10 — Trusted Types safety + observer presence/absence checks ─
 
 describe("OVERLAY_BOOTSTRAP_JS — TT-safe + collapsed-card fns + click present + scroll/sampleVisibleFeedPosts absent + substitution placeholder (G-P57b.8)", () => {
-  it("T-Overlay.10: given OVERLAY_BOOTSTRAP_JS as exported string, WHEN substring searches applied, THEN string contains 'window.__maiShowCollapsedCard = function' + 'window.__maiHideCollapsedCard = function' + 'installPageObservers' + 'detectComposerKind' + \"addEventListener('click'\" + 'MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__'; does NOT contain 'sampleVisibleFeedPosts' / \"addEventListener('scroll'\" / '.innerHTML' / '.outerHTML' / 'insertAdjacentHTML'", () => {
+  it("T-Overlay.10: given OVERLAY_BOOTSTRAP_JS as exported string, WHEN substring searches applied, THEN string contains 'window.__frondoseShowCollapsedCard = function' + 'window.__frondoseHideCollapsedCard = function' + 'installPageObservers' + 'detectComposerKind' + \"addEventListener('click'\" + 'FRONDOSE_PASSIVE_ENABLED = __FRONDOSE_PASSIVE_ENABLED__'; does NOT contain 'sampleVisibleFeedPosts' / \"addEventListener('scroll'\" / '.innerHTML' / '.outerHTML' / 'insertAdjacentHTML'", () => {
     // 6 PRESENT + 5 ABSENT = 11 substring assertions per plan §6 T-Overlay.10 rev-1 spec.
 
     // PRESENT (6)
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiShowCollapsedCard = function"),
-      "(a) must contain 'window.__maiShowCollapsedCard = function' (collapsed-card render)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseShowCollapsedCard = function"),
+      "(a) must contain 'window.__frondoseShowCollapsedCard = function' (collapsed-card render)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiHideCollapsedCard = function"),
-      "(b) must contain 'window.__maiHideCollapsedCard = function' (collapsed-card hide)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseHideCollapsedCard = function"),
+      "(b) must contain 'window.__frondoseHideCollapsedCard = function' (collapsed-card hide)",
     );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("installPageObservers"),
@@ -258,8 +258,8 @@ describe("OVERLAY_BOOTSTRAP_JS — TT-safe + collapsed-card fns + click present 
       "(e) must contain \"addEventListener('click'\" (click observer registration per rev-1)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__"),
-      "(f) must contain 'MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__' (substitution placeholder per §5.2.1)",
+      OVERLAY_BOOTSTRAP_JS.includes("FRONDOSE_PASSIVE_ENABLED = __FRONDOSE_PASSIVE_ENABLED__"),
+      "(f) must contain 'FRONDOSE_PASSIVE_ENABLED = __FRONDOSE_PASSIVE_ENABLED__' (substitution placeholder per §5.2.1)",
     );
 
     // ABSENT (5 — TT-safe + rev-1 dropped)

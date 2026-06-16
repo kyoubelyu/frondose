@@ -248,7 +248,7 @@ async function spinHarness(testName: string): Promise<{ port: number; bearer: st
 function dispatchClick(rawCtx: any): void {
   if (!mockBindingCalledHandler) throw new Error("mockBindingCalledHandler not captured");
   mockBindingCalledHandler({
-    name: "__maiPost",
+    name: "__frondosePost",
     payload: JSON.stringify({ type: "observe", event_type: "click", ctx: rawCtx, t0: Date.now() }),
   });
 }

@@ -19,32 +19,32 @@ export const LEGACY_JS = `
   //   card: string | null;
   //   frames?: Array<{ type: "text" | "tool", content: string, ts: number }>;
   // };
-  var MAI_DIALOG_KEY = '__mai_dialog_state';
-  var MAI_OUTPUT_CAP = 2000;
-  var MAI_FRAMES_CAP = 20;
+  var FRONDOSE_DIALOG_KEY = '__frondose_dialog_state';
+  var FRONDOSE_OUTPUT_CAP = 2000;
+  var FRONDOSE_FRAMES_CAP = 20;
 
-  function maiReadDialogState() {
+  function frondoseReadDialogState() {
     try {
-      return JSON.parse(sessionStorage.getItem(MAI_DIALOG_KEY) || 'null');
+      return JSON.parse(sessionStorage.getItem(FRONDOSE_DIALOG_KEY) || 'null');
     } catch (e) {
       return null;
     }
   }
 
-  function maiWriteDialogState(state) {
+  function frondoseWriteDialogState(state) {
     try {
       state.ts = Date.now();
       state.output = state.output || '';
-      state.output = state.output.slice(-MAI_OUTPUT_CAP);
+      state.output = state.output.slice(-FRONDOSE_OUTPUT_CAP);
       state.frames = state.frames || [];
-      state.frames = state.frames.slice(-MAI_FRAMES_CAP);
-      sessionStorage.setItem(MAI_DIALOG_KEY, JSON.stringify(state));
+      state.frames = state.frames.slice(-FRONDOSE_FRAMES_CAP);
+      sessionStorage.setItem(FRONDOSE_DIALOG_KEY, JSON.stringify(state));
     } catch (e) {
       // sessionStorage quota exceeded or disabled; dialog still works.
     }
   }
 
-  var maiDialogState = {
+  var frondoseDialogState = {
     ts: Date.now(),
     ticker: null,
     output: '',
@@ -53,7 +53,7 @@ export const LEGACY_JS = `
   };
 
   var resetTimer = null;
-  window.__maiUpdateTicker = function(text) {
+  window.__frondoseUpdateTicker = function(text) {
     if (resetTimer) {
       clearTimeout(resetTimer);
       resetTimer = null;
@@ -63,8 +63,8 @@ export const LEGACY_JS = `
     } else {
       pillLabel.textContent = text;
     }
-    maiDialogState.ticker = text || null;
-    maiWriteDialogState(maiDialogState);
+    frondoseDialogState.ticker = text || null;
+    frondoseWriteDialogState(frondoseDialogState);
     if (text === 'done' || (typeof text === 'string' && text.charAt(0) === '✓')) {
       resetTimer = setTimeout(function() {
         if (dialogExpanded && dialogElements && dialogElements.ticker) {
@@ -73,13 +73,13 @@ export const LEGACY_JS = `
           pillLabel.textContent = 'Frondose';
         }
         resetTimer = null;
-        maiDialogState.ticker = null;
-        maiWriteDialogState(maiDialogState);
+        frondoseDialogState.ticker = null;
+        frondoseWriteDialogState(frondoseDialogState);
       }, 5000);
     }
   };
 
-  window.__maiAppendOutput = function(chunk) {
+  window.__frondoseAppendOutput = function(chunk) {
     if (!dialogExpanded || !dialogElements) return;
     var text = chunk;
     try {
@@ -87,30 +87,30 @@ export const LEGACY_JS = `
       if (typeof parsed === 'string') text = parsed;
     } catch (e) {
     }
-    if (typeof window.__maiAppendChunk === 'function') {
-      window.__maiAppendChunk(text);
+    if (typeof window.__frondoseAppendChunk === 'function') {
+      window.__frondoseAppendChunk(text);
     }
-    maiDialogState.output = (maiDialogState.output || '') + text;
-    maiDialogState.frames = maiDialogState.frames || [];
-    maiDialogState.frames.push({ type: 'text', content: text, ts: Date.now() });
-    maiWriteDialogState(maiDialogState);
+    frondoseDialogState.output = (frondoseDialogState.output || '') + text;
+    frondoseDialogState.frames = frondoseDialogState.frames || [];
+    frondoseDialogState.frames.push({ type: 'text', content: text, ts: Date.now() });
+    frondoseWriteDialogState(frondoseDialogState);
   };
 
-  window.__maiClearOutput = function() {
+  window.__frondoseClearOutput = function() {
     if (!dialogElements) return;
     // [P-Y2-MA] semantics changed: no DOM wipe; just end the active bubble.
-    if (typeof window.__maiEndAgent === 'function') {
-      window.__maiEndAgent();
+    if (typeof window.__frondoseEndAgent === 'function') {
+      window.__frondoseEndAgent();
     }
-    maiDialogState.output = '';
-    maiDialogState.frames = [];
-    maiWriteDialogState(maiDialogState);
+    frondoseDialogState.output = '';
+    frondoseDialogState.frames = [];
+    frondoseWriteDialogState(frondoseDialogState);
   };
 
-  window.__maiShowCard = function(payloadJson) {
+  window.__frondoseShowCard = function(payloadJson) {
     var payload;
     try { payload = JSON.parse(payloadJson); } catch (e) { return; }
-    if (!dialogExpanded) window.__maiExpandDialog();
+    if (!dialogExpanded) window.__frondoseExpandDialog();
     if (!dialogElements) return;
     var slot = dialogElements.cardSlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
@@ -160,17 +160,17 @@ export const LEGACY_JS = `
       move.appendChild(text);
       slot.appendChild(move);
     }
-    maiDialogState.card = payloadJson;
-    maiDialogState.frames = maiDialogState.frames || [];
-    maiDialogState.frames.push({ type: 'tool', content: payloadJson, ts: Date.now() });
-    maiWriteDialogState(maiDialogState);
+    frondoseDialogState.card = payloadJson;
+    frondoseDialogState.frames = frondoseDialogState.frames || [];
+    frondoseDialogState.frames.push({ type: 'tool', content: payloadJson, ts: Date.now() });
+    frondoseWriteDialogState(frondoseDialogState);
   };
 
-  window.__maiShowSummaryCard = function(payloadJson) {
+  window.__frondoseShowSummaryCard = function(payloadJson) {
     var payload;
     try { payload = JSON.parse(payloadJson); } catch (e) { return; }
     if (!payload) return;
-    if (!dialogExpanded) window.__maiExpandDialog();
+    if (!dialogExpanded) window.__frondoseExpandDialog();
     if (!dialogElements) return;
     var slot = dialogElements.cardSlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
@@ -215,19 +215,19 @@ export const LEGACY_JS = `
     }
   };
 
-  window.__maiHideCard = function() {
+  window.__frondoseHideCard = function() {
     if (!dialogElements) return;
     var slot = dialogElements.cardSlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
     slot.style.cssText = cardSlotHiddenStyle;
-    maiDialogState.card = null;
-    maiWriteDialogState(maiDialogState);
+    frondoseDialogState.card = null;
+    frondoseWriteDialogState(frondoseDialogState);
   };
 
-  window.__maiShowNextActions = function(payloadJson) {
+  window.__frondoseShowNextActions = function(payloadJson) {
     var payload;
     try { payload = JSON.parse(payloadJson); } catch (e) { return; }
-    if (!dialogExpanded) window.__maiExpandDialog();
+    if (!dialogExpanded) window.__frondoseExpandDialog();
     if (!dialogElements) return;
     var slot = dialogElements.nextActionsSlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
@@ -250,8 +250,8 @@ export const LEGACY_JS = `
     });
   };
 
-  window.__maiShowRetry = function(message) {
-    if (!dialogExpanded) window.__maiExpandDialog();
+  window.__frondoseShowRetry = function(message) {
+    if (!dialogExpanded) window.__frondoseExpandDialog();
     if (!dialogElements) return;
     var slot = dialogElements.retrySlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
@@ -271,7 +271,7 @@ export const LEGACY_JS = `
     slot.appendChild(btn);
   };
 
-  window.__maiHideRetry = function() {
+  window.__frondoseHideRetry = function() {
     if (!dialogElements) return;
     var slot = dialogElements.retrySlot;
     while (slot.firstChild) slot.removeChild(slot.firstChild);
@@ -281,11 +281,11 @@ export const LEGACY_JS = `
   var cronBannerEl = null;
   var cronBannerPulseInterval = null;
 
-  window.__maiShowCronBanner = function(text) {
-    if (window.__maiHideCronBanner) window.__maiHideCronBanner();
+  window.__frondoseShowCronBanner = function(text) {
+    if (window.__frondoseHideCronBanner) window.__frondoseHideCronBanner();
 
     cronBannerEl = document.createElement('div');
-    cronBannerEl.id = '__mai_cron_banner';
+    cronBannerEl.id = '__frondose_cron_banner';
     cronBannerEl.style.cssText = 'all:initial; background:#F2DCAE; color:#2A2A22; border:1px solid #D9A75F; border-left:4px solid #D9A75F; border-radius:6px; padding:9px 11px; font:13px/1.35 -apple-system,system-ui,sans-serif; box-shadow:0 6px 20px rgba(0,0,0,0.15); z-index:2147483647;';
 
     if (dialogExpanded && dialogElements && dialogElements.cronSlot) {
@@ -324,7 +324,7 @@ export const LEGACY_JS = `
     }, 80);
   };
 
-  window.__maiHideCronBanner = function() {
+  window.__frondoseHideCronBanner = function() {
     if (cronBannerPulseInterval !== null) {
       clearInterval(cronBannerPulseInterval);
       cronBannerPulseInterval = null;
@@ -338,7 +338,7 @@ export const LEGACY_JS = `
   var activeCardEl = null;
   var activeCardTimer = null;
 
-  window.__maiShowCollapsedCard = function(payloadJson) {
+  window.__frondoseShowCollapsedCard = function(payloadJson) {
     var payload;
     try { payload = JSON.parse(payloadJson); } catch (e) { return; }
     if (!payload) return;
@@ -351,7 +351,7 @@ export const LEGACY_JS = `
     }
 
     activeCardEl = document.createElement('div');
-    activeCardEl.id = '__mai_collapsed_card';
+    activeCardEl.id = '__frondose_collapsed_card';
     activeCardEl.style.cssText = 'all:initial;position:fixed;bottom:160px;right:16px;width:300px;max-height:80px;background:white;color:#2A2A22;border:1px solid #E0DDD2;border-left:4px solid #5A8043;border-radius:6px;padding:9px 11px;font:13px/1.35 -apple-system,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,0.18);cursor:pointer;z-index:2147483647;overflow:hidden;';
 
     var title = document.createElement('div');
@@ -366,18 +366,18 @@ export const LEGACY_JS = `
 
     activeCardEl.addEventListener('click', function() {
       var fullCardJson = payload.fullCardJson;
-      if (window.__maiHideCollapsedCard) window.__maiHideCollapsedCard();
-      if (window.__maiExpandDialog) window.__maiExpandDialog(payload);
-      if (fullCardJson && window.__maiShowCard) window.__maiShowCard(fullCardJson);
+      if (window.__frondoseHideCollapsedCard) window.__frondoseHideCollapsedCard();
+      if (window.__frondoseExpandDialog) window.__frondoseExpandDialog(payload);
+      if (fullCardJson && window.__frondoseShowCard) window.__frondoseShowCard(fullCardJson);
     });
 
     document.documentElement.appendChild(activeCardEl);
     activeCardTimer = setTimeout(function() {
-      if (window.__maiHideCollapsedCard) window.__maiHideCollapsedCard();
+      if (window.__frondoseHideCollapsedCard) window.__frondoseHideCollapsedCard();
     }, 30000);
   };
 
-  window.__maiHideCollapsedCard = function() {
+  window.__frondoseHideCollapsedCard = function() {
     if (activeCardTimer) {
       clearTimeout(activeCardTimer);
       activeCardTimer = null;
@@ -472,15 +472,15 @@ export const LEGACY_JS = `
     var debouncedClick = debounce(function(event) {
       var target = event.target;
       if (!target || !target.closest) return;
-      if (target.closest('#__mai_root') !== null) return;
-      if (target.closest('#__mai_collapsed_card') !== null) return;
+      if (target.closest('#__frondose_root') !== null) return;
+      if (target.closest('#__frondose_collapsed_card') !== null) return;
       // P-57e rev-2 (item c): use getElementRef to find nearest interactive ancestor.
       // Returns null if no ref found (within depth=8) OR if target is input/textarea.
       // Null-ref clicks are SKIPPED — no SSE emit (saves cost; agent only sees
       // interactive UI interactions).
       var ref = getElementRef(target);
       if (ref === null) return;
-      window.__maiPost(JSON.stringify({
+      window.__frondosePost(JSON.stringify({
         type: 'observe',
         event_type: 'click',
         ctx: {
@@ -501,7 +501,7 @@ export const LEGACY_JS = `
       if (!target.matches('div[contenteditable], textarea')) return;
       var text = target.textContent || target.value || '';
       if (text.length < 20) return;
-      window.__maiPost(JSON.stringify({
+      window.__frondosePost(JSON.stringify({
         type: 'observe',
         event_type: 'input',
         ctx: {

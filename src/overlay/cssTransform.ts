@@ -29,10 +29,10 @@ export const OVERLAY_LAYOUT_OVERRIDES = `
 /* compact auto: at ~300px the hero text + 2 action buttons collide — wrap the actions to their own row */
 .hero { flex-wrap: wrap; }
 .hero-actions { flex-basis: 100%; }
-.mai-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
+.frondose-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
   background: var(--grad-agent); color: var(--on-brand); font: 600 12px/1.2 "Inter", system-ui;
   cursor: pointer; box-shadow: 0 2px 10px rgba(58, 90, 44, 0.28); }
-.mai-pill .brand-logo { width: 15px; height: 15px; color: var(--on-brand); }
+.frondose-pill .brand-logo { width: 15px; height: 15px; color: var(--on-brand); }
 .brand-logo { color: var(--brand-600); display: block; }
 :host(.mode-auto) .brand-logo { color: var(--accent-500); }
 /* P-Y2-MA G7: overlay-only drag-grip visual (no drag behavior — see OQ-6). */

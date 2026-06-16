@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const REQUIRED_FILES = ["dist/overlay/bootstrapTakeover.js", "dist/overlay/bootstrap.js"];
-const REQUIRED_MARKERS = ["__maiShowWorkflow", "__maiShowEdgeRing", "__maiShowAgentTarget"];
+const REQUIRED_MARKERS = ["__frondoseShowWorkflow", "__frondoseShowEdgeRing", "__frondoseShowAgentTarget"];
 
 export function findMissingDistMarkers(root: string = process.cwd()): string[] {
   const missing: string[] = [];

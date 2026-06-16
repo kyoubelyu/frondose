@@ -60,5 +60,5 @@ export function pushWorkflowToOverlay(
   if (ctxId === undefined || !client) return;
   const snapshot = toOverlayWorkflowSnapshot(workflow.getState(), frame);
   const json = JSON.stringify(snapshot);
-  void callInOverlay(client.handle, ctxId, `function() { window.__maiShowWorkflow(${JSON.stringify(json)}); }`);
+  void callInOverlay(client.handle, ctxId, `function() { window.__frondoseShowWorkflow(${JSON.stringify(json)}); }`);
 }

@@ -16,27 +16,27 @@ export const OVERLAY_BOOTSTRAP_JS = `
     document.addEventListener("DOMContentLoaded", install, {once: true});
     return;
   }
-  var MAI_OVERLAY_OWNER = __MAI_OVERLAY_OWNER__;
-  var MAI_OVERLAY_VERSION = __MAI_OVERLAY_VERSION__;
-  var existingRoot = document.getElementById('__mai_root');
-  var existingRootOwner = existingRoot && existingRoot.dataset ? existingRoot.dataset.maiOverlayOwner : undefined;
-  var existingRootVersion = existingRoot && existingRoot.dataset ? existingRoot.dataset.maiOverlayVersion : undefined;
-  var existingOwner = existingRootOwner || window.__maiOverlayOwner;
-  var existingVersion = existingRootVersion || window.__maiOverlayVersion;
+  var FRONDOSE_OVERLAY_OWNER = __FRONDOSE_OVERLAY_OWNER__;
+  var FRONDOSE_OVERLAY_VERSION = __FRONDOSE_OVERLAY_VERSION__;
+  var existingRoot = document.getElementById('__frondose_root');
+  var existingRootOwner = existingRoot && existingRoot.dataset ? existingRoot.dataset.frondoseOverlayOwner : undefined;
+  var existingRootVersion = existingRoot && existingRoot.dataset ? existingRoot.dataset.frondoseOverlayVersion : undefined;
+  var existingOwner = existingRootOwner || window.__frondoseOverlayOwner;
+  var existingVersion = existingRootVersion || window.__frondoseOverlayVersion;
   var existingMarkersMatch =
     existingRoot &&
-    existingOwner === MAI_OVERLAY_OWNER &&
-    existingVersion === MAI_OVERLAY_VERSION &&
-    window.__maiOverlayOwner === MAI_OVERLAY_OWNER &&
-    window.__maiOverlayVersion === MAI_OVERLAY_VERSION;
+    existingOwner === FRONDOSE_OVERLAY_OWNER &&
+    existingVersion === FRONDOSE_OVERLAY_VERSION &&
+    window.__frondoseOverlayOwner === FRONDOSE_OVERLAY_OWNER &&
+    window.__frondoseOverlayVersion === FRONDOSE_OVERLAY_VERSION;
   if (existingMarkersMatch) {
-    window.__maiBootstrapped = true;
+    window.__frondoseBootstrapped = true;
     return;
   }
-  if (window.__maiBootstrapped || existingRoot) {
+  if (window.__frondoseBootstrapped || existingRoot) {
     if (existingRoot) {
-      existingRoot.id = '__mai_root_stale_' + Date.now();
-      existingRoot.dataset.maiOverlayStale = 'true';
+      existingRoot.id = '__frondose_root_stale_' + Date.now();
+      existingRoot.dataset.frondoseOverlayStale = 'true';
       existingRoot.setAttribute('aria-hidden', 'true');
       existingRoot.setAttribute('hidden', 'true');
       existingRoot.setAttribute('inert', '');
@@ -45,42 +45,42 @@ export const OVERLAY_BOOTSTRAP_JS = `
       existingRoot.style.setProperty('pointer-events', 'none', 'important');
       if (existingRoot.shadowRoot) existingRoot.shadowRoot.replaceChildren();
     }
-    var staleCollapsedCard = document.getElementById('__mai_collapsed_card');
+    var staleCollapsedCard = document.getElementById('__frondose_collapsed_card');
     if (staleCollapsedCard) staleCollapsedCard.remove();
-    var staleCronBanner = document.getElementById('__mai_cron_banner');
+    var staleCronBanner = document.getElementById('__frondose_cron_banner');
     if (staleCronBanner) staleCronBanner.remove();
-    window.__maiBootstrapped = false;
-    window.__maiOverlayOwner = undefined;
-    window.__maiOverlayVersion = undefined;
+    window.__frondoseBootstrapped = false;
+    window.__frondoseOverlayOwner = undefined;
+    window.__frondoseOverlayVersion = undefined;
   }
 
-  // --- shared builders (esbuild IIFE: defines var __maiShared = (()=>{...})()) ---
+  // --- shared builders (esbuild IIFE: defines var __frondoseShared = (()=>{...})()) ---
   ${SHARED_RENDER_JS}
 
   // --- frondose host + shadow (HOST_STYLE + self-heal preserved verbatim from P-57e) ---
   var HOST_STYLE = 'all:initial; position:fixed; bottom:72px; right:16px; z-index:2147483647;';
   const host = document.createElement('div');
-  host.id = '__mai_root';
-  host.dataset.maiOverlayOwner = MAI_OVERLAY_OWNER;
-  host.dataset.maiOverlayVersion = MAI_OVERLAY_VERSION;
+  host.id = '__frondose_root';
+  host.dataset.frondoseOverlayOwner = FRONDOSE_OVERLAY_OWNER;
+  host.dataset.frondoseOverlayVersion = FRONDOSE_OVERLAY_VERSION;
   host.style.cssText = HOST_STYLE;
   const shadow = host.attachShadow({ mode: 'open' });
 
   // --- frondose stylesheet (one <style>; swap to adoptedStyleSheets is a one-line change here) ---
-  var __maiCss = ${JSON.stringify(FRONDOSE_CSS)};
+  var __frondoseCss = ${JSON.stringify(FRONDOSE_CSS)};
   function applyFrondoseStyle(root) {
     var s = document.createElement('style');
-    s.textContent = __maiCss;
+    s.textContent = __frondoseCss;
     root.appendChild(s);
   }
   applyFrondoseStyle(shadow);
 
   document.documentElement.appendChild(host);
-  window.__maiOverlayOwner = MAI_OVERLAY_OWNER;
-  window.__maiOverlayVersion = MAI_OVERLAY_VERSION;
-  window.__maiBootstrapped = true;
-  var MAI_PASSIVE_ENABLED = __MAI_PASSIVE_ENABLED__;
-  var passiveEnabled = MAI_PASSIVE_ENABLED;
+  window.__frondoseOverlayOwner = FRONDOSE_OVERLAY_OWNER;
+  window.__frondoseOverlayVersion = FRONDOSE_OVERLAY_VERSION;
+  window.__frondoseBootstrapped = true;
+  var FRONDOSE_PASSIVE_ENABLED = __FRONDOSE_PASSIVE_ENABLED__;
+  var passiveEnabled = FRONDOSE_PASSIVE_ENABLED;
 
   // P-57e: re-append the host if LinkedIn SPA-nav removes it from the DOM.
   new MutationObserver(() => {
@@ -102,8 +102,8 @@ export const OVERLAY_BOOTSTRAP_JS = `
 
   function post(payload) {
     var json = JSON.stringify(payload);
-    window.__maiLastEventJson = json;
-    window.__maiPost(json);
+    window.__frondoseLastEventJson = json;
+    window.__frondosePost(json);
   }
 
   // shared mutable state (closure; both fragments + tail reference these)
@@ -125,26 +125,26 @@ export const OVERLAY_BOOTSTRAP_JS = `
 
   // --- boot tail: build the panel skeleton, replay saved dialog state, wire pill + passive ---
   buildPanelSkeleton();
-  const saved = maiReadDialogState();
+  const saved = frondoseReadDialogState();
   if (saved) {
-    maiDialogState = saved;
-    maiDialogState.frames = maiDialogState.frames || [];
-    if (maiDialogState.output && typeof window.__maiBeginAgent === 'function') {
-      window.__maiBeginAgent();
-      window.__maiAppendChunk(maiDialogState.output);
-      window.__maiEndAgent();
+    frondoseDialogState = saved;
+    frondoseDialogState.frames = frondoseDialogState.frames || [];
+    if (frondoseDialogState.output && typeof window.__frondoseBeginAgent === 'function') {
+      window.__frondoseBeginAgent();
+      window.__frondoseAppendChunk(frondoseDialogState.output);
+      window.__frondoseEndAgent();
     }
-    if (maiDialogState.ticker && dialogElements) dialogElements.ticker.textContent = maiDialogState.ticker;
-    if (saved.card) { try { window.__maiShowCard(saved.card); } catch (e) {} }
+    if (frondoseDialogState.ticker && dialogElements) dialogElements.ticker.textContent = frondoseDialogState.ticker;
+    if (saved.card) { try { window.__frondoseShowCard(saved.card); } catch (e) {} }
   }
 
   pill.addEventListener('click', function() {
     var m = window.location.pathname.match(/^\\/in\\/([^/]+)\\/?$/);
     if (m) {
-      window.__maiExpandDialog();
+      window.__frondoseExpandDialog();
       post({ type: 'activate', url: window.location.href, handle: m[1], pageContext: document.title || '', t0: Date.now() });
     } else {
-      window.__maiExpandDialog();
+      window.__frondoseExpandDialog();
       post({ type: 'expand-dialog', url: window.location.href, t0: Date.now() });
     }
   });

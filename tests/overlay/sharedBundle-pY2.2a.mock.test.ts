@@ -3,7 +3,7 @@
  *
  * Verifies the inlining infra (plan §6.4-A/B/D): the committed `SHARED_RENDER_JS` IIFE in
  * `src/overlay/sharedRenderBundle.generated.ts` is a clean self-contained bundle exposing the shared
- * render builders on the `__maiShared` global, AND a fresh esbuild of `src/overlay/sharedEntry.ts`
+ * render builders on the `__frondoseShared` global, AND a fresh esbuild of `src/overlay/sharedEntry.ts`
  * reproduces the same builder surface (drift guard).
  *
  * ★ LOAD-BEARING (builder 4b drift #1): the gen script resolves NodeNext `.js` imports to their `.ts`
@@ -44,11 +44,11 @@ describe("SHARED_RENDER_JS — clean IIFE, not an ES module (G-PY2.2a.1)", () =>
   });
 });
 
-describe("SHARED_RENDER_JS — exposes the shared builders on __maiShared (G-PY2.2a.1)", () => {
+describe("SHARED_RENDER_JS — exposes the shared builders on __frondoseShared (G-PY2.2a.1)", () => {
   // Given: SHARED_RENDER_JS.  When: searched.
-  // Then: contains "__maiShared" AND each of the 5 builder names (incl. buildLeafMark — the plugin-fix proof).
-  it("T-Bundle.2: SHARED_RENDER_JS contains '__maiShared' and the 5 builder names (buildIwfCard/buildAutoStage/buildSwitcher/buildLeafMark/computeProgress)", () => {
-    assert.ok(SHARED_RENDER_JS.includes("__maiShared"), "bundle must define the __maiShared global");
+  // Then: contains "__frondoseShared" AND each of the 5 builder names (incl. buildLeafMark — the plugin-fix proof).
+  it("T-Bundle.2: SHARED_RENDER_JS contains '__frondoseShared' and the 5 builder names (buildIwfCard/buildAutoStage/buildSwitcher/buildLeafMark/computeProgress)", () => {
+    assert.ok(SHARED_RENDER_JS.includes("__frondoseShared"), "bundle must define the __frondoseShared global");
     const missing = BUILDER_NAMES.filter((n) => !SHARED_RENDER_JS.includes(n));
     assert.deepEqual(
       missing,
@@ -78,14 +78,14 @@ describe("fresh esbuild of sharedEntry.ts reproduces the builder surface — dri
       entryPoints: [resolve(REPO, "src/overlay/sharedEntry.ts")],
       bundle: true,
       format: "iife",
-      globalName: "__maiShared",
+      globalName: "__frondoseShared",
       platform: "browser",
       target: "es2022",
       write: false,
       plugins: [tsSourceResolve],
     });
     const txt = result.outputFiles[0]?.text ?? "";
-    assert.ok(txt.includes("__maiShared"), "fresh bundle must define __maiShared");
+    assert.ok(txt.includes("__frondoseShared"), "fresh bundle must define __frondoseShared");
     const missing = BUILDER_NAMES.filter((n) => !txt.includes(n));
     assert.deepEqual(missing, [], `fresh esbuild must reproduce every builder; missing ${JSON.stringify(missing)}`);
   });

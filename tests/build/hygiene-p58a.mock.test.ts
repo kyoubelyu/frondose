@@ -73,21 +73,21 @@ describe("build:tauri regenerates the overlay assets (G-P58a.2)", () => {
 });
 
 describe("assert-dist core — findMissingDistMarkers (G-P58a.2)", () => {
-  // Given: a fake dist MISSING __maiShowEdgeRing → non-empty array; a fake dist WITH bootstrapTakeover.js + all
+  // Given: a fake dist MISSING __frondoseShowEdgeRing → non-empty array; a fake dist WITH bootstrapTakeover.js + all
   //        markers → []. (The script process.exit(1)s on non-empty — covered live in T-LIVE.BuildHygiene.)
   it("T-Build.2: findMissingDistMarkers flags a stale dist (missing marker/file) and passes a complete one", () => {
     assert.ok(findMissingDistMarkers, "builder 4b must export an import-safe findMissingDistMarkers");
-    const bad = makeFakeDist({ withTakeover: false, markers: ["__maiShowWorkflow"] });
+    const bad = makeFakeDist({ withTakeover: false, markers: ["__frondoseShowWorkflow"] });
     const badMissing = findMissingDistMarkers(bad);
     assert.ok(badMissing.length > 0, "stale dist (no bootstrapTakeover.js + missing takeover markers) → non-empty");
     assert.ok(
       badMissing.some((m) => m.includes("bootstrapTakeover.js")) &&
-        badMissing.some((m) => m.includes("__maiShowEdgeRing")),
+        badMissing.some((m) => m.includes("__frondoseShowEdgeRing")),
       "reports the missing file AND the missing marker",
     );
     const good = makeFakeDist({
       withTakeover: true,
-      markers: ["__maiShowWorkflow", "__maiShowEdgeRing", "__maiShowAgentTarget"],
+      markers: ["__frondoseShowWorkflow", "__frondoseShowEdgeRing", "__frondoseShowAgentTarget"],
     });
     assert.deepEqual(findMissingDistMarkers(good), [], "complete dist → no missing markers");
   });

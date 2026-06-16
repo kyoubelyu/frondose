@@ -362,14 +362,14 @@ test("T-M40: captureCurrentSurfaceContext on non-LinkedIn URL returns 'unknown' 
  *   - AX tree (empty by default — overlay path doesn't need AX entries)
  *   - Runtime.evaluate:
  *       • "window.location.href" → pageUrl
- *       • expression containing setAttribute('data-mai-ov' → OVERLAY_SYNTH_JS → overlayEvalResults[n]
+ *       • expression containing setAttribute('data-frondose-ov' → OVERLAY_SYNTH_JS → overlayEvalResults[n]
  *       • cleanup expr containing removeAttribute → return undefined (best-effort)
  *   - DOM: getDocument, querySelectorAll (→ overlayNodeIds), describeNode (→ backendNodeId)
  */
 function makeOverlayFakeHandle(opts: {
   pageUrl: string;
   overlayEvalResults: string[]; // successive results for OVERLAY_SYNTH_JS calls
-  overlayNodeIds: number[]; // returned from querySelectorAll('[data-mai-ov=…]')
+  overlayNodeIds: number[]; // returned from querySelectorAll('[data-frondose-ov=…]')
   backendNodeId: number; // returned by DOM.describeNode
   axNodes?: Array<{ nodeId: string; role: string; name: string; backendDOMNodeId: number }>;
 }) {
@@ -393,8 +393,8 @@ function makeOverlayFakeHandle(opts: {
           if (args.expression === "window.location.href") {
             return { result: { value: opts.pageUrl } };
           }
-          // OVERLAY_SYNTH_JS is identified by its data-mai-ov setAttribute marker
-          if (args.expression.includes("setAttribute('data-mai-ov'")) {
+          // OVERLAY_SYNTH_JS is identified by its data-frondose-ov setAttribute marker
+          if (args.expression.includes("setAttribute('data-frondose-ov'")) {
             const result = opts.overlayEvalResults[overlayEvalCallCount] ?? "[]";
             overlayEvalCallCount++;
             return { result: { value: result } };
@@ -668,12 +668,12 @@ describe("T-P10: 2nd-degree modal inner-button enumeration (Phase 10)", () => {
   // When:  search for the empty-label rollback pattern
   // Then:  the iteration drops buttons whose label is empty (no aria-label + no innerText)
   //        — those are typically dropdown carets, icon-only buttons, etc. The rollback
-  //        also un-marks the data-mai-ov attribute so it doesn't accumulate.
-  it("T-P10.4: empty-label inner buttons are dropped (rollback `i` + remove data-mai-ov)", () => {
+  //        also un-marks the data-frondose-ov attribute so it doesn't accumulate.
+  it("T-P10.4: empty-label inner buttons are dropped (rollback `i` + remove data-frondose-ov)", () => {
     assert.ok(
-      SNAPSHOT_CAPTURE_SRC.includes("removeAttribute('data-mai-ov')") &&
+      SNAPSHOT_CAPTURE_SRC.includes("removeAttribute('data-frondose-ov')") &&
         SNAPSHOT_CAPTURE_SRC.includes("i--"),
-      "T-P10.4: OVERLAY_SYNTH_JS must roll back the index + remove the data-mai-ov attribute when an inner button has no usable label — without this the agent gets noisy unnamed refs",
+      "T-P10.4: OVERLAY_SYNTH_JS must roll back the index + remove the data-frondose-ov attribute when an inner button has no usable label — without this the agent gets noisy unnamed refs",
     );
   });
 });

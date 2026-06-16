@@ -291,7 +291,7 @@ describe("T-snapshotCapture.Orchestrator.2 — synth evaluate throws → orchest
       // Match by the characteristic substring used in the feed synth: "SIGNALS"
       const feedThrowHandle = makeStubHandle({
         pageUrl: "https://www.linkedin.com/feed/",
-        evaluateThrowsOn: ["Open control menu for post by", "setAttribute('data-mai-ov'"],
+        evaluateThrowsOn: ["Open control menu for post by", "setAttribute('data-frondose-ov'"],
       });
       const feedThrowClient = CdpClient.fromHandle(feedThrowHandle);
 
@@ -314,7 +314,7 @@ describe("T-snapshotCapture.Orchestrator.2 — synth evaluate throws → orchest
       // Profile surface — PROFILE_SYNTH_JS evaluate throws (edge case 1)
       const profileThrowHandle = makeStubHandle({
         pageUrl: "https://www.linkedin.com/in/test-user/",
-        evaluateThrowsOn: ["document.title.match", "setAttribute('data-mai-ov'"],
+        evaluateThrowsOn: ["document.title.match", "setAttribute('data-frondose-ov'"],
       });
       const profileThrowClient = CdpClient.fromHandle(profileThrowHandle);
 
@@ -340,7 +340,7 @@ describe("T-snapshotCapture.Orchestrator.2 — synth evaluate throws → orchest
       // Feed surface — overlay throws too (edge case 2)
       const overlayThrowHandle = makeStubHandle({
         pageUrl: "https://www.linkedin.com/feed/",
-        evaluateThrowsOn: ["setAttribute('data-mai-ov'"],
+        evaluateThrowsOn: ["setAttribute('data-frondose-ov'"],
       });
       const overlayThrowClient = CdpClient.fromHandle(overlayThrowHandle);
 

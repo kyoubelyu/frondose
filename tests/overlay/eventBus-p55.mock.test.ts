@@ -6,7 +6,7 @@
  *
  * Gate coverage:
  *   G-P55.3 — `attachEventBus` subscribes to Runtime.bindingCalled exactly once;
- *              name-filter passes `__maiPost` and rejects other binding names;
+ *              name-filter passes `__frondosePost` and rejects other binding names;
  *              malformed JSON payload silently swallowed (T-Overlay.3)
  *   G-P55.4 — End-to-end mock: valid bindingCalled payload → `onEvent` called once
  *              with the locked OverlayEvent envelope (T-Overlay.4)
@@ -25,14 +25,14 @@ import { describe, it } from "node:test";
 // ─── G-P55.3: attachEventBus subscription, name-filter, malformed-JSON swallow ─
 
 describe("attachEventBus — Runtime.bindingCalled subscribe + name filter + malformed payload (G-P55.3)", () => {
-  it("T-Overlay.3: given fakeHandle whose Runtime.bindingCalled spy captures the handler and returns stub unsubscribe, when attachEventBus(fakeHandle, onEventSpy) then handler fired with (a) valid __maiPost payload (b) other-binding name (c) malformed JSON, THEN Runtime.bindingCalled subscribed ONCE; onEventSpy called ONCE total (only valid __maiPost); handler does NOT throw on any invocation; unsub is a function", async () => {
+  it("T-Overlay.3: given fakeHandle whose Runtime.bindingCalled spy captures the handler and returns stub unsubscribe, when attachEventBus(fakeHandle, onEventSpy) then handler fired with (a) valid __frondosePost payload (b) other-binding name (c) malformed JSON, THEN Runtime.bindingCalled subscribed ONCE; onEventSpy called ONCE total (only valid __frondosePost); handler does NOT throw on any invocation; unsub is a function", async () => {
     // Given: fake CdpHandle whose Runtime.bindingCalled(handler) captures `handler` and
     //        returns a stub `() => {}` unsubscribe function; onEventCalls records each call
     // When:  const unsub = attachEventBus(fakeHandle, onEventSpy);
     //        then invoke captured handler with 3 payloads:
-    //          (a) {name:"__maiPost", payload:'{"type":"hello","t0":100}'}  — valid
+    //          (a) {name:"__frondosePost", payload:'{"type":"hello","t0":100}'}  — valid
     //          (b) {name:"other_binding", payload:'{"type":"x"}'}           — wrong name
-    //          (c) {name:"__maiPost", payload:"not-json"}                   — malformed JSON
+    //          (c) {name:"__frondosePost", payload:"not-json"}                   — malformed JSON
     // Then:  Runtime.bindingCalled subscribed exactly once;
     //        onEventCalls.length === 1 (only (a) passes both guards);
     //        handler threw on none of the three invocations;
@@ -75,30 +75,30 @@ describe("attachEventBus — Runtime.bindingCalled subscribe + name filter + mal
 
     // Fire 3 payloads — none must throw
     assert.doesNotThrow(
-      () => capturedHandler?.({ name: "__maiPost", payload: '{"type":"hello","t0":100}' }),
-      "(a) valid __maiPost: handler must not throw",
+      () => capturedHandler?.({ name: "__frondosePost", payload: '{"type":"hello","t0":100}' }),
+      "(a) valid __frondosePost: handler must not throw",
     );
     assert.doesNotThrow(
       () => capturedHandler?.({ name: "other_binding", payload: '{"type":"x"}' }),
       "(b) wrong binding name: handler must not throw",
     );
     assert.doesNotThrow(
-      () => capturedHandler?.({ name: "__maiPost", payload: "not-json" }),
+      () => capturedHandler?.({ name: "__frondosePost", payload: "not-json" }),
       "(c) malformed JSON: handler must not throw (silently swallowed)",
     );
 
     // Only payload (a) passes both guards (correct name + valid JSON + type is string)
-    assert.equal(onEventCalls.length, 1, "onEvent called ONCE: only valid __maiPost passes");
+    assert.equal(onEventCalls.length, 1, "onEvent called ONCE: only valid __frondosePost passes");
   });
 });
 
 // ─── G-P55.4: end-to-end mock — bindingCalled payload → locked OverlayEvent ───
 
 describe("attachEventBus — end-to-end mock: valid payload → locked OverlayEvent envelope (G-P55.4)", () => {
-  it("T-Overlay.4: given fakeHandle + Date.now() stubbed to 2000, when captured handler invoked with {name:'__maiPost', payload:JSON.stringify({type:'hello',url:'https://x',t0:1000})}, THEN onEvent called ONCE with EXACTLY {kind:'overlay-event',ts:2000,event_type:'hello',t0:1000,latency_ms:1000}", async () => {
+  it("T-Overlay.4: given fakeHandle + Date.now() stubbed to 2000, when captured handler invoked with {name:'__frondosePost', payload:JSON.stringify({type:'hello',url:'https://x',t0:1000})}, THEN onEvent called ONCE with EXACTLY {kind:'overlay-event',ts:2000,event_type:'hello',t0:1000,latency_ms:1000}", async () => {
     // Given: fake CdpHandle whose Runtime.bindingCalled captures the handler;
     //        Date.now() stub returns 2000 during the handler invocation
-    // When:  invoke captured handler with {name:"__maiPost",
+    // When:  invoke captured handler with {name:"__frondosePost",
     //        payload: JSON.stringify({type:"hello", url:"https://x", t0: 1000})}
     // Then:  onEventCalls[0] deep-equals {kind:"overlay-event", ts:2000, event_type:"hello",
     //          t0:1000, latency_ms:1000}  (ts - t0 = 2000 - 1000 = 1000)
@@ -138,7 +138,7 @@ describe("attachEventBus — end-to-end mock: valid payload → locked OverlayEv
     try {
       Date.now = () => 2000;
       capturedHandler?.({
-        name: "__maiPost",
+        name: "__frondosePost",
         payload: JSON.stringify({ type: "hello", url: "https://x", t0: 1000 }),
       });
     } finally {

@@ -5,7 +5,7 @@
  *
  * Testing strategy:
  *   Source-structural assertions on bootstrapShell.ts confirm:
- *     T-PY2MA.Hover.1 — sparkles SVG path attribute in __maiBeginAgent (G3)
+ *     T-PY2MA.Hover.1 — sparkles SVG path attribute in __frondoseBeginAgent (G3)
  *     T-PY2MA.Hover.2 — drag-grip DOM structure (3×2 dots) in buildPanelSkeleton (G7 visual-only)
  *     T-PY2MA.Hover.3 — handoff-button label "Run on Auto" (G9; desktop keeps "Hand off to Auto")
  *
@@ -33,14 +33,14 @@ const INDEX_HTML = readFileSync(join(REPO, "src/tauri/ui/index.html"), "utf-8");
 // ─── T-PY2MA.Hover.1 ────────────────────────────────────────────────────────
 
 describe("T-PY2MA.Hover.1 — overlay agent avatar contains sparkles SVG (G-PY2MA.8 / G3)", () => {
-  it("T-PY2MA.Hover.1: bootstrapShell.ts __maiBeginAgent creates an SVG with the sparkles path (M12 2.5...)", () => {
+  it("T-PY2MA.Hover.1: bootstrapShell.ts __frondoseBeginAgent creates an SVG with the sparkles path (M12 2.5...)", () => {
     // Given: src/overlay/bootstrapShell.ts source post-builder (Sketch C §5.3.5 pasted)
-    // When:  scanned for the sparkles SVG path data inside the __maiBeginAgent definition
+    // When:  scanned for the sparkles SVG path data inside the __frondoseBeginAgent definition
     // Then:  the string 'M12 2.5' appears inside bootstrapShell.ts (the sparkles glyph d-attribute)
     const hasSparkles = SHELL_TS.includes("M12 2.5");
     assert.ok(
       hasSparkles,
-      "bootstrapShell.ts __maiBeginAgent must create an SVG <path d='M12 2.5...'> (sparkles glyph, G3). " +
+      "bootstrapShell.ts __frondoseBeginAgent must create an SVG <path d='M12 2.5...'> (sparkles glyph, G3). " +
         "String 'M12 2.5' absent — FAILS pre-builder (Sketch C §5.3.5 not yet pasted).",
     );
   });

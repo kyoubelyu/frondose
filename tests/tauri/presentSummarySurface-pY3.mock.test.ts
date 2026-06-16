@@ -33,7 +33,7 @@ describe("P-Y3 desktop surface guard — overlay-only summary rendering", () => 
     // Given: no new SSE frame is needed for overlay-only scope.
     // When: src/tauri/ui/app.ts is inspected.
     // Then: present_summary is not routed through desktop UI state.
-    for (const forbidden of ["present-summary", "present_summary", "summary-card", "__maiShowSummaryCard"]) {
+    for (const forbidden of ["present-summary", "present_summary", "summary-card", "__frondoseShowSummaryCard"]) {
       assert.equal(APP_TS.includes(forbidden), false, `app.ts must not contain desktop summary marker ${forbidden}`);
     }
   });
