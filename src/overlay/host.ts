@@ -9,18 +9,18 @@ const OVERLAY_VERSION = "p-app-4-overlay-v1";
 export async function installOverlay(client: CdpHandle): Promise<string> {
   await client.Runtime.enable();
   await client.Page.enable();
-  await client.Runtime.addBinding({ name: "__maiPost" });
+  await client.Runtime.addBinding({ name: "__frondosePost" });
   const passiveEnabled = (frondoseEnv("PASSIVE_SUGGEST") ?? "on").toLowerCase() !== "off";
   const overlayOwner = frondoseEnv("SIDECAR_OWNER") === APP_SIDECAR_OWNER ? APP_SIDECAR_OWNER : DEFAULT_OVERLAY_OWNER;
-  const substituted = OVERLAY_BOOTSTRAP_JS.replace(/__MAI_PASSIVE_ENABLED__/g, JSON.stringify(passiveEnabled))
-    .replace(/__MAI_OVERLAY_OWNER__/g, JSON.stringify(overlayOwner))
-    .replace(/__MAI_OVERLAY_VERSION__/g, JSON.stringify(OVERLAY_VERSION));
-  if (substituted.includes("__MAI_OVERLAY_OWNER__") || substituted.includes("__MAI_OVERLAY_VERSION__")) {
+  const substituted = OVERLAY_BOOTSTRAP_JS.replace(/__FRONDOSE_PASSIVE_ENABLED__/g, JSON.stringify(passiveEnabled))
+    .replace(/__FRONDOSE_OVERLAY_OWNER__/g, JSON.stringify(overlayOwner))
+    .replace(/__FRONDOSE_OVERLAY_VERSION__/g, JSON.stringify(OVERLAY_VERSION));
+  if (substituted.includes("__FRONDOSE_OVERLAY_OWNER__") || substituted.includes("__FRONDOSE_OVERLAY_VERSION__")) {
     throw new Error("unresolved overlay owner/version placeholder");
   }
   const { identifier } = await client.Page.addScriptToEvaluateOnNewDocument({
     source: substituted,
-    worldName: "mai-overlay",
+    worldName: "frondose-overlay",
     runImmediately: true,
   });
   return identifier;
@@ -43,7 +43,7 @@ export async function subscribeContextId(
   const mainFrameId = typeof frameTree?.frame?.id === "string" ? frameTree.frame.id : undefined;
   // top-frame context fires first due to runImmediately, so filtering by frameId after getFrameTree resolves is safe in practice.
   return client.Runtime.executionContextCreated(({ context }: { context: OverlayExecutionContext }) => {
-    if (context.name !== "mai-overlay") return;
+    if (context.name !== "frondose-overlay") return;
     if (mainFrameId !== undefined && context.auxData?.frameId !== mainFrameId) return;
     onContext(context.id);
   });

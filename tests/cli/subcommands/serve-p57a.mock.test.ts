@@ -6,7 +6,7 @@
  *   T-Serve.9  — currentTurn 409 guard preserved from P-56b (regression check)
  *   T-Serve.10 — suggest_card / suggest_next_actions tool result →
  *                'suggestion-card' / 'next-actions' SSE event + overlay
- *                __maiShowCard / __maiShowNextActions callInOverlay invocation
+ *                __frondoseShowCard / __frondoseShowNextActions callInOverlay invocation
  *                (CONCERN-MR-1 fix from critics: paired serve-layer assertion)
  *   T-Serve.11 — POST /agent/activate → triggerAnalyzeProfile fires a turn with
  *                the LOCKED prompt substring "Analyze this profile against the

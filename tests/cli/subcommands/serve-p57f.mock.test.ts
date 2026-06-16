@@ -4,7 +4,7 @@
  *
  * Per source grep at Step 5 baseline (post-Step 4b):
  *   - serve.ts L717 passiveRefSummary (click → [ariaLabel, controlName, text].find(non-empty).slice(0,60)).
- *   - L734 passiveTicker: callInOverlay(client.handle, ctxId, `function() { window.__maiUpdateTicker(<json>); }`)
+ *   - L734 passiveTicker: callInOverlay(client.handle, ctxId, `function() { window.__frondoseUpdateTicker(<json>); }`)
  *     guarded by `if (ctxId === undefined || !client) return`.
  *   - L748 start-ticker `mai · observing ${eventType}: ${refSummary}…` BEFORE runAgentLoop.
  *   - L784 completion-ticker `✓ noted: ${refSummary}` at the passive-fired emit.
@@ -274,13 +274,13 @@ async function spinHarness(testName: string): Promise<{ port: number; bearer: st
 // biome-ignore lint/suspicious/noExplicitAny: synthetic payload
 function dispatchOverlayBindingEvent(rawPayload: any): void {
   if (!mockBindingCalledHandler) throw new Error("mockBindingCalledHandler not captured");
-  mockBindingCalledHandler({ name: "__maiPost", payload: JSON.stringify(rawPayload) });
+  mockBindingCalledHandler({ name: "__frondosePost", payload: JSON.stringify(rawPayload) });
 }
 
 // ─── T-Ticker.1 — passive START ticker via callInOverlay (before runAgentLoop) ─
 
 describe("triggerPassiveAnalysis — passive turn START emits observing-ticker via callInOverlay (G-P57f.1)", () => {
-  it("T-Ticker.1: given serve.ts harness with callInOverlay spy + overlayContextId set + session.getClient() handle + runAgentLoop resolving, WHEN triggerPassiveAnalysis('click', {ref:{ariaLabel:'Connect to Jane'}}) fires, THEN callInOverlay is called BEFORE runAgentLoop with a fn string containing '__maiUpdateTicker' + 'observing click: Connect to Jane' (refSummary uses ariaLabel)", async () => {
+  it("T-Ticker.1: given serve.ts harness with callInOverlay spy + overlayContextId set + session.getClient() handle + runAgentLoop resolving, WHEN triggerPassiveAnalysis('click', {ref:{ariaLabel:'Connect to Jane'}}) fires, THEN callInOverlay is called BEFORE runAgentLoop with a fn string containing '__frondoseUpdateTicker' + 'observing click: Connect to Jane' (refSummary uses ariaLabel)", async () => {
     const h = await spinHarness("tt1");
     try {
       dispatchOverlayBindingEvent({
@@ -296,7 +296,7 @@ describe("triggerPassiveAnalysis — passive turn START emits observing-ticker v
       const startIdx = callSeq.findIndex(
         (s) =>
           s.startsWith("callInOverlay:") &&
-          s.includes("__maiUpdateTicker") &&
+          s.includes("__frondoseUpdateTicker") &&
           s.includes("observing click: Connect to Jane"),
       );
       const loopIdx = callSeq.indexOf("runAgentLoop");
@@ -318,7 +318,7 @@ describe("triggerPassiveAnalysis — passive turn START emits observing-ticker v
 // ─── T-Ticker.2 — passive COMPLETION ticker (✓ noted) + passive-fired ───────
 
 describe("triggerPassiveAnalysis — passive turn COMPLETION emits ✓-noted ticker + passive-fired (G-P57f.2)", () => {
-  it("T-Ticker.2: given serve.ts harness + SSE collector, WHEN triggerPassiveAnalysis('click', {ref:{controlName:'connect_btn'}}) runs to completion, THEN after runAgentLoop resolves a callInOverlay fires with '__maiUpdateTicker' + '✓ noted: connect_btn' (refSummary fallback ariaLabel>controlName>text — controlName since no ariaLabel) AND passive-fired SSE is emitted", async () => {
+  it("T-Ticker.2: given serve.ts harness + SSE collector, WHEN triggerPassiveAnalysis('click', {ref:{controlName:'connect_btn'}}) runs to completion, THEN after runAgentLoop resolves a callInOverlay fires with '__frondoseUpdateTicker' + '✓ noted: connect_btn' (refSummary fallback ariaLabel>controlName>text — controlName since no ariaLabel) AND passive-fired SSE is emitted", async () => {
     const h = await spinHarness("tt2");
     try {
       const ssePromise = collectSse(h.port, h.bearer, 1500);
@@ -335,7 +335,7 @@ describe("triggerPassiveAnalysis — passive turn COMPLETION emits ✓-noted tic
 
       // Completion-ticker present + AFTER runAgentLoop.
       const compIdx = callSeq.findIndex(
-        (s) => s.startsWith("callInOverlay:") && s.includes("__maiUpdateTicker") && s.includes("✓ noted: connect_btn"),
+        (s) => s.startsWith("callInOverlay:") && s.includes("__frondoseUpdateTicker") && s.includes("✓ noted: connect_btn"),
       );
       const loopIdx = callSeq.indexOf("runAgentLoop");
       assert.ok(

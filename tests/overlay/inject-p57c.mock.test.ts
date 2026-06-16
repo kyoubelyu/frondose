@@ -27,7 +27,7 @@ import { OVERLAY_BOOTSTRAP_JS } from "../../src/overlay/inject.js";
 // ─── T-Overlay.11 — Cron-banner + retry-button TT-safe + observability ─────
 
 describe("OVERLAY_BOOTSTRAP_JS — cron-banner + retry-button TT-safe + state-aware mount + JS-pulse (G-P57c.10)", () => {
-  it("T-Overlay.11: given OVERLAY_BOOTSTRAP_JS exported, WHEN substring greps applied to the P-57c additions, THEN string contains __maiShowCronBanner / __maiHideCronBanner / __maiShowRetry / __maiHideRetry window-fn declarations + __mai_cron_slot id + cronSlot.appendChild (rev-1 MR-5 appendChild-only pattern) + setInterval (JS pulse) + createElement / textContent / appendChild / style.cssText; does NOT contain innerHTML / outerHTML / insertAdjacentHTML / @keyframes / insertBefore on cron banner mount", () => {
+  it("T-Overlay.11: given OVERLAY_BOOTSTRAP_JS exported, WHEN substring greps applied to the P-57c additions, THEN string contains __frondoseShowCronBanner / __frondoseHideCronBanner / __frondoseShowRetry / __frondoseHideRetry window-fn declarations + __frondose_cron_slot id + cronSlot.appendChild (rev-1 MR-5 appendChild-only pattern) + setInterval (JS pulse) + createElement / textContent / appendChild / style.cssText; does NOT contain innerHTML / outerHTML / insertAdjacentHTML / @keyframes / insertBefore on cron banner mount", () => {
     // Given: OVERLAY_BOOTSTRAP_JS as P-57c-extended exported constant per plan §5.5
     // When:  apply substring searches for required-present + required-absent fragments
     // Then:  10 PRESENT + 5 ABSENT = 15 substring assertions total
@@ -39,28 +39,28 @@ describe("OVERLAY_BOOTSTRAP_JS — cron-banner + retry-button TT-safe + state-aw
 
     // ─── PRESENT (10) — P-57c additions present in source ───
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiShowCronBanner = function"),
-      "(a) must contain 'window.__maiShowCronBanner = function' (cron-banner render fn)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseShowCronBanner = function"),
+      "(a) must contain 'window.__frondoseShowCronBanner = function' (cron-banner render fn)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiHideCronBanner = function"),
-      "(b) must contain 'window.__maiHideCronBanner = function' (cron-banner hide fn)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseHideCronBanner = function"),
+      "(b) must contain 'window.__frondoseHideCronBanner = function' (cron-banner hide fn)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiShowRetry = function"),
-      "(c) must contain 'window.__maiShowRetry = function' (retry surface render fn)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseShowRetry = function"),
+      "(c) must contain 'window.__frondoseShowRetry = function' (retry surface render fn)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiHideRetry = function"),
-      "(d) must contain 'window.__maiHideRetry = function' (retry surface hide fn)",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseHideRetry = function"),
+      "(d) must contain 'window.__frondoseHideRetry = function' (retry surface hide fn)",
     );
 
     // rev-1 MR-5 — pre-created cron slot + appendChild-only mount pattern
-    // P-Y2.2a RECONCILED: the frondose skeleton renamed the slot id '__mai_cron_slot' → 'cron-slot'
+    // P-Y2.2a RECONCILED: the frondose skeleton renamed the slot id '__frondose_cron_slot' → 'cron-slot'
     // (the cron-banner feature + appendChild-only mount are preserved+recolored in bootstrapLegacy).
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("cron-slot"),
-      "(e) must contain the pre-created cron slot id (P-Y2.2a: '__mai_cron_slot' → 'cron-slot'; appendChild-only mount preserved)",
+      "(e) must contain the pre-created cron slot id (P-Y2.2a: '__frondose_cron_slot' → 'cron-slot'; appendChild-only mount preserved)",
     );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("cronSlot.appendChild") || OVERLAY_BOOTSTRAP_JS.includes(".cronSlot.appendChild"),

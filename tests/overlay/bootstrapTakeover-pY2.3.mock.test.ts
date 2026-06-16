@@ -50,14 +50,14 @@ function sliceFnBody(src: string, fnName: string): string {
 }
 
 describe("OVERLAY_BOOTSTRAP_JS — the 4 takeover fns + the layer (G-PY2.3.6)", () => {
-  // Then: defines __maiShowEdgeRing/__maiHideEdgeRing/__maiShowAgentTarget/__maiClearAgentTarget AND builds a
+  // Then: defines __frondoseShowEdgeRing/__frondoseHideEdgeRing/__frondoseShowAgentTarget/__frondoseClearAgentTarget AND builds a
   //       'takeover-layer' appended to shadow, with takeover-ring/takeover-label/agent-cursor/agent-highlight children.
   it("T-Overlay.1: OVERLAY_BOOTSTRAP_JS defines the 4 takeover window fns + builds the takeover-layer (ring/label/cursor/highlight)", () => {
     for (const fn of [
-      "window.__maiShowEdgeRing",
-      "window.__maiHideEdgeRing",
-      "window.__maiShowAgentTarget",
-      "window.__maiClearAgentTarget",
+      "window.__frondoseShowEdgeRing",
+      "window.__frondoseHideEdgeRing",
+      "window.__frondoseShowAgentTarget",
+      "window.__frondoseClearAgentTarget",
     ]) {
       assert.ok(BOOTSTRAP.includes(fn), `bootstrap defines ${fn}`);
     }
@@ -69,11 +69,11 @@ describe("OVERLAY_BOOTSTRAP_JS — the 4 takeover fns + the layer (G-PY2.3.6)", 
   });
 });
 
-describe("OVERLAY_BOOTSTRAP_JS — __maiShowAgentTarget positions from the box (G-PY2.3.6)", () => {
-  // Then: __maiShowAgentTarget JSON.parses the payload, reads data.box, sets highlight left/top/width/height
+describe("OVERLAY_BOOTSTRAP_JS — __frondoseShowAgentTarget positions from the box (G-PY2.3.6)", () => {
+  // Then: __frondoseShowAgentTarget JSON.parses the payload, reads data.box, sets highlight left/top/width/height
   //       from box.x/y/w/h (per-property .style, NOT cssText), classList.remove('hidden') highlight + cursor.
-  it("T-Overlay.2: __maiShowAgentTarget reads data.box + sets highlight .style.left/top/width/height per-property (not cssText) + reveals highlight & cursor", () => {
-    const body = sliceFnBody(BOOTSTRAP, "__maiShowAgentTarget");
+  it("T-Overlay.2: __frondoseShowAgentTarget reads data.box + sets highlight .style.left/top/width/height per-property (not cssText) + reveals highlight & cursor", () => {
+    const body = sliceFnBody(BOOTSTRAP, "__frondoseShowAgentTarget");
     assert.match(body, /JSON\.parse\(/, "parses the payload JSON");
     assert.match(body, /data\.box|\.box/, "reads data.box");
     for (const prop of [".style.left", ".style.top", ".style.width", ".style.height"]) {

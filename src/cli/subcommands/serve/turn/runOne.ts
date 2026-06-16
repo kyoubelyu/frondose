@@ -79,7 +79,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
   const ctxId0 = state.overlayContextId;
   const client0 = deps.session.getClient();
   if (ctxId0 !== undefined && client0) {
-    void callInOverlay(client0.handle, ctxId0, "function() { window.__maiClearOutput(); }");
+    void callInOverlay(client0.handle, ctxId0, "function() { window.__frondoseClearOutput(); }");
   }
   showEdgeRing(state, deps.session); // P-Y2.3: Auto-mode page-edge ring for the turn (no-op in Manual)
   // [P-75 D-16] Runtime-enforced Auto duration cap. Without this, the cap is
@@ -185,7 +185,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
                 void callInOverlay(
                   client.handle,
                   ctxId,
-                  `function() { window.__maiShowSummaryCard(${JSON.stringify(json)}); }`,
+                  `function() { window.__frondoseShowSummaryCard(${JSON.stringify(json)}); }`,
                 );
               }
             }
@@ -197,7 +197,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
             const client = deps.session.getClient();
             if (ctxId !== undefined && client) {
               const json = JSON.stringify(card);
-              void callInOverlay(client.handle, ctxId, `function() { window.__maiShowCard(${JSON.stringify(json)}); }`);
+              void callInOverlay(client.handle, ctxId, `function() { window.__frondoseShowCard(${JSON.stringify(json)}); }`);
             }
           }
           if (tr.toolName === "suggest_next_actions") {
@@ -214,7 +214,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
               void callInOverlay(
                 client.handle,
                 ctxId,
-                `function() { window.__maiShowNextActions(${JSON.stringify(json)}); }`,
+                `function() { window.__frondoseShowNextActions(${JSON.stringify(json)}); }`,
               );
             }
           }
@@ -235,7 +235,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         const client = deps.session.getClient();
         if (ctxId !== undefined && client) {
           const s = JSON.stringify(delta);
-          void callInOverlay(client.handle, ctxId, `function() { window.__maiAppendOutput(${JSON.stringify(s)}); }`);
+          void callInOverlay(client.handle, ctxId, `function() { window.__frondoseAppendOutput(${JSON.stringify(s)}); }`);
         }
       },
       onToolCall: (toolName) => {
@@ -245,7 +245,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         const client = deps.session.getClient();
         if (ctxId !== undefined && client) {
           const text = JSON.stringify(`mai \xb7 ${toolName}\u2026`);
-          void callInOverlay(client.handle, ctxId, `function() { window.__maiUpdateTicker(${text}); }`);
+          void callInOverlay(client.handle, ctxId, `function() { window.__frondoseUpdateTicker(${text}); }`);
         }
       },
     });
@@ -261,7 +261,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         void callInOverlay(
           client.handle,
           ctxId,
-          'function() { window.__maiUpdateTicker("done"); if (window.__maiHideRetry) window.__maiHideRetry(); }',
+          'function() { window.__frondoseUpdateTicker("done"); if (window.__frondoseHideRetry) window.__frondoseHideRetry(); }',
         );
       }
     }
@@ -308,8 +308,8 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     if (ctxId !== undefined && client) {
       const messageJson = JSON.stringify(message);
       const fn = retryable
-        ? `function() { if (window.__maiShowRetry) window.__maiShowRetry(${messageJson}); }`
-        : "function() { if (window.__maiHideRetry) window.__maiHideRetry(); }";
+        ? `function() { if (window.__frondoseShowRetry) window.__frondoseShowRetry(${messageJson}); }`
+        : "function() { if (window.__frondoseHideRetry) window.__frondoseHideRetry(); }";
       void callInOverlay(client.handle, ctxId, fn);
     }
   } finally {

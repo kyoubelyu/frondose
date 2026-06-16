@@ -2,7 +2,7 @@
  * P-Y3 Step 4a scaffold — overlay summary card renderer.
  *
  * Expected-red before Step 4b: bootstrapLegacy.ts does not define
- * window.__maiShowSummaryCard yet.
+ * window.__frondoseShowSummaryCard yet.
  *
  * Run:
  *   node --import tsx --test --test-force-exit --test-timeout=30000 \
@@ -152,10 +152,10 @@ function makeHarness() {
   };
   context.window = context;
   Object.assign(context, {
-    __maiExpandDialog: () => {
+    __frondoseExpandDialog: () => {
       context.dialogExpanded = true;
     },
-    __maiPost: () => undefined,
+    __frondosePost: () => undefined,
   });
 
   const vmContext = vm.createContext(context);
@@ -163,19 +163,19 @@ function makeHarness() {
   return { context, cardSlot, nextActionsSlot };
 }
 
-function requireSummaryRenderer(context: { window?: { __maiShowSummaryCard?: unknown } }) {
+function requireSummaryRenderer(context: { window?: { __frondoseShowSummaryCard?: unknown } }) {
   assert.equal(
-    typeof context.window?.__maiShowSummaryCard,
+    typeof context.window?.__frondoseShowSummaryCard,
     "function",
-    "bootstrapLegacy.ts must define window.__maiShowSummaryCard(payloadJson)",
+    "bootstrapLegacy.ts must define window.__frondoseShowSummaryCard(payloadJson)",
   );
-  return context.window.__maiShowSummaryCard as (payloadJson: string) => void;
+  return context.window.__frondoseShowSummaryCard as (payloadJson: string) => void;
 }
 
 describe("bootstrapLegacy.ts — present_summary card renderer", () => {
-  it("T-PY3.Overlay.1: __maiShowSummaryCard populates #card-slot with title, summary, bullets, and next step", () => {
+  it("T-PY3.Overlay.1: __frondoseShowSummaryCard populates #card-slot with title, summary, bullets, and next step", () => {
     // Given: LEGACY_JS evaluated in a minimal dialog/card-slot DOM harness.
-    // When: __maiShowSummaryCard receives a full present_summary payload.
+    // When: __frondoseShowSummaryCard receives a full present_summary payload.
     // Then: #card-slot is visible and contains the operator-facing summary text.
     const { context, cardSlot } = makeHarness();
     const showSummary = requireSummaryRenderer(context);
@@ -201,7 +201,7 @@ describe("bootstrapLegacy.ts — present_summary card renderer", () => {
 
   it("T-PY3.Overlay.2: malicious-looking strings are rendered as textContent and unsafe HTML sinks stay absent", () => {
     // Given: a payload containing HTML-looking text and JavaScript-looking attributes.
-    // When: __maiShowSummaryCard renders it.
+    // When: __frondoseShowSummaryCard renders it.
     // Then: the literal text appears and no innerHTML/outerHTML/insertAdjacentHTML sink exists in LEGACY_JS.
     const { context, cardSlot } = makeHarness();
     const showSummary = requireSummaryRenderer(context);
@@ -224,11 +224,11 @@ describe("bootstrapLegacy.ts — present_summary card renderer", () => {
 
   it("T-PY3.Overlay.3: summary card uses #card-slot without deleting existing #next-actions-slot content", () => {
     // Given: existing next-action buttons are rendered into #next-actions-slot.
-    // When: __maiShowSummaryCard renders a summary into #card-slot.
+    // When: __frondoseShowSummaryCard renders a summary into #card-slot.
     // Then: the summary replaces only card-slot content; next-actions content remains intact.
     const { context, cardSlot, nextActionsSlot } = makeHarness();
-    assert.equal(typeof context.window.__maiShowNextActions, "function", "__maiShowNextActions precondition");
-    context.window.__maiShowNextActions(
+    assert.equal(typeof context.window.__frondoseShowNextActions, "function", "__frondoseShowNextActions precondition");
+    context.window.__frondoseShowNextActions(
       JSON.stringify({
         summary: "Existing actions",
         actions: [{ id: "a1", label: "Keep action", prompt: "Keep action prompt" }],

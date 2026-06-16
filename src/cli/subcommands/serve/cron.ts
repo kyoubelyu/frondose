@@ -139,7 +139,7 @@ export function createCronDriver(
       void callInOverlay(
         client.handle,
         ctxId,
-        `function() { if (window.__maiShowCronBanner) window.__maiShowCronBanner(${JSON.stringify(taskHint ?? "")}); }`,
+        `function() { if (window.__frondoseShowCronBanner) window.__frondoseShowCronBanner(${JSON.stringify(taskHint ?? "")}); }`,
       );
     }
     state.messages.push({ role: "user", content: cronPrompt });
@@ -292,7 +292,7 @@ export function createCronDriver(
         void callInOverlay(
           doneClient.handle,
           doneCtxId,
-          "function() { if (window.__maiHideCronBanner) window.__maiHideCronBanner(); }",
+          "function() { if (window.__frondoseHideCronBanner) window.__frondoseHideCronBanner(); }",
         );
       }
     }

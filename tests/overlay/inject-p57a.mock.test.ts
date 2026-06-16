@@ -68,19 +68,19 @@ describe("OVERLAY_BOOTSTRAP_JS — ONLY safe DOM API; ZERO innerHTML/outerHTML/i
 // ─── T-Overlay.7 — 7 new window functions + SPA detectors ────────────────────
 
 describe("OVERLAY_BOOTSTRAP_JS — defines 7 new P-57a window functions + MutationObserver + popstate (G-P57a.8)", () => {
-  it("T-Overlay.7: given OVERLAY_BOOTSTRAP_JS imported, WHEN substring grep applied, THEN contains all 7 P-57a window functions (__maiExpandDialog, __maiCollapseDialog, __maiShowCard, __maiHideCard, __maiShowNextActions, __maiAppendOutput, __maiClearOutput) AND contains 'MutationObserver' (title detect) AND contains 'popstate' listener", () => {
+  it("T-Overlay.7: given OVERLAY_BOOTSTRAP_JS imported, WHEN substring grep applied, THEN contains all 7 P-57a window functions (__frondoseExpandDialog, __frondoseCollapseDialog, __frondoseShowCard, __frondoseHideCard, __frondoseShowNextActions, __frondoseAppendOutput, __frondoseClearOutput) AND contains 'MutationObserver' (title detect) AND contains 'popstate' listener", () => {
     // Given: OVERLAY_BOOTSTRAP_JS as P-57a-extended constant
     // When:  substring grep for each window function declaration + SPA detectors
     // Then:  all 7 P-57a window functions present + MutationObserver + popstate
 
     const windowFns = [
-      "window.__maiExpandDialog = function",
-      "window.__maiCollapseDialog = function",
-      "window.__maiShowCard = function",
-      "window.__maiHideCard = function",
-      "window.__maiShowNextActions = function",
-      "window.__maiAppendOutput = function",
-      "window.__maiClearOutput = function",
+      "window.__frondoseExpandDialog = function",
+      "window.__frondoseCollapseDialog = function",
+      "window.__frondoseShowCard = function",
+      "window.__frondoseHideCard = function",
+      "window.__frondoseShowNextActions = function",
+      "window.__frondoseAppendOutput = function",
+      "window.__frondoseClearOutput = function",
     ];
     for (const decl of windowFns) {
       assert.ok(OVERLAY_BOOTSTRAP_JS.includes(decl), `must contain "${decl}" per plan §5.5`);
@@ -128,9 +128,9 @@ describe("OVERLAY_BOOTSTRAP_JS — pill click handler dispatches activate vs exp
 
 // ─── T-Overlay.9 — Dialog input Enter emits prompt event ─────────────────────
 
-describe("OVERLAY_BOOTSTRAP_JS — dialog #input keydown Enter emits {type:'prompt', text} via __maiPost (G-P57a.10)", () => {
-  it("T-Overlay.9: given OVERLAY_BOOTSTRAP_JS imported, WHEN grep applied, THEN contains 'input.addEventListener(\\'keydown\\'' AND contains \"e.key === 'Enter'\" AND contains 'prompt' event-type literal AND contains '__maiPost(' invocation", () => {
-    // Given: OVERLAY_BOOTSTRAP_JS as P-57a-extended constant
+describe("OVERLAY_BOOTSTRAP_JS — dialog #input keydown Enter emits {type:'prompt', text} via __frondosePost (G-P57a.10)", () => {
+  it("T-Overlay.9: given OVERLAY_BOOTSTRAP_JS imported, WHEN grep applied, THEN contains 'input.addEventListener(\\'keydown\\'' AND contains \"e.key === 'Enter'\" AND contains 'prompt' event-type literal AND contains '__frondosePost(' invocation", () => {
+    // Given: OVERLAY_BOOTSTRAP_JS as P-57a-extended constant (post F-REN-5 rebrand)
     // When:  substring grep for input keydown handler + Enter check + post call
     // Then:  all 4 substrings present
 
@@ -143,10 +143,10 @@ describe("OVERLAY_BOOTSTRAP_JS — dialog #input keydown Enter emits {type:'prom
       "(b) must contain Enter key check: e.key === 'Enter'",
     );
     assert.ok(OVERLAY_BOOTSTRAP_JS.includes("'prompt'"), "(c) must contain 'prompt' literal (event_type)");
-    // The post() helper invokes window.__maiPost(json); test for `__maiPost(` substring.
+    // The post() helper invokes window.__frondosePost(json); test for `__frondosePost(` substring (F-REN-5 renamed from __maiPost).
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("__maiPost("),
-      "(d) must contain '__maiPost(' invocation (the post() helper calls window.__maiPost)",
+      OVERLAY_BOOTSTRAP_JS.includes("__frondosePost("),
+      "(d) must contain '__frondosePost(' invocation (the post() helper calls window.__frondosePost — renamed by F-REN-5)",
     );
   });
 });

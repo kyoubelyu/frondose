@@ -2,7 +2,7 @@
  * P-Y2.3 Step 5 — T-Driver.1..4 — FILLED.
  *
  * The session visual hook (plan §6.4-B/C): OPTIONAL `setVisualDriver`/`showAgentTarget`/`clearAgentTarget`.
- * `showAgentTarget` pushes `__maiShowAgentTarget(json)` via the driver + dwells (~VISUAL_DWELL_MS=500) ONLY
+ * `showAgentTarget` pushes `__frondoseShowAgentTarget(json)` via the driver + dwells (~VISUAL_DWELL_MS=500) ONLY
  * when the driver returns true (painted) — Manual/headless/REPL take ZERO latency.
  *
  * Gate coverage: G-PY2.3.3 (push + dwell-only-when-painted + no-op-when-no-driver), G-PY2.3.9 (optional).
@@ -22,15 +22,15 @@ const BOX = { x: 1, y: 2, w: 3, h: 4 };
 function makeSession(): any {
   return createLinkedinSession({ port: 9222, profileDir: "/tmp/p-y2.3", inputMode: "cdp" });
 }
-/** Parse the {box,label} embedded in a driver fn string (double-encoded — the __maiShowCard push pattern). */
+/** Parse the {box,label} embedded in a driver fn string (double-encoded — the __frondoseShowCard push pattern). */
 function payloadFromFn(fn: string): unknown {
-  const m = /__maiShowAgentTarget\((".*")\)/.exec(fn);
-  assert.ok(m?.[1], `fn must embed __maiShowAgentTarget("<json>"); got ${fn.slice(0, 120)}`);
+  const m = /__frondoseShowAgentTarget\((".*")\)/.exec(fn);
+  assert.ok(m?.[1], `fn must embed __frondoseShowAgentTarget("<json>"); got ${fn.slice(0, 120)}`);
   return JSON.parse(JSON.parse(m[1]) as string);
 }
 
-describe("session.showAgentTarget — pushes __maiShowAgentTarget via the driver (G-PY2.3.3)", () => {
-  it("T-Driver.1: showAgentTarget pushes a fn embedding __maiShowAgentTarget({box,label}) via the driver", async () => {
+describe("session.showAgentTarget — pushes __frondoseShowAgentTarget via the driver (G-PY2.3.3)", () => {
+  it("T-Driver.1: showAgentTarget pushes a fn embedding __frondoseShowAgentTarget({box,label}) via the driver", async () => {
     const s = makeSession();
     assert.equal(typeof s.setVisualDriver, "function", "builder 4b must add setVisualDriver");
     const calls: string[] = [];
@@ -40,7 +40,7 @@ describe("session.showAgentTarget — pushes __maiShowAgentTarget via the driver
     });
     await s.showAgentTarget(BOX, "Send note");
     assert.equal(calls.length, 1, "driver called once");
-    assert.ok(calls[0]?.includes("window.__maiShowAgentTarget("), "fn calls __maiShowAgentTarget");
+    assert.ok(calls[0]?.includes("window.__frondoseShowAgentTarget("), "fn calls __frondoseShowAgentTarget");
     assert.deepEqual(payloadFromFn(calls[0] ?? ""), { box: BOX, label: "Send note" });
   });
 });
@@ -80,8 +80,8 @@ describe("session.showAgentTarget/clearAgentTarget — no-op when no driver set 
   });
 });
 
-describe("session.clearAgentTarget — pushes __maiClearAgentTarget via the driver (G-PY2.3.3)", () => {
-  it("T-Driver.4: clearAgentTarget pushes a fn containing window.__maiClearAgentTarget()", () => {
+describe("session.clearAgentTarget — pushes __frondoseClearAgentTarget via the driver (G-PY2.3.3)", () => {
+  it("T-Driver.4: clearAgentTarget pushes a fn containing window.__frondoseClearAgentTarget()", () => {
     const s = makeSession();
     const calls: string[] = [];
     s.setVisualDriver((fn: string) => {
@@ -90,8 +90,8 @@ describe("session.clearAgentTarget — pushes __maiClearAgentTarget via the driv
     });
     s.clearAgentTarget();
     assert.ok(
-      calls.some((c) => c.includes("window.__maiClearAgentTarget()")),
-      "clearAgentTarget must push __maiClearAgentTarget()",
+      calls.some((c) => c.includes("window.__frondoseClearAgentTarget()")),
+      "clearAgentTarget must push __frondoseClearAgentTarget()",
     );
   });
 });

@@ -1,7 +1,7 @@
 // P-Y2.3 — TAKEOVER_JS: the magical Auto-mode takeover layer fragment. Defines (inside the install()
 // closure) the .takeover-layer builder (reuses the existing all:initial shadow host → position:fixed;
-// inset:0 spans the full viewport, F-RG-3) + __maiShowEdgeRing/__maiHideEdgeRing/__maiShowAgentTarget/
-// __maiClearAgentTarget. All DOM-API (no innerHTML → TT-safe). References the HEAD closure var `shadow`.
+// inset:0 spans the full viewport, F-RG-3) + __frondoseShowEdgeRing/__frondoseHideEdgeRing/__frondoseShowAgentTarget/
+// __frondoseClearAgentTarget. All DOM-API (no innerHTML → TT-safe). References the HEAD closure var `shadow`.
 // Interpolated by bootstrap.ts after LEGACY_JS. Styling comes from OVERLAY_TAKEOVER_CSS (shadow <style>).
 export const TAKEOVER_JS = `
   var takeoverLayer = null;
@@ -31,15 +31,15 @@ export const TAKEOVER_JS = `
     return layer;
   }
 
-  window.__maiShowEdgeRing = function() {
+  window.__frondoseShowEdgeRing = function() {
     var layer = buildTakeoverLayer();
     if (layer.parentNode !== shadow) shadow.appendChild(layer);
     layer.classList.remove('hidden');
   };
-  window.__maiHideEdgeRing = function() {
+  window.__frondoseHideEdgeRing = function() {
     if (takeoverLayer && takeoverLayer.parentNode === shadow) shadow.removeChild(takeoverLayer);
   };
-  window.__maiShowAgentTarget = function(payloadJson) {
+  window.__frondoseShowAgentTarget = function(payloadJson) {
     var data;
     try { data = JSON.parse(payloadJson); } catch (e) { return; }
     if (!data || !data.box) return;
@@ -56,7 +56,7 @@ export const TAKEOVER_JS = `
     agentCursor.classList.remove('hidden');
     if (data.label && cursorTagText) cursorTagText.textContent = String(data.label);
   };
-  window.__maiClearAgentTarget = function() {
+  window.__frondoseClearAgentTarget = function() {
     if (agentHighlight) agentHighlight.classList.add('hidden');
     if (agentCursor) agentCursor.classList.add('hidden');
   };

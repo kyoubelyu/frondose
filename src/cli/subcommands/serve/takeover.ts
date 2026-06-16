@@ -19,12 +19,12 @@ export function makeTakeoverVisualDriver(
 
 export function showEdgeRing(state: ServeState, session: ServeDeps["session"]): void {
   if (!state.cronEnabled) return; // ring only in Auto
-  pushOverlay(state, session, "function() { window.__maiShowEdgeRing(); }");
+  pushOverlay(state, session, "function() { window.__frondoseShowEdgeRing(); }");
 }
 
 export function hideEdgeRing(state: ServeState, session: ServeDeps["session"]): void {
   // ungated — retract is always safe (no-op in the overlay if nothing was shown)
-  pushOverlay(state, session, "function() { window.__maiHideEdgeRing(); window.__maiClearAgentTarget(); }");
+  pushOverlay(state, session, "function() { window.__frondoseHideEdgeRing(); window.__frondoseClearAgentTarget(); }");
 }
 
 function pushOverlay(state: ServeState, session: ServeDeps["session"], fn: string): void {

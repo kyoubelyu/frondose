@@ -226,13 +226,13 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
     async showAgentTarget(box: { x: number; y: number; w: number; h: number }, label: string): Promise<void> {
       if (!visualDriver) return;
       const payload = JSON.stringify({ box, label });
-      const painted = visualDriver(`function() { window.__maiShowAgentTarget(${JSON.stringify(payload)}); }`);
+      const painted = visualDriver(`function() { window.__frondoseShowAgentTarget(${JSON.stringify(payload)}); }`);
       if (painted) await new Promise((r) => setTimeout(r, VISUAL_DWELL_MS));
     },
 
     clearAgentTarget(): void {
       if (!visualDriver) return;
-      visualDriver("function() { window.__maiClearAgentTarget(); }");
+      visualDriver("function() { window.__frondoseClearAgentTarget(); }");
     },
 
     /** P-18 D-2: Probe cached CDP connection health via Runtime.evaluate("1").

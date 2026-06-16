@@ -30,14 +30,14 @@ async function genBundle(): Promise<void> {
     entryPoints: [resolve(ROOT, "src/overlay/sharedEntry.ts")],
     bundle: true,
     format: "iife",
-    globalName: "__maiShared",
+    globalName: "__frondoseShared",
     platform: "browser",
     target: "es2022",
     write: false,
     plugins: [tsSourceResolve],
   });
   const iife = result.outputFiles[0]?.text ?? "";
-  if (!iife.includes("__maiShared")) throw new Error("gen-overlay-assets: empty/invalid bundle");
+  if (!iife.includes("__frondoseShared")) throw new Error("gen-overlay-assets: empty/invalid bundle");
   // JSON.stringify → a safe double-quoted JS string literal regardless of backticks/${} in render.ts.
   writeFileSync(
     resolve(ROOT, "src/overlay/sharedRenderBundle.generated.ts"),
