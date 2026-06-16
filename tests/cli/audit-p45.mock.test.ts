@@ -147,72 +147,62 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
 // T-DOC.4 is updated to remove soul.ts position check (the server.ts clause is the final P-45
 // approved site after the amendment). T-DOC.2/3 are updated in lock-step.
 
-describe("CLAUDE.md Hard Rule 8 amendment (G-P45.10)", () => {
-  it("T-DOC.1: WHEN grep for 'subcommands/server.ts' in CLAUDE.md, THEN at least one match inside Hard Rule 8 approved-sites paragraph (soul.ts removed by P-APP-11 b1 amendment)", () => {
-    // Given: P-APP-11 stage (b1) removes the soul.ts $EDITOR spawn site;
-    //        CLAUDE.md Hard Rule 8 amendment (Step 7) removes the soul.ts clause;
-    //        the surviving server.ts:231-234 (mai server soul edit) clause STAYS.
-    // When:  grep -n "subcommands/server.ts" CLAUDE.md
-    // Then:  at least 1 match (server.ts clause still present — mai server soul edit stays)
-    const matches = run("grep -n 'subcommands/server.ts' CLAUDE.md || true");
-    assert.ok(
-      matches.length > 0,
-      `T-DOC.1: CLAUDE.md must mention 'subcommands/server.ts' (Hard Rule 8 — P-45 server soul edit clause); got: ${matches}`,
-    );
+describe("ROADMAP.md approved CLI-layer child_process sites (G-P45.10)", () => {
+  it("T-DOC.1: WHEN ROADMAP carve-out section is read, THEN it lists the surviving server.ts editor site", () => {
+    // Given: mutable child_process carve-out inventory lives in ROADMAP.md.
+    // When:  reading the canonical section.
+    // Then:  server.ts:231-234 remains listed as the approved server soul edit site.
+    const roadmap = run("cat ROADMAP.md");
+    assert.match(roadmap, /## Approved CLI-layer child_process sites/);
+    assert.match(roadmap, /src\/cli\/subcommands\/server\.ts:231-234/);
   });
 
-  it("T-DOC.2: WHEN grep for '2026-05-20' in CLAUDE.md, THEN MUST include the approval-date marker for the server.ts:233 site", () => {
-    // Given: CLAUDE.md Hard Rule 8 has the 2026-05-20 retroactive approval for server.ts:233
-    //        (P-APP-11 b1 removes the soul.ts reference from the same line, but server.ts stays)
-    // When:  grep -n "2026-05-20" CLAUDE.md
-    // Then:  at least one match; the matched line references server.ts
-    const result = run("grep -n '2026-05-20' CLAUDE.md || true");
-    assert.ok(result.length > 0, "T-DOC.2: CLAUDE.md must contain '2026-05-20' approval date (P-45 retroactive for server.ts)");
-    const serverMatch = run("grep -n 'server.ts' CLAUDE.md || true");
-    assert.ok(
-      serverMatch.length > 0,
-      `T-DOC.2: CLAUDE.md must mention server.ts in Hard Rule 8 (server.ts:231-234 site stays); got: ${serverMatch}`,
-    );
+  it("T-DOC.2: WHEN ROADMAP carve-out section is read, THEN it includes the 2026-05-20 approval date for server.ts", () => {
+    // Given: P-45 retroactively approved the server.ts:231-234 editor site on 2026-05-20.
+    // When:  ROADMAP.md is scanned.
+    // Then:  the server.ts row carries that date.
+    const roadmap = run("cat ROADMAP.md");
+    assert.match(roadmap, /src\/cli\/subcommands\/server\.ts:231-234`?\s*\|\s*2026-05-20/);
   });
 
-  it("T-DOC.3: WHEN grep for 'subcommands/server.ts' in CLAUDE.md, THEN at least one match inside Hard Rule 8 approved-sites paragraph (BLOCKER-2 / E-7b)", () => {
-    // Given: builder added server.ts:233 clause per BLOCKER-2 amendment (§4);
-    //        P-APP-11 b1 does NOT remove the server.ts clause (server.command is KEPT)
-    // When:  grep -n "subcommands/server.ts" CLAUDE.md
-    // Then:  at least 1 match
-    const matches = run("grep -n 'subcommands/server.ts' CLAUDE.md || true");
-    assert.ok(
-      matches.length > 0,
-      `T-DOC.3: CLAUDE.md must mention 'subcommands/server.ts' (Hard Rule 8 / BLOCKER-2); got: ${matches}`,
-    );
-  });
-
-  it("T-DOC.4: WHEN Hard Rule 8 paragraph is read, THEN approved-sites ordering includes update.ts → launchd.ts → autoUpdate.ts → serverLaunchd.ts → install.sh → server.ts:233 (soul.ts removed by P-APP-11 b1 amendment)", () => {
-    // Given: CLAUDE.md Hard Rule 8 amended by P-APP-11 b1 to remove soul.ts approved-site clause
-    //        (Step 7 orchestrator); server.ts:233 remains as the last P-45 approved site.
-    // When:  paragraph text parsed for clause positions
-    // Then:  server.ts appears AFTER install.sh (soul.ts position no longer checked)
+  it("T-DOC.3: WHEN CLAUDE.md is read, THEN it points Hard Rule 8 readers to ROADMAP.md for the carve-out list", () => {
+    // Given: CLAUDE.md is condensed and no longer duplicates the full approved-site inventory.
+    // When:  the no-bash boundary paragraph is scanned.
+    // Then:  it points to the canonical ROADMAP.md section.
     const claudeMd = run("cat CLAUDE.md");
-    const hr8Start = claudeMd.indexOf("The no-bash boundary");
-    assert.ok(hr8Start > 0, "T-DOC.4: Hard Rule 8 paragraph must be findable via 'The no-bash boundary' anchor");
-    const hr8End = claudeMd.indexOf("\n9.", hr8Start);
-    const hr8 = hr8End > 0 ? claudeMd.slice(hr8Start, hr8End) : claudeMd.slice(hr8Start, hr8Start + 4000);
+    assert.match(claudeMd, /ROADMAP\.md` § Approved CLI-layer `child_process` sites/);
+  });
 
+  it("T-DOC.4: WHEN ROADMAP carve-out section is read, THEN approved-sites ordering is chronological", () => {
+    // Given: ROADMAP.md owns the approved-site inventory.
+    // When:  the section is parsed for site positions.
+    // Then:  the operator-approved sites appear in chronological order.
+    const roadmap = run("cat ROADMAP.md");
+    const start = roadmap.indexOf("## Approved CLI-layer child_process sites");
+    assert.ok(start > 0, "T-DOC.4: ROADMAP carve-out section must exist");
+    const end = roadmap.indexOf("\n## Current Validation Matrix", start);
+    const section = end > 0 ? roadmap.slice(start, end) : roadmap.slice(start, start + 4000);
     const positions = {
-      update: hr8.indexOf("subcommands/update.ts"),
-      launchd: hr8.indexOf("subcommands/launchd.ts"),
-      autoUpdate: hr8.indexOf("autoUpdate.ts"),
-      serverLaunchd: hr8.indexOf("subcommands/serverLaunchd.ts"),
-      installSh: hr8.indexOf("install.sh"),
-      server: hr8.indexOf("subcommands/server.ts"),
+      update: section.indexOf("src/cli/subcommands/update.ts"),
+      launchd: section.indexOf("src/cli/subcommands/launchd.ts"),
+      autoUpdate: section.indexOf("src/cli/autoUpdate.ts"),
+      serverLaunchd: section.indexOf("src/cli/subcommands/serverLaunchd.ts"),
+      installSh: section.indexOf("install.sh"),
+      server: section.indexOf("src/cli/subcommands/server.ts:231-234"),
+      tauri: section.indexOf("src/tauri/src-tauri/src/main.rs"),
     };
     for (const [k, v] of Object.entries(positions)) {
-      assert.ok(v >= 0, `T-DOC.4: Hard Rule 8 paragraph must mention '${k}'; positions=${JSON.stringify(positions)}`);
+      assert.ok(
+        v >= 0,
+        `T-DOC.4: ROADMAP carve-out section must mention '${k}'; positions=${JSON.stringify(positions)}`,
+      );
     }
-    // server.ts MUST appear AFTER install.sh (chronological approval order)
-    assert.ok(
-      positions.server > positions.installSh,
-      `T-DOC.4: 'subcommands/server.ts' must appear AFTER 'install.sh' (chronological order); positions=${JSON.stringify(positions)}`,
+    assert.deepEqual(
+      Object.values(positions),
+      Object.values(positions)
+        .slice()
+        .sort((a, b) => a - b),
+      `T-DOC.4: approved sites must be chronological; positions=${JSON.stringify(positions)}`,
     );
   });
 });
