@@ -27,12 +27,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { request as httpReq, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { before, describe, it } from "node:test";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ── Gate-on-builder: updateServer.ts not created until Step 4b ────────────────
 // biome-ignore lint/suspicious/noExplicitAny: gate-on-builder dynamic import (module absent at Step 4a)
@@ -64,7 +65,7 @@ function makeSiteDirs(): SiteDirs {
   const parentDir = mkdtempSync(join(tmpdir(), "mai-p58d2-site-"));
   const siteDir = join(parentDir, "site");
   mkdirSync(siteDir, { recursive: true });
-  return { siteDir, parentDir, cleanup: () => rmSync(parentDir, { recursive: true, force: true }) };
+  return { siteDir, parentDir, cleanup: () => cleanupTmpDir(parentDir) };
 }
 
 /** Start the update server on a random port; resolve once listening. */

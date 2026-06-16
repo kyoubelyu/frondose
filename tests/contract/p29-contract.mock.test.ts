@@ -10,8 +10,7 @@
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -19,6 +18,7 @@ import type { LinkedinSession } from "../../src/linkedin/types.js";
 import { readConfig } from "../../src/persistence/config.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
@@ -26,7 +26,7 @@ process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p29-contract-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 const mockSession: LinkedinSession = {
@@ -40,6 +40,23 @@ const mockSession: LinkedinSession = {
 
 const mockControl: ControlSignals = { requestStop: () => {} };
 
+function collectTsFiles(projectRoot: string, repoPath: string): string[] {
+  const absolutePath = join(projectRoot, repoPath);
+  const stat = statSync(absolutePath);
+  if (stat.isFile()) return repoPath.endsWith(".ts") ? [absolutePath] : [];
+
+  const files: string[] = [];
+  for (const entry of readdirSync(absolutePath, { withFileTypes: true })) {
+    const childRepoPath = join(repoPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectTsFiles(projectRoot, childRepoPath));
+    } else if (entry.name.endsWith(".ts") && entry.name !== "hooks.ts") {
+      files.push(join(projectRoot, childRepoPath));
+    }
+  }
+  return files;
+}
+
 // ─── T-CONTRACT.NO-BASH ───────────────────────────────────────────────────────
 
 describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
@@ -50,22 +67,22 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
     // When: grep -rE '(from|require)\s*\(?['"'"'"]((node:)?child_process)' across those files
     // Then: zero matches — no child_process imports introduced in P-29 (G-P29.24)
     const projectRoot = resolve(process.cwd());
-    const result = spawnSync(
-      "grep",
-      [
-        "-rE",
-        "--include=*.ts",
-        "--exclude=hooks.ts",
-        `(from|require)\\s*\\(?['"]((node:)?child_process)['"]`,
-        "src/tools",
-        "src/persistence",
-        "src/cli/serverWeb.ts",
-        "src/cli/subcommands/serverWebToken.ts",
-      ],
-      { cwd: projectRoot, encoding: "utf-8" },
-    );
-    // grep exit 1 = no matches = clean; exit 0 = matches found = violation
-    const output = result.stdout ?? "";
+    const targets = [
+      "src/tools",
+      "src/persistence",
+      "src/cli/serverWeb.ts",
+      "src/cli/subcommands/serverWebToken.ts",
+    ];
+    const importPattern = /(?:from|require)\s*\(?['"](?:node:)?child_process['"]/;
+    const matches = targets
+      .flatMap((target) => collectTsFiles(projectRoot, target))
+      .flatMap((filePath) =>
+        readFileSync(filePath, "utf-8")
+          .split(/\r?\n/)
+          .map((line, index) => ({ filePath, line, lineNumber: index + 1 }))
+          .filter(({ line }) => importPattern.test(line)),
+      );
+    const output = matches.map(({ filePath, lineNumber, line }) => `${filePath}:${lineNumber}: ${line}`).join("\n");
     assert.equal(output.trim(), "", `T-CONTRACT.NO-BASH: child_process found in P-29 no-bash zones:\n${output}`);
   });
 });
@@ -192,10 +209,8 @@ describe("package.json build script contains build:web (G-P29.25 static check)",
     // Then: scripts.build includes 'build:web'; scripts['build:web'] includes 'esbuild' AND
     //       the tailwind CLI AND 'src/web' → 'dist/web' output paths
     const projectRoot = resolve(process.cwd());
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic package.json read
-    const pkg = (await import(`${projectRoot}/package.json`, { assert: { type: "json" } })) as any;
-    // JSON imports expose the content as `default` in ESM
-    const scripts: Record<string, string> = (pkg.default ?? pkg).scripts ?? {};
+    const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8")) as { scripts?: Record<string, string> };
+    const scripts: Record<string, string> = pkg.scripts ?? {};
     assert.ok(
       typeof scripts.build === "string" && scripts.build.includes("build:web"),
       `T-CONTRACT.BUILD: scripts.build must include 'build:web'; got: ${scripts.build}`,

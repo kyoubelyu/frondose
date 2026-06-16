@@ -19,7 +19,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, test } from "node:test";
@@ -34,6 +34,7 @@ import {
   readAuthJsonVisionModel,
   writeAuth,
 } from "../../src/persistence/auth.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // (mockProcessExit helper removed in P-APP-11 stage (b1) — T-Auth6 re-pointed to direct writeAuth)
 
@@ -43,6 +44,9 @@ function tmpAuthPath(): { dir: string; authPath: string } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p7-auth-"));
   return { dir, authPath: join(dir, "auth.json") };
 }
+
+const posixPermissionsOptions: { skip?: string } =
+  process.platform === "win32" ? { skip: "POSIX chmod mode assertions are not portable to Windows." } : {};
 
 // P-24 Step 5: authPathToSecretsPath imported from auth.js (replaces local secretsPathFor helper).
 // Logic: production auth path → DEFAULT_SECRETS_PATH(); test path (tmpDir/auth.json) → tmpDir/secrets.json.
@@ -55,20 +59,25 @@ test("T-Auth1a: writeAuth initial-create sets mode 0o600 on secrets.json (P-24 s
     writeAuth({ providers: { anthropic: { key: "sk-ant-test1234" } } }, authPath);
     // P-24 Step 5: authPathToSecretsPath(authPath) derives co-located secrets.json.
     // Mode assertion is on secrets.json, not auth.json (write lands on secrets.json).
-    const mode = statSync(authPathToSecretsPath(authPath)).mode & 0o777;
-    assert.equal(mode, 0o600, `T-Auth1a: file mode must be 0o600 on initial create; got ${mode.toString(8)}`);
+    if (process.platform !== "win32") {
+      const mode = statSync(authPathToSecretsPath(authPath)).mode & 0o777;
+      assert.equal(mode, 0o600, `T-Auth1a: file mode must be 0o600 on initial create; got ${mode.toString(8)}`);
+    }
     // Contents round-trip (readAuth shim reads from secrets.json via authPathToSecretsPath)
     const read = readAuth(authPath);
     assert.equal(read?.providers?.anthropic?.key, "sk-ant-test1234", "T-Auth1a: provider key must round-trip");
     console.log("T-Auth1a: initial-create mode 0o600 ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
 // ─── T-Auth1b — overwrite enforces mode 0o600 ────────────────────────────────
 
-test("T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 shim: write lands on secrets.json)", () => {
+test(
+  "T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 shim: write lands on secrets.json)",
+  posixPermissionsOptions,
+  () => {
   const { dir, authPath } = tmpAuthPath();
   try {
     // P-24 Step 5: pre-create at secrets.json path (authPathToSecretsPath imported from auth.js).
@@ -84,9 +93,10 @@ test("T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 sh
     assert.equal(mode, 0o600, `T-Auth1b: overwrite must enforce 0o600 on secrets.json; got ${mode.toString(8)}`);
     console.log("T-Auth1b: overwrite defensive chmodSync 0o600 ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
-});
+  },
+);
 
 // ─── T-Auth2 — set with baseUrl ───────────────────────────────────────────────
 
@@ -95,11 +105,14 @@ test("T-Auth2: writeAuth stores baseUrl in providers[provider] (re-pointed from 
   // The persistence subject (writeAuth storing baseUrl) is unchanged.
   const { dir, authPath } = tmpAuthPath();
   try {
-    writeAuth({
-      providers: {
-        deepseek: { key: "sk-dsk-test", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+    writeAuth(
+      {
+        providers: {
+          deepseek: { key: "sk-dsk-test", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+        },
       },
-    }, authPath);
+      authPath,
+    );
     const auth = readAuth(authPath);
     assert.equal(auth?.providers?.deepseek?.key, "sk-dsk-test", "T-Auth2: key must be stored");
     assert.equal(
@@ -109,7 +122,7 @@ test("T-Auth2: writeAuth stores baseUrl in providers[provider] (re-pointed from 
     );
     console.log("T-Auth2: baseUrl stored correctly ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -144,7 +157,7 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
     assert.ok(masked.includes("***"), "T-Auth3: masked key must contain ***");
     console.log(`T-Auth3: maskKey + list output correct ✓ (example: "${masked1}")`);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -156,11 +169,14 @@ test("T-Auth4: writeAuth set then manual provider remove leaves provider absent 
   const { dir, authPath } = tmpAuthPath();
   try {
     // Write a provider
-    writeAuth({
-      providers: {
-        deepseek: { key: "sk-dsk-toremove", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+    writeAuth(
+      {
+        providers: {
+          deepseek: { key: "sk-dsk-toremove", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+        },
       },
-    }, authPath);
+      authPath,
+    );
     const before = readAuth(authPath);
     assert.ok(before?.providers?.deepseek, "T-Auth4: pre-condition: provider must exist before remove");
 
@@ -171,7 +187,7 @@ test("T-Auth4: writeAuth set then manual provider remove leaves provider absent 
     assert.ok(!after?.providers?.deepseek, "T-Auth4: provider must be absent after manual remove");
     console.log("T-Auth4: set-then-remove round-trip ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -186,7 +202,7 @@ test("T-Auth5: writeAuth default field stores model spec in auth.json (re-pointe
     assert.equal(auth?.default, "deepseek:deepseek-v4-flash", "T-Auth5: default must be written");
     console.log("T-Auth5: default field written ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -205,7 +221,7 @@ test("T-Auth6: writeAuth with incomplete provider fields + readAuth: persistence
     assert.equal(auth?.default, undefined, "T-Auth6: default must be undefined when not written");
     console.log("T-Auth6: persistence resilience with empty data ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -230,7 +246,7 @@ test("T-MR1: readAuthJsonKey returns key when present; undefined when absent or 
 
     console.log("T-MR1: readAuthJsonKey present/absent/missing ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -260,7 +276,7 @@ test("T-Auth.4: writeAuth with visionModel field → readAuth returns visionMode
     const vm2 = readAuthJsonVisionModel(authPath);
     assert.equal(vm2, undefined, "readAuthJsonVisionModel must return undefined when absent");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -299,7 +315,7 @@ test("T-Auth.6: readAuth returns stored deepseek baseUrl from auth.json; DEEPSEE
     if (savedEnv !== undefined) process.env.DEEPSEEK_BASE_URL = savedEnv;
     else delete process.env.DEEPSEEK_BASE_URL;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -395,7 +411,7 @@ describe("readAuth — migrateAuth called on read; old on-disk entries upgraded 
         "T-MIG.1b: key must be preserved during in-memory migration",
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      cleanupTmpDir(dir);
     }
   });
 });

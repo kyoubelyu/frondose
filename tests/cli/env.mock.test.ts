@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadDotenv } from "../../src/cli/env.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // T-M5 + T-M6: inline .env reader contract
 
@@ -26,7 +27,7 @@ test("T-M5: loadDotenv populates new keys; ignores comments and blanks", () => {
       else process.env.KEY_B = prevB;
     }
   } finally {
-    rmSync(dir, { recursive: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -42,7 +43,7 @@ test("T-M6: loadDotenv no-clobber; FRONDOSE_DOTENV=skip; silent on missing file"
     } finally {
       if (prevC === undefined) delete process.env.KEY_C;
       else process.env.KEY_C = prevC;
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 
@@ -61,7 +62,7 @@ test("T-M6: loadDotenv no-clobber; FRONDOSE_DOTENV=skip; silent on missing file"
       else process.env.FRONDOSE_DOTENV = prevSkip;
       if (prevD === undefined) delete process.env.KEY_D;
       else process.env.KEY_D = prevD;
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 
@@ -71,7 +72,7 @@ test("T-M6: loadDotenv no-clobber; FRONDOSE_DOTENV=skip; silent on missing file"
       // Do NOT write .env — must not throw
       assert.doesNotThrow(() => loadDotenv(dir), "loadDotenv must be silent on missing .env");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });

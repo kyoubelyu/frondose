@@ -9,11 +9,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeIdentityTool } from "../../../src/tools/identity/identity.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ function uniqueIdPath(): string {
 
 function cleanupDir(path: string): void {
   try {
-    rmSync(join(path, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(path, ".."));
   } catch {
     // best-effort
   }
@@ -106,7 +107,7 @@ test("T-M112: identity tool execute merges patch over existing identity and writ
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
     else delete process.env.FRONDOSE_HOME_BASE;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -141,7 +142,7 @@ test("T-M113: identity tool execute refreshes updatedAt on every save", async ()
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
     else delete process.env.FRONDOSE_HOME_BASE;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -184,6 +185,6 @@ test("T-M114: identity tool execute does NOT include data.hint (identity is not 
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
     else delete process.env.FRONDOSE_HOME_BASE;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });

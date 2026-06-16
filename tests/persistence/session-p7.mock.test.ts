@@ -10,11 +10,12 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { cwdHash, listAllSessions, sessionDir } from "../../src/persistence/session.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -22,19 +23,23 @@ import { cwdHash, listAllSessions, sessionDir } from "../../src/persistence/sess
 function withTmpSessionsRoot(): { tmpRoot: string; restore: () => void } {
   const tmpRoot = mkdtempSync(join(tmpdir(), "mai-p7-sessions-"));
   const prevHome = process.env.HOME;
+  const prevHomeBase = process.env.FRONDOSE_HOME_BASE;
   // SESSIONS_ROOT() = join(homedir(), ".frondose", "agent", "sessions")
   // We can't easily override it without patching the module, so we point
   // process.env.HOME at a tmp dir that mirrors the structure.
   // The actual sessions root will be: tmpRoot/.mai/agent/sessions
   const fakeHome = mkdtempSync(join(tmpdir(), "mai-p7-fakehome-"));
   process.env.HOME = fakeHome;
+  process.env.FRONDOSE_HOME_BASE = fakeHome;
   return {
     tmpRoot: fakeHome,
     restore: () => {
       if (prevHome === undefined) delete process.env.HOME;
       else process.env.HOME = prevHome;
-      rmSync(tmpRoot, { recursive: true, force: true });
-      rmSync(fakeHome, { recursive: true, force: true });
+      if (prevHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = prevHomeBase;
+      cleanupTmpDir(tmpRoot);
+      cleanupTmpDir(fakeHome);
     },
   };
 }

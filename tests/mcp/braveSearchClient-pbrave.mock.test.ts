@@ -102,7 +102,7 @@ describe("P-BRAVE-MCP client launch contract", () => {
 
     assert.equal(params.command, process.execPath);
     assert.ok(isAbsolute(script), `server script must be absolute; got ${script}`);
-    assert.match(script, /node_modules\/@brave\/brave-search-mcp-server\/dist\/index\.js$/);
+    assert.match(script.replace(/\\/g, "/"), /node_modules\/@brave\/brave-search-mcp-server\/dist\/index\.js$/);
     assert.deepEqual(args.slice(1), [
       "--transport",
       "stdio",

@@ -200,7 +200,7 @@ describe("plist path derivation — frondose label in filename (T-FREN4c.PlistPa
       // Then:  result ends with Library/LaunchAgents/com.kyoube.frondose.telegram.plist
       const p = plistPath("/tmp/h");
       assert.ok(
-        p.endsWith("Library/LaunchAgents/com.kyoube.frondose.telegram.plist"),
+        p.endsWith(join("Library", "LaunchAgents", "com.kyoube.frondose.telegram.plist")),
         `T-FREN4c.PlistPath.1: plistPath must end with 'Library/LaunchAgents/com.kyoube.frondose.telegram.plist'; got "${p}"`,
       );
     },

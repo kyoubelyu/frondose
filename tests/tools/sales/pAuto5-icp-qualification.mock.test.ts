@@ -232,7 +232,7 @@ describe("T-A5.Band — QUALIFICATION_BAND totalScore-consistency validation", (
 
 describe("T-A5.Required — qualification is a required Zod param", () => {
   it("T-A5.Required.1: score_lead.parameters.safeParse WITHOUT qualification → {success:false}, issue at path 'qualification'", () => {
-    const tool = makeScoreLeadTool("/tmp/a5-required-zod-only.sqlite");
+    const tool = makeScoreLeadTool(join(tmpdir(), "a5-required-zod-only.sqlite"));
     const parseResult = tool.parameters.safeParse({ candidateId: "c1", totalScore: 70, confidence: 0.6 });
     assert.equal(parseResult.success, false, "qualification must be a required param");
     if (!parseResult.success) {

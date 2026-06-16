@@ -18,7 +18,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path, { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -31,6 +31,7 @@ import { runRepl } from "../../src/cli/repl.js";
 import type { RunCronTurnDeps } from "../../src/cli/replCron.js";
 import type { TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ function withTmpHome(): { tmpHome: string; cleanup: () => void } {
       if (priorHome === undefined) delete process.env.HOME;
       else process.env.HOME = priorHome;
       try {
-        rmSync(tmpHome, { recursive: true, force: true });
+        cleanupTmpDir(tmpHome);
       } catch {
         // best-effort
       }

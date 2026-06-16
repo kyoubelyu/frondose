@@ -21,7 +21,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, mock } from "node:test";
@@ -29,6 +29,7 @@ import { MockLanguageModelV1 } from "ai/test";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import type { PollerHandle, TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // P-Z3 (D-Z3-02 option c): module-mock telegramFetch to a no-Agent passthrough → zero undici Agents.
 // real telegramFetch (transport.ts:81-88) takes the caller abort via the 3rd `opts.signal` arg (NOT
@@ -66,7 +67,7 @@ function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void; r
   return {
     dir,
     cfgPath,
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
     restoreHome: () => {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;

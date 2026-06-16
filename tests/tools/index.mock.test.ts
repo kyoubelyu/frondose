@@ -23,7 +23,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -31,13 +31,14 @@ import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 const TEST_HOME_BASE = mkdtempSync(join(tmpdir(), "mai-tools-index-"));
 process.env.FRONDOSE_HOME_BASE = TEST_HOME_BASE;
 
 after(() => {
-  rmSync(TEST_HOME_BASE, { recursive: true, force: true });
+  cleanupTmpDir(TEST_HOME_BASE);
 });
 
 // P-SP-F update: 17 sales tools total (14 P-SP-A+B + 2 P-SP-E auto-run lifecycle + 1 P-SP-F analytics)
@@ -169,8 +170,8 @@ test("T-M120: makeAllTools() with no args returns exactly 24 keys — P-SP-F upd
 test("T-M121: makeAllTools(undefined, persistence) returns 32 keys (base 24 + 8 memory/identity) [P-SP-F updated]", () => {
   // P-SP-F update: base 24 + 8 persistence = 32.
   const persistence = {
-    memoryDbPath: "/tmp/p4-t121-memory.sqlite",
-    identityPath: "/tmp/p4-t121-identity.json",
+    memoryDbPath: join(tmpdir(), "p4-t121-memory.sqlite"),
+    identityPath: join(tmpdir(), "p4-t121-identity.json"),
   };
   const t = makeAllTools(undefined, persistence);
   const keys = Object.keys(t).sort();
@@ -222,8 +223,8 @@ test("T-M122: makeAllTools(session, persistence) returns 43 keys — clear_cooki
     getLastContext: () => undefined as CurrentSurfaceContext | undefined,
   };
   const persistence = {
-    memoryDbPath: "/tmp/p4-t122-memory.sqlite",
-    identityPath: "/tmp/p4-t122-identity.json",
+    memoryDbPath: join(tmpdir(), "p4-t122-memory.sqlite"),
+    identityPath: join(tmpdir(), "p4-t122-identity.json"),
   };
 
   const t = makeAllTools(session, persistence);
@@ -289,8 +290,8 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 43 keys including 'q
     getLastContext: () => undefined as CurrentSurfaceContext | undefined,
   };
   const persistence = {
-    memoryDbPath: "/tmp/p5-t-m-p5-18-memory.sqlite",
-    identityPath: "/tmp/p5-t-m-p5-18-identity.json",
+    memoryDbPath: join(tmpdir(), "p5-t-m-p5-18-memory.sqlite"),
+    identityPath: join(tmpdir(), "p5-t-m-p5-18-identity.json"),
   };
 
   const t = makeAllTools(session, persistence);
@@ -329,8 +330,8 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (ba
     getLastContext: () => undefined as CurrentSurfaceContext | undefined,
   };
   const persistence = {
-    memoryDbPath: "/tmp/p6-t-m-p6-21-memory.sqlite",
-    identityPath: "/tmp/p6-t-m-p6-21-identity.json",
+    memoryDbPath: join(tmpdir(), "p6-t-m-p6-21-memory.sqlite"),
+    identityPath: join(tmpdir(), "p6-t-m-p6-21-identity.json"),
   };
   const control = { requestStop: () => {} };
 
@@ -385,11 +386,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 52 keys (ba
     expected,
     `T-M_p6.21: makeAllTools(session, persistence, control) must yield 52 keys (clear_cookies removed); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(
-    keys.length,
-    52,
-    `T-M_p6.21: must have exactly 52 tools (clear_cookies removed); got ${keys.length}`,
-  );
+  assert.equal(keys.length, 52, `T-M_p6.21: must have exactly 52 tools (clear_cookies removed); got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -458,7 +455,7 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
   // → assert.ok(false, …) immediately fails (expected at Step 4a).
   process.env.FRONDOSE_TIER = "power";
   // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
-  const control = { requestStop: () => {}, auditPath: "/tmp/p-sp-b-wiring1-audit.jsonl" } as any;
+  const control = { requestStop: () => {}, auditPath: join(tmpdir(), "p-sp-b-wiring1-audit.jsonl") } as any;
   // biome-ignore lint/suspicious/noExplicitAny: pre-builder stub
   const t = makeAllTools(undefined, undefined, control, undefined, { mode: "worker", tier: "power" } as any);
   // score_lead + score_account must be present in the full worker+power registry
@@ -565,7 +562,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 44 keys (base
   // P-Y3 presentation tool is control-backed and tier-neutral.
   assert.ok("present_summary" in t, "T-M_p6.23: present_summary must be present when control given (P-Y3)");
 
-  console.log("T-M_p6.23: makeAllTools(session, undefined, control) -> 44 keys (clear_cookies removed; CONCERN-MR-1 preserved)");
+  console.log(
+    "T-M_p6.23: makeAllTools(session, undefined, control) -> 44 keys (clear_cookies removed; CONCERN-MR-1 preserved)",
+  );
 });
 
 // ─── T-F.Wire.1 — get_sales_report registered (P-SP-F) ─────────────────────────
@@ -628,7 +627,7 @@ test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 52/50
   );
 
   // ROADMAP.md count contract check
-  const repoRoot = join(fileURLToPath(import.meta.url), "../../..");
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
   const roadmap = readFileSync(join(repoRoot, "ROADMAP.md"), "utf-8");
   assert.ok(
     roadmap.includes("worker/server `52/25`"),

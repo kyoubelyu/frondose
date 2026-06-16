@@ -20,6 +20,7 @@
 
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -27,11 +28,15 @@ import type { ServeDeps } from "../../../src/cli/subcommands/serve/context.js";
 import { maskKey } from "../../../src/persistence/auth.js";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../src/persistence/config.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, writeSecrets } from "../../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf8");
 // P-72 slice 6: POST /settings handler moved to routes/settings.ts; widen T-Post.5 to check either location.
-const ROUTES_SETTINGS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "settings.ts"), "utf8");
+const ROUTES_SETTINGS_TS = readFileSync(
+  join(REPO, "src", "cli", "subcommands", "serve", "routes", "settings.ts"),
+  "utf8",
+);
 
 // gate-on-builder: serve/settings.ts is NEW (builder 4b B1)
 // biome-ignore lint/suspicious/noExplicitAny: gate-on-builder dynamic import of a not-yet-existing module
@@ -49,13 +54,14 @@ before(async () => {
 /** Run `fn` with MAI_HOME_BASE → a fresh temp dir (DEFAULT_*_PATH resolve under it). */
 function withTempHome<T>(fn: (home: string) => T): T {
   const prev = process.env.FRONDOSE_HOME_BASE;
-  const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pY6-"));
+  const home = mkdtempSync(join(tmpdir(), "pY6-"));
   process.env.FRONDOSE_HOME_BASE = home;
   try {
     return fn(home);
   } finally {
     if (prev === undefined) delete process.env.FRONDOSE_HOME_BASE;
     else process.env.FRONDOSE_HOME_BASE = prev;
+    cleanupTmpDir(home);
   }
 }
 /** Seed secrets.json (the LLM store) with a deepseek provider + default. */
@@ -92,7 +98,10 @@ function jsonContains(obj: unknown, needle: string): boolean {
  * P-AUTO-8 (N-1): cast tolerates the widened Pick<ServeDeps, "system"|"model"|"systemResume"|"composeOperatorSystem">
  * that reloadAgentDeps will require after Step 4 adds the composeOperatorSystem field to ServeDeps. */
 function makeReloadDeps(): Pick<ServeDeps, "system" | "model"> {
-  return { system: "OLD", model: { __old: true } as unknown as ServeDeps["model"] } as unknown as Pick<ServeDeps, "system" | "model">;
+  return { system: "OLD", model: { __old: true } as unknown as ServeDeps["model"] } as unknown as Pick<
+    ServeDeps,
+    "system" | "model"
+  >;
 }
 // readConfig/readSecrets verify writes in the Step-5 assertions; makeReloadDeps stubs T-Reload (referenced now
 // so the gate-on-builder scaffold compiles cleanly while every body is still an assert.fail TODO).
@@ -164,7 +173,9 @@ describe("applySettings — fresh key writes (chmod 600, custom-URL-only) (G-PY6
       assert.equal(s.providers?.deepseek.type, "openai");
       assert.equal(s.providers?.deepseek.baseUrl, "https://x/v1");
       assert.equal(s.default, "deepseek:deepseek-chat");
-      assert.equal(statSync(DEFAULT_SECRETS_PATH()).mode & 0o777, 0o600, "secrets.json must be chmod 600");
+      if (process.platform !== "win32") {
+        assert.equal(statSync(DEFAULT_SECRETS_PATH()).mode & 0o777, 0o600, "secrets.json must be chmod 600");
+      }
     });
   });
 });
@@ -239,7 +250,11 @@ describe("/settings handler — sendJson only, NO SSE/audit leak (structural) (G
       block = rest.slice(0, end > 0 ? end : 600);
     }
     void src; // used via block
-    assert.match(block, /sendJson\(/, "the /settings handler responds via sendJson (routes.ts or routes/settings.ts after P-72 slice 6)");
+    assert.match(
+      block,
+      /sendJson\(/,
+      "the /settings handler responds via sendJson (routes.ts or routes/settings.ts after P-72 slice 6)",
+    );
     assert.ok(!block.includes("emitFrame"), "the /settings handler must NEVER emitFrame the body (no SSE key leak)");
     assert.ok(
       !block.includes("auditWriter"),

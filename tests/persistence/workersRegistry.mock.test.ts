@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -21,6 +21,7 @@ import {
   removeWorker,
   rotateWorkerToken,
 } from "../../src/persistence/workersRegistry.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -28,7 +29,7 @@ function sha256(s: string): string {
 
 function makeTmpDb(): { dbPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-workers-"));
-  return { dbPath: join(dir, "workers.sqlite"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dbPath: join(dir, "workers.sqlite"), cleanup: () => cleanupTmpDir(dir) };
 }
 
 describe("workersRegistry CRUD (G-P26.9, G-P26.10, G-P26.11, G-P26.12, G-P26.13)", () => {

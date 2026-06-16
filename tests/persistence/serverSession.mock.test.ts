@@ -6,18 +6,19 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage } from "ai";
 import { appendServerSession, loadServerSession, serverSessionFile } from "../../src/persistence/serverSession.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-srvsess-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 // ─── T-SRV.SESS ───────────────────────────────────────────────────────────────
@@ -29,8 +30,10 @@ describe("serverSession helpers (G-P25.1)", () => {
     // Then:  returned path ends in .jsonl; parent dir is auto-created; no cwdHash in path
     const { dir, cleanup } = makeTmpDir();
     const savedHome = process.env.HOME;
+    const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
     try {
       process.env.HOME = dir;
+      process.env.FRONDOSE_HOME_BASE = dir;
       const filePath = serverSessionFile();
       // Ends in .jsonl
       assert.ok(filePath.endsWith(".jsonl"), `path must end in .jsonl, got: ${filePath}`);
@@ -50,7 +53,10 @@ describe("serverSession helpers (G-P25.1)", () => {
         `file must be directly under sessions/ directory, no cwdHash subdir; got: ${filePath}`,
       );
     } finally {
-      process.env.HOME = savedHome;
+      if (savedHome === undefined) delete process.env.HOME;
+      else process.env.HOME = savedHome;
+      if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
       cleanup();
     }
   });

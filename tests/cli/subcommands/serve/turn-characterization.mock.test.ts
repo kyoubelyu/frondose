@@ -24,10 +24,12 @@
  */
 
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import { before, describe, it, mock } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
+
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 // ── Mock state ──────────────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ before(async () => {
   // 1. Mock src/agent/pi/loop.js — the actual import target in turn.ts (NOT the
   //    loop.js delegate). We provide runAgentLoopPi + the 5 transitive re-exports
   //    that pi/loop.js re-imports from loop.js to keep the module chain valid.
-  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  const piLoopUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/loop.js")).href;
   mock.module(piLoopUrl, {
     namedExports: {
       // biome-ignore lint/suspicious/noExplicitAny: opts shape varies by test mode
@@ -123,8 +125,20 @@ before(async () => {
     },
   });
 
-  // 2. Mock src/persistence/audit.js — captures writeLlmErrorAudit calls.
-  const auditUrl = pathToFileURL(resolve(process.cwd(), "src/persistence/audit.js")).href;
+  // 2. Mock src/agent/pi/model.js — runOneTurn preflights Pi config before calling the loop.
+  const piModelUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => ({
+        model: { id: "test-model" },
+        apiKey: "test-key",
+        onPayload: (payload: unknown) => payload,
+      }),
+    },
+  });
+
+  // 3. Mock src/persistence/audit.js — captures writeLlmErrorAudit calls.
+  const auditUrl = pathToFileURL(join(REPO_ROOT, "src/persistence/audit.js")).href;
   mock.module(auditUrl, {
     namedExports: {
       writeLlmErrorAudit: (auditPath: string, row: unknown) => {
@@ -136,8 +150,8 @@ before(async () => {
     },
   });
 
-  // 3. Mock src/overlay/inject.js — captures callInOverlay calls.
-  const injectUrl = pathToFileURL(resolve(process.cwd(), "src/overlay/inject.js")).href;
+  // 4. Mock src/overlay/inject.js — captures callInOverlay calls.
+  const injectUrl = pathToFileURL(join(REPO_ROOT, "src/overlay/inject.js")).href;
   mock.module(injectUrl, {
     namedExports: {
       OVERLAY_BOOTSTRAP_JS: "",
@@ -149,8 +163,8 @@ before(async () => {
     },
   });
 
-  // 4. Mock src/persistence/salesDb.js — getCurrentAutoRun returns null (no auto-run).
-  const salesDbUrl = pathToFileURL(resolve(process.cwd(), "src/persistence/salesDb.js")).href;
+  // 5. Mock src/persistence/salesDb.js — getCurrentAutoRun returns null (no auto-run).
+  const salesDbUrl = pathToFileURL(join(REPO_ROOT, "src/persistence/salesDb.js")).href;
   mock.module(salesDbUrl, {
     namedExports: {
       getCurrentAutoRun: () => null,
@@ -158,8 +172,8 @@ before(async () => {
     },
   });
 
-  // 5. Mock src/tools/sales/_dbHandle.js — getSalesDb returns a stub.
-  const dbHandleUrl = pathToFileURL(resolve(process.cwd(), "src/tools/sales/_dbHandle.js")).href;
+  // 6. Mock src/tools/sales/_dbHandle.js — getSalesDb returns a stub.
+  const dbHandleUrl = pathToFileURL(join(REPO_ROOT, "src/tools/sales/_dbHandle.js")).href;
   mock.module(dbHandleUrl, {
     namedExports: {
       getSalesDb: () => ({
@@ -169,16 +183,16 @@ before(async () => {
     },
   });
 
-  // 5b. P-AUTO-7: mock the reaper to a no-op — these tests pin runOneTurn's frame/audit behavior,
+  // 6b. P-AUTO-7: mock the reaper to a no-op — these tests pin runOneTurn's frame/audit behavior,
   // not the auto-run reaper (which has its own test, tests/tools/sales/pAuto7-reaper.mock.test.ts).
-  const reaperUrl = pathToFileURL(resolve(process.cwd(), "src/cli/subcommands/serve/turn/reaper.js")).href;
+  const reaperUrl = pathToFileURL(join(REPO_ROOT, "src/cli/subcommands/serve/turn/reaper.js")).href;
   mock.module(reaperUrl, {
     namedExports: {
       reapExpiredAutoRun: () => undefined,
     },
   });
 
-  // 6. Dynamic import createTurnRunner AFTER mocks are registered.
+  // 7. Dynamic import createTurnRunner AFTER mocks are registered.
   const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
   createTurnRunner = turnMod.createTurnRunner as typeof createTurnRunner;
 });
@@ -548,7 +562,7 @@ describe("createTurnRunner — triggerCardActionTurn", () => {
     let observedCurrentTurnDuringLoop: { turnId: string } | null = null;
 
     // Intercept inside the loop to observe state mid-call.
-    const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+    const piLoopUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/loop.js")).href;
     // We use a local capture via a helper — we can't re-register mock.module, but
     // we can observe state.currentTurn from within our existing mock by delegating:
     // The existing mock just calls opts.onStepFinish; state.currentTurn is set before

@@ -17,10 +17,11 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { CoreMessage, ToolSet } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
@@ -28,13 +29,14 @@ import { drainDueJobs, type RunCronTurnDeps } from "../../src/cli/replCron.js";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
 import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
 import { SERVER_SCHEDULE_PATH } from "../../src/persistence/serverPaths.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p31-tick-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
-const SRC_ROOT = resolve(new URL(".", import.meta.url).pathname, "../../src");
+const SRC_ROOT = fileURLToPath(new URL("../../src", import.meta.url));
 
 // ─── T-TICK.1 ─────────────────────────────────────────────────────────────────
 

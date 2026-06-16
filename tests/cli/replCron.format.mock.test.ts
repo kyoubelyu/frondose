@@ -18,13 +18,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 import { handleCronSlash, type RunCronTurnDeps, runCronTurn } from "../../src/cli/replCron.js";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function makeTmpDir() {
   return {
     dir,
     schedulePath: join(dir, "schedule.jsonl"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

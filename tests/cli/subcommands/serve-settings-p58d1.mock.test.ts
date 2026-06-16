@@ -26,25 +26,27 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { applySettings, parseSettingsPatch, readSettings } from "../../../src/cli/subcommands/serve/settings.js";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../../src/persistence/config.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 /** Run fn with MAI_HOME_BASE pointing at a fresh temp dir (DEFAULT_CONFIG_PATH resolves under it). */
 function withTempHome<T>(fn: (home: string) => T): T {
   const prev = process.env.FRONDOSE_HOME_BASE;
-  const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "p58d1-settings-"));
+  const home = mkdtempSync(join(tmpdir(), "p58d1-settings-"));
   process.env.FRONDOSE_HOME_BASE = home;
   try {
     return fn(home);
   } finally {
     if (prev === undefined) delete process.env.FRONDOSE_HOME_BASE;
     else process.env.FRONDOSE_HOME_BASE = prev;
-    rmSync(home, { recursive: true, force: true }); // cleanup temp dir
+    cleanupTmpDir(home); // cleanup temp dir
   }
 }
 

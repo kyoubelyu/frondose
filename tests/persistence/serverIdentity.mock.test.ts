@@ -6,17 +6,18 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { readServerIdentity, type ServerIdentity, writeServerIdentity } from "../../src/persistence/serverIdentity.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-srvident-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 function makeMinimalIdentity(): ServerIdentity {

@@ -6,11 +6,12 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { downloadTelegramFile, mediaTagFor } from "../../../src/tools/telegram/inboundMedia.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ type Transport = (url: string, init?: RequestInit) => Promise<Response>;
 
 function makeTmpRoot(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "mai-p11-inbox-"));
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupTmpDir(root) };
 }
 
 /** Returns a transport mock: getFile → fileInfo; binary download → bytes. */

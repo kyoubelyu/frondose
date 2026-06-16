@@ -2,7 +2,7 @@
  * P-SP-B Step 5 — T-SP-B.Account.1..5: score_account tool.
  *
  * FILLED at Step 5. All 5 assertion bodies filled with real assertions.
- * Test isolation: each it() uses a unique /tmp path so salesDb singleton
+ * Test isolation: each it() uses a unique OS temp path so salesDb singleton
  * instances don't bleed between tests.
  *
  * Gates covered: UPSERT INSERT path (created), UPSERT UPDATE path (updated,
@@ -16,6 +16,8 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { closeSalesDatabase, openSalesDatabase } from "../../../src/persistence/salesDb.js";
 import { seedFreshCandidate } from "../../sales/_fixtures/salesDb.js";
@@ -45,7 +47,7 @@ describe("T-SP-B.Account — score_account tool", () => {
     // Then:  accounts has 1 new row with all those values + id set + updated_at non-null;
     //        return {ok:true, data:{accountId:<id>, action:"created"}}
 
-    const path = `/tmp/sp-b-account-1-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-account-1-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -100,7 +102,7 @@ describe("T-SP-B.Account — score_account tool", () => {
     //        + refreshed updated_at + new current_pain_hypothesis;
     //        return {ok:true, data:{accountId:<SAME id as first insert>, action:"updated"}}
 
-    const path = `/tmp/sp-b-account-2-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-account-2-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -153,7 +155,7 @@ describe("T-SP-B.Account — score_account tool", () => {
     // Then:  raw_candidates.account_id for c1 is now set to the account row's id (atomic);
     //        return {ok:true, data:{accountId:<id>, action:"created"}}
 
-    const path = `/tmp/sp-b-account-3-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-account-3-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -196,7 +198,7 @@ describe("T-SP-B.Account — score_account tool", () => {
     // Then:  accounts row created; raw_candidates.account_id remains null (untouched);
     //        return {ok:true, data:{accountId:<id>, action:"created"}}
 
-    const path = `/tmp/sp-b-account-4-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-account-4-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -233,7 +235,7 @@ describe("T-SP-B.Account — score_account tool", () => {
     // Then:  {success:false}; issues array has at least 1 issue with path[0]==="accountScore"
 
     // Use any path — Zod safeParse never touches the DB
-    const tool = makeScoreAccountTool("/tmp/sp-b-account-5-zod-only.sqlite");
+    const tool = makeScoreAccountTool(join(tmpdir(), "sp-b-account-5-zod-only.sqlite"));
 
     const result = tool.parameters.safeParse({
       name: "BadCorp",

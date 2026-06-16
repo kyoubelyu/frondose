@@ -28,14 +28,14 @@
  * directly (no LLM, no 3-band prompt). Per CLAUDE §10, it verifies the tool layer
  * works; the real-agent L2 gate (T-SP-D.Live.1) is required for agent-level verification.
  *
- * Run (mock only, DB /tmp path per test, no Chrome, no LLM):
+ * Run (mock only, OS temp DB path per test, no Chrome, no LLM):
  *   node --import tsx --test --test-force-exit \
  *     tests/tools/sales/sp-d-chain.mock.test.ts
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -46,10 +46,11 @@ import { makeRecordRawCandidateTool } from "../../../src/tools/sales/recordRawCa
 import { makeSaveMessageDraftTool } from "../../../src/tools/sales/saveMessageDraft.js";
 import { makeScoreLeadTool } from "../../../src/tools/sales/scoreLead.js";
 import { makeUpdateLeadStageTool } from "../../../src/tools/sales/updateLeadStage.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
-/** Create a unique /tmp path per test so salesDb singletons don't bleed. */
+/** Create a unique temp path per test so salesDb singletons don't bleed. */
 function tmpPath(): string {
-  return `/tmp/sp-d-chain-${randomUUID()}.sqlite`;
+  return join(tmpdir(), `sp-d-chain-${randomUUID()}.sqlite`);
 }
 
 /** Minimal Vercel tool execute options. */
@@ -71,7 +72,10 @@ function setupNoIcpHome(): { restore: () => void } {
   mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
   writeFileSync(
     join(tmpHome, ".frondose", "agent", "config.json"),
-    JSON.stringify({ identity: { fullName: "Test BD", role: "BD", icp: { targetRole: [] } }, updatedAt: new Date().toISOString() }),
+    JSON.stringify({
+      identity: { fullName: "Test BD", role: "BD", icp: { targetRole: [] } },
+      updatedAt: new Date().toISOString(),
+    }),
   );
   return {
     restore: () => {
@@ -79,7 +83,7 @@ function setupNoIcpHome(): { restore: () => void } {
       else delete process.env.HOME;
       if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
       else delete process.env.FRONDOSE_HOME_BASE;
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     },
   };
 }
@@ -335,7 +339,14 @@ describe("T-SP-D.Chain — full outbound chain integration (P-SP-D §4.3)", () =
       await makeScoreLeadTool(path).execute(
         // P-AUTO-5: qualification required; totalScore:70 is in qualified band [60,100]
         // P-AUTO-15b MR-2: add evidenceJson — QS-5 gate requires it for totalScore>=40
-        { candidateId, qualification: "qualified", totalScore: 70, confidence: 0.6, nextAction: "connect_now", evidenceJson: '{"role":"VP Sales","source":"chain4-fixture"}' },
+        {
+          candidateId,
+          qualification: "qualified",
+          totalScore: 70,
+          confidence: 0.6,
+          nextAction: "connect_now",
+          evidenceJson: '{"role":"VP Sales","source":"chain4-fixture"}',
+        },
         toolOpts,
       );
 

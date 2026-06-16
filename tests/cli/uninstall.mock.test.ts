@@ -17,24 +17,17 @@
  */
 
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { runUninstallSubcommand } from "../../src/cli/subcommands/uninstall.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Repo root ───────────────────────────────────────────────────────────────
 
-const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -105,7 +98,7 @@ function makeTmpInstall(opts: { pkgAsRealDir?: boolean } = {}): TmpInstall {
     pkgSymlinkPath,
     releasesDir,
     maiDir,
-    cleanup: () => rmSync(tmpDir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(tmpDir),
   };
 }
 
@@ -128,7 +121,9 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 
 // ─── T-UI.1 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall — plain uninstall (G-P38.3)", () => {
+const skipOnWindows = process.platform === "win32" ? { skip: "POSIX symlink install layout" } : {};
+
+describe("mai uninstall — plain uninstall (G-P38.3)", skipOnWindows, () => {
   it("T-UI.1: given full tmp install layout, confirm→true, no --purge: bin symlink + pkg symlink + releases dir removed; secrets.json preserved", async () => {
     // Given: a tmp layout with bin symlink + pkg symlink + releases dir + secrets.json
     // When:  runUninstallSubcommand({purge:false, yes:false, argv1, homeDir, confirm:→true})
@@ -242,14 +237,14 @@ describe("mai uninstall — non-global install (G-P38.4)", () => {
       // plain file must still exist (nothing removed)
       assert.ok(existsSync(plainFile), "plainFile must still exist after non-global-install early-exit");
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      cleanupTmpDir(tmpDir);
     }
   });
 });
 
 // ─── T-UI.3 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall — confirm→false aborts (G-P38.5)", () => {
+describe("mai uninstall — confirm→false aborts (G-P38.5)", skipOnWindows, () => {
   it("T-UI.3: given confirm→false: prints abort message; bin symlink, pkg symlink, releases dir all still exist", async () => {
     // Given: full tmp layout; confirm returns false (operator declines)
     // When:  runUninstallSubcommand called
@@ -291,7 +286,7 @@ describe("mai uninstall — confirm→false aborts (G-P38.5)", () => {
 
 // ─── T-UI.4 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall — --yes skips confirm (G-P38.5)", () => {
+describe("mai uninstall — --yes skips confirm (G-P38.5)", skipOnWindows, () => {
   it("T-UI.4: given yes:true: confirm is NOT called; removal proceeds", async () => {
     // Given: full tmp layout; yes:true; injected confirm that tracks call count
     // When:  runUninstallSubcommand called
@@ -331,7 +326,7 @@ describe("mai uninstall — --yes skips confirm (G-P38.5)", () => {
 
 // ─── T-UI.5 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall --purge — removes ~/.mai/ (G-P38.6)", () => {
+describe("mai uninstall --purge — removes ~/.mai/ (G-P38.6)", skipOnWindows, () => {
   it("T-UI.5: given purge:true, both confirms→true: ~/.mai/ fully removed", async () => {
     // Given: full tmp layout; purge:true; both confirms return true
     // When:  runUninstallSubcommand called (confirm called twice — once for uninstall, once for purge)
@@ -363,7 +358,7 @@ describe("mai uninstall --purge — removes ~/.mai/ (G-P38.6)", () => {
 
 // ─── T-UI.6 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall --purge — warning text (G-P38.6)", () => {
+describe("mai uninstall --purge — warning text (G-P38.6)", skipOnWindows, () => {
   it("T-UI.6: given purge:true, confirms→true: stdout contains 'chrome-profile' + 'mai-browser' + 'IRREVERSIBLY' (or equivalent purge-destruction warning)", async () => {
     // Given: full tmp layout; purge:true; both confirms return true
     // When:  runUninstallSubcommand called; stdout captured
@@ -392,7 +387,7 @@ describe("mai uninstall --purge — warning text (G-P38.6)", () => {
 
 // ─── T-UI.7 ──────────────────────────────────────────────────────────────────
 
-describe("mai uninstall — pkg path is real directory (G-P38.9)", () => {
+describe("mai uninstall — pkg path is real directory (G-P38.9)", skipOnWindows, () => {
   it("T-UI.7: given pkg symlink path is actually a real directory (not a symlink): removed via rmSync({recursive}), not left behind", async () => {
     // Given: tmp layout where pkgSymlinkPath is a real directory (not a symlink); confirm→true
     // When:  runUninstallSubcommand called

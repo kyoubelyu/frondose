@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -19,12 +19,26 @@ import { plistPath } from "../../src/cli/subcommands/launchd.js";
 import { runTelegramSubcommand } from "../../src/cli/subcommands/telegram.js";
 import { writePid } from "../../src/persistence/processLock.js";
 import { DEFAULT_TELEGRAM_CONFIG, readTelegramConfig } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-tgon-"));
-  return { home, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+  return { home, cleanup: () => cleanupTmpDir(home) };
+}
+
+function setIsolatedHome(home: string): () => void {
+  const origHome = process.env.HOME;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+  return () => {
+    if (origHome === undefined) delete process.env.HOME;
+    else process.env.HOME = origHome;
+    if (origHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = origHomeBase;
+  };
 }
 
 function writeTelegramCfg(home: string, overrides: Record<string, unknown> = {}): string {
@@ -96,9 +110,8 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     //         cfg.enabled=true + '[telegram on] daemon installed' require live launchctl success.
     if (process.platform !== "darwin") return; // skip on non-darwin
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "tg-stub-token";
       const cfgPath = writeTelegramCfg(home); // boundUserId=12345
       const plPath = plistPath(home);
@@ -118,7 +131,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       // No assertion if plist doesn't exist — launchctl bootstrapping may have produced different flow
       // The key check is that the code path ran without unexpected crash
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       delete process.env.TELEGRAM_TOKEN;
       cleanup();
     }
@@ -131,10 +144,9 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     //         plist file NOT written
     if (process.platform !== "darwin") return; // telegram on is darwin-only
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     const { restore } = mockProcessExit();
     try {
-      process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "tg-stub-token";
       const agentDir = join(home, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
@@ -157,7 +169,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       // Plist must NOT have been written
       assert.ok(!existsSync(plistPath(home)), "plist must NOT be written when repl.pid is alive");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       delete process.env.TELEGRAM_TOKEN;
       restore();
       cleanup();
@@ -170,9 +182,8 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     // Then:   cfg.enabled=false in telegram.json; stdout contains '[telegram off]'
     //         launchctl bootout invoked (returns 113=not-found → handled silently)
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       const cfgPath = writeTelegramCfg(home, { enabled: true });
 
       const stdoutOutput = await captureStdout(() => runTelegramSubcommand("off", { tcPath: cfgPath }));
@@ -183,7 +194,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       const cfgAfter = readTelegramConfig(cfgPath);
       assert.strictEqual(cfgAfter.enabled, false, "cfg.enabled must be false after 'off'");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -195,9 +206,8 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
     // Then:   stdout contains 'daemon pid: <N> (alive=true)';
     //         stdout contains 'test-log-line' (truncated last line of err log)
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       const agentDir = join(home, ".frondose", "agent");
       mkdirSync(agentDir, { recursive: true });
       writePid(join(agentDir, "telegram.pid")); // live PID
@@ -216,7 +226,7 @@ describe("telegram-onoff: extended subcommand behaviors", () => {
       // Must show last log line
       assert.ok(stdoutOutput.includes("test-log-line"), `expected last log line in stdout, got: ${stdoutOutput}`);
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       cleanup();
     }
   });

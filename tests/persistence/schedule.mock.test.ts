@@ -42,11 +42,10 @@
 // No Chrome, no LLM, no SQLite. Uses mkdtempSync + cleanup for I/O tests.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-
 import {
   computeCronRunId,
   findDueJobs,
@@ -58,12 +57,13 @@ import {
   type ScheduleRecord,
   writeSchedule,
 } from "../../src/persistence/schedule.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p10-schedule-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 function makeRecord(overrides: Partial<ScheduleRecord> = {}): ScheduleRecord {

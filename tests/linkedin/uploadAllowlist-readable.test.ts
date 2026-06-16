@@ -17,11 +17,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { assertFileReadable } from "../../src/linkedin/uploadAllowlist.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ test("T-Sandbox.6: path inside FRONDOSE_UPLOAD_ALLOWLIST custom dir → allowed"
       );
     });
   } finally {
-    rmSync(customDir, { recursive: true, force: true });
+    cleanupTmpDir(customDir);
   }
 });
 
@@ -125,7 +126,7 @@ test("T-Sandbox.7: exact boundary — home dir itself is NOT allowed; ~/.mai/age
   // assertFileReadable derives the ~/.mai/agent prefix from getHomeBase() (= FRONDOSE_HOME_BASE ?? homedir);
   // pin it to a synthetic root OUTSIDE tmpdir (prefix-only check — the dir need not exist) so the
   // home-root-denied vs ~/.mai/agent-allowed boundary is exercised deterministically. Restored after.
-  const SYNTH_HOME = "/mai-z3-home-root";
+  const SYNTH_HOME = resolve(tmpdir(), "..", "..", "frondose-z3-home-root");
   withEnv("FRONDOSE_UPLOAD_ALLOWLIST", undefined, () =>
     withEnv("FRONDOSE_HOME_BASE", SYNTH_HOME, () => {
       // The home dir itself (not ~/.mai/agent/) must NOT be allowed

@@ -74,7 +74,7 @@ test("T-M78: screenshot tool creates file in os.tmpdir() when no 'out' path prov
   assert.ok(existsSync(data.path), "screenshot file must exist after execute");
 
   // Cleanup
-  rmSync(data.path, { force: true });
+  rmSync(data.path, { force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 // ─── T-M79 ─────────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ test("T-M79: screenshot tool writes to custom 'out' path when provided", async (
   assert.ok(existsSync(customOut), "screenshot file must exist at custom path");
 
   // Cleanup
-  rmSync(customOut, { force: true });
+  rmSync(customOut, { force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 // ─── T-Screenshot.3 — pageUrl in success response ────────────────────────────
@@ -117,5 +117,5 @@ test("T-Screenshot.3: pageUrl is present in success response when getCurrentUrl(
   assert.equal(data.pageUrl, "https://www.linkedin.com/feed/", "data.pageUrl must be present from getCurrentUrl()");
 
   // Cleanup
-  rmSync(customOut, { force: true });
+  rmSync(customOut, { force: true, maxRetries: 5, retryDelay: 100 });
 });

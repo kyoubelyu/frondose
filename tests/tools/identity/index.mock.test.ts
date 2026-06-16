@@ -6,13 +6,15 @@
  */
 
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { makeIdentityTools } from "../../../src/tools/identity/index.js";
 
 // ─── T-M118 ──────────────────────────────────────────────────────────────────
 
 test("T-M118: makeIdentityTools returns exactly 2 keys: identity and getIdentity", () => {
-  const tools = makeIdentityTools("/tmp/p4-t118-identity.json");
+  const tools = makeIdentityTools(join(tmpdir(), "p4-t118-identity.json"));
   const keys = Object.keys(tools).sort();
 
   assert.deepEqual(keys, ["getIdentity", "identity"], "makeIdentityTools must return {identity, getIdentity}");

@@ -23,7 +23,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -32,6 +32,7 @@ import { MockLanguageModelV1 } from "ai/test";
 import { TokenBudget } from "../../src/agent/tokenBudget.js";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import { dispatchSlash, type SlashCtx } from "../../src/cli/replSlash.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
 /** Create a temp dir for session files; returns cleanup fn. */
 function makeTempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p8-slash-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /**
@@ -87,7 +88,7 @@ async function withTmpHomeAsync<T>(fn: (tmpHome: string) => Promise<T>): Promise
   } finally {
     if (prevHome === undefined) delete process.env.HOME;
     else process.env.HOME = prevHome;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 }
 

@@ -18,13 +18,14 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import type { LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
@@ -32,7 +33,7 @@ process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p32-contract-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 const mockSession: LinkedinSession = {
@@ -116,6 +117,11 @@ describe("cgevent.ts loader — G-P32.20", () => {
     // Then:  throws an Error mentioning 'cgevent' or 'build:native' or 'addon'
     const { loadCgEvent } = await import("../../src/native/cgevent.js");
     const nodePath = join(resolve(process.cwd()), "build", "Release", "cgevent.node");
+    if (process.platform === "win32") {
+      // Windows ships CDP-only input in the current product scope; a checked-in
+      // darwin cgevent.node artifact is not a valid Win32 addon.
+      return;
+    }
     if (existsSync(nodePath)) {
       // Present-path: addon compiled — verify loader returns functional CgEvent object
       const cg = loadCgEvent();
@@ -162,6 +168,9 @@ describe("N-API arity guard — CONCERN-2 (guardian §3) — skip if .node absen
     // Dynamic check: if .node absent, skip gracefully
     const projectRoot = resolve(process.cwd());
     const nodePath = join(projectRoot, "build", "Release", "cgevent.node");
+    if (process.platform === "win32") {
+      return;
+    }
     if (!existsSync(nodePath)) {
       // Skip — no built addon in test environment. Documented as live-only verification.
       return;

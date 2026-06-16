@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -29,6 +29,7 @@ import {
   setPersonScore,
   toFtsMatchQuery,
 } from "../../src/persistence/memory.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ function freshDb(): DB {
 function makeTmpDb(): { tmpPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), `mai-p39-v3-${process.pid}-`));
   const tmpPath = join(dir, "memory.sqlite");
-  return { tmpPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { tmpPath, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Build a V2-state DB at `tmpPath`: V1+V2 tables, 3 rows, schema_version rows 1+2. */

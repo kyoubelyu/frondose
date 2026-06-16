@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -21,6 +21,7 @@ import {
   resolveModel,
   resolveModelOrNull,
 } from "../../src/agent/modelResolver.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,11 @@ function restoreEnv(saved: Record<string, string | undefined>): void {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+}
+
+function setIsolatedHome(home: string): void {
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
 }
 
 /**
@@ -52,12 +58,19 @@ function setupTmpHome(
   writeFileSync(join(secretsDir, "secrets.json"), JSON.stringify({ schema_version: 1, providers, ...extra }), "utf-8");
   return {
     tmpHome,
-    cleanup: () => rmSync(tmpHome, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(tmpHome),
   };
 }
 
 /** Standard env vars to save/restore around model-resolution tests. */
-const MODEL_ENV_KEYS = ["HOME", "FRONDOSE_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"] as const;
+const MODEL_ENV_KEYS = [
+  "HOME",
+  "FRONDOSE_HOME_BASE",
+  "FRONDOSE_MODEL",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "DEEPSEEK_API_KEY",
+] as const;
 
 /** Clear keys that could short-circuit provider-resolution and confuse tests. */
 function clearModelEnv(): void {
@@ -83,7 +96,7 @@ describe("buildModel error — provider list + pre-P-21 hint + Frondose Settings
         anthropic: { key: "sk-fake-ant", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
         deepseek: { key: "sk-fake-ds", type: "openai", baseUrl: "https://api.deepseek.com/v1" },
       });
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       clearModelEnv();
       try {
         assert.throws(
@@ -134,7 +147,7 @@ describe("buildModel error — generic provider list (no pre-P-21 hint) (G-P36.1
       const { tmpHome, cleanup } = setupTmpHome({
         anthropic: { key: "sk-fake-ant", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
       });
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       clearModelEnv();
       try {
         assert.throws(
@@ -186,7 +199,7 @@ describe("buildModel error — spec-source naming: FRONDOSE_MODEL env var (G-P36
       // Then:  error message contains "FRONDOSE_MODEL" (F-REN-3: modelResolver.ts:167 updated)
       const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fa3-"));
       // Empty HOME → no secrets.json → no providers
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       process.env.FRONDOSE_MODEL = "openai:bad-model-fa3";
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
@@ -204,7 +217,7 @@ describe("buildModel error — spec-source naming: FRONDOSE_MODEL env var (G-P36
           },
         );
       } finally {
-        rmSync(tmpHome, { recursive: true, force: true });
+        cleanupTmpDir(tmpHome);
       }
     },
   );
@@ -234,7 +247,7 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
         },
         { default: "openai:bad-model-fa4" },
       );
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       delete process.env.FRONDOSE_MODEL; // ensure FRONDOSE_MODEL is unset so auth default wins
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
@@ -279,7 +292,7 @@ describe("resolveModelOrNull — returns null + stderr on resolution failure (G-
     // Point HOME to empty tmp dir — no secrets.json → no providers
     // → DEFAULT_MODEL_SPEC "anthropic:claude-sonnet-4-5" → no "anthropic" provider → throws
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p36-fb1-"));
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     delete process.env.FRONDOSE_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -303,7 +316,7 @@ describe("resolveModelOrNull — returns null + stderr on resolution failure (G-
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process.stderr as any).write = origStderrWrite;
       restoreEnv(saved);
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     }
 
     assert.ok(!threw, "T-FB.1: resolveModelOrNull must NOT throw");
@@ -330,7 +343,7 @@ describe("resolveModelOrNull — returns LanguageModel on success (G-P36.5)", ()
         baseUrl: "https://api.deepseek.com/v1",
       },
     });
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     delete process.env.FRONDOSE_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;

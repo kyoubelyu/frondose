@@ -29,18 +29,19 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SCRIPT = join(REPO, "scripts", "gen-latest-json.mjs");
 
 function makeTmp(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p58d2-manifest-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 // ── T-Manifest.1 ─────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -25,12 +25,13 @@ import {
   type ProvisionDeps,
   runSshProvision,
 } from "../../src/tools/server/provisionWorker.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p41-prov-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Build a minimal ProvisionContext with temp DBs + dirs */

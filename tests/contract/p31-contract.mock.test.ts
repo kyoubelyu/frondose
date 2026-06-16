@@ -17,18 +17,20 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
-const SRC_ROOT = resolve(new URL(".", import.meta.url).pathname, "../../src");
+const SRC_ROOT = fileURLToPath(new URL("../../src", import.meta.url));
 
 function makeFakeSession(): LinkedinSession {
   const fakeHandle = {};
@@ -45,7 +47,7 @@ function makeFakeSession(): LinkedinSession {
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p31-contract-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 const mockControl: ControlSignals = { requestStop: () => {} };
@@ -143,12 +145,7 @@ const PRE_P31_SERVER_KEYS = [
 
 // P-73 rebaseline: current server tool snapshot (25 keys = pre-P-31 22 + schedule_task [P-31]
 // + todo_write [P-Y1] + present_summary [P-Y3]; suggest_card/suggest_next_actions worker-only per P-73).
-const POST_P31_SERVER_KEYS = [
-  ...PRE_P31_SERVER_KEYS,
-  "present_summary",
-  "schedule_task",
-  "todo_write",
-].sort();
+const POST_P31_SERVER_KEYS = [...PRE_P31_SERVER_KEYS, "present_summary", "schedule_task", "todo_write"].sort();
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 

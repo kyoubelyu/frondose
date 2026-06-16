@@ -71,8 +71,12 @@ function runCliProcess(argv: string[], env?: Record<string, string>, stdinData?:
     });
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-    child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+    child.stdout.on("data", (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
     if (stdinData !== undefined) {
       child.stdin.write(stdinData);
     }
@@ -147,16 +151,13 @@ describe("T-App11b1.2: kept admin commands still parse; registration set charact
     const removedRegistrations = [
       'program.command("auth")',
       'program.command("setup")',
-      'program.command("identity")',  // must not match server.command("identity")
+      'program.command("identity")', // must not match server.command("identity")
       'program.command("sessions")',
       'program.command("version")',
       'program.command("search")',
     ];
     for (const reg of removedRegistrations) {
-      assert.ok(
-        !src.includes(reg),
-        `main.ts must NOT contain '${reg}' after stage (b1) deletion`,
-      );
+      assert.ok(!src.includes(reg), `main.ts must NOT contain '${reg}' after stage (b1) deletion`);
     }
 
     // Kept tokens must be present
@@ -174,10 +175,7 @@ describe("T-App11b1.2: kept admin commands still parse; registration set charact
       'command("soul <action>")',
     ];
     for (const reg of keptRegistrations) {
-      assert.ok(
-        src.includes(reg),
-        `main.ts must still contain '${reg}' after stage (b1) (kept set); not found`,
-      );
+      assert.ok(src.includes(reg), `main.ts must still contain '${reg}' after stage (b1) (kept set); not found`);
     }
   });
 });
@@ -223,14 +221,8 @@ describe("T-App11b1.4: gh KEPT — still registered + dispatches (G-PApp11b1.4)"
     // When:  searched for the gh import and registration
     // Then:  both are present
     const src = readFileSync(MAIN_TS, "utf-8");
-    assert.ok(
-      src.includes("runGhSubcommand"),
-      "main.ts must still import/use runGhSubcommand (gh is KEPT)",
-    );
-    assert.ok(
-      src.includes('command("gh")'),
-      'main.ts must still register program.command("gh")',
-    );
+    assert.ok(src.includes("runGhSubcommand"), "main.ts must still import/use runGhSubcommand (gh is KEPT)");
+    assert.ok(src.includes('command("gh")'), 'main.ts must still register program.command("gh")');
   });
 });
 
@@ -272,31 +264,19 @@ describe("T-App11b1.6: trimmed soul.ts keeps promptFreeAxes + runSoulReset (non-
     //        ABSENT: runSoulShow, runSoulEdit
     const src = readFileSync(SOUL_TS, "utf-8");
 
-    assert.ok(
-      src.includes("export async function promptFreeAxes"),
-      "soul.ts must still export promptFreeAxes",
-    );
+    assert.ok(src.includes("export async function promptFreeAxes"), "soul.ts must still export promptFreeAxes");
     assert.ok(
       src.includes("export async function runSoulSubcommand"),
       "soul.ts must still export runSoulSubcommand (narrowed to reset)",
     );
-    assert.ok(
-      src.includes("async function runSoulReset"),
-      "soul.ts must define runSoulReset (non-exported internal)",
-    );
+    assert.ok(src.includes("async function runSoulReset"), "soul.ts must define runSoulReset (non-exported internal)");
     // runSoulReset must NOT be exported (it's internal)
     assert.ok(
       !src.includes("export async function runSoulReset") && !src.includes("export function runSoulReset"),
       "runSoulReset must NOT be exported (it is a non-exported internal — §6.4.4)",
     );
-    assert.ok(
-      !src.includes("runSoulShow"),
-      "soul.ts must NOT define runSoulShow (removed in trim)",
-    );
-    assert.ok(
-      !src.includes("runSoulEdit"),
-      "soul.ts must NOT define runSoulEdit (removed in trim)",
-    );
+    assert.ok(!src.includes("runSoulShow"), "soul.ts must NOT define runSoulShow (removed in trim)");
+    assert.ok(!src.includes("runSoulEdit"), "soul.ts must NOT define runSoulEdit (removed in trim)");
   });
 
   it("T-App11b1.6b: soul.ts has NO 'node:child_process' import and NO spawn( call (no-bash boundary cleanup)", () => {
@@ -308,14 +288,8 @@ describe("T-App11b1.6: trimmed soul.ts keeps promptFreeAxes + runSoulReset (non-
       !src.includes("node:child_process"),
       "soul.ts must NOT import node:child_process after trim (the $EDITOR spawn site is gone)",
     );
-    assert.ok(
-      !src.includes("spawn("),
-      "soul.ts must NOT contain spawn( after trim (no-bash-boundary cleanup)",
-    );
-    assert.ok(
-      !src.includes("composeSoulBand"),
-      "soul.ts must NOT import composeSoulBand (removed with runSoulShow)",
-    );
+    assert.ok(!src.includes("spawn("), "soul.ts must NOT contain spawn( after trim (no-bash-boundary cleanup)");
+    assert.ok(!src.includes("composeSoulBand"), "soul.ts must NOT import composeSoulBand (removed with runSoulShow)");
   });
 
   it("T-App11b1.6c: soul.ts still imports applyIdentityPatch + writeIdentity (used by runSoulReset)", () => {
@@ -327,10 +301,7 @@ describe("T-App11b1.6: trimmed soul.ts keeps promptFreeAxes + runSoulReset (non-
       src.includes("applyIdentityPatch"),
       "soul.ts must still import applyIdentityPatch (used by runSoulReset)",
     );
-    assert.ok(
-      src.includes("writeIdentity"),
-      "soul.ts must still import writeIdentity (used by runSoulReset)",
-    );
+    assert.ok(src.includes("writeIdentity"), "soul.ts must still import writeIdentity (used by runSoulReset)");
   });
 });
 
@@ -361,7 +332,11 @@ describe("T-App11b1.7: no stale deleted-subcommand dist artifacts; kept artifact
     // When:  existsSync is checked
     // Then:  true — tsc re-emits the trimmed soul.js
     const soulJsPath = join(REPO_ROOT, "dist", "cli", "subcommands", "soul.js");
-    assert.equal(existsSync(soulJsPath), true, "dist/cli/subcommands/soul.js must exist (soul.ts is TRIMMED, not deleted)");
+    assert.equal(
+      existsSync(soulJsPath),
+      true,
+      "dist/cli/subcommands/soul.js must exist (soul.ts is TRIMMED, not deleted)",
+    );
   });
 
   it("T-App11b1.7 (gh.js kept): dist/cli/subcommands/gh.js must EXIST after build", () => {
@@ -376,7 +351,11 @@ describe("T-App11b1.7: no stale deleted-subcommand dist artifacts; kept artifact
     // Given: a fresh build; main.ts is KEPT (the binary is load-bearing for launchd)
     // When:  existsSync is checked
     // Then:  true
-    assert.equal(existsSync(CLI), true, "dist/cli/main.js must exist (binary is load-bearing for launchd update-server)");
+    assert.equal(
+      existsSync(CLI),
+      true,
+      "dist/cli/main.js must exist (binary is load-bearing for launchd update-server)",
+    );
   });
 });
 
@@ -484,11 +463,7 @@ describe("T-App11b1.9: no production src/** file imports a deleted subcommand mo
       }
     }
 
-    assert.deepEqual(
-      violations,
-      [],
-      `Orphaned imports/symbols found in kept src/ files:\n${violations.join("\n")}`,
-    );
+    assert.deepEqual(violations, [], `Orphaned imports/symbols found in kept src/ files:\n${violations.join("\n")}`);
   });
 });
 
@@ -565,8 +540,12 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
     //        is covered by T-App11b1.12a and T-App11b1.12b.
     // When:  applyIdentityPatch(initial, {freeAxes: newAxes}) + writeIdentity + re-read
     // Then:  OUTCOME ANCHOR: identity.freeAxes has the new values; updatedAt has changed
-    const { applyIdentityPatch: applyPatch, identityRecordSchema: schema, readIdentity: readId, writeIdentity: writeId } =
-      await import("../../src/persistence/identity.js");
+    const {
+      applyIdentityPatch: applyPatch,
+      identityRecordSchema: schema,
+      readIdentity: readId,
+      writeIdentity: writeId,
+    } = await import("../../src/persistence/identity.js");
 
     const identityPath = join(tmpdir(), `mai-b1-soul-reset-${process.pid}.json`);
     try {
@@ -616,7 +595,11 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
         "T-App11b1.12c: updatedAt must change after reset persist (durable state mutation)",
       );
     } finally {
-      try { rmSync(identityPath, { force: true }); } catch { /* best-effort */ }
+      try {
+        rmSync(identityPath, { force: true, maxRetries: 5, retryDelay: 100 });
+      } catch {
+        /* best-effort */
+      }
     }
   });
 });
@@ -668,11 +651,7 @@ describe("T-App11b1.13: no kept src/**/*.ts guidance names a removed command (B3
       }
     }
 
-    assert.deepEqual(
-      violations,
-      [],
-      `Removed-command tokens found in kept src/**/*.ts:\n${violations.join("\n")}`,
-    );
+    assert.deepEqual(violations, [], `Removed-command tokens found in kept src/**/*.ts:\n${violations.join("\n")}`);
   });
 
   it("T-App11b1.13b: 'mai soul reset' guidance is STILL PRESENT in src/**/*.ts (positive guard — valid guidance not over-scrubbed)", () => {
@@ -735,7 +714,10 @@ describe("T-App11b1.14: non-.ts guidance sites carry §6.4.6 PINNED literals; no
     // When:  grepped for removed-command tokens
     // Then:  ZERO matches
     const content = readFileSync(INSTALL_SH, "utf-8");
-    assert.ok(!content.includes("mai setup"), "install.sh must NOT contain 'mai setup' after B3 round-2 rewrite (§6.4.6)");
+    assert.ok(
+      !content.includes("mai setup"),
+      "install.sh must NOT contain 'mai setup' after B3 round-2 rewrite (§6.4.6)",
+    );
     assert.ok(!content.includes("mai auth"), "install.sh must NOT contain 'mai auth' after B3 round-2 rewrite");
     assert.ok(!content.includes("mai identity init"), "install.sh must NOT contain 'mai identity init'");
   });
@@ -746,7 +728,8 @@ describe("T-App11b1.14: non-.ts guidance sites carry §6.4.6 PINNED literals; no
     // Then:  contains EXACTLY the §6.4.6 echo line + the anchor is preserved
     const content = readFileSync(INSTALL_SH, "utf-8");
     // The §6.4.6 PINNED literal for install.sh (exact wording required)
-    const pinnedEcho = "Next: open Frondose and use Settings to configure your provider key, identity, and integrations.";
+    const pinnedEcho =
+      "Next: open Frondose and use Settings to configure your provider key, identity, and integrations.";
     assert.ok(
       content.includes(pinnedEcho),
       `install.sh must contain the PINNED echo line:\n  "${pinnedEcho}"\n(§6.4.6)`,

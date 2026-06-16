@@ -11,16 +11,30 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runServerPersonaSubcommand } from "../../../src/cli/subcommands/serverPersona.js";
 import { personaTemplateSchema } from "../../../src/persistence/personaLibrary.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p27-sp-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const originalHome = process.env.HOME;
+  const originalHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = originalHomeBase;
+  };
 }
 
 /** Minimal PersonaPrompter stub — satisfies the `question(key,prompt)` interface
@@ -60,8 +74,7 @@ describe("mai server persona add — happy path (G-P27.15)", () => {
     // When:  runServerPersonaSubcommand('add', {personaId:'p1', fromTemplate: '<json>'}, prompter)
     // Then:  no error thrown; personasDir/p1.json exists with fullName='BD Alice'
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     try {
       await runServerPersonaSubcommand(
         "add",
@@ -73,7 +86,7 @@ describe("mai server persona add — happy path (G-P27.15)", () => {
       const parsed = JSON.parse(readFileSync(expectedPath, "utf-8"));
       assert.equal(parsed.fullName, "BD Alice", "fullName must match template");
     } finally {
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -88,8 +101,7 @@ describe("mai server persona add — idempotent overwrite (G-P27.16)", () => {
     // When:  runServerPersonaSubcommand('add', {personaId:'p1', fromTemplate: '<updated json>'}, prompter)
     // Then:  no error; personasDir/p1.json updated; fullName='Alice Updated'
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     try {
       // Write original
       await runServerPersonaSubcommand(
@@ -107,7 +119,7 @@ describe("mai server persona add — idempotent overwrite (G-P27.16)", () => {
       const parsed = JSON.parse(readFileSync(expectedPath, "utf-8"));
       assert.equal(parsed.fullName, "Alice Updated", "fullName must be updated after second add");
     } finally {
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -121,8 +133,7 @@ describe("mai server persona list — 2 personas (G-P27.15)", () => {
     // When:  runServerPersonaSubcommand('list', {json: false}, prompter)
     // Then:  no error thrown (stdout output is side effect; test verifies function resolves)
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     try {
       // Pre-create persona files via add (uses same HOME override)
       await runServerPersonaSubcommand(
@@ -141,7 +152,7 @@ describe("mai server persona list — 2 personas (G-P27.15)", () => {
         "list must not throw with 2 personas present",
       );
     } finally {
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -155,8 +166,7 @@ describe("mai server persona list — json flag (G-P27.15)", () => {
     // When:  runServerPersonaSubcommand('list', {json: true}, prompter)
     // Then:  no error thrown; stdout output captured via redirect contains persona JSON
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     // Capture stdout
     const chunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
@@ -183,7 +193,7 @@ describe("mai server persona list — json flag (G-P27.15)", () => {
       assert.equal(p1.fullName, "BD Alice");
     } finally {
       process.stdout.write = origWrite;
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -197,8 +207,7 @@ describe("mai server persona show — persona exists (G-P27.15)", () => {
     // When:  runServerPersonaSubcommand('show', {personaId:'p1'}, prompter)
     // Then:  no error thrown; output contains fullName
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     const chunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
     // biome-ignore lint/suspicious/noExplicitAny: stdout capture
@@ -219,7 +228,7 @@ describe("mai server persona show — persona exists (G-P27.15)", () => {
       assert.equal(parsed.fullName, "BD Alice", "show output must contain fullName='BD Alice'");
     } finally {
       process.stdout.write = origWrite;
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -233,8 +242,7 @@ describe("mai server persona remove — happy path (G-P27.15)", () => {
     // When:  runServerPersonaSubcommand('remove', {personaId:'p1'}, prompter)
     // Then:  no error; personasDir/p1.json no longer exists
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     try {
       await runServerPersonaSubcommand(
         "add",
@@ -246,7 +254,7 @@ describe("mai server persona remove — happy path (G-P27.15)", () => {
       await runServerPersonaSubcommand("remove", { personaId: "p1" }, makePrompterStub());
       assert.ok(!existsSync(expectedPath), "p1.json must be gone after remove");
     } finally {
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -260,8 +268,7 @@ describe("mai server persona remove — non-existent (G-P27.16)", () => {
     // When:  runServerPersonaSubcommand('remove', {personaId:'ghost'}, prompter)
     // Then:  throws Error containing 'not found' — does not silently no-op
     const { dir, cleanup } = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = dir;
+    const restoreHome = setIsolatedHome(dir);
     try {
       // Pre-create the personas dir so it exists but is empty
       mkdirSync(join(personasDirFor(dir)), { recursive: true });
@@ -277,7 +284,7 @@ describe("mai server persona remove — non-existent (G-P27.16)", () => {
         "remove of non-existent persona must throw",
       );
     } finally {
-      process.env.HOME = originalHome;
+      restoreHome();
       cleanup();
     }
   });

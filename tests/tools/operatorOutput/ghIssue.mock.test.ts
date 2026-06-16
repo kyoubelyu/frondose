@@ -11,11 +11,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { makeGhIssueTool } from "../../../src/tools/operatorOutput/ghIssue.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // P-Z2 (bucket 2): isolate HOME so ghIssue's readGithubConfig() fallback reads an
 // empty tmp ~/.mai/agent/github.json instead of the operator's real config (which
@@ -31,7 +32,7 @@ before(() => {
 after(() => {
   if (pZ2PrevHome === undefined) delete process.env.FRONDOSE_HOME_BASE;
   else process.env.FRONDOSE_HOME_BASE = pZ2PrevHome;
-  rmSync(pZ2TmpHome, { recursive: true, force: true });
+  cleanupTmpDir(pZ2TmpHome);
 });
 
 // ─── fetch mock helpers ───────────────────────────────────────────────────────

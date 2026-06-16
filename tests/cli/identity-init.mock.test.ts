@@ -20,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -31,10 +31,10 @@ import {
   readIdentity,
   writeIdentity,
 } from "../../src/persistence/identity.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-const TSX_BIN = join(process.cwd(), "node_modules", ".bin", "tsx");
 const RUNNER = join(process.cwd(), "tests", "fixtures", "identity-bootstrap-runner.ts");
 
 let _counter = 0;
@@ -46,7 +46,7 @@ function uniqueIdPath(): string {
 
 function cleanupDir(path: string): void {
   try {
-    rmSync(join(path, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(path, ".."));
   } catch {
     // best-effort
   }
@@ -161,7 +161,7 @@ test("T-M126: runIdentityBootstrap exits 1 with chicken-and-egg error when no LL
   const fakeHome = mkdtempSync(join(tmpdir(), "mai-t126-home-"));
 
   const result = await new Promise<{ status: number | null; stderr: string }>((resolve, reject) => {
-    const child = spawn(TSX_BIN, [RUNNER], {
+    const child = spawn(process.execPath, ["--import", "tsx", RUNNER], {
       // Explicitly clear all provider env vars so detectAnyModelKey returns false.
       // Also clear MAI_DOTENV=skip so the inline .env reader is skipped.
       // HOME → fakeHome: DEFAULT_AUTH_PATH becomes fakeHome/.mai/auth.json (doesn't exist).
@@ -172,6 +172,7 @@ test("T-M126: runIdentityBootstrap exits 1 with chicken-and-egg error when no LL
         DEEPSEEK_API_KEY: "",
         MAI_DOTENV: "skip",
         HOME: fakeHome,
+        FRONDOSE_HOME_BASE: fakeHome,
         MAI_IDENTITY_PATH: idPath,
       },
       stdio: ["pipe", "pipe", "pipe"],
@@ -211,6 +212,6 @@ test("T-M126: runIdentityBootstrap exits 1 with chicken-and-egg error when no LL
     console.log("T-M126: chicken-and-egg exit 1 + no-key guidance ✓");
   } finally {
     cleanupDir(idPath);
-    rmSync(fakeHome, { recursive: true, force: true });
+    cleanupTmpDir(fakeHome);
   }
 });

@@ -15,13 +15,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, it } from "node:test";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // Dynamic-import sentinel — `BootstrapTimeoutError` + `bootstrapTimeoutMs` are
 // new exports at Step 4b §6.8(a). The dynamic import keeps the scaffold robust
@@ -44,7 +45,7 @@ function makeTmpBootstrapPaths(): { dir: string; identityPath: string; wipPath: 
     dir,
     identityPath: join(dir, "identity.json"),
     wipPath: join(dir, "identity.wip.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

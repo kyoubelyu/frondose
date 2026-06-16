@@ -10,13 +10,14 @@
  */
 
 import assert from "node:assert/strict";
-import { closeSync, ftruncateSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, ftruncateSync, mkdtempSync, openSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeUploadTool } from "../../../src/tools/browser/upload.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
 process.env.FRONDOSE_PACE_MIN_MS = "0";
@@ -33,7 +34,7 @@ function makeTempUploadFile(): { uploadDir: string; filePath: string; cleanup: (
   return {
     uploadDir,
     filePath,
-    cleanup: () => rmSync(uploadDir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(uploadDir),
   };
 }
 

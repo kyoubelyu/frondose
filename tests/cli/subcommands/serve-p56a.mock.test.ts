@@ -25,6 +25,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { before, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── Session mock state (T-Serve.3) ──────────────────────────────────────────
 
@@ -191,8 +192,8 @@ describe("runServeSubcommand — GET /health auth variants (G-P56a.1)", () => {
       assert.ok(r3.body.ts > 0, "ts should be positive");
       assert.equal(r3.body.pid, process.pid, "pid should match test process pid");
     } finally {
-      rmSync(portFile, { force: true });
-      rmSync(baseDir, { recursive: true, force: true });
+      rmSync(portFile, { force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTmpDir(baseDir);
     }
   });
 });
@@ -242,8 +243,8 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
       assert.equal(rA.body.ok, true, "variant A: ok should be true");
       assert.equal(rA.body.fullName, "Test Operator", "variant A: fullName should match");
     } finally {
-      rmSync(portFileA, { force: true });
-      rmSync(homeDirA, { recursive: true, force: true });
+      rmSync(portFileA, { force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTmpDir(homeDirA);
     }
 
     // ── Variant B: no identity ───────────────────────────────────────────────
@@ -265,10 +266,14 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
       });
       assert.equal(rB.status, 200, `variant B: expected 200, got ${rB.status}`);
       assert.equal(rB.body.ok, false, "variant B: ok should be false");
-      assert.equal(rB.body.reason, "identity not set; open Frondose → Settings to complete setup", "variant B: reason must match exactly (P-APP-11 b1 PINNED)");
+      assert.equal(
+        rB.body.reason,
+        "identity not set; open Frondose → Settings to complete setup",
+        "variant B: reason must match exactly (P-APP-11 b1 PINNED)",
+      );
     } finally {
-      rmSync(portFileB, { force: true });
-      rmSync(homeDirB, { recursive: true, force: true });
+      rmSync(portFileB, { force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTmpDir(homeDirB);
       if (origHome !== undefined) {
         process.env.FRONDOSE_HOME_BASE = origHome;
       } else {
@@ -310,8 +315,8 @@ describe("runServeSubcommand — POST /chrome/ensure guard-denied + success (G-P
       assert.equal(rA.status, 503, `sub-case (a): expected 503, got ${rA.status}`);
       assert.deepEqual(rA.body, { ok: false, error: "chrome_unavailable", message: "busy" });
     } finally {
-      rmSync(portFileA, { force: true });
-      rmSync(baseDirA, { recursive: true, force: true });
+      rmSync(portFileA, { force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTmpDir(baseDirA);
     }
 
     // ── Sub-case (b): success mode ───────────────────────────────────────────
@@ -334,8 +339,8 @@ describe("runServeSubcommand — POST /chrome/ensure guard-denied + success (G-P
       assert.deepEqual(rB.body, { ok: true, chromePort: 9222, overlayInstalled: true });
     } finally {
       mockChromeFailMode = false;
-      rmSync(portFileB, { force: true });
-      rmSync(baseDirB, { recursive: true, force: true });
+      rmSync(portFileB, { force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTmpDir(baseDirB);
     }
   });
 });

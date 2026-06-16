@@ -16,7 +16,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -26,6 +26,7 @@ import { checkBasicAuth, startWebHttp, type WebHttpDeps } from "../../src/cli/se
 import { appendPersonInteraction, openMemoryDatabase } from "../../src/persistence/memory.js";
 import { writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
 import { addWorker, insertLeadAction, openWorkersDb } from "../../src/persistence/workersRegistry.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,8 +70,8 @@ function makeFixture(overrides: Partial<WebHttpDeps> = {}): TestFixture {
     cleanup: () => {
       workersDb.close();
       memoryDb.close();
-      rmSync(assetDir, { recursive: true, force: true });
-      rmSync(personasDir, { recursive: true, force: true });
+      cleanupTmpDir(assetDir);
+      cleanupTmpDir(personasDir);
     },
   };
 }

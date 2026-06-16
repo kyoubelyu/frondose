@@ -9,11 +9,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeQualifyProfileTool } from "../../../src/tools/methodology/qualifyProfile.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ function makeTempPath(suffix: string): string {
 
 function cleanup(path: string): void {
   try {
-    rmSync(join(path, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(path, ".."));
   } catch {
     // best-effort
   }
@@ -96,7 +97,7 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
     else delete process.env.FRONDOSE_HOME_BASE;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -190,6 +191,6 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
     else delete process.env.FRONDOSE_HOME_BASE;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });

@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -25,10 +25,24 @@ import {
   readPersonaTemplate,
   writePersonaTemplate,
 } from "../../src/persistence/personaLibrary.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p28-persona-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (savedHome !== undefined) process.env.HOME = savedHome;
+    else delete process.env.HOME;
+    if (savedHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+    else delete process.env.FRONDOSE_HOME_BASE;
+  };
 }
 
 // ─── T-PERS.CRED.1 ────────────────────────────────────────────────────────────
@@ -121,9 +135,8 @@ describe("runServerPersonaSubcommand add: fromTemplate path writes llmKeyRef + g
     // NOTE:  Interactive prompter path requires TTY; this test uses the fromTemplate
     //        non-interactive code path which exercises the same schema correctness gate.
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const template = JSON.stringify(
         personaTemplateSchema.parse({
           fullName: "BD Alice",
@@ -156,8 +169,7 @@ describe("runServerPersonaSubcommand add: fromTemplate path writes llmKeyRef + g
         "T-PERS.CRED.3: written persona must preserve googleAccountRef='g1'",
       );
     } finally {
-      if (savedHome !== undefined) process.env.HOME = savedHome;
-      else delete process.env.HOME;
+      restoreHome();
       cleanup();
     }
   });

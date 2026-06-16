@@ -29,20 +29,14 @@
  */
 
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { before, afterEach, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { afterEach, before, describe, it } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
-const REPO = join(fileURLToPath(import.meta.url), "..", "..", "..");
+const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const SCRIPT = join(REPO, "scripts", "copy-web-assets.mjs");
 
 // Loaded lazily in before() — undefined pre-impl
@@ -51,7 +45,7 @@ let copyWebAssets: CopyFn | undefined;
 
 before(async () => {
   try {
-    const mod = await import(SCRIPT);
+    const mod = await import(pathToFileURL(SCRIPT).href);
     copyWebAssets = mod.copyWebAssets;
   } catch {
     // scripts/copy-web-assets.mjs not yet created (pre-impl Step 4) — tests hit assert.fail
@@ -61,7 +55,7 @@ before(async () => {
 let tmpDir: string | undefined;
 afterEach(() => {
   if (tmpDir) {
-    rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTmpDir(tmpDir);
     tmpDir = undefined;
   }
 });
@@ -235,10 +229,7 @@ describe("G-WIN2.3 — copy-web-assets: copies index.html and vendor/ into dist/
 
     // Precondition: stale vendor dir exists before copy
     const staleFile = join(tmpDir, "dist", "web", "vendor", "stale.txt");
-    assert.ok(
-      existsSync(staleFile),
-      "T-WIN2.3e: precondition — dist/web/vendor/stale.txt must exist before copy",
-    );
+    assert.ok(existsSync(staleFile), "T-WIN2.3e: precondition — dist/web/vendor/stale.txt must exist before copy");
 
     copyWebAssets({ root: tmpDir });
 

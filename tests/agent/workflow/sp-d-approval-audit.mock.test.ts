@@ -28,10 +28,12 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import { describe, it } from "node:test";
 import { createWorkflowController } from "../../../src/agent/workflow/controller.js";
 import { closeSalesDatabase, openSalesDatabase } from "../../../src/persistence/salesDb.js";
 import { makeSaveMessageDraftTool } from "../../../src/tools/sales/saveMessageDraft.js";
+import { cleanupTmpDir, makeTmpFile } from "../../_helpers/tmp";
 
 /** Minimal Vercel tool execute options. */
 const toolOpts = { messages: [] as never[], toolCallId: "test" };
@@ -53,7 +55,7 @@ describe("T-SP-D.ApprovalAudit — draft-before-approval invariant + approval_re
     //        3. handleEndpoint returns {status:200, response:{ok:true}, resumePrompt: <non-empty string>}
     //           (the resumePrompt tells the agent to continue with the approved outbound click)
 
-    const path = `/tmp/sp-d-audit-${randomUUID()}.sqlite`;
+    const path = makeTmpFile(`sp-d-audit-${randomUUID()}.sqlite`);
     const db = openSalesDatabase(path);
     try {
       // ── Step 1: Seed raw_candidates + leads rows directly via SQL ─────────────
@@ -215,6 +217,7 @@ describe("T-SP-D.ApprovalAudit — draft-before-approval invariant + approval_re
       );
     } finally {
       closeSalesDatabase(path);
+      cleanupTmpDir(dirname(path));
     }
   });
 });
