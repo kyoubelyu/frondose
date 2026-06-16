@@ -22,7 +22,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -31,6 +31,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { HookRunner } from "../../src/agent/hooks.js";
 import { wrapWithHooks } from "../../src/tools/hookWrapper.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -41,13 +42,7 @@ const FAKE_OPTS: ToolExecutionOptions = {
 
 function makeTempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-hw-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
-}
-
-function writeHooksJson(dir: string, content: unknown): string {
-  const p = join(dir, "hooks.json");
-  writeFileSync(p, JSON.stringify(content), "utf-8");
-  return p;
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Build a minimal Vercel tool with a spy execute. */
@@ -59,112 +54,92 @@ function makeSpyTool(executeFn: (args: { msg: string }) => Promise<unknown>) {
   });
 }
 
+type HookRunnerFake = Pick<HookRunner, "runPreToolUse" | "runPostToolUse">;
+
+function makeFakeRunner(overrides: Partial<HookRunnerFake> = {}): HookRunner {
+  const base: HookRunnerFake = {
+    runPreToolUse: async () => ({ blocked: false }),
+    runPostToolUse: async () => {},
+  };
+  return { ...base, ...overrides } as unknown as HookRunner;
+}
+
 // ─── T-HookWrapper.1: PreToolUse blocked → fail envelope; execute NOT called ──
 
 test("T-HookWrapper.1: PreToolUse BLOCK → fail envelope returned; inner execute NOT called", async () => {
-  const { dir, cleanup } = makeTempDir();
-  try {
-    const p = writeHooksJson(dir, {
-      hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 2" }] }],
-      },
-    });
+  let executeCalled = false;
+  const base = makeSpyTool(async () => {
+    executeCalled = true;
+    return { ok: true, command: "test", data: {} };
+  });
 
-    let executeCalled = false;
-    const base = makeSpyTool(async () => {
-      executeCalled = true;
-      return { ok: true, command: "test", data: {} };
-    });
+  const runner = makeFakeRunner({
+    runPreToolUse: async () => ({ blocked: true, message: "blocked by test hook" }),
+  });
+  const wrapped = wrapWithHooks(base, runner, "test_tool");
+  const result = (await wrapped.execute?.({ msg: "hi" }, FAKE_OPTS)) as {
+    ok: boolean;
+    error: { kind: string; message: string };
+  };
 
-    const runner = new HookRunner(p);
-    const wrapped = wrapWithHooks(base, runner, "test_tool");
-    const result = (await wrapped.execute?.({ msg: "hi" }, FAKE_OPTS)) as {
-      ok: boolean;
-      error: { kind: string; message: string };
-    };
+  // Inner execute must NOT have been called
+  assert.equal(executeCalled, false, "execute must NOT be called when PreToolUse blocks");
 
-    // Inner execute must NOT have been called
-    assert.equal(executeCalled, false, "execute must NOT be called when PreToolUse blocks");
-
-    // Result must be a fail envelope
-    assert.equal(result.ok, false, "blocked result must be ok:false");
-    assert.equal(result.error.kind, "runtime_error", "blocked result kind must be runtime_error");
-    assert.ok(result.error.message.length > 0, "blocked result must have a message");
-  } finally {
-    cleanup();
-  }
+  // Result must be a fail envelope
+  assert.equal(result.ok, false, "blocked result must be ok:false");
+  assert.equal(result.error.kind, "runtime_error", "blocked result kind must be runtime_error");
+  assert.ok(result.error.message.length > 0, "blocked result must have a message");
 });
 
 // ─── T-HookWrapper.2: PreToolUse allowed → execute + PostToolUse called ──────
 
 test("T-HookWrapper.2: PreToolUse ALLOW → execute called; PostToolUse called on success", async () => {
-  const { dir, cleanup } = makeTempDir();
-  try {
-    const postOutput = join(dir, "post-fired.txt");
-    const p = writeHooksJson(dir, {
-      hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 0" }] }],
-        PostToolUse: [
-          { matcher: ".*", hooks: [{ type: "command", command: `cat >/dev/null; echo "fired" > "${postOutput}"` }] },
-        ],
-      },
-    });
+  let postCalled = false;
+  let executeCalled = false;
+  const base = makeSpyTool(async () => {
+    executeCalled = true;
+    return { ok: true, command: "test", data: { value: "done" } };
+  });
 
-    let executeCalled = false;
-    const base = makeSpyTool(async () => {
-      executeCalled = true;
-      return { ok: true, command: "test", data: { value: "done" } };
-    });
+  const runner = makeFakeRunner({
+    runPreToolUse: async () => ({ blocked: false }),
+    runPostToolUse: async () => {
+      postCalled = true;
+    },
+  });
+  const wrapped = wrapWithHooks(base, runner, "test_tool");
+  const result = (await wrapped.execute?.({ msg: "hi" }, FAKE_OPTS)) as { ok: boolean };
 
-    const runner = new HookRunner(p);
-    const wrapped = wrapWithHooks(base, runner, "test_tool");
-    const result = (await wrapped.execute?.({ msg: "hi" }, FAKE_OPTS)) as { ok: boolean };
+  assert.equal(executeCalled, true, "execute must be called when PreToolUse allows");
+  assert.equal(result.ok, true, "result must be the tool's ok envelope");
 
-    assert.equal(executeCalled, true, "execute must be called when PreToolUse allows");
-    assert.equal(result.ok, true, "result must be the tool's ok envelope");
-
-    // PostToolUse hook must have fired (file exists)
-    const { existsSync } = await import("node:fs");
-    assert.ok(existsSync(postOutput), "PostToolUse hook must have fired (file exists)");
-  } finally {
-    cleanup();
-  }
+  // PostToolUse hook must have fired after the tool returned.
+  assert.equal(postCalled, true, "PostToolUse hook must have fired");
 });
 
 // ─── T-HookWrapper.3: Execute throws → PostToolUse NOT called (D-2) ──────────
 
 test("T-HookWrapper.3: execute throws → PostToolUse SKIPPED; error re-thrown to Vercel SDK (D-2)", async () => {
-  const { dir, cleanup } = makeTempDir();
-  try {
-    const postOutput = join(dir, "post-fired.txt");
-    const p = writeHooksJson(dir, {
-      hooks: {
-        PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: "cat >/dev/null; exit 0" }] }],
-        PostToolUse: [
-          { matcher: ".*", hooks: [{ type: "command", command: `cat >/dev/null; echo "fired" > "${postOutput}"` }] },
-        ],
-      },
-    });
+  let postCalled = false;
+  const base = makeSpyTool(async () => {
+    throw new Error("tool execute threw");
+  });
 
-    const base = makeSpyTool(async () => {
-      throw new Error("tool execute threw");
-    });
+  const runner = makeFakeRunner({
+    runPreToolUse: async () => ({ blocked: false }),
+    runPostToolUse: async () => {
+      postCalled = true;
+    },
+  });
+  const wrapped = wrapWithHooks(base, runner, "test_tool");
 
-    const runner = new HookRunner(p);
-    const wrapped = wrapWithHooks(base, runner, "test_tool");
+  await assert.rejects(
+    () => wrapped.execute?.({ msg: "hi" }, FAKE_OPTS) as Promise<unknown>,
+    /tool execute threw/,
+    "error must propagate to caller (Vercel SDK)",
+  );
 
-    await assert.rejects(
-      () => wrapped.execute?.({ msg: "hi" }, FAKE_OPTS) as Promise<unknown>,
-      /tool execute threw/,
-      "error must propagate to caller (Vercel SDK)",
-    );
-
-    // PostToolUse hook must NOT have fired (file must NOT exist)
-    const { existsSync } = await import("node:fs");
-    assert.ok(!existsSync(postOutput), "PostToolUse must NOT fire when execute throws (D-2 success-only)");
-  } finally {
-    cleanup();
-  }
+  assert.equal(postCalled, false, "PostToolUse must NOT fire when execute throws (D-2 success-only)");
 });
 
 // ─── T-HookWrapper.4: null-hooksJson HookRunner → no-op; execute runs ─────────
@@ -241,32 +216,24 @@ test("T-HookWrapper.6: opts (including abortSignal) forwarded to inner execute v
 // ─── T-HookWrapper.7: PostToolUse receives correct result payload ─────────────
 
 test("T-HookWrapper.7: PostToolUse hook receives tool result in stdin payload", async () => {
-  const { dir, cleanup } = makeTempDir();
-  try {
-    const payloadFile = join(dir, "post-payload.json");
-    const p = writeHooksJson(dir, {
-      hooks: {
-        PostToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: `cat > "${payloadFile}"` }] }],
-      },
-    });
+  let captured:
+    | {
+        toolName: string;
+        result: unknown;
+      }
+    | undefined;
+  const expectedResult = { ok: true, command: "test", data: { foo: "bar" } };
+  const base = makeSpyTool(async () => expectedResult);
 
-    const expectedResult = { ok: true, command: "test", data: { foo: "bar" } };
-    const base = makeSpyTool(async () => expectedResult);
+  const runner = makeFakeRunner({
+    runPostToolUse: async (toolName, _args, result) => {
+      captured = { toolName, result };
+    },
+  });
+  const wrapped = wrapWithHooks(base, runner, "test_tool");
+  await wrapped.execute?.({ msg: "hello" }, FAKE_OPTS);
 
-    const runner = new HookRunner(p);
-    const wrapped = wrapWithHooks(base, runner, "test_tool");
-    await wrapped.execute?.({ msg: "hello" }, FAKE_OPTS);
-
-    const { existsSync, readFileSync } = await import("node:fs");
-    assert.ok(existsSync(payloadFile), "PostToolUse payload file must exist");
-
-    const payload = JSON.parse(readFileSync(payloadFile, "utf-8")) as {
-      toolName: string;
-      result: typeof expectedResult;
-    };
-    assert.equal(payload.toolName, "test_tool", "PostToolUse payload must include toolName");
-    assert.deepEqual(payload.result, expectedResult, "PostToolUse payload must include the tool result");
-  } finally {
-    cleanup();
-  }
+  assert.ok(captured, "PostToolUse payload must be captured");
+  assert.equal(captured.toolName, "test_tool", "PostToolUse payload must include toolName");
+  assert.deepEqual(captured.result, expectedResult, "PostToolUse payload must include the tool result");
 });

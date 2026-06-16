@@ -11,18 +11,32 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runTelegramDaemon } from "../../src/cli/subcommands/telegramDaemon.js";
 import { acquireTurnLock, isPidAlive, LockBusy, releaseTurnLock, writePid } from "../../src/persistence/processLock.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-daemon-"));
-  return { home, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+  return { home, cleanup: () => cleanupTmpDir(home) };
+}
+
+function setIsolatedHome(home: string): () => void {
+  const origHome = process.env.HOME;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+  return () => {
+    if (origHome === undefined) delete process.env.HOME;
+    else process.env.HOME = origHome;
+    if (origHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = origHomeBase;
+  };
 }
 
 /** Capture process.exit calls without terminating the runner */
@@ -68,11 +82,10 @@ describe("telegramDaemon: PID mutex on boot", () => {
     // When:   runTelegramDaemon() called
     // Then:   stderr contains 'TELEGRAM_TOKEN unset' (NOT 'already running') — proves PID mutex passed
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     const { restore } = mockProcessExit();
     const origToken = process.env.TELEGRAM_TOKEN;
     try {
-      process.env.HOME = home;
       delete process.env.TELEGRAM_TOKEN;
       // Create the .mai/agent dir so daemon can write PID
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
@@ -81,7 +94,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
       assert.ok(stderr.includes("TELEGRAM_TOKEN unset"), `expected 'TELEGRAM_TOKEN unset' in stderr, got: ${stderr}`);
       assert.ok(!stderr.includes("already running"), `must NOT contain 'already running' when no prior daemon`);
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       if (origToken !== undefined) process.env.TELEGRAM_TOKEN = origToken;
       else delete process.env.TELEGRAM_TOKEN;
       restore();
@@ -95,9 +108,8 @@ describe("telegramDaemon: PID mutex on boot", () => {
     // Then:   process.exit(1) invoked; stderr contains 'already running, PID <N>'; no second poller
     const { home, cleanup } = makeTmpHome();
     const { restore } = mockProcessExit();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       // Write live PID (current test process is alive)
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       writeFileSync(join(home, ".frondose", "agent", "telegram.pid"), String(process.pid), "utf-8");
@@ -105,7 +117,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
       assert.ok(stderr.includes("already running"), `expected 'already running' in stderr, got: ${stderr}`);
       assert.ok(stderr.includes(String(process.pid)), "stderr must include the live PID");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       restore();
       cleanup();
     }
@@ -116,11 +128,10 @@ describe("telegramDaemon: PID mutex on boot", () => {
     // When:   runTelegramDaemon() is called (no TELEGRAM_TOKEN → exits at token check)
     // Then:   stderr contains 'TELEGRAM_TOKEN unset' (not 'already running') — stale PID was bypassed
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     const { restore } = mockProcessExit();
     const origToken = process.env.TELEGRAM_TOKEN;
     try {
-      process.env.HOME = home;
       delete process.env.TELEGRAM_TOKEN;
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
       writeFileSync(join(home, ".frondose", "agent", "telegram.pid"), "-999999", "utf-8");
@@ -131,7 +142,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
       );
       assert.ok(!stderr.includes("already running"), "stale PID must not block daemon");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       if (origToken !== undefined) process.env.TELEGRAM_TOKEN = origToken;
       else delete process.env.TELEGRAM_TOKEN;
       restore();

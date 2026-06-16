@@ -22,6 +22,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { before, describe, it } from "node:test";
 
+const skipOnWindows = process.platform === "win32" ? { skip: "POSIX symlink semantics" } : {};
+
 // gate-on-builder: profileLock.ts does not exist until 4b. NOTE: the builder implemented it ASYNC
 // (node:fs/promises; returns Promise<void>) — awaited at the ensureChrome call site (launcher.ts:102).
 let clearStaleSingletonLocks:
@@ -44,7 +46,9 @@ before(async () => {
 /** A throwaway temp profile dir with a SingletonLock symlink → `target` (+ sibling Cookie/Socket files). */
 function makeProfile(target?: string, withSiblings = true): string {
   const dir = mkdtempSync(join(tmpdir(), "p58a-lock-"));
-  if (target !== undefined) symlinkSync(target, join(dir, "SingletonLock")); // dangling symlink is fine
+  if (target !== undefined && process.platform !== "win32") {
+    symlinkSync(target, join(dir, "SingletonLock")); // dangling symlink is fine
+  }
   if (withSiblings) {
     writeFileSync(join(dir, "SingletonCookie"), "c");
     writeFileSync(join(dir, "SingletonSocket"), "s");
@@ -74,21 +78,25 @@ describe("clearStaleSingletonLocks — dead owner pid clears all three (G-P58a.1
   // Given: SingletonLock → "host-999999999" (+ Cookie/Socket) and a killFn that throws ESRCH (dead).
   // When:  clearStaleSingletonLocks(dir, killDead).
   // Then:  none of SingletonLock/Cookie/Socket exist afterwards.
-  it("T-Lock.1: dead pid (ESRCH) → unlinks SingletonLock + SingletonCookie + SingletonSocket", async () => {
-    assert.ok(clearStaleSingletonLocks, "builder 4b must export clearStaleSingletonLocks");
-    const dir = makeProfile("host-999999999");
-    await clearStaleSingletonLocks(dir, killDead);
-    assert.ok(!lexists(dir, "SingletonLock"), "dead-owner SingletonLock removed");
-    assert.ok(!lexists(dir, "SingletonCookie"), "SingletonCookie removed");
-    assert.ok(!lexists(dir, "SingletonSocket"), "SingletonSocket removed");
-  });
+  it(
+    "T-Lock.1: dead pid (ESRCH) → unlinks SingletonLock + SingletonCookie + SingletonSocket",
+    skipOnWindows,
+    async () => {
+      assert.ok(clearStaleSingletonLocks, "builder 4b must export clearStaleSingletonLocks");
+      const dir = makeProfile("host-999999999");
+      await clearStaleSingletonLocks(dir, killDead);
+      assert.ok(!lexists(dir, "SingletonLock"), "dead-owner SingletonLock removed");
+      assert.ok(!lexists(dir, "SingletonCookie"), "SingletonCookie removed");
+      assert.ok(!lexists(dir, "SingletonSocket"), "SingletonSocket removed");
+    },
+  );
 });
 
 describe("clearStaleSingletonLocks — alive owner pid keeps everything (G-P58a.1)", () => {
   // Given: SingletonLock → "host-4242" and a killFn that returns (no throw = alive).
   // When:  clearStaleSingletonLocks(dir, killAlive).
   // Then:  SingletonLock still exists (nothing unlinked — never stomp a live owner).
-  it("T-Lock.2: alive pid (no throw) → keeps the lock (the live-owner safety)", async () => {
+  it("T-Lock.2: alive pid (no throw) → keeps the lock (the live-owner safety)", skipOnWindows, async () => {
     assert.ok(clearStaleSingletonLocks, "builder 4b must export clearStaleSingletonLocks");
     const dir = makeProfile("host-4242");
     await clearStaleSingletonLocks(dir, killAlive);
@@ -102,7 +110,7 @@ describe("clearStaleSingletonLocks — EPERM (alive-but-not-ours) keeps everythi
   // Given: a killFn that throws EPERM (the shared-symlinked-profile safety: a live Chrome we can't signal).
   // When:  clearStaleSingletonLocks(dir, killEperm).
   // Then:  the files are KEPT (EPERM treated as alive).
-  it("T-Lock.3: EPERM → keeps (treated as alive — shared-profile safety guard)", async () => {
+  it("T-Lock.3: EPERM → keeps (treated as alive — shared-profile safety guard)", skipOnWindows, async () => {
     assert.ok(clearStaleSingletonLocks, "builder 4b must export clearStaleSingletonLocks");
     const dir = makeProfile("host-4242");
     await clearStaleSingletonLocks(dir, killEperm);
@@ -130,7 +138,7 @@ describe("clearStaleSingletonLocks — malformed target (no parseable pid) is a 
   // Given: SingletonLock → "garbage-no-pid-x" (trailing token not an integer → NaN/≤0).
   // When:  clearStaleSingletonLocks(dir, killDead).
   // Then:  nothing is unlinked (the malformed-pid guard makes a wrong parse SAFE — falls back to today's behavior).
-  it("T-Lock.5: malformed symlink target (non-integer pid) → no-op (NaN/≤0 guard)", async () => {
+  it("T-Lock.5: malformed symlink target (non-integer pid) → no-op (NaN/≤0 guard)", skipOnWindows, async () => {
     assert.ok(clearStaleSingletonLocks, "builder 4b must export clearStaleSingletonLocks");
     const dir = makeProfile("garbage-no-pid-x"); // trailing token not an integer → NaN guard
     await clearStaleSingletonLocks(dir, killDead);

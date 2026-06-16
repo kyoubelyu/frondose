@@ -9,11 +9,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { readSecrets } from "../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── T-FD1.1 ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ describe("readSecrets — corrupt secrets.json emits expected-shape hint on stde
       process.env.MAI_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
       process.env.MAI_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
-      const cleanup = () => rmSync(dir, { recursive: true, force: true });
+      const cleanup = () => cleanupTmpDir(dir);
 
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);

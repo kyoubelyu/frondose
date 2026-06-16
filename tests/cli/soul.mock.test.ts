@@ -92,7 +92,7 @@ test("T-M_p5.20: soul reset core persist path — applyIdentityPatch(freeAxes) +
     console.log("T-M_p5.20: soul reset core persist path verified — new freeAxes persisted + re-read correctly ✓");
   } finally {
     try {
-      rmSync(identityPath, { force: true });
+      rmSync(identityPath, { force: true, maxRetries: 5, retryDelay: 100 });
     } catch {
       // best-effort
     }

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { streamText } from "ai";
 import { resolveModel } from "../../src/agent/modelResolver.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
@@ -11,7 +12,7 @@ import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
 
-export const TEST_IDENTITY_PATH = new URL("../fixtures/test-identity.json", import.meta.url).pathname;
+export const TEST_IDENTITY_PATH = fileURLToPath(new URL("../fixtures/test-identity.json", import.meta.url));
 
 export interface ScenarioOpts {
   prompt: string;

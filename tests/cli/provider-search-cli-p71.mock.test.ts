@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { runStatusSubcommand } from "../../src/cli/subcommands/status.js";
-import { readSearchConfig, writeSearchConfig } from "../../src/persistence/search.js";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeSearchConfig } from "../../src/persistence/search.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -57,8 +58,8 @@ async function captureCli(fn: () => Promise<void>): Promise<{
 }
 
 function makeTmpDir(label: string): { dir: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", `mai-p71-${label}-`));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const dir = mkdtempSync(join(tmpdir(), `mai-p71-${label}-`));
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 const flushReporter = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));

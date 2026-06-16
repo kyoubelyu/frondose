@@ -10,17 +10,18 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { appendMessagesShared, loadMessagesShared, sharedSessionPath } from "../../src/persistence/sharedSession.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-shsession-"));
-  return { home, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+  return { home, cleanup: () => cleanupTmpDir(home) };
 }
 
 // ─── Shared session tests ─────────────────────────────────────────────────────
@@ -32,14 +33,19 @@ describe("sharedSession: path resolver + append + load", () => {
     // Then:   returned path ends with 'sessions/shared/active.jsonl'; dir is created if absent
     const { home, cleanup } = makeTmpHome();
     const origHome = process.env.HOME;
+    const origHomeBase = process.env.FRONDOSE_HOME_BASE;
     try {
       process.env.HOME = home;
+      process.env.FRONDOSE_HOME_BASE = home;
       const p = sharedSessionPath();
-      assert.ok(p.endsWith("sessions/shared/active.jsonl"), `expected shared path suffix, got: ${p}`);
+      assert.ok(p.endsWith(join("sessions", "shared", "active.jsonl")), `expected shared path suffix, got: ${p}`);
       // sharedSessionPath creates the directory on first call
       assert.ok(existsSync(dirname(p)), "sessions/shared directory must be created");
     } finally {
-      process.env.HOME = origHome;
+      if (origHome === undefined) delete process.env.HOME;
+      else process.env.HOME = origHome;
+      if (origHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+      else process.env.FRONDOSE_HOME_BASE = origHomeBase;
       cleanup();
     }
   });

@@ -7,17 +7,18 @@
  */
 
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { handleCronSlash } from "../../src/cli/replCron.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpScheduleDir(): { schedulePath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p11-cronsub-"));
-  return { schedulePath: join(dir, "schedule.jsonl"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { schedulePath: join(dir, "schedule.jsonl"), cleanup: () => cleanupTmpDir(dir) };
 }
 
 function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {

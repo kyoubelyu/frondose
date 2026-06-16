@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -19,12 +19,26 @@ import { describe, it } from "node:test";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import { runServerRepl } from "../../src/cli/serverRepl.js";
 import { writePid } from "../../src/persistence/processLock.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-srvrepl-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+  };
 }
 
 async function captureStdout(fn: () => Promise<unknown>): Promise<string> {
@@ -172,10 +186,9 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
     // Then:  resolves as "done" (not "timeout") within 2s; stdout has "[server] mai-server ready"
     //        and "[server] session closed."
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     const savedToken = process.env.TELEGRAM_TOKEN;
     try {
-      process.env.HOME = dir;
       process.env.TELEGRAM_TOKEN = "fake-repl-token-001";
       writeServerEnv(dir);
 
@@ -200,7 +213,7 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
         `stdout must contain '[server] session closed.'; got: ${stdout.slice(0, 300)}`,
       );
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
       cleanup();
@@ -235,10 +248,9 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
     // When:  runServerRepl() called
     // Then:  process.exit(1) called; stderr contains "daemon already running"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     const { captured, restore } = mockProcessExit();
     try {
-      process.env.HOME = dir;
       const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       // Write live PID (current test runner process — guaranteed alive)
@@ -252,7 +264,7 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
         `stderr must contain 'daemon already running'; got: ${stderr}`,
       );
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       restore();
       cleanup();
     }
@@ -264,10 +276,9 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
     // When:  runServerRepl({stdin: mockStdin}) called
     // Then:  no throw on EOF (no ERR_USE_AFTER_CLOSE); raceResult is "done"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     const savedToken = process.env.TELEGRAM_TOKEN;
     try {
-      process.env.HOME = dir;
       process.env.TELEGRAM_TOKEN = "fake-repl-token-004";
       writeServerEnv(dir);
 
@@ -292,7 +303,7 @@ describe("runServerRepl (G-P25.14, G-P25.16)", () => {
       assert.equal(raceResult, "done", "runServerRepl must return cleanly on non-TTY EOF");
       assert.equal(threw, null, `runServerRepl must not throw on non-TTY EOF; threw: ${threw}`);
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
       cleanup();

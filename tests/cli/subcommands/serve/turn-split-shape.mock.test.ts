@@ -24,10 +24,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ServeState, ServeDeps } from "../../../../src/cli/subcommands/serve/context.js";
+import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
 import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn.js";
 
-const REPO = join(fileURLToPath(import.meta.url), "..", "..", "..", "..", "..");
+const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
 const SERVE_DIR = join(REPO, "src", "cli", "subcommands", "serve");
 
 // ── File paths for structural checks ────────────────────────────────────────
@@ -149,13 +149,11 @@ describe("T-turn.PublicSurface.1 — createTurnRunner returns 5-method object; T
     }
 
     // Property-insertion order matches pre-split L413-419
-    assert.deepEqual(keys, [
-      "runOneTurn",
-      "triggerAnalyzeProfile",
-      "steerThenTrigger",
-      "triggerCardActionTurn",
-      "resumeWorkflowTurn",
-    ], "Property order must match pre-split L413-419 exactly");
+    assert.deepEqual(
+      keys,
+      ["runOneTurn", "triggerAnalyzeProfile", "steerThenTrigger", "triggerCardActionTurn", "resumeWorkflowTurn"],
+      "Property order must match pre-split L413-419 exactly",
+    );
   });
 });
 
@@ -245,9 +243,7 @@ describe("T-turn.NoCircular.1 — no runtime import cycle among turn.ts + turn/*
     // Verify: IF any of the turn/* files import from "../turn.js", it MUST be type-only.
     for (const key of ["runOne", "triggers", "steer"] as FileKey[]) {
       const { runtime: rtImports } = parseImports(files[key]);
-      const hasRuntimeBackEdge = rtImports.some(
-        (s) => s === "../turn.js" || s === "../turn",
-      );
+      const hasRuntimeBackEdge = rtImports.some((s) => s === "../turn.js" || s === "../turn");
       assert.equal(
         hasRuntimeBackEdge,
         false,
@@ -273,7 +269,10 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     //        call; the reaper body itself lives in the separate turn/reaper.ts, keeping runOne.ts lean.
     // P-AUTO-8: +1 for the selectSystem.ts import (3-branch select extracted to a pure helper, mirroring P-AUTO-7's reaper.ts extraction)
     const loc = locOf(RUN_ONE_TS);
-    assert.ok(loc <= 327, `turn/runOne.ts must be ≤ 327 LoC (§4.2.1 relaxed cap + P-AUTO-7 reaper call + P-AUTO-8 selectSystem import); got ${loc}`);
+    assert.ok(
+      loc <= 327,
+      `turn/runOne.ts must be ≤ 327 LoC (§4.2.1 relaxed cap + P-AUTO-7 reaper call + P-AUTO-8 selectSystem import); got ${loc}`,
+    );
   });
 
   it("T-turn.LoCBudget.1 — turn/triggers.ts ≤ 100 LoC (G-P72s7.2)", () => {
@@ -302,7 +301,7 @@ describe("T-turn.Importer.1 — 6 production importers resolve unchanged", () =>
     const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
     assert.equal(typeof turnMod.createTurnRunner, "function", "createTurnRunner must be a named export");
     assert.ok(
-      Object.prototype.hasOwnProperty.call(turnMod, "createTurnRunner"),
+      Object.hasOwn(turnMod, "createTurnRunner"),
       "createTurnRunner must be own property of the module exports",
     );
     // TurnArgs is a type — no runtime property, but the module must not throw on import.
@@ -343,7 +342,11 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
     assert.equal(runOneMod.runOneTurn.length, 3, "runOneTurn must have arity 3 (state, deps, args)");
 
     // triggerAnalyzeProfile: arity 6 — (state, deps, runOne, pageUrl, turnId, abortController)
-    assert.equal(typeof triggersMod.triggerAnalyzeProfile, "function", "triggerAnalyzeProfile must be exported from triggers.ts");
+    assert.equal(
+      typeof triggersMod.triggerAnalyzeProfile,
+      "function",
+      "triggerAnalyzeProfile must be exported from triggers.ts",
+    );
     assert.equal(
       triggersMod.triggerAnalyzeProfile.length,
       6,
@@ -352,7 +355,11 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
 
     // triggerCardActionTurn: arity 4 (isWorkflowResume has default — fn.length counts before first default)
     // (state, deps, runOne, actionPrompt, isWorkflowResume = false) → fn.length === 4
-    assert.equal(typeof triggersMod.triggerCardActionTurn, "function", "triggerCardActionTurn must be exported from triggers.ts");
+    assert.equal(
+      typeof triggersMod.triggerCardActionTurn,
+      "function",
+      "triggerCardActionTurn must be exported from triggers.ts",
+    );
     assert.equal(
       triggersMod.triggerCardActionTurn.length,
       4,
@@ -383,7 +390,12 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
     // runOneTurn signature: state comes before deps
     const runOneSig = runOneSrc.match(/export\s+async\s+function\s+runOneTurn\s*\(([^)]+)\)/);
     assert.ok(runOneSig, "runOneTurn signature must be parseable");
-    const runOneParams = runOneSig[1].split(",").map((p) => p.trim().split(/[:\s=]/)[0].trim());
+    const runOneParams = runOneSig[1].split(",").map((p) =>
+      p
+        .trim()
+        .split(/[:\s=]/)[0]
+        .trim(),
+    );
     assert.equal(runOneParams[0], "state", "runOneTurn: first param must be 'state'");
     assert.equal(runOneParams[1], "deps", "runOneTurn: second param must be 'deps'");
 
@@ -392,7 +404,12 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
     assert.ok(analyzeSig, "triggerAnalyzeProfile signature must be parseable");
     const analyzeParams = analyzeSig[1]
       .split(",")
-      .map((p) => p.trim().split(/[:\s=]/)[0].trim())
+      .map((p) =>
+        p
+          .trim()
+          .split(/[:\s=]/)[0]
+          .trim(),
+      )
       .filter(Boolean);
     assert.equal(analyzeParams[0], "state", "triggerAnalyzeProfile: first param must be 'state'");
     assert.equal(analyzeParams[1], "deps", "triggerAnalyzeProfile: second param must be 'deps'");
@@ -400,8 +417,17 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
     // resumeWorkflowTurn: first param is 'steer' (no state/deps — exception)
     const resumeSig = steerSrc.match(/export\s+async\s+function\s+resumeWorkflowTurn\s*\(([^)]+)\)/);
     assert.ok(resumeSig, "resumeWorkflowTurn signature must be parseable");
-    const resumeParams = resumeSig[1].split(",").map((p) => p.trim().split(/[:\s=]/)[0].trim());
-    assert.equal(resumeParams[0], "steer", "resumeWorkflowTurn: first param must be 'steer' (§4.6 exception — no state/deps)");
+    const resumeParams = resumeSig[1].split(",").map((p) =>
+      p
+        .trim()
+        .split(/[:\s=]/)[0]
+        .trim(),
+    );
+    assert.equal(
+      resumeParams[0],
+      "steer",
+      "resumeWorkflowTurn: first param must be 'steer' (§4.6 exception — no state/deps)",
+    );
   });
 });
 

@@ -10,11 +10,13 @@
  *   T-M_p6.20b — writeAuditRow direct-emit: appends correct JSONL line with expected schema
  *                (P-6 Step 5a r3: stop tool uses direct emit to bypass onStepFinish skip-on-abort)
  *
- * Uses tmp files under /tmp. No Chrome, no LLM, no SQLite.
+ * Uses tmp files under the OS temp dir. No Chrome, no LLM, no SQLite.
  */
 
 import assert from "node:assert/strict";
 import { readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { AuditEntry } from "../../src/persistence/audit.js";
 import { makeAuditWriter, writeAuditRow } from "../../src/persistence/audit.js";
@@ -35,7 +37,7 @@ function makeStep(
 // ─── T-M_p6.17 — one line per tool result ────────────────────────────────────
 
 test("T-M_p6.17: makeAuditWriter writes one JSONL line per toolResult", async () => {
-  const auditPath = `/tmp/mai-test-audit-p6-17-${Date.now()}.jsonl`;
+  const auditPath = join(tmpdir(), `mai-test-audit-p6-17-${Date.now()}.jsonl`);
   try {
     const writer = makeAuditWriter(auditPath);
 
@@ -71,7 +73,7 @@ test("T-M_p6.17: makeAuditWriter writes one JSONL line per toolResult", async ()
 // ─── T-M_p6.18 — output truncated at 2000 chars ──────────────────────────────
 
 test("T-M_p6.18: makeAuditWriter truncates output > 2000 chars", async () => {
-  const auditPath = `/tmp/mai-test-audit-p6-18-${Date.now()}.jsonl`;
+  const auditPath = join(tmpdir(), `mai-test-audit-p6-18-${Date.now()}.jsonl`);
   try {
     const writer = makeAuditWriter(auditPath);
 
@@ -113,7 +115,8 @@ test("T-M_p6.18: makeAuditWriter truncates output > 2000 chars", async () => {
 
 test("T-M_p6.19: makeAuditWriter with bad path logs stderr warning and does NOT throw", async () => {
   // Use a path in a non-existent nested directory that we cannot create.
-  const badPath = "/nonexistent/deep/nested/path/audit.jsonl";
+  const badPath =
+    process.platform === "win32" ? join(tmpdir(), `mai-test-audit-p6-19-${Date.now()}\0`, "audit.jsonl") : "/nonexistent/deep/nested/path/audit.jsonl";
 
   // Intercept stderr to capture the warning.
   const stderrChunks: string[] = [];
@@ -151,7 +154,7 @@ test("T-M_p6.19: makeAuditWriter with bad path logs stderr warning and does NOT 
 // ─── T-M_p6.20 — AuditEntry schema fields ────────────────────────────────────
 
 test("T-M_p6.20: AuditEntry fields: ts, toolCallId, toolName, input, output, error, stepFinishReason (no sessionId)", async () => {
-  const auditPath = `/tmp/mai-test-audit-p6-20-${Date.now()}.jsonl`;
+  const auditPath = join(tmpdir(), `mai-test-audit-p6-20-${Date.now()}.jsonl`);
   try {
     const writer = makeAuditWriter(auditPath);
 
@@ -211,7 +214,7 @@ test("T-M_p6.20: AuditEntry fields: ts, toolCallId, toolName, input, output, err
 // ─── T-M_p6.20b — writeAuditRow direct-emit ──────────────────────────────────
 
 test("T-M_p6.20b: writeAuditRow appends correct JSONL line with same 7-field schema (P-6 Step 5a r3 stop-tool path)", () => {
-  const auditPath = `/tmp/mai-test-audit-p6-20b-${Date.now()}.jsonl`;
+  const auditPath = join(tmpdir(), `mai-test-audit-p6-20b-${Date.now()}.jsonl`);
   try {
     const row: AuditEntry = {
       ts: "2026-05-08T15:00:00.000Z",

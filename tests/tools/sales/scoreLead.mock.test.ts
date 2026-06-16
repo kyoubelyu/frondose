@@ -2,7 +2,7 @@
  * P-SP-B Step 5 — T-SP-B.Lead.1..5: score_lead tool.
  *
  * FILLED at Step 5. All 5 assertion bodies filled with real assertions.
- * Test isolation: each it() uses a unique /tmp path so salesDb singleton
+ * Test isolation: each it() uses a unique OS temp path so salesDb singleton
  * instances don't bleed between tests.
  *
  * Gates covered: score_lead happy path (atomic write), FK pre-check, nullable
@@ -15,6 +15,8 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { closeSalesDatabase, insertLead, openSalesDatabase } from "../../../src/persistence/salesDb.js";
 import { seedFreshCandidate } from "../../sales/_fixtures/salesDb.js";
@@ -41,7 +43,7 @@ describe("T-SP-B.Lead — score_lead tool", () => {
     //        with metadata.scoreId === lead_scores.id; raw_candidates.status='scored' +
     //        latest_score_id=scoreId (ONE atomic txn); envelope = {ok:true, data:{scoreId,candidateId,totalScore}}
 
-    const path = `/tmp/sp-b-lead-1-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-lead-1-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -116,7 +118,7 @@ describe("T-SP-B.Lead — score_lead tool", () => {
     // Then:  {ok:false, error:{kind:"invalid_input", message: matches /candidateId.*record_raw_candidate first/i}};
     //        lead_scores count = 0; lead_timeline count = 0 (no rows written on FK failure)
 
-    const path = `/tmp/sp-b-lead-2-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-lead-2-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -166,7 +168,7 @@ describe("T-SP-B.Lead — score_lead tool", () => {
     // (which fires at totalScore>=40 when evidenceJson=null). The test INTENT is unchanged — it verifies
     // nullable columns are persisted correctly, not the qualified-band gate behavior.
 
-    const path = `/tmp/sp-b-lead-3-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-lead-3-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {
@@ -225,7 +227,7 @@ describe("T-SP-B.Lead — score_lead tool", () => {
     //        (no DB write in either case — Zod gate precedes execute body)
 
     // Use any path — Zod safeParse never touches the DB
-    const tool = makeScoreLeadTool("/tmp/sp-b-lead-4-zod-only.sqlite");
+    const tool = makeScoreLeadTool(join(tmpdir(), "sp-b-lead-4-zod-only.sqlite"));
 
     // Case A: totalScore=150 (> max 100)
     const resultOver = tool.parameters.safeParse({
@@ -263,7 +265,7 @@ describe("T-SP-B.Lead — score_lead tool", () => {
     // When:  score_lead.execute called with candidateId=c1, leadId=L1, totalScore=80
     // Then:  new lead_scores row has lead_id=L1 set (FK populated when supplied)
 
-    const path = `/tmp/sp-b-lead-5-${randomUUID()}.sqlite`;
+    const path = join(tmpdir(), `sp-b-lead-5-${randomUUID()}.sqlite`);
     // biome-ignore lint/suspicious/noExplicitAny: test fixture db handle
     const db = openSalesDatabase(path) as any;
     try {

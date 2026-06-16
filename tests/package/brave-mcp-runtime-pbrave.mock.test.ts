@@ -75,7 +75,7 @@ describe("P-BRAVE-MCP no-bash and module boundary contract", () => {
     for (const file of walkFiles(toolsRoot)) {
       if (!/\.(ts|tsx|js|mjs|cjs)$/.test(file)) continue;
       const source = stripComments(readFileSync(file, "utf8"));
-      const rel = relative(REPO, file);
+      const rel = relative(REPO, file).replace(/\\/g, "/");
       const patterns = [
         /node:child_process|child_process/,
         /\bspawn(?:Sync)?\s*\(/,
@@ -99,7 +99,7 @@ describe("P-BRAVE-MCP no-bash and module boundary contract", () => {
     // When: its repo-relative location is inspected.
     // Then: the MCP process/client code is outside the LLM-visible tool implementation tree.
     const clientPath = join(REPO, "src", "mcp", "braveSearchClient.ts");
-    const rel = relative(REPO, clientPath);
+    const rel = relative(REPO, clientPath).replace(/\\/g, "/");
 
     assert.ok(existsSync(clientPath), "Builder must add src/mcp/braveSearchClient.ts");
     assert.equal(rel, "src/mcp/braveSearchClient.ts");

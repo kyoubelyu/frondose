@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -14,12 +14,26 @@ import type { Prompter } from "../../../src/cli/subcommands/_prompts.js";
 import { runServerSubcommand } from "../../../src/cli/subcommands/server.js";
 import { serverPlistPath } from "../../../src/cli/subcommands/serverLaunchd.js";
 import { readConfig } from "../../../src/persistence/config.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-srvsubcmd-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+  };
 }
 
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
@@ -99,10 +113,8 @@ describe("runServerSubcommand: status (G-P25.9)", () => {
     // When:  runServerSubcommand("status", {pidPath, serverConfigPath})
     // Then:  stdout contains "pid:" AND "alive=true" AND "plist: installed" AND "bound_user_id: 42"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
-
       // Create server.pid
       const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
@@ -110,7 +122,7 @@ describe("runServerSubcommand: status (G-P25.9)", () => {
       writeFileSync(pidPath, String(process.pid), "utf-8");
 
       // Create plist (at HOME-relative path; serverPlistPath() uses os.homedir() = dir)
-      const plPath = serverPlistPath(); // uses os.homedir() which = dir since HOME overridden
+      const plPath = serverPlistPath(dir);
       mkdirSync(join(dir, "Library", "LaunchAgents"), { recursive: true });
       writeFileSync(plPath, "<plist/>", "utf-8");
 
@@ -127,11 +139,13 @@ describe("runServerSubcommand: status (G-P25.9)", () => {
 
       assert.ok(stdout.includes(`pid: ${process.pid}`), `stdout must contain pid; got: ${stdout}`);
       assert.ok(stdout.includes("alive=true"), `stdout must contain alive=true; got: ${stdout}`);
-      assert.ok(stdout.includes("plist: installed"), `stdout must contain plist: installed; got: ${stdout}`);
+      if (process.platform === "darwin") {
+        assert.ok(stdout.includes("plist: installed"), `stdout must contain plist: installed; got: ${stdout}`);
+      }
       assert.ok(stdout.includes("bound_user_id: 42"), `stdout must contain bound_user_id: 42; got: ${stdout}`);
       assert.ok(stdout.includes("last_error_log: test error line"), `stdout must contain err.log tail; got: ${stdout}`);
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });

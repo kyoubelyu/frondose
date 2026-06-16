@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { applySettings, parseSettingsPatch } from "../../../src/cli/subcommands/serve/settings.js";
 import { readAuth, writeAuth } from "../../../src/persistence/auth.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SETTINGS_ENV_KEYS = ["HOME", "MAI_HOME_BASE"] as const;
@@ -25,7 +27,7 @@ function restoreEnv(saved: Record<SettingsEnvKey, string | undefined>): void {
 }
 
 function withSettingsHome<T>(fn: () => T): T {
-  const home = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "mai-p71-settings-"));
+  const home = mkdtempSync(join(tmpdir(), "mai-p71-settings-"));
   const saved = saveEnv();
   process.env.HOME = home;
   process.env.FRONDOSE_HOME_BASE = home;
@@ -33,7 +35,7 @@ function withSettingsHome<T>(fn: () => T): T {
     return fn();
   } finally {
     restoreEnv(saved);
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 

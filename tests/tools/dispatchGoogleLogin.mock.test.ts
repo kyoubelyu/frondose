@@ -27,7 +27,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -40,10 +40,11 @@ import {
   dispatchGoogleLogin,
   makeDispatchGoogleLoginTool,
 } from "../../src/tools/server/dispatchGoogleLogin.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p28.5-dgl-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Build standard `:memory:` deps with worker 'w1' active, persona 'acme-bd',

@@ -7,12 +7,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { identityFieldNames } from "../../../src/persistence/identity.js";
 import { makeGetIdentityTool } from "../../../src/tools/identity/getIdentity.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -25,10 +26,22 @@ function uniqueIdPath(): string {
 
 function cleanupDir(path: string): void {
   try {
-    rmSync(join(path, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(path, ".."));
   } catch {
     // best-effort
   }
+}
+
+function setIsolatedHome(home: string): void {
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+}
+
+function restoreHome(home: string | undefined, homeBase: string | undefined): void {
+  if (home !== undefined) process.env.HOME = home;
+  else delete process.env.HOME;
+  if (homeBase !== undefined) process.env.FRONDOSE_HOME_BASE = homeBase;
+  else delete process.env.FRONDOSE_HOME_BASE;
 }
 
 // ─── T-M115 ──────────────────────────────────────────────────────────────────
@@ -38,7 +51,8 @@ test("T-M115: getIdentity execute returns record:null and all 7 fields missing w
   // Without override, operator's real identity is returned instead of null.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
-  process.env.HOME = tmpHome;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  setIsolatedHome(tmpHome);
   const idPath = uniqueIdPath();
   // Do NOT write the file — it must be absent
   try {
@@ -60,9 +74,8 @@ test("T-M115: getIdentity execute returns record:null and all 7 fields missing w
     }
   } finally {
     cleanupDir(idPath);
-    if (origHome !== undefined) process.env.HOME = origHome;
-    else delete process.env.HOME;
-    rmSync(tmpHome, { recursive: true, force: true });
+    restoreHome(origHome, origHomeBase);
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -73,7 +86,8 @@ test("T-M116: getIdentity execute returns parsed record when identity.json is va
   // Without override, operator's real identity is returned (wrong record values).
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
-  process.env.HOME = tmpHome;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  setIsolatedHome(tmpHome);
   const idPath = uniqueIdPath();
   try {
     const record = {
@@ -104,9 +118,8 @@ test("T-M116: getIdentity execute returns parsed record when identity.json is va
     assert.ok(missing.includes("persona"), "persona must be missing");
   } finally {
     cleanupDir(idPath);
-    if (origHome !== undefined) process.env.HOME = origHome;
-    else delete process.env.HOME;
-    rmSync(tmpHome, { recursive: true, force: true });
+    restoreHome(origHome, origHomeBase);
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -117,7 +130,8 @@ test("T-M117: getIdentity execute returns record:null when identity.json is corr
   // Without override, operator's real identity is returned instead of null for corrupt file.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
   const origHome = process.env.HOME;
-  process.env.HOME = tmpHome;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  setIsolatedHome(tmpHome);
   const idPath = uniqueIdPath();
   try {
     writeFileSync(idPath, "not valid json {{{", "utf-8");
@@ -141,8 +155,7 @@ test("T-M117: getIdentity execute returns record:null when identity.json is corr
     assert.equal(data.record, null, "record must be null when JSON is corrupt");
   } finally {
     cleanupDir(idPath);
-    if (origHome !== undefined) process.env.HOME = origHome;
-    else delete process.env.HOME;
-    rmSync(tmpHome, { recursive: true, force: true });
+    restoreHome(origHome, origHomeBase);
+    cleanupTmpDir(tmpHome);
   }
 });

@@ -15,10 +15,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   type EnvSnapshot,
   installLaunchAgent,
-  isDaemonInstalled,
   LABEL,
   type PlistArgs,
   plistPath,
@@ -49,9 +49,6 @@ function makePlistArgs(overrides: Partial<PlistArgs> & { env?: Partial<EnvSnapsh
     env,
   };
 }
-
-// Stub spawnSync for launchctl — replaced by real mock at Step 5
-type SpawnSyncReturn = { status: number | null; stderr?: string; stdout?: string };
 
 // ─── Plist render ─────────────────────────────────────────────────────────────
 
@@ -216,7 +213,7 @@ describe("P-23 contract: Hard Rule 8 + tool count", () => {
     // When:   all TypeScript files under src/tools/ are scanned for 'child_process'
     // Then:   zero matches (launchd.ts is under src/cli/subcommands/, not src/tools/)
     // NOTE:   CI biome lint enforces this rule; this test provides a deterministic signal.
-    const projectRoot = new URL("../../../", import.meta.url).pathname;
+    const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
     const result = execSync("grep -rl 'child_process' src/tools/ 2>/dev/null || true", {
       cwd: projectRoot,
       encoding: "utf-8",

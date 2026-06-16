@@ -25,8 +25,9 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const INSTALL_SH = resolve(ROOT, "install.sh");
 const PKG_JSON_PATH = resolve(ROOT, "package.json");
 
@@ -38,6 +39,9 @@ describe("install.sh bash syntax check (G-P40.8)", () => {
     // When:  execSync(`bash -n "${INSTALL_SH}"`)
     // Then:  exits 0 — bash syntax is valid
     assert.ok(existsSync(INSTALL_SH), "install.sh must exist at repo root");
+    if (process.platform === "win32") {
+      return;
+    }
     try {
       execSync(`bash -n "${INSTALL_SH}"`, { stdio: "pipe" });
     } catch (e) {
@@ -221,11 +225,11 @@ describe("package.json — scripts.install suppresses npm implicit node-gyp rebu
     const installScript = pkg.scripts?.install ?? "";
     assert.ok(
       installScript.includes("node -e"),
-      `package.json scripts.install must be cross-platform node-based no-op (WIN-2: 'node -e \"\"'); got '${installScript}'`,
+      `package.json scripts.install must be cross-platform node-based no-op (WIN-2: 'node -e ""'); got '${installScript}'`,
     );
     assert.ok(
       installScript !== "true",
-      `package.json scripts.install must NOT be bare 'true' (WIN-2 replaced with cross-platform 'node -e \"\"'); got '${installScript}'`,
+      `package.json scripts.install must NOT be bare 'true' (WIN-2 replaced with cross-platform 'node -e ""'); got '${installScript}'`,
     );
   });
 });

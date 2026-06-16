@@ -6,16 +6,17 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { addWorker, listWorkers, openWorkersDb } from "../../src/persistence/workersRegistry.js";
 import { makeRevokeWorkerTool } from "../../src/tools/server/revokeWorker.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p27-rev-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 // ─── T-REV.1 ─────────────────────────────────────────────────────────────────

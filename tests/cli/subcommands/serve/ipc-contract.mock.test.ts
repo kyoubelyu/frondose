@@ -29,7 +29,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 // ─── §A Goldens ──────────────────────────────────────────────────────────────
@@ -51,11 +52,11 @@ const SIDECAR_ROUTE_BRANCHES_GOLDEN: ReadonlySet<string> = new Set([
   "POST /agent/activate",
   "POST /agent/abort",
   "POST /agent/retry",
-  "POST /workflow/",   // startsWith branch
+  "POST /workflow/", // startsWith branch
   "POST /agent/cron-mode",
   "POST /agent/passive-mode",
   "GET /agent/events",
-  "GET /audit/tail",   // startsWith branch
+  "GET /audit/tail", // startsWith branch
 ]);
 
 /** 15 app-side concrete (METHOD PATH) pairs from main.rs uds_request + SSE build_uri. */
@@ -97,54 +98,98 @@ const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
 ]);
 
 /** Workflow subpaths that controller/endpoints.ts:8-12 must accept. */
-const WORKFLOW_SUBPATHS = ["/workflow/approve", "/workflow/decline", "/workflow/handoff", "/workflow/cancel", "/workflow/hand-off-to-auto"] as const;
+const WORKFLOW_SUBPATHS = [
+  "/workflow/approve",
+  "/workflow/decline",
+  "/workflow/handoff",
+  "/workflow/cancel",
+  "/workflow/hand-off-to-auto",
+] as const;
 
 // ─── §C Goldens ──────────────────────────────────────────────────────────────
 
 /** 28 sidecar SSE frame type strings (21 SseFrame context.ts + 7 WorkflowSseFrame types.ts). */
 const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   // SseFrame context.ts — multiline block (16):
-  "tool-call", "text", "step-done", "done", "error",
-  "overlay-reconnected", "overlay-event", "suggestion-card", "next-actions",
-  "profile-nav", "dialog-mode", "cron-mode", "cron-tick", "cron-done",
-  "turn-started", "passive-mode",
+  "tool-call",
+  "text",
+  "step-done",
+  "done",
+  "error",
+  "overlay-reconnected",
+  "overlay-event",
+  "suggestion-card",
+  "next-actions",
+  "profile-nav",
+  "dialog-mode",
+  "cron-mode",
+  "cron-tick",
+  "cron-done",
+  "turn-started",
+  "passive-mode",
   // SseFrame context.ts — standalone members (5):
-  "passive-fired", "passive-skipped",
-  "auto-run-started", "auto-run-progress", "auto-run-completed",
+  "passive-fired",
+  "passive-skipped",
+  "auto-run-started",
+  "auto-run-progress",
+  "auto-run-completed",
   // WorkflowSseFrame types.ts (7):
-  "workflow-proposed", "workflow-step-advanced", "workflow-approval-pending",
-  "workflow-approval-resolved", "workflow-mode-changed", "workflow-completed",
+  "workflow-proposed",
+  "workflow-step-advanced",
+  "workflow-approval-pending",
+  "workflow-approval-resolved",
+  "workflow-mode-changed",
+  "workflow-completed",
   "commit-warning",
 ]);
 
 /** 23 UI SseFrame literals (app.ts:51-80) — documented drift baseline (5 sidecar-only frames missing). */
 const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
-  "tool-call", "text", "step-done", "done", "error",
-  "overlay-reconnected", "overlay-event", "suggestion-card", "next-actions",
-  "profile-nav", "dialog-mode", "cron-mode", "passive-mode",
-  "cron-tick", "cron-done", "turn-started",
-  "workflow-proposed", "workflow-step-advanced", "workflow-approval-pending",
-  "workflow-approval-resolved", "workflow-mode-changed", "workflow-completed",
+  "tool-call",
+  "text",
+  "step-done",
+  "done",
+  "error",
+  "overlay-reconnected",
+  "overlay-event",
+  "suggestion-card",
+  "next-actions",
+  "profile-nav",
+  "dialog-mode",
+  "cron-mode",
+  "passive-mode",
+  "cron-tick",
+  "cron-done",
+  "turn-started",
+  "workflow-proposed",
+  "workflow-step-advanced",
+  "workflow-approval-pending",
+  "workflow-approval-resolved",
+  "workflow-mode-changed",
+  "workflow-completed",
   "commit-warning",
 ]);
 
 /** 5 sidecar-only frames the UI silently drops (latent UX bug — CONCERN-MR-4). */
 const SIDECAR_ONLY_DRIFT: ReadonlySet<string> = new Set([
-  "passive-fired", "passive-skipped",
-  "auto-run-started", "auto-run-progress", "auto-run-completed",
+  "passive-fired",
+  "passive-skipped",
+  "auto-run-started",
+  "auto-run-progress",
+  "auto-run-completed",
 ]);
 
 // ─── Source file paths ────────────────────────────────────────────────────────
 
-const ROOT = join(new URL(import.meta.url).pathname, "..", "..", "..", "..", "..");
-const CONTEXT_TS   = join(ROOT, "src", "cli", "subcommands", "serve", "context.ts");
+const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+const CONTEXT_TS = join(ROOT, "src", "cli", "subcommands", "serve", "context.ts");
 const WORKFLOW_TYPES_TS = join(ROOT, "src", "agent", "workflow", "types.ts");
-const APP_TS       = join(ROOT, "src", "tauri", "ui", "app.ts");
-const ROUTES_TS    = join(ROOT, "src", "cli", "subcommands", "serve", "routes.ts");
-const MAIN_RS      = join(ROOT, "src", "tauri", "src-tauri", "src", "main.rs");
-const HTTP_TS      = join(ROOT, "src", "cli", "subcommands", "serve", "http.ts");
-const HOST_TS      = join(ROOT, "src", "overlay", "host.ts");
-const SERVE_TS     = join(ROOT, "src", "cli", "subcommands", "serve.ts");
+const APP_TS = join(ROOT, "src", "tauri", "ui", "app.ts");
+const ROUTES_TS = join(ROOT, "src", "cli", "subcommands", "serve", "routes.ts");
+const MAIN_RS = join(ROOT, "src", "tauri", "src-tauri", "src", "main.rs");
+const HTTP_TS = join(ROOT, "src", "cli", "subcommands", "serve", "http.ts");
+const HOST_TS = join(ROOT, "src", "overlay", "host.ts");
+const SERVE_TS = join(ROOT, "src", "cli", "subcommands", "serve.ts");
 const ENDPOINTS_TS = join(ROOT, "src", "agent", "workflow", "controller", "endpoints.ts");
 
 // ─── TS compiler API extractor ────────────────────────────────────────────────
@@ -197,10 +242,7 @@ function extractSseFrameDiscriminants(filePath: string, aliasName: string): Set<
 
   let found: Set<string> | null = null;
   function visit(node: ts.Node): void {
-    if (
-      ts.isTypeAliasDeclaration(node) &&
-      node.name.text === aliasName
-    ) {
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === aliasName) {
       found = extractFromTypeAlias(node);
       return;
     }
@@ -235,7 +277,11 @@ class MockServerResponse extends EventEmitter {
     this.ended = true;
   }
   parsedBody(): unknown {
-    try { return JSON.parse(this.body); } catch { return null; }
+    try {
+      return JSON.parse(this.body);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -267,7 +313,9 @@ class MockIncomingMessage extends EventEmitter {
 
 function makeSpy<T extends unknown[]>(): ((...args: T) => void) & { calls: T[] } {
   const calls: T[] = [];
-  const spy = (...args: T) => { calls.push(args); };
+  const spy = (...args: T) => {
+    calls.push(args);
+  };
   spy.calls = calls;
   return spy;
 }
@@ -280,7 +328,9 @@ function makeTempHome(): string {
 
 // Note: makeState and makeDeps are used inside async test bodies; the actual
 // WorkflowController import happens inside each test that needs it.
-function makeState(overrides: Partial<import("../../../../src/cli/subcommands/serve/context.js").ServeState> = {}): import("../../../../src/cli/subcommands/serve/context.js").ServeState {
+function makeState(
+  overrides: Partial<import("../../../../src/cli/subcommands/serve/context.js").ServeState> = {},
+): import("../../../../src/cli/subcommands/serve/context.js").ServeState {
   return {
     currentTurn: null,
     overlayContextId: undefined,
@@ -315,7 +365,7 @@ async function issueRequest(
 
 function assertSetsEqual(actual: Set<string>, expected: ReadonlySet<string>, label: string): void {
   const missing = [...expected].filter((x) => !actual.has(x));
-  const extra   = [...actual].filter((x) => !expected.has(x));
+  const extra = [...actual].filter((x) => !expected.has(x));
   assert.ok(
     missing.length === 0 && extra.length === 0,
     `${label}: set mismatch\n  missing from actual: ${JSON.stringify(missing)}\n  extra in actual:    ${JSON.stringify(extra)}`,
@@ -327,7 +377,6 @@ function assertSetsEqual(actual: Set<string>, expected: ReadonlySet<string>, lab
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant, --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)", () => {
-
   it("T-IPC.Transport.1: when main.rs and http.ts are read, the TCP-loopback transport uses Authorization Bearer and 127.0.0.1 Host header on both sides (WIN-1)", () => {
     // Given: main.rs (Rust app side) + http.ts (Node sidecar side) at HEAD after WIN-1
     // When: both files are read as text and inspected for header literals and loopback bind
@@ -335,8 +384,8 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
 
     // TODO (Step 5): fill assertion bodies after builder lands TCP transport.
     // The assertions below describe the NEW TCP contract — they will FAIL until Step 4.
-    const mainRs  = readFileSync(MAIN_RS,  "utf-8");
-    const httpTs  = readFileSync(HTTP_TS,  "utf-8");
+    const mainRs = readFileSync(MAIN_RS, "utf-8");
+    const httpTs = readFileSync(HTTP_TS, "utf-8");
 
     // App side — http_request (renamed from uds_request) builds http://127.0.0.1:<port><path>.
     // Rust uses format!("http://127.0.0.1:{}{}", port, path) so "127.0.0.1" appears as a literal.
@@ -362,20 +411,14 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     );
 
     // Sidecar side — http.ts:checkBearer reads authorization header + startsWith("Bearer ")
-    assert.ok(
-      httpTs.includes("authorization"),
-      "http.ts:checkBearer must reference req.headers.authorization",
-    );
+    assert.ok(httpTs.includes("authorization"), "http.ts:checkBearer must reference req.headers.authorization");
     assert.ok(
       httpTs.includes(`"${BEARER_PREFIX}"`),
       `http.ts must contain the literal "${BEARER_PREFIX}" (note trailing space)`,
     );
 
     // NoUDS: main.rs must NOT reference hyperlocal or unix socket scheme after WIN-1
-    assert.ok(
-      !mainRs.includes("hyperlocal"),
-      "main.rs must not reference hyperlocal after WIN-1 transport swap",
-    );
+    assert.ok(!mainRs.includes("hyperlocal"), "main.rs must not reference hyperlocal after WIN-1 transport swap");
     assert.ok(
       !mainRs.includes("Client::unix"),
       "main.rs must not call Client::unix() after WIN-1 — use Client::new() TCP",
@@ -387,8 +430,8 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     // When: both files are read as text
     // Then: main.rs contains "FRONDOSE_SIDECAR_OWNER" + the value; host.ts still has the value
 
-    const mainRs = readFileSync(MAIN_RS,  "utf-8");
-    const hostTs = readFileSync(HOST_TS,  "utf-8");
+    const mainRs = readFileSync(MAIN_RS, "utf-8");
+    const hostTs = readFileSync(HOST_TS, "utf-8");
 
     assert.ok(
       mainRs.includes("FRONDOSE_SIDECAR_OWNER") && mainRs.includes(`"${FRONDOSE_SIDECAR_OWNER_VALUE}"`),
@@ -412,7 +455,7 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
 
     // Helper: guard against process.exit(2) so the whole file doesn't crash pre-impl
     function withExitGuard<T>(fn: () => T): { result?: T; exitCode?: number; stderr: string } {
-      const origExit  = process.exit;
+      const origExit = process.exit;
       const origWrite = process.stderr.write.bind(process.stderr);
       let capturedCode: number | undefined;
       let stderrMsg = "";
@@ -433,7 +476,7 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
         }
         throw err;
       } finally {
-        process.exit         = origExit;
+        process.exit = origExit;
         process.stderr.write = origWrite;
       }
     }
@@ -442,7 +485,11 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     // Pre-impl: parseArgs exits(2) because --port-file is not recognized. Post-impl: returns result.
     {
       const outcome = withExitGuard(() => parseArgs(["--port-file", "/x", "--token", "T"]));
-      assert.strictEqual(outcome.exitCode, undefined, "--port-file space form must not cause exit (WIN-1: replaces --sock)");
+      assert.strictEqual(
+        outcome.exitCode,
+        undefined,
+        "--port-file space form must not cause exit (WIN-1: replaces --sock)",
+      );
       assert.deepEqual(
         outcome.result,
         { portFile: "/x", bearerToken: "T" },
@@ -464,9 +511,9 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     // Success shape 3: env fallback — FRONDOSE_PORT_FILE (MAI_SOCK dropped; no transition window for internal arg)
     {
       const origPortFile = process.env["FRONDOSE_PORT_FILE"];
-      const origToken    = process.env["FRONDOSE_TOKEN"];
+      const origToken = process.env["FRONDOSE_TOKEN"];
       process.env["FRONDOSE_PORT_FILE"] = "/x";
-      process.env["FRONDOSE_TOKEN"]     = "T";
+      process.env["FRONDOSE_TOKEN"] = "T";
       try {
         const outcome = withExitGuard(() => parseArgs([]));
         assert.strictEqual(outcome.exitCode, undefined, "env fallback FRONDOSE_PORT_FILE must not cause exit");
@@ -476,17 +523,19 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
           "env fallback (FRONDOSE_PORT_FILE + FRONDOSE_TOKEN via frondoseEnv) must parse correctly (WIN-1)",
         );
       } finally {
-        if (origPortFile === undefined) delete process.env["FRONDOSE_PORT_FILE"]; else process.env["FRONDOSE_PORT_FILE"] = origPortFile;
-        if (origToken    === undefined) delete process.env["FRONDOSE_TOKEN"];     else process.env["FRONDOSE_TOKEN"]     = origToken;
+        if (origPortFile === undefined) delete process.env["FRONDOSE_PORT_FILE"];
+        else process.env["FRONDOSE_PORT_FILE"] = origPortFile;
+        if (origToken === undefined) delete process.env["FRONDOSE_TOKEN"];
+        else process.env["FRONDOSE_TOKEN"] = origToken;
       }
     }
 
     // Failure shape: no args + no env → process.exit(2) with new fatal text
     {
       const prevPortFile = process.env["FRONDOSE_PORT_FILE"];
-      const prevToken    = process.env["FRONDOSE_TOKEN"];
-      const prevSock     = process.env["FRONDOSE_SOCK"];
-      const prevMaiSock  = process.env["MAI_SOCK"];
+      const prevToken = process.env["FRONDOSE_TOKEN"];
+      const prevSock = process.env["FRONDOSE_SOCK"];
+      const prevMaiSock = process.env["MAI_SOCK"];
       delete process.env["FRONDOSE_PORT_FILE"];
       delete process.env["FRONDOSE_TOKEN"];
       delete process.env["FRONDOSE_SOCK"];
@@ -500,9 +549,9 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
         );
       } finally {
         if (prevPortFile !== undefined) process.env["FRONDOSE_PORT_FILE"] = prevPortFile;
-        if (prevToken    !== undefined) process.env["FRONDOSE_TOKEN"]     = prevToken;
-        if (prevSock     !== undefined) process.env["FRONDOSE_SOCK"]      = prevSock;
-        if (prevMaiSock  !== undefined) process.env["MAI_SOCK"]           = prevMaiSock;
+        if (prevToken !== undefined) process.env["FRONDOSE_TOKEN"] = prevToken;
+        if (prevSock !== undefined) process.env["FRONDOSE_SOCK"] = prevSock;
+        if (prevMaiSock !== undefined) process.env["MAI_SOCK"] = prevMaiSock;
       }
     }
   });
@@ -517,10 +566,7 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     const serveTs = readFileSync(SERVE_TS, "utf-8");
 
     // Must have loopback bind
-    assert.ok(
-      serveTs.includes("127.0.0.1"),
-      "serve.ts must bind on '127.0.0.1' (TCP loopback — WIN-1 transport)",
-    );
+    assert.ok(serveTs.includes("127.0.0.1"), "serve.ts must bind on '127.0.0.1' (TCP loopback — WIN-1 transport)");
 
     // Must NOT retain the per-file 0o600 chmod from the UDS path
     // (Optional parent-dir 0o700 for unix hardening is permitted per plan §2.3 note.)
@@ -535,7 +581,6 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
       "serve.ts must reference portFile (or port_file) not sockPath after WIN-1",
     );
   });
-
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -543,7 +588,6 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)", () => {
-
   it("T-IPC.Endpoints.1: when routes.ts is parsed, it has exactly 14 route branches matching the golden set", () => {
     // Given: routes.ts:48-113 contains all sidecar HTTP dispatch branches
     // When: the source is parsed for all if(method===... && url===... / url.startsWith(...)) conditions
@@ -552,18 +596,21 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     const routesTs = readFileSync(ROUTES_TS, "utf-8");
 
     // Extract branches: two patterns — exact equality and startsWith prefix
-    const exactPattern    = /if\s*\(\s*method\s*===\s*"(\w+)"\s*&&\s*url\s*===\s*"([^"]+)"\s*\)/g;
-    const prefixPattern   = /if\s*\(\s*method\s*===\s*"(\w+)"\s*&&\s*url\.startsWith\s*\(\s*"([^"]+)"\s*\)\s*\)/g;
+    const exactPattern = /if\s*\(\s*method\s*===\s*"(\w+)"\s*&&\s*url\s*===\s*"([^"]+)"\s*\)/g;
+    const prefixPattern = /if\s*\(\s*method\s*===\s*"(\w+)"\s*&&\s*url\.startsWith\s*\(\s*"([^"]+)"\s*\)\s*\)/g;
 
     const extracted = new Set<string>();
 
-    let m: RegExpExecArray | null;
-    while ((m = exactPattern.exec(routesTs)) !== null) {
+    let m = exactPattern.exec(routesTs);
+    while (m !== null) {
       extracted.add(`${m[1]} ${m[2]}`);
+      m = exactPattern.exec(routesTs);
     }
-    while ((m = prefixPattern.exec(routesTs)) !== null) {
+    m = prefixPattern.exec(routesTs);
+    while (m !== null) {
       // Keep the prefix as-is (including trailing slash) — matches golden keys like "POST /workflow/"
       extracted.add(`${m[1]} ${m[2]}`);
+      m = prefixPattern.exec(routesTs);
     }
 
     // Fail-closed count assertion BEFORE set equality
@@ -578,10 +625,7 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // Sub-assertion: workflow subpaths accepted by controller/endpoints.ts
     const endpointsSrc = readFileSync(ENDPOINTS_TS, "utf-8");
     for (const subpath of WORKFLOW_SUBPATHS) {
-      assert.ok(
-        endpointsSrc.includes(`"${subpath}"`),
-        `controller/endpoints.ts must handle subpath "${subpath}"`,
-      );
+      assert.ok(endpointsSrc.includes(`"${subpath}"`), `controller/endpoints.ts must handle subpath "${subpath}"`);
     }
   });
 
@@ -597,15 +641,15 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // uds_request pattern: Method::GET/POST followed (possibly across lines) by the path string
     // The calls can be multiline: uds_request(\n  state.inner(),\n  Method::POST,\n  "/path",
     const udsPattern = /Method::(GET|POST|PUT|DELETE|PATCH)[^"]*"(\/[^"]+)"/g;
-    let m: RegExpExecArray | null;
-    while ((m = udsPattern.exec(mainRsSrc)) !== null) {
+    let m = udsPattern.exec(mainRsSrc);
+    while (m !== null) {
       extracted.add(`${m[1]} ${m[2]}`);
+      m = udsPattern.exec(mainRsSrc);
     }
 
     // SSE subscriber build_uri call: build_uri(&state.sock_path, "/agent/events")
     // This is a GET — the SSE subscriber uses Method::GET
-    if (mainRsSrc.includes('build_uri(&state.sock_path, "/agent/events")') ||
-        mainRsSrc.includes('"/agent/events"')) {
+    if (mainRsSrc.includes('build_uri(&state.sock_path, "/agent/events")') || mainRsSrc.includes('"/agent/events"')) {
       extracted.add("GET /agent/events");
     }
 
@@ -628,19 +672,18 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
         // Exact match OR prefix match (for startsWith branches like /workflow/ and /audit/tail)
         return appPath === bPath || appPath.startsWith(bPath);
       });
-      assert.ok(
-        accepted,
-        `app path "${appPair}" has no accepting sidecar route branch — CONTRACT BREAK`,
-      );
+      assert.ok(accepted, `app path "${appPair}" has no accepting sidecar route branch — CONTRACT BREAK`);
     }
 
     // Workflow subpaths accepted by controller/endpoints.ts
     const endpointsSrc = readFileSync(ENDPOINTS_TS, "utf-8");
-    for (const subpath of ["/workflow/approve", "/workflow/decline", "/workflow/handoff", "/workflow/cancel"] as const) {
-      assert.ok(
-        endpointsSrc.includes(`"${subpath}"`),
-        `controller/endpoints.ts must explicitly handle "${subpath}"`,
-      );
+    for (const subpath of [
+      "/workflow/approve",
+      "/workflow/decline",
+      "/workflow/handoff",
+      "/workflow/cancel",
+    ] as const) {
+      assert.ok(endpointsSrc.includes(`"${subpath}"`), `controller/endpoints.ts must explicitly handle "${subpath}"`);
     }
   });
 
@@ -673,7 +716,6 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
 
     assertSetsEqual(extracted, TAURI_COMMANDS_GOLDEN, "Tauri invoke_handler commands");
   });
-
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -681,13 +723,12 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=23)", () => {
-
   it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 28-element golden", () => {
     // Given: context.ts declares SseFrame (multiline + standalone forms); types.ts declares WorkflowSseFrame
     // When: TS compiler API extracts all type: discriminants from both files (Approach A — no regex)
     // Then: context.ts yields exactly 21, types.ts yields exactly 7, combined===28; any drift fails
 
-    const contextSseFrameSet  = extractSseFrameDiscriminants(CONTEXT_TS,       "SseFrame");
+    const contextSseFrameSet = extractSseFrameDiscriminants(CONTEXT_TS, "SseFrame");
     const workflowSseFrameSet = extractSseFrameDiscriminants(WORKFLOW_TYPES_TS, "WorkflowSseFrame");
 
     // Fail-closed counts BEFORE set equality
@@ -740,7 +781,6 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=23)", () =
       `UI SseFrame contains ${uiOnlyActual.size} frames not in the sidecar union — unexpected UI-only drift: ${JSON.stringify([...uiOnlyActual])}`,
     );
   });
-
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -757,7 +797,7 @@ let _tempHome: string;
 
 function setupTempHome(): void {
   _savedHome = process.env.FRONDOSE_HOME_BASE;
-  _tempHome  = mkdtempSync(join(tmpdir(), "p-app-7-mask-"));
+  _tempHome = mkdtempSync(join(tmpdir(), "p-app-7-mask-"));
   mkdirSync(join(_tempHome, ".frondose", "agent"), { recursive: true });
 
   // Write auth.json with toy key — "abc12345" → mask "***2345" (verified against auth.ts:177-187)
@@ -783,7 +823,6 @@ function teardownTempHome(): void {
 }
 
 describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () => {
-
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
@@ -895,5 +934,4 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
       'serialized response MUST NOT contain the raw key "abc12345"',
     );
   });
-
 });

@@ -11,14 +11,15 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { secretsJsonSchema } from "../../src/persistence/secrets.js";
 import { makeAllTools } from "../../src/tools/index.js";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
-const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // ─── T-C.1 ────────────────────────────────────────────────────────────────────
 

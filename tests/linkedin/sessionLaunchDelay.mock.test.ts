@@ -27,12 +27,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { launch as chromeLaunch } from "chrome-launcher";
 import { CdpClient } from "../../src/cdp/client.js";
 import { __setLaunchFn } from "../../src/cdp/launcher.js";
 import { createLinkedinSession } from "../../src/linkedin/session.js";
 
-const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // ─── Fake CDP handle ─────────────────────────────────────────────────────────
 

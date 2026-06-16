@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -7,6 +7,7 @@ import { handlePostSettings } from "../../../src/cli/subcommands/serve/routes/se
 import { applySettings, parseSettingsPatch, readSettings } from "../../../src/cli/subcommands/serve/settings.js";
 import { maskKey } from "../../../src/persistence/auth.js";
 import { DEFAULT_SECRETS_PATH, readSecrets, writeSecrets } from "../../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const RAW_BRAVE_KEY = "bsa_live_value_1234567890";
 
@@ -22,7 +23,7 @@ async function withSettingsHome<T>(fn: () => T | Promise<T>): Promise<T> {
     else process.env.HOME = saved.HOME;
     if (saved.FRONDOSE_HOME_BASE === undefined) delete process.env.FRONDOSE_HOME_BASE;
     else process.env.FRONDOSE_HOME_BASE = saved.FRONDOSE_HOME_BASE;
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 
@@ -140,8 +141,7 @@ describe("P-BRAVE-MCP settings backend write contract", () => {
         // When: the submitted search.brave.key is omitted, blank, masked, mask-shaped, or whitespace-only.
         // Then: the existing key is preserved and not overwritten by UI placeholder values.
         seedSecrets({ braveApiKey: RAW_BRAVE_KEY, tavilyApiKey: "legacy-tavily" });
-        const body =
-          key === undefined ? { search: { brave: {} } } : { search: { brave: { key: key as string } } };
+        const body = key === undefined ? { search: { brave: {} } } : { search: { brave: { key: key as string } } };
         const parsed = parseSettingsPatch(body) as {
           ok: boolean;
           patch?: { search?: { brave?: { key?: string } } };

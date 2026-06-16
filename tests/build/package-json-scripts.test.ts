@@ -28,7 +28,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const REPO = join(fileURLToPath(import.meta.url), "..", "..", "..");
+const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as {
   scripts: Record<string, string>;
 };
@@ -43,10 +43,7 @@ describe("G-WIN2.4 — package.json: scripts use cross-platform helpers; no POSI
     //        AND does NOT equal exactly "true" (which fails on Windows — no true.exe)
 
     const installScript = pkg.scripts.install;
-    assert.ok(
-      typeof installScript === "string",
-      "T-WIN2.4a: scripts.install must exist",
-    );
+    assert.ok(typeof installScript === "string", "T-WIN2.4a: scripts.install must exist");
     assert.notEqual(
       installScript,
       "true",
@@ -65,10 +62,7 @@ describe("G-WIN2.4 — package.json: scripts use cross-platform helpers; no POSI
     //        AND does NOT contain "chmod +x" (POSIX-only — fails on Windows)
 
     const buildScript = pkg.scripts.build;
-    assert.ok(
-      typeof buildScript === "string",
-      "T-WIN2.4b: scripts.build must exist",
-    );
+    assert.ok(typeof buildScript === "string", "T-WIN2.4b: scripts.build must exist");
     assert.ok(
       !buildScript.includes("chmod +x"),
       `T-WIN2.4b: scripts.build must NOT contain 'chmod +x' (POSIX-only; got: ${JSON.stringify(buildScript)})`,
@@ -87,10 +81,7 @@ describe("G-WIN2.4 — package.json: scripts use cross-platform helpers; no POSI
     //        NOTE: "cp " (with trailing space) is checked to avoid matching "cpSync" in future helpers
 
     const webScript = pkg.scripts["build:web"];
-    assert.ok(
-      typeof webScript === "string",
-      "T-WIN2.4c: scripts['build:web'] must exist",
-    );
+    assert.ok(typeof webScript === "string", "T-WIN2.4c: scripts['build:web'] must exist");
     assert.ok(
       !webScript.includes("cp "),
       `T-WIN2.4c: scripts['build:web'] must NOT contain 'cp ' (POSIX bare cp — fails on Windows; got: ${JSON.stringify(webScript)})`,
@@ -108,10 +99,7 @@ describe("G-WIN2.4 — package.json: scripts use cross-platform helpers; no POSI
     //        AND does NOT contain "chmod +x" (POSIX-only — fails on Windows)
 
     const tauriScript = pkg.scripts["build:tauri"];
-    assert.ok(
-      typeof tauriScript === "string",
-      "T-WIN2.4d: scripts['build:tauri'] must exist",
-    );
+    assert.ok(typeof tauriScript === "string", "T-WIN2.4d: scripts['build:tauri'] must exist");
     assert.ok(
       !tauriScript.includes("chmod +x"),
       `T-WIN2.4d: scripts['build:tauri'] must NOT contain 'chmod +x' (POSIX-only; got: ${JSON.stringify(tauriScript)})`,

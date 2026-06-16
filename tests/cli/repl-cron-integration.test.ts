@@ -34,7 +34,7 @@
 // No Chrome, no real LLM, no SQLite.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -43,12 +43,13 @@ import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { runRepl } from "../../src/cli/repl.js";
 import { readSchedule, type ScheduleRecord, writeSchedule } from "../../src/persistence/schedule.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p10-repl-cron-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {

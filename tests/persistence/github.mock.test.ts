@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -25,6 +25,7 @@ import {
   readGithubConfig,
   writeGithubConfig,
 } from "../../src/persistence/github.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function makeTmpDir(): { dir: string; path: string; cleanup: () => void } {
   return {
     dir,
     path: join(dir, "github.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 
@@ -107,7 +108,7 @@ describe("github.json persistence (G-P15.1)", () => {
       cleanup();
       if (origHome !== undefined) process.env.HOME = origHome;
       else delete process.env.HOME;
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     }
   });
 
@@ -130,7 +131,7 @@ describe("github.json persistence (G-P15.1)", () => {
     } finally {
       if (origHome !== undefined) process.env.HOME = origHome;
       else delete process.env.HOME;
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     }
   });
 

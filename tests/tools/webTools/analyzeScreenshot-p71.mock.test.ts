@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { writeAuth } from "../../../src/persistence/auth.js";
 import { makeAnalyzeScreenshotTool } from "../../../src/tools/webTools/analyzeScreenshot.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const FIXTURE_PNG = join(process.cwd(), "tests", "fixtures", "test-screenshot.png");
 const FAKE_OPTS: ToolExecutionOptions = { toolCallId: "p71-analyze-screenshot", messages: [] as CoreMessage[] };
@@ -48,7 +49,7 @@ async function withIsolatedVisionHome(fn: () => Promise<void>): Promise<void> {
     await fn();
   } finally {
     restoreEnv(saved);
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 

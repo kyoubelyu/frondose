@@ -14,7 +14,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -29,6 +29,7 @@ import {
   readTelegramConfig,
   writeTelegramConfig,
 } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ function makeTmpDir() {
     dir,
     configPath: join(dir, "config.json"),
     tcPath: join(dir, "telegram.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

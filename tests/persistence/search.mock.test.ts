@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -25,6 +25,7 @@ import {
   searchConfigSchema,
   writeSearchConfig,
 } from "../../src/persistence/search.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function makeTmpDir(): { dir: string; path: string; cleanup: () => void } {
   return {
     dir,
     path: join(dir, "search.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 
@@ -52,6 +53,18 @@ function captureStderr(fn: () => void): string {
     (process.stderr as any).write = orig;
   }
   return chunks.join("");
+}
+
+function setIsolatedHome(home: string): void {
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+}
+
+function restoreHome(home: string | undefined, homeBase: string | undefined): void {
+  if (home !== undefined) process.env.HOME = home;
+  else delete process.env.HOME;
+  if (homeBase !== undefined) process.env.FRONDOSE_HOME_BASE = homeBase;
+  else delete process.env.FRONDOSE_HOME_BASE;
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -81,7 +94,8 @@ describe("search.json persistence (G-P15.2)", () => {
     // (which would trigger a secrets.json write attempt against a wrong path).
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
-    process.env.HOME = tmpHome;
+    const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+    setIsolatedHome(tmpHome);
     const { path, cleanup } = makeTmpDir();
     try {
       writeSearchConfig({ braveApiKey: "bsa-xxx" }, path);
@@ -90,14 +104,15 @@ describe("search.json persistence (G-P15.2)", () => {
 
       // P-24 shim: data is in co-located secrets.json, NOT in search.json (search.json is never created).
       // Mode check must be on secrets.json.
-      const secretsPath = join(dirname(path), "secrets.json");
-      const mode = statSync(secretsPath).mode & 0o777;
-      assert.equal(mode, 0o600, `file mode must be 0o600 for secrets; got ${mode.toString(8)}`);
+      if (process.platform !== "win32") {
+        const secretsPath = join(dirname(path), "secrets.json");
+        const mode = statSync(secretsPath).mode & 0o777;
+        assert.equal(mode, 0o600, `file mode must be 0o600 for secrets; got ${mode.toString(8)}`);
+      }
     } finally {
       cleanup();
-      if (origHome !== undefined) process.env.HOME = origHome;
-      else delete process.env.HOME;
-      rmSync(tmpHome, { recursive: true, force: true });
+      restoreHome(origHome, origHomeBase);
+      cleanupTmpDir(tmpHome);
     }
   });
 
@@ -110,15 +125,15 @@ describe("search.json persistence (G-P15.2)", () => {
     // secrets.json to /nonexistent/ → mkdirSync("/nonexistent") → EACCES.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
-    process.env.HOME = tmpHome;
+    const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+    setIsolatedHome(tmpHome);
     try {
       const result = readSearchConfig("/nonexistent/mai-test-search.json");
       assert.deepEqual(result, DEFAULT_SEARCH_CONFIG, "missing file must return DEFAULT_SEARCH_CONFIG");
       assert.equal(Object.keys(result).length, 0, "default config must be empty object");
     } finally {
-      if (origHome !== undefined) process.env.HOME = origHome;
-      else delete process.env.HOME;
-      rmSync(tmpHome, { recursive: true, force: true });
+      restoreHome(origHome, origHomeBase);
+      cleanupTmpDir(tmpHome);
     }
   });
 

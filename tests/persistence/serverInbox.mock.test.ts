@@ -9,15 +9,16 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { drainServerInbox, enqueueServerInbox, openServerInboxDb } from "../../src/persistence/serverInbox.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDb(): { dbPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-sinbox-"));
-  return { dbPath: join(dir, "inbox.sqlite"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dbPath: join(dir, "inbox.sqlite"), cleanup: () => cleanupTmpDir(dir) };
 }
 
 describe("serverInbox persistence (G-P26.7, G-P26.15)", () => {

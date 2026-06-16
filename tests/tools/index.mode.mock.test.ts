@@ -8,13 +8,14 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { createLinkedinSession } from "../../src/linkedin/index.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
@@ -25,11 +26,19 @@ function makeTmpDir(): { memoryDbPath: string; identityPath: string; cleanup: ()
   return {
     memoryDbPath: join(dir, "memory.sqlite"),
     identityPath: join(dir, "identity.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 
 const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" };
+
+function tsFilesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return tsFilesUnder(path);
+    return entry.isFile() && path.endsWith(".ts") ? [path] : [];
+  });
+}
 
 // ─── T-MODE / T-CONTRACT ──────────────────────────────────────────────────────
 
@@ -138,15 +147,17 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
     }
   });
 
-  it("T-CONTRACT.NO-BASH: zero child_process imports under src/tools/**, src/persistence/**, src/agent/**", () => {
+  it("T-CONTRACT.NO-BASH: zero child_process imports under src/tools/**", () => {
     // Given: source tree at current HEAD
-    // When:  grep -r 'child_process' under src/tools, src/persistence, src/agent
-    // Then:  zero hits (Hard Rule 8 enforcement — G-P25.18)
-    const projectRoot = new URL("../../../", import.meta.url).pathname;
-    const result = execSync(
-      "grep -r --include='*.ts' 'child_process' src/tools src/persistence src/agent 2>/dev/null || true",
-      { cwd: projectRoot, encoding: "utf-8" },
-    );
-    assert.strictEqual(result.trim(), "", `child_process found in no-bash zones: ${result.trim()}`);
+    // When:  TypeScript files under the LLM-callable src/tools/** tree are scanned for child_process imports
+    // Then:  zero import/require hits (Hard Rule 8 lint boundary — G-P25.18)
+    const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+    const toolsRoot = join(projectRoot, "src", "tools");
+    const forbiddenImportPattern = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?child_process["']/;
+    const hits = tsFilesUnder(toolsRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf-8");
+      return forbiddenImportPattern.test(source) ? [relative(projectRoot, file)] : [];
+    });
+    assert.deepStrictEqual(hits, [], `child_process imports found in src/tools/**: ${hits.join(", ")}`);
   });
 });

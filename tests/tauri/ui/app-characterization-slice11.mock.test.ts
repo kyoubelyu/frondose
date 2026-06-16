@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const LEAF_DIR = join(REPO, "src/tauri/ui/app");
@@ -243,8 +243,8 @@ before(async () => {
     return;
   }
   try {
-    workflowStepsMod = (await import(WORKFLOW_STEPS_JS)) as WorkflowStepsModule;
-    turnSyncMod = (await import(TURN_SYNC_JS)) as TurnSyncModule;
+    workflowStepsMod = (await import(pathToFileURL(WORKFLOW_STEPS_JS).href)) as WorkflowStepsModule;
+    turnSyncMod = (await import(pathToFileURL(TURN_SYNC_JS).href)) as TurnSyncModule;
   } catch (e) {
     leafLoadError = `leaf import failed: ${e instanceof Error ? e.message : String(e)} — run npm run build:tauri-ui first`;
   }

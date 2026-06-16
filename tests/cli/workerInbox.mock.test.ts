@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -20,10 +20,11 @@ import { MockLanguageModelV1 } from "ai/test";
 import type { RunCronTurnDeps } from "../../src/cli/replCron.js";
 import { drainWorkerInbox } from "../../src/cli/workerInbox.js";
 import { enqueueWorkerInbox, openWorkerInboxDb } from "../../src/persistence/workerInbox.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-wibdrain-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** A mock model that immediately returns an empty text response stream. */

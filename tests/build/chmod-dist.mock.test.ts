@@ -32,22 +32,19 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { before, beforeEach, afterEach, describe, it, mock } from "node:test";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { afterEach, before, beforeEach, describe, it, mock } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
-const REPO = join(fileURLToPath(import.meta.url), "..", "..", "..");
+const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const SCRIPT = join(REPO, "scripts", "chmod-dist.mjs");
 
 // The 3 dist entrypoints relative to a fixture root (mirrors §6.4-A ENTRYPOINTS)
-const ENTRYPOINTS = [
-  "dist/cli/main.js",
-  "dist/app/sidecarMain.js",
-  "dist/app/updateServerMain.js",
-];
+const ENTRYPOINTS = ["dist/cli/main.js", "dist/app/sidecarMain.js", "dist/app/updateServerMain.js"];
 
 // ─── CONCERN-MR 1: spy on fs.chmodSync ───────────────────────────────────────
 //
@@ -80,7 +77,7 @@ let chmodDistEntrypoints: ChmodFn | undefined;
 
 before(async () => {
   try {
-    const mod = await import(SCRIPT);
+    const mod = await import(pathToFileURL(SCRIPT).href);
     chmodDistEntrypoints = mod.chmodDistEntrypoints;
   } catch {
     // scripts/chmod-dist.mjs not yet created (pre-impl Step 4) — tests will hit assert.fail
@@ -97,7 +94,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (tmpDir) {
-    rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTmpDir(tmpDir);
     tmpDir = undefined;
   }
 });
@@ -167,9 +164,7 @@ describe("G-WIN2.2 — chmod-dist: chmods 3 entrypoints to 0o755 on POSIX", () =
     assert.equal(
       chmodSyncSpy.mock.calls.length,
       3,
-      "T-WIN2.2a: fs.chmodSync must be called EXACTLY 3 times (got " +
-        chmodSyncSpy.mock.calls.length +
-        ")",
+      "T-WIN2.2a: fs.chmodSync must be called EXACTLY 3 times (got " + chmodSyncSpy.mock.calls.length + ")",
     );
 
     // Assert: every call used mode 0o755
@@ -184,7 +179,7 @@ describe("G-WIN2.2 — chmod-dist: chmods 3 entrypoints to 0o755 on POSIX", () =
     }
 
     // Assert: the 3 expected path SUFFIXES are present (order-independent)
-    const calledPaths = chmodSyncSpy.mock.calls.map((c) => (c.arguments as [string, number])[0]);
+    const calledPaths = chmodSyncSpy.mock.calls.map((c) => (c.arguments as [string, number])[0].replace(/\\/g, "/"));
 
     for (const expected of ENTRYPOINTS) {
       assert.ok(

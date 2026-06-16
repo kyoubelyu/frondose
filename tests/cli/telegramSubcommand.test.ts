@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -18,6 +18,7 @@ import {
   readTelegramConfig,
   writeTelegramConfigFields,
 } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ function makeTmpCfgDir(): { cfgPath: string; cleanup: () => void; restoreHome: (
   process.env.HOME = dir;
   return {
     cfgPath: join(dir, "telegram.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
     restoreHome: () => {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;

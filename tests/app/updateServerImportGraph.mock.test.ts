@@ -198,6 +198,7 @@ describe("T-UpdateSrv.Build — dist output and executable bit", () => {
         `dist/app/updateServerMain.js must exist after build (pre-impl: intentional scaffold failure). ` +
           `Path: ${DIST_ENTRY}`,
       );
+      if (process.platform === "win32") return;
       const st = statSync(DIST_ENTRY);
       // 0o100 = S_IXUSR (owner execute)
       assert.ok(

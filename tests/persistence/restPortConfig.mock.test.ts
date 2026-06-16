@@ -9,17 +9,18 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { readConfig } from "../../src/persistence/config.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpConfig(obj: Record<string, unknown>): { configPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p36-fd2-"));
   const configPath = join(dir, "config.json");
   writeFileSync(configPath, JSON.stringify(obj), "utf-8");
-  return { configPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { configPath, cleanup: () => cleanupTmpDir(dir) };
 }
 
 // ─── T-FD2.1 ──────────────────────────────────────────────────────────────────

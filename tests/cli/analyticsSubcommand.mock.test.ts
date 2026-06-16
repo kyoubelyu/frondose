@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const REPO = join(fileURLToPath(import.meta.url), "../../..");
+const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const MAIN_TS = join(REPO, "src/cli/main.ts");
 
 // biome-ignore lint/suspicious/noExplicitAny: pre-builder stubs
