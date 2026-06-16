@@ -602,10 +602,10 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
   console.log(`T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`);
 });
 
-// ─── T-F.Wire.2 — worker=53/51, server=25/23 count contract (P-73) ─────────────
+// ─── T-F.Wire.2 — worker=52/50, server=25/23 count contract (P-73) ─────────────
 // NOTE: P-73 rebaselines server counts from P-Y3 27/25 to 25/23 (suggest_card/suggest_next_actions worker-only).
 
-test("T-F.Wire.2: post-P-73 tool count docs — CLAUDE.md contains worker 53/51 and server 25/23 plus present_summary", () => {
+test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 52/50 and server 25/23 plus present_summary", () => {
   // Given: P-73 has shipped (suggest_card/suggest_next_actions gated out of server mode);
   //        FULL worker power/consumer = 53/51 (unchanged) and server power/consumer = 25/23
   //        AND CLAUDE.md documents present_summary in the breakdown
@@ -627,19 +627,17 @@ test("T-F.Wire.2: post-P-73 tool count docs — CLAUDE.md contains worker 53/51 
       `(P-SP-E base 23 + 1 get_sales_report). Got ${baseCount}: ${Object.keys(t).sort().join(", ")}`,
   );
 
-  // CLAUDE.md count contract check
+  // ROADMAP.md count contract check
   const repoRoot = join(fileURLToPath(import.meta.url), "../../..");
-  const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf-8");
+  const roadmap = readFileSync(join(repoRoot, "ROADMAP.md"), "utf-8");
   assert.ok(
-    claudeMd.includes("worker = 52"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 52' in the power-tier paragraph (clear_cookies de-registered 2026-06-10)",
+    roadmap.includes("worker/server `52/25`"),
+    "T-F.Wire.2: ROADMAP.md must document worker/server 52/25 in the power-tier paragraph",
   );
   assert.ok(
-    claudeMd.includes("worker = 50"),
-    "T-F.Wire.2: CLAUDE.md must contain 'worker = 50' in the consumer-tier paragraph (clear_cookies de-registered 2026-06-10)",
+    roadmap.includes("worker/server `50/23`"),
+    "T-F.Wire.2: ROADMAP.md must document worker/server 50/23 in the consumer-tier paragraph",
   );
-  assert.ok(claudeMd.includes("server = 25"), "T-F.Wire.2: CLAUDE.md must contain 'server = 25' (P-73)");
-  assert.ok(claudeMd.includes("server = 23"), "T-F.Wire.2: CLAUDE.md must contain 'server = 23' (P-73)");
-  assert.ok(claudeMd.includes("present_summary"), "T-F.Wire.2: CLAUDE.md must document present_summary (P-Y3)");
-  console.log(`T-F.Wire.2 PASS: post-P-Y3 base count = ${baseCount}; CLAUDE.md count strings verified.`);
+  assert.ok(roadmap.includes("present_summary"), "T-F.Wire.2: ROADMAP.md must document present_summary (P-Y3)");
+  console.log(`T-F.Wire.2 PASS: post-P-Y3 base count = ${baseCount}; ROADMAP.md count strings verified.`);
 });
