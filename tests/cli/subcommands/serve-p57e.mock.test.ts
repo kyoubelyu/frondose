@@ -234,7 +234,7 @@ async function spinHarness(
 // biome-ignore lint/suspicious/noExplicitAny: synthetic payload
 function dispatchOverlayBindingEvent(rawPayload: any): void {
   if (!mockBindingCalledHandler) throw new Error("mockBindingCalledHandler not captured");
-  mockBindingCalledHandler({ name: "__maiPost", payload: JSON.stringify(rawPayload) });
+  mockBindingCalledHandler({ name: "__frondosePost", payload: JSON.stringify(rawPayload) });
 }
 
 /** Capture the buildPassivePrompt output (= passiveMessages[0].content) for a dispatched event. */

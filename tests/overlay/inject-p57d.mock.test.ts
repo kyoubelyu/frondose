@@ -3,13 +3,13 @@
  * (G-P57d.5, G-P57d.6)
  *
  * Per source grep at Step 5 baseline (post-Step 4b):
- *   - L43-45: MAI_DIALOG_KEY='__mai_dialog_state' + MAI_OUTPUT_CAP=2000 + MAI_FRAMES_CAP=20.
- *   - L47-54: maiReadDialogState helper (try/catch + sessionStorage.getItem).
- *   - L55-66: maiWriteDialogState helper (cap-trim via .slice(-N) + sessionStorage.setItem).
- *   - L68-: maiDialogState initialization (ts, ticker:null, output:'', card:null, frames:[]).
- *   - L215-: __maiAppendOutput writes state.output + state.frames.push({content:text}) [normalized
+ *   - L43-45: FRONDOSE_DIALOG_KEY='__frondose_dialog_state' + FRONDOSE_OUTPUT_CAP=2000 + FRONDOSE_FRAMES_CAP=20.
+ *   - L47-54: frondoseReadDialogState helper (try/catch + sessionStorage.getItem).
+ *   - L55-66: frondoseWriteDialogState helper (cap-trim via .slice(-N) + sessionStorage.setItem).
+ *   - L68-: frondoseDialogState initialization (ts, ticker:null, output:'', card:null, frames:[]).
+ *   - L215-: __frondoseAppendOutput writes state.output + state.frames.push({content:text}) [normalized
  *     'text' post-JSON.parse, NOT raw 'chunk', per rev-1 MR-1 fix].
- *   - L307-320: bootstrap-time replay block: `const saved = maiReadDialogState(); if (saved) { ... }`.
+ *   - L307-320: bootstrap-time replay block: `const saved = frondoseReadDialogState(); if (saved) { ... }`.
  *
  * Test strategy:
  *   - Pure substring-grep verification against OVERLAY_BOOTSTRAP_JS exported constant.
@@ -36,20 +36,20 @@ describe("OVERLAY_BOOTSTRAP_JS — sessionStorage round-trip helpers + bootstrap
     );
 
     // (a) Key namespace constant
-    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("MAI_DIALOG_KEY"), "must contain 'MAI_DIALOG_KEY' constant declaration");
+    assert.ok(OVERLAY_BOOTSTRAP_JS.includes("FRONDOSE_DIALOG_KEY"), "must contain 'FRONDOSE_DIALOG_KEY' constant declaration");
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("'__mai_dialog_state'"),
-      "must contain verbatim '__mai_dialog_state' key namespace string per plan §5.4.1",
+      OVERLAY_BOOTSTRAP_JS.includes("'__frondose_dialog_state'"),
+      "must contain verbatim '__frondose_dialog_state' key namespace string per plan §5.4.1",
     );
 
     // (b) Helper functions
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("function maiReadDialogState"),
-      "must contain 'function maiReadDialogState' read helper",
+      OVERLAY_BOOTSTRAP_JS.includes("function frondoseReadDialogState"),
+      "must contain 'function frondoseReadDialogState' read helper",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("function maiWriteDialogState"),
-      "must contain 'function maiWriteDialogState' write helper",
+      OVERLAY_BOOTSTRAP_JS.includes("function frondoseWriteDialogState"),
+      "must contain 'function frondoseWriteDialogState' write helper",
     );
 
     // (c) sessionStorage API calls
@@ -64,12 +64,12 @@ describe("OVERLAY_BOOTSTRAP_JS — sessionStorage round-trip helpers + bootstrap
 
     // (d) Per-call writes — output accumulator + frames ring-buffer
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("maiDialogState.output"),
-      "must contain 'maiDialogState.output' write site (output accumulator)",
+      OVERLAY_BOOTSTRAP_JS.includes("frondoseDialogState.output"),
+      "must contain 'frondoseDialogState.output' write site (output accumulator)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("maiDialogState.frames.push(") ||
-        OVERLAY_BOOTSTRAP_JS.includes("maiDialogState.frames = maiDialogState.frames"),
+      OVERLAY_BOOTSTRAP_JS.includes("frondoseDialogState.frames.push(") ||
+        OVERLAY_BOOTSTRAP_JS.includes("frondoseDialogState.frames = frondoseDialogState.frames"),
       "must contain frames ring-buffer push pattern",
     );
 
@@ -82,48 +82,48 @@ describe("OVERLAY_BOOTSTRAP_JS — sessionStorage round-trip helpers + bootstrap
 
     // (f) Bootstrap-time replay — restore through bubble helpers, not the old single output sink.
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("maiReadDialogState()"),
-      "must contain bootstrap-time 'maiReadDialogState()' call",
+      OVERLAY_BOOTSTRAP_JS.includes("frondoseReadDialogState()"),
+      "must contain bootstrap-time 'frondoseReadDialogState()' call",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiBeginAgent()"),
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseBeginAgent()"),
       "must begin an agent bubble during bootstrap replay",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiAppendChunk(maiDialogState.output)"),
-      "must append saved output through __maiAppendChunk during bootstrap replay",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseAppendChunk(frondoseDialogState.output)"),
+      "must append saved output through __frondoseAppendChunk during bootstrap replay",
     );
     assert.ok(
-      !OVERLAY_BOOTSTRAP_JS.includes("dialogElements.output.textContent = maiDialogState.output"),
+      !OVERLAY_BOOTSTRAP_JS.includes("dialogElements.output.textContent = frondoseDialogState.output"),
       "must not restore by directly writing dialogElements.output.textContent after the bubble migration",
     );
   });
 });
 
-// ─── T-SS.2 — sessionStorage caps (MAI_OUTPUT_CAP + MAI_FRAMES_CAP) ─────────
+// ─── T-SS.2 — sessionStorage caps (FRONDOSE_OUTPUT_CAP + FRONDOSE_FRAMES_CAP) ─────────
 
 describe("OVERLAY_BOOTSTRAP_JS — sessionStorage caps prevent quota issues (G-P57d.6)", () => {
-  it("T-SS.2: given OVERLAY_BOOTSTRAP_JS exported post-P-57d, WHEN substring greps applied for cap constants + trim operations, THEN string contains MAI_OUTPUT_CAP=2000 + MAI_FRAMES_CAP=20 constants + the actual slice operations (state.output.slice + state.frames.slice) that enforce caps per plan §5.4.1 maiWriteDialogState helper", () => {
+  it("T-SS.2: given OVERLAY_BOOTSTRAP_JS exported post-P-57d, WHEN substring greps applied for cap constants + trim operations, THEN string contains FRONDOSE_OUTPUT_CAP=2000 + FRONDOSE_FRAMES_CAP=20 constants + the actual slice operations (state.output.slice + state.frames.slice) that enforce caps per plan §5.4.1 frondoseWriteDialogState helper", () => {
     // Cap constants
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("MAI_OUTPUT_CAP = 2000"),
-      "must contain 'MAI_OUTPUT_CAP = 2000' constant (output char cap)",
+      OVERLAY_BOOTSTRAP_JS.includes("FRONDOSE_OUTPUT_CAP = 2000"),
+      "must contain 'FRONDOSE_OUTPUT_CAP = 2000' constant (output char cap)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("MAI_FRAMES_CAP = 20"),
-      "must contain 'MAI_FRAMES_CAP = 20' constant (frames ring-buffer cap)",
+      OVERLAY_BOOTSTRAP_JS.includes("FRONDOSE_FRAMES_CAP = 20"),
+      "must contain 'FRONDOSE_FRAMES_CAP = 20' constant (frames ring-buffer cap)",
     );
 
-    // Trim operations applied inside maiWriteDialogState
+    // Trim operations applied inside frondoseWriteDialogState
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("state.output.slice(-MAI_OUTPUT_CAP)") ||
+      OVERLAY_BOOTSTRAP_JS.includes("state.output.slice(-FRONDOSE_OUTPUT_CAP)") ||
         OVERLAY_BOOTSTRAP_JS.includes("state.output.slice("),
-      "must contain 'state.output.slice(' (FIFO trim to MAI_OUTPUT_CAP)",
+      "must contain 'state.output.slice(' (FIFO trim to FRONDOSE_OUTPUT_CAP)",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("state.frames.slice(-MAI_FRAMES_CAP)") ||
+      OVERLAY_BOOTSTRAP_JS.includes("state.frames.slice(-FRONDOSE_FRAMES_CAP)") ||
         OVERLAY_BOOTSTRAP_JS.includes("state.frames.slice("),
-      "must contain 'state.frames.slice(' (ring-buffer trim to MAI_FRAMES_CAP)",
+      "must contain 'state.frames.slice(' (ring-buffer trim to FRONDOSE_FRAMES_CAP)",
     );
   });
 });

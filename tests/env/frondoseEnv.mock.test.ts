@@ -209,27 +209,41 @@ describe("frondoseEnv — Rust↔Node SIDECAR_OWNER lockstep (G-FREN3.lockstep)"
 
 // ─── T-FREN3.10 ───────────────────────────────────────────────────────────────
 
-describe("overlay placeholders untouched — __MAI_*__ tokens in host.ts are NOT env vars (G-FREN3.suffix-na)", () => {
-  it("T-FREN3.10: host.ts .replace() calls for __MAI_OVERLAY_OWNER__ + __MAI_OVERLAY_VERSION__ + __MAI_PASSIVE_ENABLED__ remain unchanged; only env reads go through frondoseEnv", () => {
-    // Given: src/overlay/host.ts source text
+describe("overlay placeholders renamed — __FRONDOSE_*__ tokens in host.ts after F-REN-5 (G-FREN3.suffix-na)", () => {
+  it("T-FREN3.10: host.ts .replace() calls for __FRONDOSE_OVERLAY_OWNER__ + __FRONDOSE_OVERLAY_VERSION__ + __FRONDOSE_PASSIVE_ENABLED__ are present (renamed in F-REN-5); old __MAI_*__ forms are gone; env reads go through frondoseEnv", () => {
+    // Given: src/overlay/host.ts source text after F-REN-5 overlay-protocol rebrand
     // When:  source scan for placeholder .replace() calls and for raw process.env.MAI_ reads
-    // Then:  all three __MAI_*__ placeholder patterns present (overlay tokens deferred);
-    //        zero raw process.env.MAI_ reads remain in host.ts (they are swapped to frondoseEnv)
+    // Then:  all three __FRONDOSE_*__ placeholder patterns present (F-REN-5 renamed them from __MAI_*__);
+    //        zero __MAI_*__ placeholder forms remain; zero raw process.env.MAI_ reads remain in host.ts
 
     const hostSrc = readFileSync(HOST_TS_PATH, "utf8");
 
-    // All three overlay placeholder tokens must still be present (deferred — NOT renamed)
+    // All three overlay placeholder tokens must now be the frondose-branded forms (F-REN-5 done)
     assert.ok(
-      hostSrc.includes("__MAI_OVERLAY_OWNER__"),
-      "host.ts must still contain __MAI_OVERLAY_OWNER__ placeholder (deferred)",
+      hostSrc.includes("__FRONDOSE_OVERLAY_OWNER__"),
+      "host.ts must contain __FRONDOSE_OVERLAY_OWNER__ placeholder (renamed by F-REN-5)",
     );
     assert.ok(
-      hostSrc.includes("__MAI_OVERLAY_VERSION__"),
-      "host.ts must still contain __MAI_OVERLAY_VERSION__ placeholder (deferred)",
+      hostSrc.includes("__FRONDOSE_OVERLAY_VERSION__"),
+      "host.ts must contain __FRONDOSE_OVERLAY_VERSION__ placeholder (renamed by F-REN-5)",
     );
     assert.ok(
-      hostSrc.includes("__MAI_PASSIVE_ENABLED__"),
-      "host.ts must still contain __MAI_PASSIVE_ENABLED__ placeholder (deferred)",
+      hostSrc.includes("__FRONDOSE_PASSIVE_ENABLED__"),
+      "host.ts must contain __FRONDOSE_PASSIVE_ENABLED__ placeholder (renamed by F-REN-5)",
+    );
+
+    // Old __MAI_*__ placeholder forms must be gone (F-REN-5 renamed them)
+    assert.ok(
+      !hostSrc.includes("__MAI_OVERLAY_OWNER__"),
+      "host.ts must NOT contain __MAI_OVERLAY_OWNER__ after F-REN-5 — old form must be gone",
+    );
+    assert.ok(
+      !hostSrc.includes("__MAI_OVERLAY_VERSION__"),
+      "host.ts must NOT contain __MAI_OVERLAY_VERSION__ after F-REN-5 — old form must be gone",
+    );
+    assert.ok(
+      !hostSrc.includes("__MAI_PASSIVE_ENABLED__"),
+      "host.ts must NOT contain __MAI_PASSIVE_ENABLED__ after F-REN-5 — old form must be gone",
     );
 
     // Zero raw process.env.MAI_* reads may remain — all env reads must go through frondoseEnv

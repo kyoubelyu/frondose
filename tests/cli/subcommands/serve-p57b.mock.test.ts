@@ -338,7 +338,7 @@ function dispatchOverlayBindingEvent(rawPayload: any): void {
   // CDP binding event. Real eventBus.ts then constructs the OverlayEvent + non-enum
   // payload + calls onEvent. Our binding handler IS the real eventBus's internal callback
   // (since attachEventBus is imported from real overlay/eventBus.js — NOT mocked).
-  mockBindingCalledHandler({ name: "__maiPost", payload: JSON.stringify(rawPayload) });
+  mockBindingCalledHandler({ name: "__frondosePost", payload: JSON.stringify(rawPayload) });
 }
 void makeOverlayEvent; // alternative shape; kept for reference
 

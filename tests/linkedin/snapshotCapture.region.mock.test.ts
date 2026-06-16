@@ -16,12 +16,12 @@
  *   1. Accessibility.enable() + Accessibility.getFullAXTree({}) → AX nodes
  *   2. Runtime.evaluate:
  *      a. "window.location.href" → pageUrl  (getCurrentUrl)
- *      b. expression containing 'data-mai-rg-aside' → REGION_TAG_JS → return tagCount (number)
- *      c. expression containing 'data-mai-ov' (setAttribute) → OVERLAY_SYNTH_JS → "[]" (no overlays)
+ *      b. expression containing 'data-frondose-rg-aside' → REGION_TAG_JS → return tagCount (number)
+ *      c. expression containing 'data-frondose-ov' (setAttribute) → OVERLAY_SYNTH_JS → "[]" (no overlays)
  *      d. any other expression → undefined (best-effort cleanup paths)
  *   3. DOM.getDocument({depth:0}) → {root:{nodeId:1}}
  *   4. DOM.querySelectorAll:
- *      a. selector '[data-mai-rg-aside="1"]' → aside-tagged nodeIds
+ *      a. selector '[data-frondose-rg-aside="1"]' → aside-tagged nodeIds
  *      b. any other selector → [] (messaging, overlay, profile synth selectors)
  *   5. DOM.describeNode({nodeId}) → {node:{backendNodeId}} mapping
  *   6. DOM.getAttributes() → {attributes:[]} (messaging synth)
@@ -44,12 +44,12 @@ import { captureCurrentSurfaceContext } from "../../src/linkedin/snapshotCapture
  * Build a fake CdpHandle for region-annotation tests. The handle routes calls by
  * expression content so no tight coupling to the REGION_TAG_JS constant string is needed:
  *   - 'window.location.href' → pageUrl
- *   - contains 'data-mai-rg-aside' → REGION_TAG_JS path → returns tagCount
- *   - contains 'data-mai-ov' + 'setAttribute' → OVERLAY_SYNTH_JS → "[]" (suppress overlays)
+ *   - contains 'data-frondose-rg-aside' → REGION_TAG_JS path → returns tagCount
+ *   - contains 'data-frondose-ov' + 'setAttribute' → OVERLAY_SYNTH_JS → "[]" (suppress overlays)
  *   - anything else → undefined (best-effort cleanup evals)
  *
  * The DOM side:
- *   - querySelectorAll('[data-mai-rg-aside="1"]') → asideNodeIds
+ *   - querySelectorAll('[data-frondose-rg-aside="1"]') → asideNodeIds
  *   - any other selector → [] (overlay/messaging synths use different selectors)
  *   - describeNode({nodeId}) → nodeToBackend[nodeId] ?? {node:{backendNodeId:undefined}}
  */
@@ -63,7 +63,7 @@ function makeRegionFakeHandle(opts: {
     ignored?: boolean;
   }>;
   pageUrl: string;
-  /** nodeIds that DOM.querySelectorAll('[data-mai-rg-aside="1"]') returns (aside-tagged). */
+  /** nodeIds that DOM.querySelectorAll('[data-frondose-rg-aside="1"]') returns (aside-tagged). */
   asideNodeIds: number[];
   /** Maps a DOM nodeId → backendNodeId for DOM.describeNode responses. */
   nodeToBackend: Record<number, number>;
@@ -88,15 +88,15 @@ function makeRegionFakeHandle(opts: {
         if (args.expression === "window.location.href") {
           return { result: { value: opts.pageUrl } };
         }
-        // REGION_TAG_JS identified by the 'data-mai-rg-aside' marker it sets on elements
-        if (args.expression.includes("data-mai-rg-aside")) {
+        // REGION_TAG_JS identified by the 'data-frondose-rg-aside' marker it sets on elements
+        if (args.expression.includes("data-frondose-rg-aside")) {
           if (opts.regionEvalThrows) {
             throw new Error("fake region eval throw (G-A18.8 best-effort path)");
           }
           return { result: { value: opts.asideNodeIds.length } };
         }
-        // OVERLAY_SYNTH_JS identified by data-mai-ov setAttribute; return "[]" = no overlays
-        if (args.expression.includes("setAttribute('data-mai-ov'")) {
+        // OVERLAY_SYNTH_JS identified by data-frondose-ov setAttribute; return "[]" = no overlays
+        if (args.expression.includes("setAttribute('data-frondose-ov'")) {
           return { result: { value: "[]" } };
         }
         // Cleanup evals (removeAttribute) and any other expression → no-op
@@ -106,7 +106,7 @@ function makeRegionFakeHandle(opts: {
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
       querySelectorAll: async (args: { nodeId: number; selector: string }) => {
-        if (args.selector === '[data-mai-rg-aside="1"]') {
+        if (args.selector === '[data-frondose-rg-aside="1"]') {
           return { nodeIds: opts.asideNodeIds };
         }
         // All other selectors (messaging synth, profile synth, overlay cleanup) → empty
@@ -137,7 +137,7 @@ describe("T-A18 — capture-time region annotation (P-AUTO-18)", () => {
       // Given: fake CdpClient with:
       //   - AX tree has one node (backendDOMNodeId=147) → refMap key 'e1' (counter=1)
       //   - REGION_TAG_JS evaluate returns tag count (no throw)
-      //   - querySelectorAll('[data-mai-rg-aside="1"]') returns [DOM nodeId 5]
+      //   - querySelectorAll('[data-frondose-rg-aside="1"]') returns [DOM nodeId 5]
       //   - describeNode({nodeId:5}) returns {node:{backendNodeId:147}}
       // When:  captureCurrentSurfaceContext(client) runs
       // Then:  entries[] contains an entry with ref==="@e1" AND region==="aside"
@@ -166,7 +166,7 @@ describe("T-A18 — capture-time region annotation (P-AUTO-18)", () => {
       // Given: fake CdpClient with:
       //   - AX tree has one node (backendDOMNodeId=1) → refMap key 'e1'
       //   - REGION_TAG_JS evaluate returns 0 (no aside elements tagged)
-      //   - querySelectorAll('[data-mai-rg-aside="1"]') returns [] (nothing aside-tagged)
+      //   - querySelectorAll('[data-frondose-rg-aside="1"]') returns [] (nothing aside-tagged)
       // When:  captureCurrentSurfaceContext(client) runs
       // Then:  entries[] contains an entry with ref==="@e1" AND region===undefined
       //        (main-region button must NOT be false-positively tagged as aside)

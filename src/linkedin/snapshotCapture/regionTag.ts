@@ -1,7 +1,7 @@
 import type { CdpClient } from "../../cdp/client.js";
 
 const REGION_TAG_JS = `(() => {
-  document.querySelectorAll('[data-mai-rg-aside="1"]').forEach(el => el.removeAttribute('data-mai-rg-aside'));
+  document.querySelectorAll('[data-frondose-rg-aside="1"]').forEach(el => el.removeAttribute('data-frondose-rg-aside'));
   const ASIDE_SEL = "aside, [role='complementary']";
   const NODE_SEL = [
     'button',
@@ -21,7 +21,7 @@ const REGION_TAG_JS = `(() => {
   const tag = (el) => {
     if (seen.has(el)) return;
     seen.add(el);
-    el.setAttribute('data-mai-rg-aside', '1');
+    el.setAttribute('data-frondose-rg-aside', '1');
   };
   for (const aside of document.querySelectorAll(ASIDE_SEL)) {
     if (aside.matches(NODE_SEL)) tag(aside);
@@ -31,7 +31,7 @@ const REGION_TAG_JS = `(() => {
 })()`;
 
 const REGION_TAG_CLEANUP_JS = `(() => {
-  document.querySelectorAll('[data-mai-rg-aside]').forEach(el => el.removeAttribute('data-mai-rg-aside'));
+  document.querySelectorAll('[data-frondose-rg-aside]').forEach(el => el.removeAttribute('data-frondose-rg-aside'));
   return {};
 })()`;
 
@@ -43,7 +43,7 @@ export async function tagAsideClickables(client: CdpClient): Promise<Set<number>
       returnByValue: true,
     });
     if (evalResult?.exceptionDetails) throw new Error("region tag evaluate failed");
-    const nodeIds = await client.querySelectorAll('[data-mai-rg-aside="1"]');
+    const nodeIds = await client.querySelectorAll('[data-frondose-rg-aside="1"]');
     const out = new Set<number>();
     for (const nodeId of nodeIds) {
       const desc = await client.handle.DOM.describeNode({ nodeId });

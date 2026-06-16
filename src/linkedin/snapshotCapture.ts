@@ -44,7 +44,7 @@ const OVERLAY_SYNTH_JS = `(() => {
   const out = []; let i = 0;
   for (const el of document.querySelectorAll('[role="menuitem"],[role="option"],[role="dialog"],[role="alertdialog"],[data-test-modal]')) {
     if (!vis(el) || el.closest('[aria-hidden="true"]')) continue;
-    i++; el.setAttribute('data-mai-ov', String(i));
+    i++; el.setAttribute('data-frondose-ov', String(i));
     const elRole = el.getAttribute('role')||'';
     const isDialog = elRole.includes('dialog') || el.hasAttribute('data-test-modal');
     const role = isDialog ? 'dialog' : 'menuitem';
@@ -58,9 +58,9 @@ const OVERLAY_SYNTH_JS = `(() => {
       const innerSel = 'button,[role="button"],a[role="button"]';
       for (const btn of el.querySelectorAll(innerSel)) {
         if (!vis(btn)) continue;
-        i++; btn.setAttribute('data-mai-ov', String(i));
+        i++; btn.setAttribute('data-frondose-ov', String(i));
         const btnLabel = (btn.getAttribute('aria-label') || btn.innerText || '').trim().slice(0,120);
-        if (!btnLabel) { i--; btn.removeAttribute('data-mai-ov'); continue; }
+        if (!btnLabel) { i--; btn.removeAttribute('data-frondose-ov'); continue; }
         out.push({ i, role: 'button', label: btnLabel });
       }
     }
@@ -83,7 +83,7 @@ const PROFILE_MORE_SYNTH_JS = `(() => {
   let pick = h1 ? cands.find(el => h1.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) : null;
   if (!pick) pick = cands[0] || null;
   if (!pick) return JSON.stringify(null);
-  pick.setAttribute('data-mai-pm','1');
+  pick.setAttribute('data-frondose-pm','1');
   return JSON.stringify({ name, label: norm(pick.getAttribute('aria-label')||pick.innerText||'More') });
 })()`;
 
@@ -124,7 +124,7 @@ const PROFILE_ACTIONS_SYNTH_JS = `(() => {
     const bare = BARE_RE.test(label) && label.length < 40;
     if (!refsSubject && !bare) continue; // drop sidebar "Invite <Other> to connect" / "Follow <Other>"
     if (out.some(o => o.label === label)) continue;
-    i++; el.setAttribute('data-mai-pa', String(i));
+    i++; el.setAttribute('data-frondose-pa', String(i));
     const role = (el.tagName === 'A' && el.getAttribute('role') !== 'button') ? 'link' : 'button';
     out.push({ i, role, label });
   }
@@ -220,7 +220,7 @@ async function synthesizeOverlayEntries(client: CdpClient): Promise<{ entries: S
   for (const it of items) {
     if (!it.label) continue;
     try {
-      const nodeIds = await client.querySelectorAll(`[data-mai-ov="${it.i}"]`);
+      const nodeIds = await client.querySelectorAll(`[data-frondose-ov="${it.i}"]`);
       const nodeId = nodeIds[0];
       if (typeof nodeId !== "number") continue;
       const desc = await client.handle.DOM.describeNode({ nodeId });
@@ -235,7 +235,7 @@ async function synthesizeOverlayEntries(client: CdpClient): Promise<{ entries: S
   }
   // best-effort cleanup of the transient markers (zero net DOM mutation)
   try {
-    await client.evaluate("document.querySelectorAll('[data-mai-ov]').forEach(e=>e.removeAttribute('data-mai-ov'));");
+    await client.evaluate("document.querySelectorAll('[data-frondose-ov]').forEach(e=>e.removeAttribute('data-frondose-ov'));");
   } catch {
     // best-effort cleanup
   }
@@ -253,10 +253,10 @@ async function synthesizeProfileMoreEntry(client: CdpClient): Promise<{ entries:
   }
   if (!info) return { entries: [], refs: {} };
   try {
-    const nodeIds = await client.querySelectorAll('[data-mai-pm="1"]');
+    const nodeIds = await client.querySelectorAll('[data-frondose-pm="1"]');
     const nodeId = nodeIds[0];
     try {
-      await client.evaluate("document.querySelectorAll('[data-mai-pm]').forEach(e=>e.removeAttribute('data-mai-pm'));");
+      await client.evaluate("document.querySelectorAll('[data-frondose-pm]').forEach(e=>e.removeAttribute('data-frondose-pm'));");
     } catch {
       // best-effort cleanup
     }
@@ -319,7 +319,7 @@ async function synthesizeProfileActionEntries(client: CdpClient): Promise<{ entr
   const refs: RefMap = {};
   for (const a of info.actions) {
     try {
-      const nodeIds = await client.querySelectorAll(`[data-mai-pa="${a.i}"]`);
+      const nodeIds = await client.querySelectorAll(`[data-frondose-pa="${a.i}"]`);
       const nodeId = nodeIds[0];
       if (typeof nodeId !== "number") continue;
       const desc = await client.handle.DOM.describeNode({ nodeId });
@@ -334,7 +334,7 @@ async function synthesizeProfileActionEntries(client: CdpClient): Promise<{ entr
     }
   }
   try {
-    await client.evaluate("document.querySelectorAll('[data-mai-pa]').forEach(e=>e.removeAttribute('data-mai-pa'));");
+    await client.evaluate("document.querySelectorAll('[data-frondose-pa]').forEach(e=>e.removeAttribute('data-frondose-pa'));");
   } catch {
     // best-effort cleanup
   }

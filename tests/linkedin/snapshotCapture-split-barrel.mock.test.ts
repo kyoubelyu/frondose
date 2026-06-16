@@ -409,7 +409,7 @@ describe("T-snapshotCapture.HelpersResolve — leaf constants === barrel re-expo
 
 describe("T-snapshotCapture.SourceScanPreservation — 4 private substrings STAY in barrel, NOT in leaves (G-P72s10.5)", () => {
   it(
-    "T-snapshotCapture.SourceScanPreservation.1: barrel still contains '[data-test-modal]', 'synthesizeOverlayEntries', 'innerSel', \"removeAttribute('data-mai-ov')\" post-split; leaves contain none of them",
+    "T-snapshotCapture.SourceScanPreservation.1: barrel still contains '[data-test-modal]', 'synthesizeOverlayEntries', 'innerSel', \"removeAttribute('data-frondose-ov')\" post-split; leaves contain none of them",
     () => {
       // Given: barrel (snapshotCapture.ts) + 2 leaves exist post-split
       //        The 3 PRIVATE synths (OVERLAY_SYNTH_JS, PROFILE_MORE_SYNTH_JS, PROFILE_ACTIONS_SYNTH_JS)
@@ -433,7 +433,7 @@ describe("T-snapshotCapture.SourceScanPreservation — 4 private substrings STAY
         "[data-test-modal]",        // OVERLAY_SYNTH_JS selector arm (T-G6.1 / T-G6.7)
         "synthesizeOverlayEntries", // module-private helper function definition (T-Inspect.1.1)
         "innerSel",                 // OVERLAY_SYNTH_JS inner-button enumeration (T-P10.1)
-        "removeAttribute('data-mai-ov')", // OVERLAY_SYNTH_JS rollback (T-P10.4)
+        "removeAttribute('data-frondose-ov')", // OVERLAY_SYNTH_JS rollback (T-P10.4)
       ];
 
       for (const substr of preservedSubstrings) {

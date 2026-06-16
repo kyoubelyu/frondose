@@ -107,7 +107,7 @@ describe("makeTakeoverVisualDriver — paints in Auto + overlay (G-PY2.3.2)", ()
 });
 
 describe("showEdgeRing — gated on cronEnabled (G-PY2.3.5)", () => {
-  it("T-Ring.1: showEdgeRing no-ops when cronEnabled=false; when true → callInOverlay with window.__maiShowEdgeRing()", () => {
+  it("T-Ring.1: showEdgeRing no-ops when cronEnabled=false; when true → callInOverlay with window.__frondoseShowEdgeRing()", () => {
     assert.ok(showEdgeRing, "builder 4b must export showEdgeRing");
     callInOverlayCalls.length = 0;
     showEdgeRing(makeState({ cronEnabled: false }), makeSession(FAKE_CLIENT));
@@ -115,22 +115,22 @@ describe("showEdgeRing — gated on cronEnabled (G-PY2.3.5)", () => {
     showEdgeRing(makeState(), makeSession(FAKE_CLIENT));
     assert.equal(callInOverlayCalls.length, 1, "ring shown in Auto");
     assert.ok(
-      callInOverlayCalls[0]?.[2].includes("window.__maiShowEdgeRing()"),
-      "Auto ring fn calls __maiShowEdgeRing()",
+      callInOverlayCalls[0]?.[2].includes("window.__frondoseShowEdgeRing()"),
+      "Auto ring fn calls __frondoseShowEdgeRing()",
     );
   });
 });
 
 describe("hideEdgeRing — ungated, clears target too (G-PY2.3.5)", () => {
-  it("T-Ring.2: hideEdgeRing (cronEnabled=false, overlay present) → callInOverlay fn has BOTH __maiHideEdgeRing() AND __maiClearAgentTarget(); overlayContextId=undefined → no call", () => {
+  it("T-Ring.2: hideEdgeRing (cronEnabled=false, overlay present) → callInOverlay fn has BOTH __frondoseHideEdgeRing() AND __frondoseClearAgentTarget(); overlayContextId=undefined → no call", () => {
     assert.ok(hideEdgeRing, "builder 4b must export hideEdgeRing");
     // ungated: retract fires even in Manual (cronEnabled=false) — always safe to clear
     callInOverlayCalls.length = 0;
     hideEdgeRing(makeState({ cronEnabled: false }), makeSession(FAKE_CLIENT));
     assert.equal(callInOverlayCalls.length, 1, "hide is ungated — fires even in Manual");
     const fn = callInOverlayCalls[0]?.[2] ?? "";
-    assert.ok(fn.includes("window.__maiHideEdgeRing()"), "hide fn retracts the ring");
-    assert.ok(fn.includes("window.__maiClearAgentTarget()"), "hide fn ALSO clears the target (cursor+highlight)");
+    assert.ok(fn.includes("window.__frondoseHideEdgeRing()"), "hide fn retracts the ring");
+    assert.ok(fn.includes("window.__frondoseClearAgentTarget()"), "hide fn ALSO clears the target (cursor+highlight)");
     // but with no overlay context there is nothing to push to
     callInOverlayCalls.length = 0;
     hideEdgeRing(makeState({ overlayContextId: undefined }), makeSession(FAKE_CLIENT));

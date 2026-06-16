@@ -4,9 +4,9 @@
  * Mock tests for `src/overlay/inject.ts` (created at builder Step 4b).
  *
  * Gate coverage:
- *   G-P55.2 — `installOverlay` injects the bootstrap source into the `mai-overlay`
+ *   G-P55.2 — `installOverlay` injects the bootstrap source into the `frondose-overlay`
  *              isolated world with `runImmediately:true` (T-Overlay.1)
- *   G-P55.1 — `installOverlay` registers the `__maiPost` binding in ALL contexts;
+ *   G-P55.1 — `installOverlay` registers the `__frondosePost` binding in ALL contexts;
  *              no `executionContextName` / `executionContextId` (OQ-5) (T-Overlay.2)
  *
  * No Chrome, no LLM, no filesystem I/O.  Fake CdpHandle (CdpHandle = any).
@@ -18,13 +18,13 @@ import { describe, it } from "node:test";
 // ─── G-P55.2 + G-P55.1: installOverlay — CDP call sequence + addBinding shape ─
 
 describe("installOverlay — CDP call sequence and Runtime.addBinding arg shape (G-P55.2, G-P55.1)", () => {
-  it("T-Overlay.1: given fakeHandle with spied Runtime.enable/Page.enable/Runtime.addBinding/Page.addScriptToEvaluateOnNewDocument, when installOverlay(fakeHandle), THEN addScriptToEvaluateOnNewDocument called ONCE with {source:<non-empty>, worldName:'mai-overlay', runImmediately:true}; return value === identifier; call ORDER Runtime.enable[0]→Page.enable[1]→Runtime.addBinding[2]→Page.addScriptToEvaluateOnNewDocument[3]", async () => {
+  it("T-Overlay.1: given fakeHandle with spied Runtime.enable/Page.enable/Runtime.addBinding/Page.addScriptToEvaluateOnNewDocument, when installOverlay(fakeHandle), THEN addScriptToEvaluateOnNewDocument called ONCE with {source:<non-empty>, worldName:'frondose-overlay', runImmediately:true}; return value === identifier; call ORDER Runtime.enable[0]→Page.enable[1]→Runtime.addBinding[2]→Page.addScriptToEvaluateOnNewDocument[3]", async () => {
     // Given: fake CdpHandle (CdpHandle=any) with spy functions recording call order via
     //        a shared call-index counter; Page.addScriptToEvaluateOnNewDocument returns
     //        {identifier: "id-7"}
     // When:  await installOverlay(fakeHandle) — the 4-step CDP sequence fires
     // Then:  addScriptToEvaluateOnNewDocument called ONCE with locked arg shape
-    //        {source:<non-empty string>, worldName:"mai-overlay", runImmediately:true};
+    //        {source:<non-empty string>, worldName:"frondose-overlay", runImmediately:true};
     //        installOverlay resolves to "id-7";
     //        call ORDER: Runtime.enable first, Page.enable second, Runtime.addBinding third,
     //        Page.addScriptToEvaluateOnNewDocument fourth (indices 0–3)
@@ -83,19 +83,19 @@ describe("installOverlay — CDP call sequence and Runtime.addBinding arg shape 
       typeof addScriptArg.source === "string" && addScriptArg.source.length > 0,
       "source must be a non-empty string (OVERLAY_BOOTSTRAP_JS)",
     );
-    assert.equal(addScriptArg.worldName, "mai-overlay", "worldName must be 'mai-overlay'");
+    assert.equal(addScriptArg.worldName, "frondose-overlay", "worldName must be 'frondose-overlay'");
     assert.equal(addScriptArg.runImmediately, true, "runImmediately must be true");
 
     // Verify return value
     assert.equal(result, "id-7", "return value must be identifier from addScriptToEvaluateOnNewDocument");
   });
 
-  it("T-Overlay.2: given fakeHandle with spied Runtime.addBinding, when installOverlay(fakeHandle), THEN Runtime.addBinding called ONCE; arg deep-equals {name:'__maiPost'}; Object.keys(arg).length === 1 (no executionContextName, no executionContextId — OQ-5 all-contexts)", async () => {
+  it("T-Overlay.2: given fakeHandle with spied Runtime.addBinding, when installOverlay(fakeHandle), THEN Runtime.addBinding called ONCE; arg deep-equals {name:'__frondosePost'}; Object.keys(arg).length === 1 (no executionContextName, no executionContextId — OQ-5 all-contexts)", async () => {
     // Given: same fake CdpHandle setup as T-Overlay.1 (spied Runtime.addBinding captures the
     //        single call argument)
     // When:  await installOverlay(fakeHandle)
     // Then:  Runtime.addBinding call count === 1;
-    //        call arg deep-equals {name: "__maiPost"};
+    //        call arg deep-equals {name: "__frondosePost"};
     //        Object.keys(callArg).length === 1 — exactly one field, no context filter fields
     // biome-ignore lint/suspicious/noExplicitAny: CdpHandle is typed as any (src/cdp/types.ts)
     let mod: any;
@@ -129,9 +129,9 @@ describe("installOverlay — CDP call sequence and Runtime.addBinding arg shape 
     // biome-ignore lint/suspicious/noExplicitAny: test-only fake handle
     await installOverlay(fakeHandle as any);
 
-    // G-P55.1: Runtime.addBinding called exactly once with {name:"__maiPost"} and no extras
+    // G-P55.1: Runtime.addBinding called exactly once with {name:"__frondosePost"} and no extras
     assert.equal(addBindingCallCount, 1, "Runtime.addBinding called exactly once");
-    assert.deepEqual(addBindingArg, { name: "__maiPost" }, "arg must deep-equal {name:'__maiPost'}");
+    assert.deepEqual(addBindingArg, { name: "__frondosePost" }, "arg must deep-equal {name:'__frondosePost'}");
     assert.equal(
       Object.keys(addBindingArg as object).length,
       1,

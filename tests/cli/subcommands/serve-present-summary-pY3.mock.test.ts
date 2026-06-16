@@ -6,7 +6,7 @@
  * UDS bootstrapping, and createLinkedinSession mocking.
  *
  * Expected-red before Step 4b: turn.ts does not route present_summary to
- * window.__maiShowSummaryCard(...).
+ * window.__frondoseShowSummaryCard(...).
  *
  * Run:
  *   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
@@ -140,7 +140,7 @@ function parseJsonArgument(call: CallInOverlayCall, fnName: string): unknown {
 }
 
 describe("createTurnRunner — present_summary routes directly to overlay summary card", () => {
-  it.skip("T-PY3.Turn.1: synthetic present_summary tool result calls __maiShowSummaryCard once, emits no new SSE frame, and leaves existing card/action routing intact", async () => {
+  it.skip("T-PY3.Turn.1: synthetic present_summary tool result calls __frondoseShowSummaryCard once, emits no new SSE frame, and leaves existing card/action routing intact", async () => {
     // Given: createTurnRunner loaded after runAgentLoop/callInOverlay mocks and an active overlay context.
     // When: runAgentLoop reports present_summary, suggest_card, and suggest_next_actions results in one step.
     // Then: exactly one summary-card overlay push occurs; no present-summary SSE frame is emitted;
@@ -167,23 +167,23 @@ describe("createTurnRunner — present_summary routes directly to overlay summar
     assert.ok(frameTypes.includes("suggestion-card"), "existing suggest_card SSE routing must remain");
     assert.ok(frameTypes.includes("next-actions"), "existing suggest_next_actions SSE routing must remain");
     assert.equal(
-      overlayCalls.some((call) => call.functionDeclaration.includes("__maiShowCard")),
+      overlayCalls.some((call) => call.functionDeclaration.includes("__frondoseShowCard")),
       true,
       "existing suggest_card overlay routing must remain",
     );
     assert.equal(
-      overlayCalls.some((call) => call.functionDeclaration.includes("__maiShowNextActions")),
+      overlayCalls.some((call) => call.functionDeclaration.includes("__frondoseShowNextActions")),
       true,
       "existing suggest_next_actions overlay routing must remain",
     );
 
-    const summaryCalls = overlayCalls.filter((call) => call.functionDeclaration.includes("__maiShowSummaryCard"));
+    const summaryCalls = overlayCalls.filter((call) => call.functionDeclaration.includes("__frondoseShowSummaryCard"));
     assert.equal(
       summaryCalls.length,
       1,
-      `present_summary must invoke exactly one __maiShowSummaryCard overlay call; got ${summaryCalls.length}: ` +
+      `present_summary must invoke exactly one __frondoseShowSummaryCard overlay call; got ${summaryCalls.length}: ` +
         overlayCalls.map((call) => call.functionDeclaration).join("\n"),
     );
-    assert.deepEqual(parseJsonArgument(summaryCalls[0], "__maiShowSummaryCard"), presentSummaryPayload);
+    assert.deepEqual(parseJsonArgument(summaryCalls[0], "__frondoseShowSummaryCard"), presentSummaryPayload);
   });
 });

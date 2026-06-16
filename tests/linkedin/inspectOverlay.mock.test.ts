@@ -203,18 +203,18 @@ describe("T-Inspect.2 — INSPECT-1 5a: synthesizeProfileMoreEntry companion fix
     );
   });
 
-  it("T-Inspect.2.2: PROFILE_MORE_SYNTH_JS constant must be defined with data-mai-pm marker and NAV exclusion", () => {
+  it("T-Inspect.2.2: PROFILE_MORE_SYNTH_JS constant must be defined with data-frondose-pm marker and NAV exclusion", () => {
     // Given: src/linkedin/snapshotCapture.ts source
     // When:  PROFILE_MORE_SYNTH_JS is inspected
-    // Then:  it contains the data-mai-pm attribute marker + NAV_SELECTOR exclusion (not inside nav/banner)
+    // Then:  it contains the data-frondose-pm attribute marker + NAV_SELECTOR exclusion (not inside nav/banner)
     assert.ok(
       SNAPSHOT_CAPTURE_SRC.includes("PROFILE_MORE_SYNTH_JS"),
       "T-Inspect.2.2a: PROFILE_MORE_SYNTH_JS constant must be defined.",
     );
     assert.ok(
-      SNAPSHOT_CAPTURE_SRC.includes("data-mai-pm"),
-      "T-Inspect.2.2b: PROFILE_MORE_SYNTH_JS must mark the picked element with data-mai-pm (DOM marker " +
-        "pattern — same as synthesizeOverlayEntries data-mai-ov) so querySelectorAll can resolve it.",
+      SNAPSHOT_CAPTURE_SRC.includes("data-frondose-pm"),
+      "T-Inspect.2.2b: PROFILE_MORE_SYNTH_JS must mark the picked element with data-frondose-pm (DOM marker " +
+        "pattern — same as synthesizeOverlayEntries data-frondose-ov) so querySelectorAll can resolve it.",
     );
     // NAV exclusion: the script must filter out elements inside nav/banner/header roles
     assert.ok(

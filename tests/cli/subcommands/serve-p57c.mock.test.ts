@@ -358,7 +358,7 @@ async function setupFailedTurn(port: number, bearer: string, failPrompt: string)
 // biome-ignore lint/suspicious/noExplicitAny: synthetic payload
 function dispatchOverlayBindingEvent(rawPayload: any): void {
   if (!mockBindingCalledHandler) throw new Error("mockBindingCalledHandler not captured");
-  mockBindingCalledHandler({ name: "__maiPost", payload: JSON.stringify(rawPayload) });
+  mockBindingCalledHandler({ name: "__frondosePost", payload: JSON.stringify(rawPayload) });
 }
 
 // ─── T-Serve.14 — Server-side steer promotion ───────────────────────────────

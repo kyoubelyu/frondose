@@ -3,7 +3,7 @@
  *
  * F8 overlay transport (plan §6.4-D): source-structural assertions on the assembled `OVERLAY_BOOTSTRAP_JS`
  * (via the inject.ts facade) proving the buttons now `post(...)` to serve, the mode tabs keep local
- * `__maiSetMode` AND add the mode post, null-tolerance + auto re-bind, and it stays TT-safe.
+ * `__frondoseSetMode` AND add the mode post, null-tolerance + auto re-bind, and it stays TT-safe.
  *
  * ★ T-Wire.1 FLIPS the 2.2a guard: bootstrap-pY2.2a T-Shell.5 asserted NO transport literals. 2.2b ADDS the
  * transport. The validator updates/supersedes the 2.2a T-Shell.5 (done this round — see § Results).
@@ -40,13 +40,13 @@ describe("OVERLAY_BOOTSTRAP_JS — iwf-card action buttons have click listeners 
   });
 });
 
-describe("OVERLAY_BOOTSTRAP_JS — mode tabs keep local __maiSetMode AND add the mode post (G-PY2.2b.4, .6)", () => {
-  // Then: mode tabs call BOTH __maiSetMode( AND post({type:'mode'); existing 'prompt' post retained;
+describe("OVERLAY_BOOTSTRAP_JS — mode tabs keep local __frondoseSetMode AND add the mode post (G-PY2.2b.4, .6)", () => {
+  // Then: mode tabs call BOTH __frondoseSetMode( AND post({type:'mode'); existing 'prompt' post retained;
   //       show-all stays local (its handler has no post).
-  it("T-Wire.3: mode tabs call BOTH __maiSetMode AND post({type:'mode'); prompt post retained; show-all stays local (no post)", () => {
+  it("T-Wire.3: mode tabs call BOTH __frondoseSetMode AND post({type:'mode'); prompt post retained; show-all stays local (no post)", () => {
     assert.ok(
-      BOOTSTRAP.includes("window.__maiSetMode('manual')") && BOOTSTRAP.includes("window.__maiSetMode('auto')"),
-      "mode tabs keep local __maiSetMode",
+      BOOTSTRAP.includes("window.__frondoseSetMode('manual')") && BOOTSTRAP.includes("window.__frondoseSetMode('auto')"),
+      "mode tabs keep local __frondoseSetMode",
     );
     assert.match(BOOTSTRAP, postRe("mode"), "mode tabs add post({type:'mode'…})");
     assert.match(BOOTSTRAP, postRe("prompt"), "the existing composer 'prompt' post is retained");

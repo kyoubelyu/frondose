@@ -1,11 +1,11 @@
 // P-Y2.2a — SHELL_JS: the NEW frondose chrome string fragment. Defines (inside the install() closure):
-// the shadow-scoped DocumentLike shim, the frondose collapsed pill (mai-pill), the id-bearing panel
+// the shadow-scoped DocumentLike shim, the frondose collapsed pill (frondose-pill), the id-bearing panel
 // skeleton (mirrors index.html body L262-354 — every workflow-*/mode-*-tab/auto-stage/command-input/
 // send-btn id, ported to createElement/createElementNS — DOM-API only, no HTML-string sinks), the
 // workflow-card skeleton with
-// the canonical button LABELS (render.ts only toggles visibility, never writes them), __maiShowWorkflow /
-// __maiSetMode (LOCAL re-render on static/mock data; serve drive is P-Y2.2b), the switcher-tab + show-all
-// LOCAL wiring, and __maiExpandDialog / __maiCollapseDialog. Uses __maiShared.buildIwfCard / buildAutoStage /
+// the canonical button LABELS (render.ts only toggles visibility, never writes them), __frondoseShowWorkflow /
+// __frondoseSetMode (LOCAL re-render on static/mock data; serve drive is P-Y2.2b), the switcher-tab + show-all
+// LOCAL wiring, and __frondoseExpandDialog / __frondoseCollapseDialog. Uses __frondoseShared builders: buildIwfCard / buildAutoStage /
 // buildSwitcher / buildLeafMark / statusForMode. Interpolated by bootstrap.ts; references HEAD closure vars
 // (host / shadow / appMode / workflowExpanded / lastWorkflowJson / dialogExpanded / dialogElements / post).
 export const SHELL_JS = `
@@ -22,8 +22,8 @@ export const SHELL_JS = `
 
   // ---- frondose collapsed pill (inline leaf + wordmark) ----
   var pill = document.createElement('div');
-  pill.className = 'mai-pill';
-  pill.appendChild(__maiShared.buildLeafMark(shadowDoc));
+  pill.className = 'frondose-pill';
+  pill.appendChild(__frondoseShared.buildLeafMark(shadowDoc));
   var pillLabel = document.createElement('span');
   pillLabel.textContent = 'Frondose';
   pill.appendChild(pillLabel);
@@ -52,10 +52,10 @@ export const SHELL_JS = `
     }
     topbar.appendChild(grip);
     var brand = el('div', 'brand');
-    brand.appendChild(__maiShared.buildLeafMark(shadowDoc));
+    brand.appendChild(__frondoseShared.buildLeafMark(shadowDoc));
     var word = el('span', 'brand-word'); word.textContent = 'Frondose'; brand.appendChild(word);
     topbar.appendChild(brand);
-    // P-Y2-MA G5: mode-badge pill; text + class flip via __maiSetMode below.
+    // P-Y2-MA G5: mode-badge pill; text + class flip via __frondoseSetMode below.
     var modeBadge = el('span', 'mode-badge manual', 'mode-badge'); modeBadge.textContent = 'MANUAL';
     topbar.appendChild(modeBadge);
     var switcher = el('div', 'switcher');
@@ -115,8 +115,8 @@ export const SHELL_JS = `
     dialogElements = { ticker: ticker, convList: convList, input: input, cardSlot: cardSlot,
       nextActionsSlot: nextActionsSlot, retrySlot: retrySlot, cronSlot: cronSlot };
 
-    manualTab.addEventListener('click', function(){ window.__maiSetMode('manual'); post({ type:'mode', mode:'manual', t0:Date.now() }); });
-    autoTab.addEventListener('click', function(){ window.__maiSetMode('auto'); post({ type:'mode', mode:'auto', t0:Date.now() }); });
+    manualTab.addEventListener('click', function(){ window.__frondoseSetMode('manual'); post({ type:'mode', mode:'manual', t0:Date.now() }); });
+    autoTab.addEventListener('click', function(){ window.__frondoseSetMode('auto'); post({ type:'mode', mode:'auto', t0:Date.now() }); });
     var showAll = shadow.getElementById('workflow-showall-btn');
     if (showAll) showAll.addEventListener('click', function(){ workflowExpanded = !workflowExpanded; rerenderWorkflow(); });
   }
@@ -182,30 +182,30 @@ export const SHELL_JS = `
     if (appMode === 'auto') {
       var wfCard = shadow.getElementById('workflow-card');
       if (wfCard) wfCard.classList.add('hidden');
-      __maiShared.buildAutoStage(shadowDoc, wf, { compact: true });
+      __frondoseShared.buildAutoStage(shadowDoc, wf, { compact: true });
       bindAutoStageButtons();
     } else {
       var stage = shadow.getElementById('auto-stage');
       if (stage) stage.classList.add('hidden');
-      __maiShared.buildIwfCard(shadowDoc, wf, workflowExpanded);
+      __frondoseShared.buildIwfCard(shadowDoc, wf, workflowExpanded);
     }
   }
 
-  window.__maiShowWorkflow = function(payloadJson) {
+  window.__frondoseShowWorkflow = function(payloadJson) {
     var parsed;
     try { parsed = JSON.parse(payloadJson); } catch (e) { return; }
     lastWorkflowJson = payloadJson;
-    if (parsed && !dialogExpanded) window.__maiExpandDialog();
+    if (parsed && !dialogExpanded) window.__frondoseExpandDialog();
     rerenderWorkflow();
   };
 
-  window.__maiSetMode = function(mode) {
+  window.__frondoseSetMode = function(mode) {
     appMode = (mode === 'auto') ? 'auto' : (mode === 'magical' ? 'magical' : 'manual');
-    __maiShared.buildSwitcher(shadow.getElementById('mode-manual-tab'), shadow.getElementById('mode-auto-tab'), appMode);
+    __frondoseShared.buildSwitcher(shadow.getElementById('mode-manual-tab'), shadow.getElementById('mode-auto-tab'), appMode);
     host.classList.toggle('mode-auto', appMode === 'auto');
     host.classList.toggle('mode-magical', appMode === 'magical');
     var st = shadow.getElementById('status');
-    if (st) st.textContent = __maiShared.statusForMode(appMode).label;   // 'Listening' / 'Observing' / 'Working'
+    if (st) st.textContent = __frondoseShared.statusForMode(appMode).label;   // 'Listening' / 'Observing' / 'Working'
     // P-Y2-MA G5: mode-badge text + class hook (styling: P-Y2-Magical owns Magical visual).
     var mb = shadow.getElementById('mode-badge');
     if (mb) {
@@ -228,7 +228,7 @@ export const SHELL_JS = `
     if (!sc || !isOverlayNearBottom()) return;
     sc.scrollTop = sc.scrollHeight - sc.clientHeight;
   }
-  window.__maiAppendUser = function(text) {
+  window.__frondoseAppendUser = function(text) {
     var list = shadow.getElementById('conversation-list');
     if (!list) return;
     var b = document.createElement('div');
@@ -237,7 +237,7 @@ export const SHELL_JS = `
     list.appendChild(b);
     overlayScrollIfPinned();
   };
-  window.__maiBeginAgent = function() {
+  window.__frondoseBeginAgent = function() {
     var list = shadow.getElementById('conversation-list');
     if (!list) return;
     var wrap = el('div', 'msg-agent');
@@ -257,25 +257,25 @@ export const SHELL_JS = `
     activeAgentTextEl = text;
     overlayScrollIfPinned();
   };
-  window.__maiAppendChunk = function(chunk) {
+  window.__frondoseAppendChunk = function(chunk) {
     // [NEW-BLOCKER-1 fix, 3b round-2] Frame-agnostic on the overlay side, symmetric
     // with Sketch A's appendAgentChunk auto-open (§5.1.2). The legacy serve→overlay
-    // wire is: serve/turn.ts:35 calls __maiClearOutput (now __maiEndAgent, nulls
-    // activeAgentTextEl); serve/turn.ts:100 calls __maiAppendOutput per text-delta
-    // (now routed to __maiAppendChunk per C-1 migration). Without the auto-open,
+    // wire is: serve/turn.ts:35 calls __frondoseClearOutput (now __frondoseEndAgent, nulls
+    // activeAgentTextEl); serve/turn.ts:100 calls __frondoseAppendOutput per text-delta
+    // (now routed to __frondoseAppendChunk per C-1 migration). Without the auto-open,
     // the FIRST chunk of every turn would silently drop because activeAgentTextEl
     // is null right after the per-turn clear. Auto-open here mirrors B1's contract:
     // first text chunk creates a bubble; subsequent chunks accumulate into it.
-    if (!activeAgentTextEl && typeof window.__maiBeginAgent === 'function') {
-      window.__maiBeginAgent();
+    if (!activeAgentTextEl && typeof window.__frondoseBeginAgent === 'function') {
+      window.__frondoseBeginAgent();
     }
     if (!activeAgentTextEl) return; // defensive — bootstrap not complete / no conv-list yet
     activeAgentTextEl.textContent = (activeAgentTextEl.textContent || '') + String(chunk);
     overlayScrollIfPinned();
   };
-  window.__maiEndAgent = function() { activeAgentTextEl = null; };
+  window.__frondoseEndAgent = function() { activeAgentTextEl = null; };
 
-  window.__maiExpandDialog = function() {
+  window.__frondoseExpandDialog = function() {
     buildPanelSkeleton();
     if (!dialogExpanded) {
       pill.style.display = 'none';
@@ -283,7 +283,7 @@ export const SHELL_JS = `
       dialogExpanded = true;
     }
   };
-  window.__maiCollapseDialog = function() {
+  window.__frondoseCollapseDialog = function() {
     if (dialogExpanded && panelRoot && panelRoot.parentNode === shadow) {
       shadow.removeChild(panelRoot);
       pill.style.display = '';

@@ -8,7 +8,7 @@
  * ⚠ RENDER-ONLY-PENDING-2.2b (plan §2/§5). The workflow action buttons (Approve/Decline/Hand-off/Pause/
  * Take-over) RENDER but are intentionally INERT in 2.2a (click→serve transport is P-Y2.2b) — a KNOWN,
  * INTENDED intermediate state, NOT a dead-button defect. This contract ASSERTS they render with the
- * canonical labels (T-Shell.1/.1b), ASSERTS the WIRED interactions only (mode tabs → __maiSetMode; T-Shell.5),
+ * canonical labels (T-Shell.1/.1b), ASSERTS the WIRED interactions only (mode tabs → __frondoseSetMode; T-Shell.5),
  * ASSERTS the transport is NOT yet present (no post workflow-/mode/abort literals; T-Shell.5). It does NOT
  * assert the inert buttons act and does NOT flag them dead. 2.2b adds the click→endpoint tests.
  * ════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -94,15 +94,15 @@ describe("OVERLAY_BOOTSTRAP_JS — workflow action buttons render with non-empty
 
 describe("OVERLAY_BOOTSTRAP_JS — shadowDoc shim + shared-builder calls (G-PY2.2a.4)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
-  // Then: shadowDoc + getElementById bound to shadow + __maiShared.buildIwfCard/buildAutoStage/buildSwitcher/buildLeafMark.
-  it("T-Shell.2: OVERLAY_BOOTSTRAP_JS contains the shadowDoc shim (getElementById via shadow) and the __maiShared builder calls", () => {
+  // Then: shadowDoc + getElementById bound to shadow + __frondoseShared.buildIwfCard/buildAutoStage/buildSwitcher/buildLeafMark.
+  it("T-Shell.2: OVERLAY_BOOTSTRAP_JS contains the shadowDoc shim (getElementById via shadow) and the __frondoseShared builder calls", () => {
     assert.ok(BOOTSTRAP.includes("shadowDoc"), "shadowDoc shim present");
     assert.ok(BOOTSTRAP.includes("shadow.getElementById"), "getElementById bound to the shadow root");
     for (const call of [
-      "__maiShared.buildIwfCard",
-      "__maiShared.buildAutoStage",
-      "__maiShared.buildSwitcher",
-      "__maiShared.buildLeafMark",
+      "__frondoseShared.buildIwfCard",
+      "__frondoseShared.buildAutoStage",
+      "__frondoseShared.buildSwitcher",
+      "__frondoseShared.buildLeafMark",
     ]) {
       assert.ok(BOOTSTRAP.includes(call), `must call ${call}`);
     }
@@ -111,14 +111,14 @@ describe("OVERLAY_BOOTSTRAP_JS — shadowDoc shim + shared-builder calls (G-PY2.
 
 describe("OVERLAY_BOOTSTRAP_JS — embeds: CSS string literal + executable bundle (G-PY2.2a.1/.2/.4)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
-  // Then: an embedded CSS string carrying ":host" + "var __maiShared" (bundle embedded raw + executable).
-  it("T-Shell.3: OVERLAY_BOOTSTRAP_JS embeds the frondose CSS (a string carrying ':host') AND the executable bundle ('var __maiShared')", () => {
+  // Then: an embedded CSS string carrying ":host" + "var __frondoseShared" (bundle embedded raw + executable).
+  it("T-Shell.3: OVERLAY_BOOTSTRAP_JS embeds the frondose CSS (a string carrying ':host') AND the executable bundle ('var __frondoseShared')", () => {
     assert.ok(BOOTSTRAP.includes(":host"), "embedded frondose CSS must carry :host");
     assert.ok(
-      /__maiCss\s*=\s*"[\s\S]*?:host/.test(BOOTSTRAP) || BOOTSTRAP.includes(":host"),
+      /__frondoseCss\s*=\s*"[\s\S]*?:host/.test(BOOTSTRAP) || BOOTSTRAP.includes(":host"),
       "CSS embedded as a string literal",
     );
-    assert.ok(BOOTSTRAP.includes("var __maiShared"), "the shared bundle must be embedded raw + executable");
+    assert.ok(BOOTSTRAP.includes("var __frondoseShared"), "the shared bundle must be embedded raw + executable");
   });
 });
 
@@ -133,16 +133,16 @@ describe("OVERLAY_BOOTSTRAP_JS — no innerHTML sink anywhere (TT-safe; G-PY2.2a
 
 describe("OVERLAY_BOOTSTRAP_JS — overlay-callable render fns + mode wiring (P-Y2.2b FLIP; G-PY2.2a.4)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
-  // Then: window.__maiShowWorkflow + window.__maiSetMode; mode tabs keep local __maiSetMode; the existing
+  // Then: window.__frondoseShowWorkflow + window.__frondoseSetMode; mode tabs keep local __frondoseSetMode; the existing
   //       'prompt' post is retained.
   // ★ P-Y2.2b RECONCILED: this was the 2.2a "render-only-pending" guard asserting NO workflow/mode/abort post
   //   literals. P-Y2.2b WIRED the transport (the buttons now ACT), so that negative is INVERTED — the literals
   //   ARE present now. The canonical transport assertion lives in tests/overlay/bootstrap-pY2.2b.mock.test.ts
   //   T-Wire.1 (this kept here, inverted, as the historical 2.2a guard's continuation).
-  it("T-Shell.5 (P-Y2.2b FLIP): defines window.__maiShowWorkflow + window.__maiSetMode; mode tabs keep local __maiSetMode + the existing 'prompt' post; transport literals are NOW present (wired in 2.2b — superseded by T-Wire.1)", () => {
-    assert.ok(BOOTSTRAP.includes("window.__maiShowWorkflow"), "must define window.__maiShowWorkflow");
-    assert.ok(BOOTSTRAP.includes("window.__maiSetMode"), "must define window.__maiSetMode");
-    assert.ok(BOOTSTRAP.includes("__maiSetMode("), "mode tabs keep local __maiSetMode");
+  it("T-Shell.5 (P-Y2.2b FLIP): defines window.__frondoseShowWorkflow + window.__frondoseSetMode; mode tabs keep local __frondoseSetMode + the existing 'prompt' post; transport literals are NOW present (wired in 2.2b — superseded by T-Wire.1)", () => {
+    assert.ok(BOOTSTRAP.includes("window.__frondoseShowWorkflow"), "must define window.__frondoseShowWorkflow");
+    assert.ok(BOOTSTRAP.includes("window.__frondoseSetMode"), "must define window.__frondoseSetMode");
+    assert.ok(BOOTSTRAP.includes("__frondoseSetMode("), "mode tabs keep local __frondoseSetMode");
     // FLIP: 2.2b added the transport — the workflow/mode/abort post literals ARE present now.
     const transport = BOOTSTRAP.match(/post\(\s*\{\s*type:\s*['"](workflow-|mode|abort)/g) ?? [];
     assert.ok(
@@ -156,16 +156,16 @@ describe("OVERLAY_BOOTSTRAP_JS — overlay-callable render fns + mode wiring (P-
 
 describe("OVERLAY_BOOTSTRAP_JS — preserved+recolored load-bearing legacy (G-PY2.2a.8)", () => {
   // Given: OVERLAY_BOOTSTRAP_JS.  When: searched.
-  // Then: HOST_STYLE + position self-heal + __MAI_PASSIVE_ENABLED__ + __maiShowCard + installPageObservers +
-  //       MAI_DIALOG_KEY all present; legacy LinkedIn-blue '#0a66c2' ABSENT (recolored).
-  it("T-Shell.6: preserves HOST_STYLE + position self-heal + __MAI_PASSIVE_ENABLED__ + __maiShowCard + installPageObservers + MAI_DIALOG_KEY; legacy '#0a66c2' recolored away", () => {
+  // Then: HOST_STYLE + position self-heal + __FRONDOSE_PASSIVE_ENABLED__ + __frondoseShowCard + installPageObservers +
+  //       FRONDOSE_DIALOG_KEY all present; legacy LinkedIn-blue '#0a66c2' ABSENT (recolored).
+  it("T-Shell.6: preserves HOST_STYLE + position self-heal + __FRONDOSE_PASSIVE_ENABLED__ + __frondoseShowCard + installPageObservers + FRONDOSE_DIALOG_KEY; legacy '#0a66c2' recolored away", () => {
     for (const token of [
       "HOST_STYLE",
       "!== 'fixed'",
-      "__MAI_PASSIVE_ENABLED__",
-      "__maiShowCard",
+      "__FRONDOSE_PASSIVE_ENABLED__",
+      "__frondoseShowCard",
       "installPageObservers",
-      "MAI_DIALOG_KEY",
+      "FRONDOSE_DIALOG_KEY",
     ]) {
       assert.ok(BOOTSTRAP.includes(token), `load-bearing legacy must survive extraction: ${token}`);
     }

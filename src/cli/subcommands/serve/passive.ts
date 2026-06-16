@@ -171,7 +171,7 @@ export function createPassiveHandlers(
     const ctxId = state.overlayContextId;
     const client = deps.session.getClient();
     if (ctxId === undefined || !client) return;
-    void callInOverlay(client.handle, ctxId, `function() { window.__maiUpdateTicker(${JSON.stringify(text)}); }`);
+    void callInOverlay(client.handle, ctxId, `function() { window.__frondoseUpdateTicker(${JSON.stringify(text)}); }`);
   }
 
   async function triggerPassiveAnalysis(eventType: string, ctx: Record<string, unknown>): Promise<void> {
@@ -224,7 +224,7 @@ export function createPassiveHandlers(
             void callInOverlay(
               client.handle,
               ctxId,
-              `function() { window.__maiShowCollapsedCard(${JSON.stringify(collapsedJson)}); }`,
+              `function() { window.__frondoseShowCollapsedCard(${JSON.stringify(collapsedJson)}); }`,
             );
           }
         },

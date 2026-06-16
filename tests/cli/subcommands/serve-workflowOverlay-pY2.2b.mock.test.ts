@@ -3,7 +3,7 @@
  *
  * F7 live workflow drive (plan §6.4-A): the PURE `toOverlayWorkflowSnapshot(state, frame) → WorkflowLike|null`
  * mapper (frame-aware notice/pendingStepId, VERBATIM-desktop strings vs app.ts L509/516/524/536, null on
- * completed/no-workflow, deterministic) + the thin `pushWorkflowToOverlay` (pushes `__maiShowWorkflow` via
+ * completed/no-workflow, deterministic) + the thin `pushWorkflowToOverlay` (pushes `__frondoseShowWorkflow` via
  * `callInOverlay` when an overlay context exists; no-op headless; null → `"null"` hide signal).
  *
  * `callInOverlay` is spied via `mock.module("…/overlay/inject.js")` BEFORE the dynamic import of
@@ -65,10 +65,10 @@ before(async () => {
   pushWorkflowToOverlay = (mod as { pushWorkflowToOverlay?: typeof pushWorkflowToOverlay }).pushWorkflowToOverlay;
 });
 
-// Extract the snapshot object embedded in a callInOverlay fn string (double-encoded, mirrors __maiShowCard).
+// Extract the snapshot object embedded in a callInOverlay fn string (double-encoded, mirrors __frondoseShowCard).
 function snapshotFromPushFn(fn: string): unknown {
-  const m = /__maiShowWorkflow\((".*")\); }/.exec(fn);
-  assert.ok(m?.[1], `push fn must embed __maiShowWorkflow("<json>"); got ${fn.slice(0, 120)}`);
+  const m = /__frondoseShowWorkflow\((".*")\); }/.exec(fn);
+  assert.ok(m?.[1], `push fn must embed __frondoseShowWorkflow("<json>"); got ${fn.slice(0, 120)}`);
   return JSON.parse(JSON.parse(m[1]) as string); // outer literal → inner json string → object
 }
 
@@ -209,7 +209,7 @@ describe("toOverlayWorkflowSnapshot — deterministic/pure (G-PY2.2b.1)", () => 
 
 // ─── 5.2 Push (T-Push.1-3) ───────────────────────────────────────────────────
 
-describe("pushWorkflowToOverlay — pushes __maiShowWorkflow when an overlay context exists (G-PY2.2b.2)", () => {
+describe("pushWorkflowToOverlay — pushes __frondoseShowWorkflow when an overlay context exists (G-PY2.2b.2)", () => {
   it("T-Push.1: with overlayContextId + a client, pushes callInOverlay(handle, 7, fn) embedding the mapped snapshot", () => {
     assert.ok(pushWorkflowToOverlay, "builder 4b must export pushWorkflowToOverlay");
     callInOverlayCalls = [];
@@ -227,7 +227,7 @@ describe("pushWorkflowToOverlay — pushes __maiShowWorkflow when an overlay con
     assert.equal(callInOverlayCalls[0]?.[0], handle, "handle threaded through");
     assert.equal(callInOverlayCalls[0]?.[1], 7, "overlayContextId threaded through");
     const fn = callInOverlayCalls[0]?.[2] ?? "";
-    assert.ok(fn.includes("window.__maiShowWorkflow("), "fn calls __maiShowWorkflow");
+    assert.ok(fn.includes("window.__frondoseShowWorkflow("), "fn calls __frondoseShowWorkflow");
     const snap = snapshotFromPushFn(fn) as { notice: string; pendingStepId: string };
     assert.equal(
       snap.notice,
@@ -251,8 +251,8 @@ describe("pushWorkflowToOverlay — no-op headless (no overlay context) (G-PY2.2
   });
 });
 
-describe('pushWorkflowToOverlay — null snapshot pushes __maiShowWorkflow("null") (G-PY2.2b.2, .3)', () => {
-  it('T-Push.3: a null snapshot (workflow-completed) pushes __maiShowWorkflow("null") (the hide signal)', () => {
+describe('pushWorkflowToOverlay — null snapshot pushes __frondoseShowWorkflow("null") (G-PY2.2b.2, .3)', () => {
+  it('T-Push.3: a null snapshot (workflow-completed) pushes __frondoseShowWorkflow("null") (the hide signal)', () => {
     callInOverlayCalls = [];
     pushWorkflowToOverlay?.(
       { overlayContextId: 7 },
@@ -262,8 +262,8 @@ describe('pushWorkflowToOverlay — null snapshot pushes __maiShowWorkflow("null
     );
     assert.equal(callInOverlayCalls.length, 1);
     assert.ok(
-      (callInOverlayCalls[0]?.[2] ?? "").includes('window.__maiShowWorkflow("null")'),
-      'null snapshot → __maiShowWorkflow("null")',
+      (callInOverlayCalls[0]?.[2] ?? "").includes('window.__frondoseShowWorkflow("null")'),
+      'null snapshot → __frondoseShowWorkflow("null")',
     );
   });
 });

@@ -42,7 +42,7 @@ export function appendOverlayEventRow(
 
 export function attachEventBus(client: CdpHandle, onEvent: (event: OverlayEvent) => void): () => void {
   const unsubscribe = client.Runtime.bindingCalled(({ name, payload }: { name: string; payload: string }) => {
-    if (name !== "__maiPost") return;
+    if (name !== "__frondosePost") return;
     try {
       const parsed = JSON.parse(payload) as unknown;
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;

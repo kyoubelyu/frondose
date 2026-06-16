@@ -3,7 +3,7 @@
  *
  * Mock tests for P-56b additions to `src/overlay/inject.ts`:
  *   (a) `export const OVERLAY_BOOTSTRAP_JS` — ticker fn + 5s auto-reset + textContent safety
- *   (b) `subscribeContextId`             — filters `context.name === "mai-overlay"` only
+ *   (b) `subscribeContextId`             — filters `context.name === "frondose-overlay"` only
  *   (c) `callInOverlay`                  — Runtime.callFunctionOn with silent:true
  *
  * Gate coverage:
@@ -40,7 +40,7 @@ const { OVERLAY_BOOTSTRAP_JS, subscribeContextId, callInOverlay } = mod;
 // ─── T-Overlay.4 — OVERLAY_BOOTSTRAP_JS ticker + Trusted Types safety ────────
 
 describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + textContent safety (G-P56b.2)", () => {
-  it("T-Overlay.4a: given OVERLAY_BOOTSTRAP_JS imported from src/overlay/inject.ts, WHEN substring searches applied, THEN string contains 'window.__maiUpdateTicker = function' AND 'setTimeout' AND '5000' AND 'pillLabel.textContent' (P-Y2.2a) AND does NOT contain '.innerHTML'", () => {
+  it("T-Overlay.4a: given OVERLAY_BOOTSTRAP_JS imported from src/overlay/inject.ts, WHEN substring searches applied, THEN string contains 'window.__frondoseUpdateTicker = function' AND 'setTimeout' AND '5000' AND 'pillLabel.textContent' (P-Y2.2a) AND does NOT contain '.innerHTML'", () => {
     // Given: OVERLAY_BOOTSTRAP_JS is an exported string constant from inject.ts
     // When:  substring checks run against the constant
     // Then:  ticker function declaration present; setTimeout with 5000ms present;
@@ -50,8 +50,8 @@ describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + t
       "OVERLAY_BOOTSTRAP_JS must be a non-empty exported string",
     );
     assert.ok(
-      OVERLAY_BOOTSTRAP_JS.includes("window.__maiUpdateTicker = function"),
-      "OVERLAY_BOOTSTRAP_JS must contain ticker function declaration: window.__maiUpdateTicker = function",
+      OVERLAY_BOOTSTRAP_JS.includes("window.__frondoseUpdateTicker = function"),
+      "OVERLAY_BOOTSTRAP_JS must contain ticker function declaration: window.__frondoseUpdateTicker = function",
     );
     assert.ok(
       OVERLAY_BOOTSTRAP_JS.includes("setTimeout"),
@@ -95,14 +95,14 @@ describe("OVERLAY_BOOTSTRAP_JS — exported constant; ticker fn + auto-reset + t
 
 // ─── T-Overlay.3 — subscribeContextId filters by context.name ────────────────
 
-describe("subscribeContextId — invokes onContext only for context.name === 'mai-overlay' (G-P56b.3)", () => {
-  it("T-Overlay.3: given a fake CdpHandle with Page.getFrameTree (mainFrameId='main-1') + Runtime.executionContextCreated handler-capture + onContext=spy, WHEN await subscribeContextId(handle, spy) + handler invoked with (a) mai-overlay+main-1 (b) mai-overlay+iframe-2 (c) other+main-1, THEN onContext called exactly once with id=7; and the return is a function (unsubscribe)", async () => {
+describe("subscribeContextId — invokes onContext only for context.name === 'frondose-overlay' (G-P56b.3)", () => {
+  it("T-Overlay.3: given a fake CdpHandle with Page.getFrameTree (mainFrameId='main-1') + Runtime.executionContextCreated handler-capture + onContext=spy, WHEN await subscribeContextId(handle, spy) + handler invoked with (a) frondose-overlay+main-1 (b) frondose-overlay+iframe-2 (c) other+main-1, THEN onContext called exactly once with id=7; and the return is a function (unsubscribe)", async () => {
     // Given: P-57a evolved subscribeContextId to async + Page.getFrameTree() + top-frame filter
     //        (D-P57a-01 Option B fix). Mock CdpHandle now provides Page.getFrameTree returning
     //        {frameTree: {frame: {id: "main-1"}}}; Runtime.executionContextCreated captures handler.
     // When:  await subscribeContextId(fakeHandle, onContext) → registers handler;
     //        validator invokes captured handler with three payload variants in sequence.
-    // Then:  onContext called count === 1 (only the mai-overlay context whose auxData.frameId
+    // Then:  onContext called count === 1 (only the frondose-overlay context whose auxData.frameId
     //        matches the mainFrameId); other variants filtered; return is a function.
 
     // biome-ignore lint/suspicious/noExplicitAny: captured handler needs any to avoid never-type narrowing
@@ -137,23 +137,23 @@ describe("subscribeContextId — invokes onContext only for context.name === 'ma
     assert.ok(capturedHandler !== null, "executionContextCreated handler should have been registered");
 
     // Invoke handler with three payloads in sequence:
-    //  (a) mai-overlay in TOP frame → accepted
-    //  (b) mai-overlay in iframe → filtered by Option B mainFrameId check
-    //  (c) non-mai-overlay name in top frame → filtered by name check
-    capturedHandler?.({ context: { id: 7, name: "mai-overlay", auxData: { frameId: "main-1" } } });
-    capturedHandler?.({ context: { id: 8, name: "mai-overlay", auxData: { frameId: "iframe-2" } } });
+    //  (a) frondose-overlay in TOP frame → accepted
+    //  (b) frondose-overlay in iframe → filtered by Option B mainFrameId check
+    //  (c) non-frondose-overlay name in top frame → filtered by name check
+    capturedHandler?.({ context: { id: 7, name: "frondose-overlay", auxData: { frameId: "main-1" } } });
+    capturedHandler?.({ context: { id: 8, name: "frondose-overlay", auxData: { frameId: "iframe-2" } } });
     capturedHandler?.({ context: { id: 9, name: "main", auxData: { frameId: "main-1" } } });
 
-    // onContext should only be called once (for the top-frame mai-overlay context)
+    // onContext should only be called once (for the top-frame frondose-overlay context)
     assert.equal(
       onContextCalls.length,
       1,
-      `onContext should be called exactly once (top-frame mai-overlay); got ${onContextCalls.length} call(s)`,
+      `onContext should be called exactly once (top-frame frondose-overlay); got ${onContextCalls.length} call(s)`,
     );
     assert.equal(
       onContextCalls[0],
       7,
-      `onContext should receive id=7 (top-frame mai-overlay); got ${onContextCalls[0]}`,
+      `onContext should receive id=7 (top-frame frondose-overlay); got ${onContextCalls[0]}`,
     );
     // Return value should be a function (unsubscribe handle)
     assert.strictEqual(typeof unsub, "function", "subscribeContextId must return a function (unsubscribe handle)");
