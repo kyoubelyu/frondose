@@ -5,7 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import os from "node:os";
-import { extname, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import type { Database as DB } from "better-sqlite3";
 import { WebSocketServer } from "ws";
@@ -81,7 +81,8 @@ function serveStatic(res: ServerResponse, assetRoot: string, urlPath: string): v
   }
   if (rel === "/") rel = "/index.html";
   const resolved = resolve(assetRoot, `.${rel}`);
-  if (resolved !== assetRoot && !resolved.startsWith(`${assetRoot}/`)) {
+  const assetRelative = relative(assetRoot, resolved);
+  if (assetRelative.startsWith("..") || isAbsolute(assetRelative)) {
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("not found\n");
     return;

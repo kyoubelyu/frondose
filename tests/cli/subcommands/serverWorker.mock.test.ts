@@ -7,16 +7,30 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runServerWorkerSubcommand } from "../../../src/cli/subcommands/serverWorker.js";
 import { addWorker, listWorkers, openWorkersDb } from "../../../src/persistence/workersRegistry.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(homedir(), "mai-p26-sw-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+  };
 }
 
 function sha256(s: string): string {
@@ -91,9 +105,8 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // Then:  stdout contains "SAVE THIS TOKEN NOW"; token printed exactly once (64-char hex);
     //        workers.sqlite has 1 row with token_hash = sha256(printed_token)
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const stdout = await captureStdout(async () => {
         await runServerWorkerSubcommand("add", { workerId: "w1" });
       });
@@ -113,8 +126,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
       const dbRow = db.prepare("SELECT token_hash FROM workers WHERE worker_id='w1'").get() as { token_hash: string };
       assert.equal(dbRow.token_hash, sha256(token), "T-SW.ADD.1: token_hash in DB = sha256(printed_token)");
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -124,10 +136,9 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // When:  add w1 again
     // Then:  process.exit(1); stderr contains "already exists" and "rotate"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     const exitMock = mockProcessExit();
     try {
-      process.env.HOME = dir;
       // Pre-populate w1 directly in the DB (avoids stdout capture noise)
       const db = openWorkersDb(workersDbPath(dir));
       addWorker(db, "w1", "initial_token_for_test_32byteXXX");
@@ -139,8 +150,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
       assert.ok(stderr.includes("rotate"), `T-SW.ADD.2: stderr must contain 'rotate'; got:\n${stderr}`);
     } finally {
       exitMock.restore();
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -150,9 +160,8 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // When:  runServerWorkerSubcommand("rotate", {workerId:"w1"})
     // Then:  token_hash in DB now = sha256(T2) where T2 ≠ T1; stdout has "OLD TOKEN REVOKED"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const initialToken = "initial_token_for_rotate_test_32X";
       const initialHash = sha256(initialToken);
       const db = openWorkersDb(workersDbPath(dir));
@@ -176,8 +185,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
       assert.equal(after.token_hash, newHash, "T-SW.ROTATE.1: DB token_hash = sha256(new printed token)");
       assert.notEqual(newHash, initialHash, "T-SW.ROTATE.1: new token differs from old token");
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -187,9 +195,8 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // When:  runServerWorkerSubcommand("remove", {workerId:"w1"})
     // Then:  row gone from workers.sqlite; stdout contains "[worker remove]" and "purged from registry"
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const db = openWorkersDb(workersDbPath(dir));
       addWorker(db, "w1", "remove_test_token_32bytesXXXXXXXX");
       assert.equal(listWorkers(db).length, 1, "T-SW.REMOVE.1: pre-condition: 1 worker");
@@ -207,8 +214,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
       // Verify row removed
       assert.equal(listWorkers(db).length, 0, "T-SW.REMOVE.1: 0 workers remain after remove");
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -218,9 +224,8 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // When:  runServerWorkerSubcommand("list", {json:false})
     // Then:  stdout has "WORKER_ID" column header; worker ids visible; no token_hash values
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const db = openWorkersDb(workersDbPath(dir));
       addWorker(db, "worker_one", "list_test_token_1_32bytesXXXXXXX");
       addWorker(db, "worker_two", "list_test_token_2_32bytesXXXXXXX");
@@ -234,8 +239,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
       const tokenHash1 = sha256("list_test_token_1_32bytesXXXXXXX");
       assert.ok(!stdout.includes(tokenHash1), "T-SW.LIST.1: token_hash must NOT appear in list output");
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -245,9 +249,8 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
     // When:  runServerWorkerSubcommand("list", {json:true})
     // Then:  stdout is valid JSON array of 2 entries; JSON.parse succeeds; no entry has token_hash
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const db = openWorkersDb(workersDbPath(dir));
       addWorker(db, "worker_one", "json_list_token_1_32bytesXXXXXXX");
       addWorker(db, "worker_two", "json_list_token_2_32bytesXXXXXXX");
@@ -272,8 +275,7 @@ describe("runServerWorkerSubcommand (G-P26.10, G-P26.11, G-P26.12, G-P26.13)", (
         assert.ok("status" in entry, "T-SW.LIST.2: status must be present in each entry");
       }
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
+      restoreHome();
       cleanup();
     }
   });

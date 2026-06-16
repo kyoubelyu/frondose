@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -20,6 +20,7 @@ import { makeGetMemoryNoteTool } from "../../src/tools/memory/getMemoryNote.js";
 import { makeRememberTool } from "../../src/tools/memory/remember.js";
 import { makeSearchMemoryTool } from "../../src/tools/memory/searchMemory.js";
 import { makeSetMemoryNoteTool } from "../../src/tools/memory/setMemoryNote.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ function uniqueDbPath(): { dbPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), `mai-p39-tools-${process.pid}-${++_counter}-`));
   return {
     dbPath: join(dir, "memory.sqlite"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

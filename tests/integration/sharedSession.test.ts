@@ -15,19 +15,20 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage } from "ai";
 import { acquireTurnLock, releaseTurnLock } from "../../src/persistence/processLock.js";
 import { appendMessagesShared, loadMessagesShared } from "../../src/persistence/sharedSession.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p30-share-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 function makeMessages(prefix: string, count: number): CoreMessage[] {

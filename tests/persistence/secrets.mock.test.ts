@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -23,6 +23,7 @@ import { readAuth, writeAuth } from "../../src/persistence/auth.js";
 import { readGithubConfig } from "../../src/persistence/github.js";
 import { readSearchConfig } from "../../src/persistence/search.js";
 import { readSecrets, writeSecrets } from "../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ function makeTmpDir() {
     dir,
     secretsPath: join(dir, "secrets.json"),
     authPath: join(dir, "auth.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 
@@ -48,6 +49,9 @@ function restoreEnv(saved: Record<string, string | undefined>): void {
     else process.env[k] = v;
   }
 }
+
+const posixPermissionsOptions: { skip?: string } =
+  process.platform === "win32" ? { skip: "POSIX chmod/read-only directory semantics are not portable to Windows." } : {};
 
 // ─── T-SECRETS.1 ─────────────────────────────────────────────────────────────
 
@@ -86,8 +90,10 @@ describe("writeSecrets — file mode 0o600 + round-trip (G-P24.3 + G-P24.7)", ()
       const payload = { schema_version: 1 as const };
       writeSecrets(payload, secretsPath);
       assert.ok(existsSync(secretsPath), "T-SECRETS.2: secrets.json must exist after writeSecrets");
-      const mode = statSync(secretsPath).mode & 0o777;
-      assert.equal(mode, 0o600, `T-SECRETS.2: file mode must be 0o600; got ${mode.toString(8)}`);
+      if (process.platform !== "win32") {
+        const mode = statSync(secretsPath).mode & 0o777;
+        assert.equal(mode, 0o600, `T-SECRETS.2: file mode must be 0o600; got ${mode.toString(8)}`);
+      }
       const readBack = JSON.parse(readFileSync(secretsPath, "utf-8"));
       assert.deepEqual(readBack, payload, "T-SECRETS.2: JSON must round-trip");
     } finally {
@@ -208,7 +214,10 @@ describe("readSecrets — schema_version forward-compat → stderr + defaults (G
 // ─── T-SECRETS.6 ─────────────────────────────────────────────────────────────
 
 describe("writeSecrets — directory read-only: original unchanged; error propagates (G-P24.3)", () => {
-  it("T-SECRETS.6: when writeSecrets is called and the target directory is read-only (EACCES), original secrets.json unchanged and error propagates", () => {
+  it(
+    "T-SECRETS.6: when writeSecrets is called and the target directory is read-only (EACCES), original secrets.json unchanged and error propagates",
+    posixPermissionsOptions,
+    () => {
     // Given: existing secrets.json with {schema_version:1, default:'anthropic:claude-sonnet-4-5'}
     //        directory made read-only (0o555) to trigger EACCES on tmp file creation
     // When:  writeSecrets({schema_version:1, default:'new-model'}, secretsPath)
@@ -249,7 +258,8 @@ describe("writeSecrets — directory read-only: original unchanged; error propag
       }
       cleanup();
     }
-  });
+    },
+  );
 });
 
 // ─── T-SHIM.AUTH.1 ───────────────────────────────────────────────────────────

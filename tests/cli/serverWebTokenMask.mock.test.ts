@@ -8,18 +8,19 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runServerWebTokenSubcommand } from "../../src/cli/subcommands/serverWebToken.js";
 import { readSecrets, writeSecrets } from "../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpSecrets(): { secretsPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p36-fc-"));
   const secretsPath = join(dir, "secrets.json");
   writeSecrets({ schema_version: 1 }, secretsPath);
-  return { secretsPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { secretsPath, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Capture stdout during fn(); restore and return captured string. */

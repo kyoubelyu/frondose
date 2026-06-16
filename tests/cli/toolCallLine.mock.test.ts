@@ -30,7 +30,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { classifyResult, formatArgs, formatToolCallLine } from "../../src/cli/toolCallLine.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -183,8 +183,9 @@ describe("COLOR_ENABLED gate — NO_COLOR=1 strips ANSI codes (G-P48.4)", () => 
     // This ensures the module is loaded fresh with NO_COLOR in its env.
     //
     // Builder cue at Step 4b: build dist/cli/toolCallLine.js so this subprocess can import it.
+    const toolCallLineUrl = pathToFileURL(path.join(REPO_ROOT, "dist", "cli", "toolCallLine.js")).href;
     const inlineScript = `
-import { formatToolCallLine } from ${JSON.stringify(path.join(REPO_ROOT, "dist/cli/toolCallLine.js"))};
+import { formatToolCallLine } from ${JSON.stringify(toolCallLineUrl)};
 process.stdout.write(formatToolCallLine({toolName:"launch",args:{},result:{ok:true}}) + "\\n");
 `;
     const result = spawnSync(process.execPath, ["--input-type=module"], {

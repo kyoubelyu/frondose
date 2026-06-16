@@ -18,12 +18,13 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { type ConfigJson, readConfig, writeConfig } from "../../src/persistence/config.js";
 import { writeSecrets } from "../../src/persistence/secrets.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,14 +34,20 @@ function makeTmpDir() {
     dir,
     secretsPath: join(dir, "secrets.json"),
     configPath: join(dir, "config.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
+
+const posixPermissionsOptions: { skip?: string } =
+  process.platform === "win32" ? { skip: "POSIX chmod/read-only directory semantics are not portable to Windows." } : {};
 
 // ─── T-ATOMIC.1 ──────────────────────────────────────────────────────────────
 
 describe("writeSecrets — directory EACCES: original unchanged; error propagates (G-P24.3)", () => {
-  it("T-ATOMIC.1: when writeSecrets called and target directory is read-only, original secrets.json unchanged and error propagates", () => {
+  it(
+    "T-ATOMIC.1: when writeSecrets called and target directory is read-only, original secrets.json unchanged and error propagates",
+    posixPermissionsOptions,
+    () => {
     // Given: existing secrets.json with {schema_version:1, default:'anthropic:claude-sonnet-4-5'}
     //        directory made read-only (0o555) to trigger EACCES on tmp file creation
     // When:  writeSecrets({schema_version:1, default:'new-model'}, secretsPath)
@@ -79,13 +86,17 @@ describe("writeSecrets — directory EACCES: original unchanged; error propagate
       }
       cleanup();
     }
-  });
+    },
+  );
 });
 
 // ─── T-ATOMIC.2 ──────────────────────────────────────────────────────────────
 
 describe("writeSecrets — mode 0o600 preserved on overwrite (G-P24.7)", () => {
-  it("T-ATOMIC.2: when existing secrets.json at 0o600 is overwritten by writeSecrets, result still has mode 0o600", () => {
+  it(
+    "T-ATOMIC.2: when existing secrets.json at 0o600 is overwritten by writeSecrets, result still has mode 0o600",
+    posixPermissionsOptions,
+    () => {
     // Given: secrets.json exists at mode 0o600 (initial write by writeSecrets)
     // When:  writeSecrets called again with updated payload
     // Then:  statSync(secretsPath).mode & 0o777 === 0o600 (belt-and-suspenders chmodSync preserved mode)
@@ -101,13 +112,17 @@ describe("writeSecrets — mode 0o600 preserved on overwrite (G-P24.7)", () => {
     } finally {
       cleanup();
     }
-  });
+    },
+  );
 });
 
 // ─── T-ATOMIC.3 ──────────────────────────────────────────────────────────────
 
 describe("writeSecrets — mode 0o600 on fresh file (G-P24.7)", () => {
-  it("T-ATOMIC.3: when secrets.json does not exist before writeSecrets, fresh file has mode 0o600 (covers R-7 mode race on first write)", () => {
+  it(
+    "T-ATOMIC.3: when secrets.json does not exist before writeSecrets, fresh file has mode 0o600 (covers R-7 mode race on first write)",
+    posixPermissionsOptions,
+    () => {
     // Given: secretsPath does not exist
     // When:  writeSecrets({schema_version:1}, secretsPath)
     // Then:  statSync(secretsPath).mode & 0o777 === 0o600
@@ -120,7 +135,8 @@ describe("writeSecrets — mode 0o600 on fresh file (G-P24.7)", () => {
     } finally {
       cleanup();
     }
-  });
+    },
+  );
 });
 
 // ─── T-ATOMIC.4 ──────────────────────────────────────────────────────────────

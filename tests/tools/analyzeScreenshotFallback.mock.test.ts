@@ -12,13 +12,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { writeAuth } from "../../src/persistence/auth.js";
 import { makeAnalyzeScreenshotTool } from "../../src/tools/webTools/analyzeScreenshot.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ function withSeededVisionProvider(fn: () => Promise<void>): Promise<void> {
   return fn().finally(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   });
 }
 

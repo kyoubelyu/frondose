@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   loadMessages,
   sessionDir,
 } from "../../src/persistence/session.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // T-M8..T-M11: session persistence contract
 
@@ -27,7 +28,7 @@ function withTmpHome(fn: (tmpHome: string) => void): void {
   } finally {
     if (prevHome === undefined) delete process.env.HOME;
     else process.env.HOME = prevHome;
-    rmSync(tmpHome, { recursive: true });
+    cleanupTmpDir(tmpHome);
   }
 }
 
@@ -76,7 +77,7 @@ test("T-M9: appendMessages + loadMessages round-trip across all CoreMessage vari
     const all = loadMessages(file2);
     assert.deepEqual(all, messages, "two-batch append must preserve full order");
   } finally {
-    rmSync(dir, { recursive: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -95,7 +96,7 @@ test("T-M9c: appendMessages with empty array is a no-op (no file created)", () =
       const loaded = loadMessages(file);
       assert.deepEqual(loaded, [], "empty-append then load must return []");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });
@@ -125,7 +126,7 @@ test("T-M10: findRecentSessionFile picks *.jsonl with latest mtime", () => {
       const result = findRecentSessionFile(fakeCwd);
       assert.equal(result, fileC, "must return the file with the latest mtime");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });
@@ -138,7 +139,7 @@ test("T-M10b: findRecentSessionFile returns undefined on empty dir", () => {
       const result = findRecentSessionFile(fakeCwd);
       assert.equal(result, undefined, "empty dir must return undefined");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });
@@ -156,7 +157,7 @@ test("T-M10c: findRecentSessionFile ignores non-.jsonl files", () => {
       const result = findRecentSessionFile(fakeCwd);
       assert.equal(result, jsonlFile, "must return the .jsonl file and ignore .DS_Store");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });
@@ -182,7 +183,7 @@ test("T-M11: continueRecent returns existing session or creates new", () => {
       assert.notEqual(fresh, pathA, "continueRecent(newSession: true) must return a new path");
       assert.ok(fresh.endsWith(".jsonl"), "new session path must end with .jsonl");
     } finally {
-      rmSync(dir, { recursive: true });
+      cleanupTmpDir(dir);
     }
   });
 });
@@ -195,6 +196,6 @@ test("T-M11b: continueRecent on empty dir creates a new session path (auto-creat
     assert.ok(freshPath.endsWith(".jsonl"), "fresh path must end with .jsonl");
     // Cleanup: remove the dir continueRecent created
     const dir = sessionDir(fakeCwd);
-    rmSync(dir, { recursive: true });
+    cleanupTmpDir(dir);
   });
 });

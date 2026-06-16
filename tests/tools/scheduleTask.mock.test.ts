@@ -13,17 +13,18 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { ScheduleRecord } from "../../src/persistence/schedule.js";
 import { readSchedule, writeSchedule } from "../../src/persistence/schedule.js";
 import { makeScheduleTaskTool } from "../../src/tools/cron/scheduleTask.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p31-st-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Invoke tool.execute with the standard Vercel tool execution options shape. */

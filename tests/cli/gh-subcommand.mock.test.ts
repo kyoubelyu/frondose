@@ -15,13 +15,14 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 import { runGhSubcommand } from "../../src/cli/subcommands/gh.js";
 import { readGithubConfig } from "../../src/persistence/github.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── mock Prompter ────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function makeTmpDir(): { dir: string; cfgPath: string; cleanup: () => void } {
   return {
     dir,
     cfgPath: join(dir, "github.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 
@@ -107,8 +108,10 @@ describe("runGhSubcommand (G-P15.5)", () => {
       const content = readGithubConfig(cfgPath); // shim reads from secrets.json
       assert.equal(content.token, "ghp_test", "token must be written");
       assert.equal(content.repo, "own/r", "repo must be written");
-      const mode = statSync(secretsPath).mode & 0o777;
-      assert.equal(mode, 0o600, `secrets.json mode must be 0o600; got ${mode.toString(8)}`);
+      if (process.platform !== "win32") {
+        const mode = statSync(secretsPath).mode & 0o777;
+        assert.equal(mode, 0o600, `secrets.json mode must be 0o600; got ${mode.toString(8)}`);
+      }
     } finally {
       cleanup();
     }

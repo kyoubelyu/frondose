@@ -17,10 +17,11 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── G-P55.3: attachEventBus subscription, name-filter, malformed-JSON swallow ─
 
@@ -221,7 +222,7 @@ describe("appendOverlayEventRow — byte-precise JSONL envelope + additive multi
         "two lines with no extra separator — just two \\n-terminated records",
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      cleanupTmpDir(dir);
     }
   });
 });

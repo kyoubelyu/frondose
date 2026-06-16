@@ -10,11 +10,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void; restoreHome: () => vo
   process.env.HOME = dir;
   return {
     dir,
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
     restoreHome: () => {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;

@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -19,12 +19,13 @@ import {
   openMemoryDatabase,
   rememberInputSchema,
 } from "../../src/persistence/memory.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; dbPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-memv2-"));
-  return { dir, dbPath: join(dir, "memory.sqlite"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, dbPath: join(dir, "memory.sqlite"), cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Create a minimal V1 database at path (no V2 columns, version=1 row). */

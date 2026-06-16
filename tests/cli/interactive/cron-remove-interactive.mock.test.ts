@@ -16,12 +16,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { handleCronSlash } from "../../../src/cli/replCron.js";
 import { runCronRemoveInteractive } from "../../../src/cli/subcommands/cronRemove.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 import { captureStdout, makeMockPrompter } from "./_mockPrompter.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ function makeTmpSchedDir(): { schedulePath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p13-cron-"));
   return {
     schedulePath: join(dir, "schedule.jsonl"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

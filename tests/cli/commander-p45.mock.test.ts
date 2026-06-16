@@ -19,6 +19,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -27,7 +28,7 @@ const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
 
 /** Path to the built CLI entry point. Validator verifies dist/ is current-build. */
-const CLI = new URL("../../dist/cli/main.js", import.meta.url).pathname;
+const CLI = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
 
 /** Load package.json version for T-CMD.2 / T-CMD.3. */
 function pkgVersion(): string {
@@ -107,7 +108,7 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     // Given: tests/fixtures/p45-help-baseline.txt committed at Step 4a
     // When:  node dist/cli/main.js --help run post-build
     // Then:  output is byte-equal to baseline (Commander surface unchanged)
-    const baselinePath = new URL("../fixtures/p45-help-baseline.txt", import.meta.url).pathname;
+    const baselinePath = fileURLToPath(new URL("../fixtures/p45-help-baseline.txt", import.meta.url));
     assert.ok(existsSync(baselinePath), `T-CMD.4: baseline fixture must exist at ${baselinePath}`);
     assert.ok(existsSync(CLI), "T-CMD.4: dist/cli/main.js must exist");
     const { stdout } = await execFileAsync("node", [CLI, "--help"]);
@@ -183,7 +184,9 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     // Given: tests/fixtures/p45-server-worker-provision-help-baseline.txt committed at Step 4a
     // When:  node dist/cli/main.js server worker provision --help run post-build
     // Then:  output byte-equal to baseline
-    const baselinePath = new URL("../fixtures/p45-server-worker-provision-help-baseline.txt", import.meta.url).pathname;
+    const baselinePath = fileURLToPath(
+      new URL("../fixtures/p45-server-worker-provision-help-baseline.txt", import.meta.url),
+    );
     assert.ok(existsSync(baselinePath), `T-CMD.7: server-worker-provision baseline must exist at ${baselinePath}`);
     assert.ok(existsSync(CLI), "T-CMD.7: dist/cli/main.js must exist");
     const { stdout } = await execFileAsync("node", [CLI, "server", "worker", "provision", "--help"]);
@@ -200,7 +203,7 @@ describe("Commander surface preserved after main.ts split (G-P45.3)", () => {
     // Given: tests/fixtures/p45-cron-schedule-help-baseline.txt committed at Step 4a
     // When:  node dist/cli/main.js cron schedule --help run post-build
     // Then:  output byte-equal to baseline
-    const baselinePath = new URL("../fixtures/p45-cron-schedule-help-baseline.txt", import.meta.url).pathname;
+    const baselinePath = fileURLToPath(new URL("../fixtures/p45-cron-schedule-help-baseline.txt", import.meta.url));
     assert.ok(existsSync(baselinePath), `T-CMD.8: cron-schedule baseline must exist at ${baselinePath}`);
     assert.ok(existsSync(CLI), "T-CMD.8: dist/cli/main.js must exist");
     const { stdout } = await execFileAsync("node", [CLI, "cron", "schedule", "--help"]);

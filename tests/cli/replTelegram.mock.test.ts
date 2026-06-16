@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -24,12 +24,26 @@ import { runRepl } from "../../src/cli/repl.js";
 import { isPidAlive, writePid } from "../../src/persistence/processLock.js";
 import { loadMessagesShared } from "../../src/persistence/sharedSession.js";
 import { DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-repl-"));
-  return { home, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+  return { home, cleanup: () => cleanupTmpDir(home) };
+}
+
+function setIsolatedHome(home: string): () => void {
+  const origHome = process.env.HOME;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+  return () => {
+    if (origHome === undefined) delete process.env.HOME;
+    else process.env.HOME = origHome;
+    if (origHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = origHomeBase;
+  };
 }
 
 function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
@@ -80,9 +94,8 @@ describe("repl: daemon-handshake on REPL boot", () => {
     // When:   runRepl boots (piped non-TTY stdin closed immediately so loop exits)
     // Then:   out contains '[telegram] daemon active (PID' advisory; no 'poller started' message
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "stub-token";
       const tgPidPath = join(home, ".frondose", "agent", "telegram.pid");
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
@@ -113,7 +126,7 @@ describe("repl: daemon-handshake on REPL boot", () => {
       // Poller must NOT have started (no 'poller started' or 'enabled — poller' message)
       assert.ok(!outText.includes("enabled — poller"), "REPL must not start its own poller when daemon is alive");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       delete process.env.TELEGRAM_TOKEN;
       cleanup();
     }
@@ -124,10 +137,9 @@ describe("repl: daemon-handshake on REPL boot", () => {
     // When:   runRepl boots (stdin closed immediately)
     // Then:   out does NOT contain 'daemon active' advisory (P-11 poller path taken instead)
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     const origFetch = globalThis.fetch;
     try {
-      process.env.HOME = home;
       process.env.TELEGRAM_TOKEN = "stub-token";
       const cfgPath = writeTelegramCfg(home);
       // No telegram.pid file — poller should start instead of advisory
@@ -164,7 +176,7 @@ describe("repl: daemon-handshake on REPL boot", () => {
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (globalThis as any).fetch = origFetch;
-      process.env.HOME = origHome;
+      restoreHome();
       delete process.env.TELEGRAM_TOKEN;
       cleanup();
     }
@@ -179,9 +191,8 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     // When:   runRepl() called; writePid runs synchronously before first await
     // Then:   repl.pid file exists at ~/.mai/agent/repl.pid with process.pid value
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       const inStream = new PassThrough();
@@ -215,7 +226,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       inStream.end();
       await replPromise;
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       cleanup();
     }
   });
@@ -225,9 +236,8 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     // When:   REPL exits normally (stdin EOF → readline closes → cleanupReplPid() called at bottom)
     // Then:   repl.pid file does NOT exist after runRepl resolves
     const { home, cleanup } = makeTmpHome();
-    const origHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(home);
     try {
-      process.env.HOME = home;
       mkdirSync(join(home, ".frondose", "agent"), { recursive: true });
 
       const inStream = new PassThrough();
@@ -250,7 +260,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       const replPidPath = join(home, ".frondose", "agent", "repl.pid");
       assert.ok(!existsSync(replPidPath), "repl.pid must be removed after REPL exits");
     } finally {
-      process.env.HOME = origHome;
+      restoreHome();
       cleanup();
     }
   });

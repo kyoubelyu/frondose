@@ -9,11 +9,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeRememberTool } from "../../../src/tools/memory/remember.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ function uniqueDbPath(): string {
 
 function cleanupDir(dbPath: string): void {
   try {
-    rmSync(join(dbPath, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(dbPath, ".."));
   } catch {
     // best-effort
   }

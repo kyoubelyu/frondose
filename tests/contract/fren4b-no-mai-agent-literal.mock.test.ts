@@ -38,12 +38,12 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, mkdirSync, symlinkSync } from "node:fs";
-import { join, relative, resolve, dirname } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { describe, it, after } from "node:test";
+import { join, relative, resolve } from "node:path";
+import { after, describe, it } from "node:test";
 import { derivePackageSymlink } from "../../src/cli/autoUpdate/symlink.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 const REPO = resolve(process.cwd());
 const SRC_DIR = join(REPO, "src");
@@ -81,10 +81,7 @@ function collectFiles(dir: string, extensions: string[], excludedPrefixes: strin
  * Find lines in `text` that match any of the given patterns.
  * Returns { lineNo, line } for each matching line (1-indexed).
  */
-function findPatternHits(
-  text: string,
-  patterns: RegExp[],
-): Array<{ lineNo: number; line: string }> {
+function findPatternHits(text: string, patterns: RegExp[]): Array<{ lineNo: number; line: string }> {
   const results: Array<{ lineNo: number; line: string }> = [];
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -156,120 +153,111 @@ const SCAN_EXCLUDED_PREFIXES = [
   "src/tauri/ui/", // UI assets
 ];
 
-const MAI_AGENT_PATTERNS = [
-  /@kyoube\/mai-agent/,
-  /kyoubelyu\/mai-agent/,
-  /\bmai-agent\b/,
-];
+const MAI_AGENT_PATTERNS = [/@kyoube\/mai-agent/, /kyoubelyu\/mai-agent/, /\bmai-agent\b/];
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.NoLeak.1 — source-scan guard
 // ---------------------------------------------------------------------------
 
-describe(
-  "source-scan guard — no @kyoube/mai-agent / mai-agent literals outside allowlist after Step 4 (T-FREN4b.NoLeak)",
-  () => {
-    it(
-      "T-FREN4b.NoLeak.1: grep src/**/*.{ts,rs} + install.sh for @kyoube/mai-agent|kyoubelyu/mai-agent|\\bmai-agent\\b returns ZERO non-allowlisted hits",
-      () => {
-        // Given: post-Step-4 working tree (production renamed to @kyoube/frondose)
-        // When:  pattern scan runs over src/ *.ts/*.rs + install.sh, excluding build artifacts
-        // Then:  zero violations outside the line-exact allowlist
+describe("source-scan guard — no @kyoube/mai-agent / mai-agent literals outside allowlist after Step 4 (T-FREN4b.NoLeak)", () => {
+  it("T-FREN4b.NoLeak.1: grep src/**/*.{ts,rs} + install.sh for @kyoube/mai-agent|kyoubelyu/mai-agent|\\bmai-agent\\b returns ZERO non-allowlisted hits", () => {
+    // Given: post-Step-4 working tree (production renamed to @kyoube/frondose)
+    // When:  pattern scan runs over src/ *.ts/*.rs + install.sh, excluding build artifacts
+    // Then:  zero violations outside the line-exact allowlist
 
-        const tsRsFiles = collectFiles(SRC_DIR, [".ts", ".rs"], SCAN_EXCLUDED_PREFIXES);
-        const installSh = join(REPO, "install.sh");
+    const tsRsFiles = collectFiles(SRC_DIR, [".ts", ".rs"], SCAN_EXCLUDED_PREFIXES);
+    const installSh = join(REPO, "install.sh");
 
-        const violations: string[] = [];
+    const violations: string[] = [];
 
-        const allFiles = [...tsRsFiles, installSh];
-        for (const filePath of allFiles) {
-          const relPath = relative(REPO, filePath).replace(/\\/g, "/");
+    const allFiles = [...tsRsFiles, installSh];
+    for (const filePath of allFiles) {
+      const relPath = relative(REPO, filePath).replace(/\\/g, "/");
 
-          // Whole-file allowlist (Cargo metadata with mai-tauri crate name)
-          if (ALLOWLISTED_FILE_PATHS.has(relPath)) continue;
+      // Whole-file allowlist (Cargo metadata with mai-tauri crate name)
+      if (ALLOWLISTED_FILE_PATHS.has(relPath)) continue;
 
-          let text: string;
-          try {
-            text = readFileSync(filePath, "utf-8");
-          } catch {
-            continue;
-          }
+      let text: string;
+      try {
+        text = readFileSync(filePath, "utf-8");
+      } catch {
+        continue;
+      }
 
-          const hits = findPatternHits(text, MAI_AGENT_PATTERNS);
-          for (const { lineNo, line } of hits) {
-            // main.rs: only specific line substrings are allowed
-            if (relPath === "src/tauri/src-tauri/src/main.rs") {
-              const allowed = MAIN_RS_ALLOWED_LINE_SUBSTRINGS.some((sub) => line.includes(sub));
-              if (allowed) continue;
-            }
-            violations.push(`${relPath}:${lineNo}: ${line}`);
-          }
+      const hits = findPatternHits(text, MAI_AGENT_PATTERNS);
+      for (const { lineNo, line } of hits) {
+        // main.rs: only specific line substrings are allowed
+        if (relPath === "src/tauri/src-tauri/src/main.rs") {
+          const allowed = MAIN_RS_ALLOWED_LINE_SUBSTRINGS.some((sub) => line.includes(sub));
+          if (allowed) continue;
         }
+        violations.push(`${relPath}:${lineNo}: ${line}`);
+      }
+    }
 
-        assert.deepEqual(
-          violations,
-          [],
-          `T-FREN4b.NoLeak.1: ${violations.length} non-allowlisted hit(s) found:\n${violations.join("\n")}`,
-        );
-      },
+    assert.deepEqual(
+      violations,
+      [],
+      `T-FREN4b.NoLeak.1: ${violations.length} non-allowlisted hit(s) found:\n${violations.join("\n")}`,
     );
-  },
-);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.PkgName — package.json + package-lock.json identity
 // ---------------------------------------------------------------------------
 
 describe("package identity — @kyoube/frondose + 0.5.0-alpha.56 (T-FREN4b.PkgName)", () => {
-  it(
-    "T-FREN4b.PkgName.1: package.json name === '@kyoube/frondose' and version === '0.5.0-alpha.56'; bin field absent (install.sh creates bin link, not npm)",
-    () => {
-      // Given: post-Step-4 package.json at repo root (F-REN-4d version bump to alpha.55)
-      // When:  parsed as JSON
-      // Then:  name === "@kyoube/frondose"; version === "0.5.0-alpha.56"; no bin field drift
+  it("T-FREN4b.PkgName.1: package.json name === '@kyoube/frondose' and version === '0.5.0-alpha.56'; bin field absent (install.sh creates bin link, not npm)", () => {
+    // Given: post-Step-4 package.json at repo root (F-REN-4d version bump to alpha.55)
+    // When:  parsed as JSON
+    // Then:  name === "@kyoube/frondose"; version === "0.5.0-alpha.56"; no bin field drift
 
-      const pkgPath = join(REPO, "package.json");
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
-      assert.equal(pkg.name, "@kyoube/frondose", "T-FREN4b.PkgName.1: package.json name must be @kyoube/frondose");
-      assert.equal(pkg.version, "0.5.0-alpha.56", "T-FREN4b.PkgName.1: package.json version must be 0.5.0-alpha.56");
-    },
-  );
+    const pkgPath = join(REPO, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
+    assert.equal(pkg.name, "@kyoube/frondose", "T-FREN4b.PkgName.1: package.json name must be @kyoube/frondose");
+    assert.equal(pkg.version, "0.5.0-alpha.56", "T-FREN4b.PkgName.1: package.json version must be 0.5.0-alpha.56");
+  });
 
-  it(
-    "T-FREN4b.PkgName.2: package-lock.json root .name and .packages[''].name both equal '@kyoube/frondose'; root + packages[''] versions both equal '0.5.0-alpha.56'",
-    () => {
-      // Given: post-Step-4 package-lock.json at repo root (F-REN-4d version bump to alpha.55)
-      // When:  parsed as JSON
-      // Then:  root name + packages[""].name === "@kyoube/frondose"; both version fields === "0.5.0-alpha.56"
+  it("T-FREN4b.PkgName.2: package-lock.json root .name and .packages[''].name both equal '@kyoube/frondose'; root + packages[''] versions both equal '0.5.0-alpha.56'", () => {
+    // Given: post-Step-4 package-lock.json at repo root (F-REN-4d version bump to alpha.55)
+    // When:  parsed as JSON
+    // Then:  root name + packages[""].name === "@kyoube/frondose"; both version fields === "0.5.0-alpha.56"
 
-      const lockPath = join(REPO, "package-lock.json");
-      const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as {
-        name: string;
-        version: string;
-        packages: Record<string, { name?: string; version: string }>;
-      };
-      assert.equal(lock.name, "@kyoube/frondose", "T-FREN4b.PkgName.2: package-lock root .name must be @kyoube/frondose");
-      assert.equal(lock.version, "0.5.0-alpha.56", "T-FREN4b.PkgName.2: package-lock root .version must be 0.5.0-alpha.56");
-      assert.equal(
-        lock.packages[""]?.name,
-        "@kyoube/frondose",
-        "T-FREN4b.PkgName.2: package-lock .packages[\"\"].name must be @kyoube/frondose",
-      );
-      assert.equal(
-        lock.packages[""]?.version,
-        "0.5.0-alpha.56",
-        "T-FREN4b.PkgName.2: package-lock .packages[\"\"].version must be 0.5.0-alpha.56",
-      );
-    },
-  );
+    const lockPath = join(REPO, "package-lock.json");
+    const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as {
+      name: string;
+      version: string;
+      packages: Record<string, { name?: string; version: string }>;
+    };
+    assert.equal(lock.name, "@kyoube/frondose", "T-FREN4b.PkgName.2: package-lock root .name must be @kyoube/frondose");
+    assert.equal(
+      lock.version,
+      "0.5.0-alpha.56",
+      "T-FREN4b.PkgName.2: package-lock root .version must be 0.5.0-alpha.56",
+    );
+    assert.equal(
+      lock.packages[""]?.name,
+      "@kyoube/frondose",
+      'T-FREN4b.PkgName.2: package-lock .packages[""].name must be @kyoube/frondose',
+    );
+    assert.equal(
+      lock.packages[""]?.version,
+      "0.5.0-alpha.56",
+      'T-FREN4b.PkgName.2: package-lock .packages[""].version must be 0.5.0-alpha.56',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.SymlinkResolution — autoUpdate symlink helpers
 // ---------------------------------------------------------------------------
 
+const skipSymlinkOnWindows = process.platform === "win32" ? { skip: "POSIX symlink install layout" } : {};
+
 describe(
   "autoUpdate symlink resolution — PKG_NAME === '@kyoube/frondose' (T-FREN4b.SymlinkResolution)",
+  skipSymlinkOnWindows,
   () => {
     // Shared tmpdir for symlink fixtures
     let tmpDir: string;
@@ -277,73 +265,67 @@ describe(
     after(() => {
       // Cleanup tmpdir after all tests in this describe block
       try {
-        rmSync(tmpDir, { recursive: true, force: true });
+        cleanupTmpDir(tmpDir);
       } catch {
         // best-effort
       }
     });
 
-    it(
-      "T-FREN4b.Symlink.1: given a @kyoube/frondose-named fixture (bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js), derivePackageSymlink returns the resolved @kyoube/frondose package path",
-      () => {
-        // Given: tmpdir layout: bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js;
-        //        lib/@kyoube/frondose -> ../releases/v0.5.0-alpha.54 (symlink)
-        // When:  derivePackageSymlink(argv1) runs with post-Step-4 PKG_NAME = "@kyoube/frondose"
-        // Then:  returns the resolved lib/@kyoube/frondose path (slice logic keys off PKG_NAME.length)
+    it("T-FREN4b.Symlink.1: given a @kyoube/frondose-named fixture (bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js), derivePackageSymlink returns the resolved @kyoube/frondose package path", () => {
+      // Given: tmpdir layout: bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js;
+      //        lib/@kyoube/frondose -> ../releases/v0.5.0-alpha.54 (symlink)
+      // When:  derivePackageSymlink(argv1) runs with post-Step-4 PKG_NAME = "@kyoube/frondose"
+      // Then:  returns the resolved lib/@kyoube/frondose path (slice logic keys off PKG_NAME.length)
 
-        tmpDir = mkdtempSync(join(tmpdir(), "fren4b-symlink1-"));
-        mkdirSync(join(tmpDir, "bin"), { recursive: true });
-        mkdirSync(join(tmpDir, "lib", "@kyoube"), { recursive: true });
-        mkdirSync(join(tmpDir, "lib", "releases", "v0.5.0-alpha.54"), { recursive: true });
+      tmpDir = mkdtempSync(join(tmpdir(), "fren4b-symlink1-"));
+      mkdirSync(join(tmpDir, "bin"), { recursive: true });
+      mkdirSync(join(tmpDir, "lib", "@kyoube"), { recursive: true });
+      mkdirSync(join(tmpDir, "lib", "releases", "v0.5.0-alpha.54"), { recursive: true });
 
-        // lib/@kyoube/frondose → ../../releases/v0.5.0-alpha.54
-        const pkgSymlinkPath = join(tmpDir, "lib", "@kyoube", "frondose");
-        symlinkSync("../../releases/v0.5.0-alpha.54", pkgSymlinkPath);
+      // lib/@kyoube/frondose → ../../releases/v0.5.0-alpha.54
+      const pkgSymlinkPath = join(tmpDir, "lib", "@kyoube", "frondose");
+      symlinkSync("../../releases/v0.5.0-alpha.54", pkgSymlinkPath);
 
-        // bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js (dangling ok — readlinkSync only reads target string)
-        const argv1 = join(tmpDir, "bin", "mai");
-        symlinkSync("../lib/@kyoube/frondose/dist/cli/main.js", argv1);
+      // bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js (dangling ok — readlinkSync only reads target string)
+      const argv1 = join(tmpDir, "bin", "mai");
+      symlinkSync("../lib/@kyoube/frondose/dist/cli/main.js", argv1);
+
+      const result = derivePackageSymlink(argv1);
+      assert.ok(result !== null, "T-FREN4b.Symlink.1: result must not be null for @kyoube/frondose-named fixture");
+      assert.ok(
+        result.includes("@kyoube/frondose"),
+        `T-FREN4b.Symlink.1: result must contain '@kyoube/frondose'; got: ${result}`,
+      );
+      assert.ok(
+        !result.includes("@kyoube/mai-agent"),
+        `T-FREN4b.Symlink.1: result must NOT contain '@kyoube/mai-agent'; got: ${result}`,
+      );
+    });
+
+    it("T-FREN4b.Symlink.2: given a legacy @kyoube/mai-agent-named bin-symlink target, derivePackageSymlink returns null (expected documented behavior — legacy install requires runbook re-install)", () => {
+      // Given: bin/mai -> ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy, pre-rename fixture)
+      // When:  derivePackageSymlink(argv1) runs with new PKG_NAME = "@kyoube/frondose"
+      // Then:  returns null — idx === -1; autoUpdate skips as not_global_install (benign; no corruption)
+
+      const legacyDir = mkdtempSync(join(tmpdir(), "fren4b-symlink2-"));
+      try {
+        mkdirSync(join(legacyDir, "bin"), { recursive: true });
+        mkdirSync(join(legacyDir, "lib", "@kyoube"), { recursive: true });
+
+        // bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy symlink target)
+        const argv1 = join(legacyDir, "bin", "mai");
+        symlinkSync("../lib/@kyoube/mai-agent/dist/cli/main.js", argv1);
 
         const result = derivePackageSymlink(argv1);
-        assert.ok(result !== null, "T-FREN4b.Symlink.1: result must not be null for @kyoube/frondose-named fixture");
-        assert.ok(
-          result.includes("@kyoube/frondose"),
-          `T-FREN4b.Symlink.1: result must contain '@kyoube/frondose'; got: ${result}`,
+        assert.strictEqual(
+          result,
+          null,
+          "T-FREN4b.Symlink.2: legacy @kyoube/mai-agent symlink MUST return null with new PKG_NAME=@kyoube/frondose (gated re-install required per runbook — NOT a bug)",
         );
-        assert.ok(
-          !result.includes("@kyoube/mai-agent"),
-          `T-FREN4b.Symlink.1: result must NOT contain '@kyoube/mai-agent'; got: ${result}`,
-        );
-      },
-    );
-
-    it(
-      "T-FREN4b.Symlink.2: given a legacy @kyoube/mai-agent-named bin-symlink target, derivePackageSymlink returns null (expected documented behavior — legacy install requires runbook re-install)",
-      () => {
-        // Given: bin/mai -> ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy, pre-rename fixture)
-        // When:  derivePackageSymlink(argv1) runs with new PKG_NAME = "@kyoube/frondose"
-        // Then:  returns null — idx === -1; autoUpdate skips as not_global_install (benign; no corruption)
-
-        const legacyDir = mkdtempSync(join(tmpdir(), "fren4b-symlink2-"));
-        try {
-          mkdirSync(join(legacyDir, "bin"), { recursive: true });
-          mkdirSync(join(legacyDir, "lib", "@kyoube"), { recursive: true });
-
-          // bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy symlink target)
-          const argv1 = join(legacyDir, "bin", "mai");
-          symlinkSync("../lib/@kyoube/mai-agent/dist/cli/main.js", argv1);
-
-          const result = derivePackageSymlink(argv1);
-          assert.strictEqual(
-            result,
-            null,
-            "T-FREN4b.Symlink.2: legacy @kyoube/mai-agent symlink MUST return null with new PKG_NAME=@kyoube/frondose (gated re-install required per runbook — NOT a bug)",
-          );
-        } finally {
-          rmSync(legacyDir, { recursive: true, force: true });
-        }
-      },
-    );
+      } finally {
+        cleanupTmpDir(legacyDir);
+      }
+    });
   },
 );
 
@@ -352,172 +334,150 @@ describe(
 // ---------------------------------------------------------------------------
 
 describe("GitHub repo refs — kyoubelyu/frondose throughout (T-FREN4b.RepoRef)", () => {
-  it(
-    "T-FREN4b.Repo.1: src/cli/autoUpdate/fetch.ts LATEST_URL contains 'kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'",
-    () => {
-      // Given: post-Step-4 src/cli/autoUpdate/fetch.ts
-      // When:  the file text is read
-      // Then:  'kyoubelyu/frondose/releases/latest' appears; 'kyoubelyu/mai-agent' does NOT
+  it("T-FREN4b.Repo.1: src/cli/autoUpdate/fetch.ts LATEST_URL contains 'kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'", () => {
+    // Given: post-Step-4 src/cli/autoUpdate/fetch.ts
+    // When:  the file text is read
+    // Then:  'kyoubelyu/frondose/releases/latest' appears; 'kyoubelyu/mai-agent' does NOT
 
-      const text = readFileSync(join(REPO, "src/cli/autoUpdate/fetch.ts"), "utf-8");
-      // REPO_PATH is a template variable: LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`
-      // So the literal "kyoubelyu/frondose/releases/latest" does NOT appear — check REPO_PATH constant instead.
-      assert.ok(
-        text.includes('kyoubelyu/frondose"') || text.includes("kyoubelyu/frondose'") || text.includes("kyoubelyu/frondose`"),
-        "T-FREN4b.Repo.1: fetch.ts REPO_PATH constant must contain 'kyoubelyu/frondose'",
-      );
-      assert.ok(
-        !text.includes("kyoubelyu/mai-agent"),
-        "T-FREN4b.Repo.1: fetch.ts must NOT contain 'kyoubelyu/mai-agent'",
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "src/cli/autoUpdate/fetch.ts"), "utf-8");
+    // REPO_PATH is a template variable: LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`
+    // So the literal "kyoubelyu/frondose/releases/latest" does NOT appear — check REPO_PATH constant instead.
+    assert.ok(
+      text.includes('kyoubelyu/frondose"') ||
+        text.includes("kyoubelyu/frondose'") ||
+        text.includes("kyoubelyu/frondose`"),
+      "T-FREN4b.Repo.1: fetch.ts REPO_PATH constant must contain 'kyoubelyu/frondose'",
+    );
+    assert.ok(
+      !text.includes("kyoubelyu/mai-agent"),
+      "T-FREN4b.Repo.1: fetch.ts must NOT contain 'kyoubelyu/mai-agent'",
+    );
+  });
 
-  it(
-    "T-FREN4b.Repo.2: src/cli/subcommands/update.ts contains 'api.github.com/repos/kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'",
-    () => {
-      // Given: post-Step-4 src/cli/subcommands/update.ts
-      // When:  the file text is read
-      // Then:  correct frondose URL present; stale mai-agent URL absent
+  it("T-FREN4b.Repo.2: src/cli/subcommands/update.ts contains 'api.github.com/repos/kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'", () => {
+    // Given: post-Step-4 src/cli/subcommands/update.ts
+    // When:  the file text is read
+    // Then:  correct frondose URL present; stale mai-agent URL absent
 
-      const text = readFileSync(join(REPO, "src/cli/subcommands/update.ts"), "utf-8");
-      assert.ok(
-        text.includes("api.github.com/repos/kyoubelyu/frondose/releases/latest"),
-        "T-FREN4b.Repo.2: update.ts must contain correct frondose API URL",
-      );
-      assert.ok(
-        !text.includes("kyoubelyu/mai-agent"),
-        "T-FREN4b.Repo.2: update.ts must NOT contain 'kyoubelyu/mai-agent'",
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "src/cli/subcommands/update.ts"), "utf-8");
+    assert.ok(
+      text.includes("api.github.com/repos/kyoubelyu/frondose/releases/latest"),
+      "T-FREN4b.Repo.2: update.ts must contain correct frondose API URL",
+    );
+    assert.ok(
+      !text.includes("kyoubelyu/mai-agent"),
+      "T-FREN4b.Repo.2: update.ts must NOT contain 'kyoubelyu/mai-agent'",
+    );
+  });
 
-  it(
-    "T-FREN4b.Repo.3: install.sh contains REPO=\"kyoubelyu/frondose\"; does NOT contain REPO=\"kyoubelyu/mai-agent\"",
-    () => {
-      // Given: post-Step-4 install.sh at repo root
-      // When:  the file text is read
-      // Then:  'REPO="kyoubelyu/frondose"' appears; 'REPO="kyoubelyu/mai-agent"' does NOT
+  it('T-FREN4b.Repo.3: install.sh contains REPO="kyoubelyu/frondose"; does NOT contain REPO="kyoubelyu/mai-agent"', () => {
+    // Given: post-Step-4 install.sh at repo root
+    // When:  the file text is read
+    // Then:  'REPO="kyoubelyu/frondose"' appears; 'REPO="kyoubelyu/mai-agent"' does NOT
 
-      const text = readFileSync(join(REPO, "install.sh"), "utf-8");
-      assert.ok(
-        text.includes('REPO="kyoubelyu/frondose"'),
-        'T-FREN4b.Repo.3: install.sh must contain REPO="kyoubelyu/frondose"',
-      );
-      assert.ok(
-        !text.includes('REPO="kyoubelyu/mai-agent"'),
-        'T-FREN4b.Repo.3: install.sh must NOT contain REPO="kyoubelyu/mai-agent"',
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "install.sh"), "utf-8");
+    assert.ok(
+      text.includes('REPO="kyoubelyu/frondose"'),
+      'T-FREN4b.Repo.3: install.sh must contain REPO="kyoubelyu/frondose"',
+    );
+    assert.ok(
+      !text.includes('REPO="kyoubelyu/mai-agent"'),
+      'T-FREN4b.Repo.3: install.sh must NOT contain REPO="kyoubelyu/mai-agent"',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.TauriPathResolution — main.rs dual-name candidate arrays
 // ---------------------------------------------------------------------------
 
-describe(
-  "Tauri path resolution — dual-name candidate arrays in main.rs (T-FREN4b.TauriPathResolution)",
-  () => {
-    it(
-      "T-FREN4b.MainRs.1: full rebrand — main.rs candidate arrays contain ONLY @kyoube/frondose paths for sidecarMain.js and cli/main.js; the @kyoube/mai-agent fallback paths are fully removed",
-      () => {
-        // Given: full-rebrand src/tauri/src-tauri/src/main.rs (operator directive 2026-06-15 — drop mai-agent back-compat)
-        // When:  file text is read and searched for candidate path substrings
-        // Then:  the @kyoube/frondose paths are present AND no @kyoube/mai-agent path remains
+describe("Tauri path resolution — dual-name candidate arrays in main.rs (T-FREN4b.TauriPathResolution)", () => {
+  it("T-FREN4b.MainRs.1: full rebrand — main.rs candidate arrays contain ONLY @kyoube/frondose paths for sidecarMain.js and cli/main.js; the @kyoube/mai-agent fallback paths are fully removed", () => {
+    // Given: full-rebrand src/tauri/src-tauri/src/main.rs (operator directive 2026-06-15 — drop mai-agent back-compat)
+    // When:  file text is read and searched for candidate path substrings
+    // Then:  the @kyoube/frondose paths are present AND no @kyoube/mai-agent path remains
 
-        const text = readFileSync(join(REPO, "src/tauri/src-tauri/src/main.rs"), "utf-8");
+    const text = readFileSync(join(REPO, "src/tauri/src-tauri/src/main.rs"), "utf-8");
 
-        // Sidecar + CLI frondose candidates (the only ones that should remain)
-        const SIDECAR_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js";
-        const CLI_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js";
+    // Sidecar + CLI frondose candidates (the only ones that should remain)
+    const SIDECAR_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js";
+    const CLI_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js";
 
-        assert.ok(text.includes(SIDECAR_FRONDOSE), `T-FREN4b.MainRs.1: sidecar @kyoube/frondose path must be present`);
-        assert.ok(text.includes(CLI_FRONDOSE), `T-FREN4b.MainRs.1: CLI @kyoube/frondose path must be present`);
+    assert.ok(text.includes(SIDECAR_FRONDOSE), `T-FREN4b.MainRs.1: sidecar @kyoube/frondose path must be present`);
+    assert.ok(text.includes(CLI_FRONDOSE), `T-FREN4b.MainRs.1: CLI @kyoube/frondose path must be present`);
 
-        // No @kyoube/mai-agent fallback may remain anywhere in main.rs
-        assert.ok(
-          !text.includes("@kyoube/mai-agent"),
-          `T-FREN4b.MainRs.1: main.rs must no longer contain any @kyoube/mai-agent fallback path after full rebrand`,
-        );
-      },
+    // No @kyoube/mai-agent fallback may remain anywhere in main.rs
+    assert.ok(
+      !text.includes("@kyoube/mai-agent"),
+      `T-FREN4b.MainRs.1: main.rs must no longer contain any @kyoube/mai-agent fallback path after full rebrand`,
     );
-  },
-);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.Cosmetic — operator/LLM-visible strings
 // ---------------------------------------------------------------------------
 
 describe("cosmetic strings — frondose throughout operator-visible surfaces (T-FREN4b.Cosmetic)", () => {
-  it(
-    "T-FREN4b.Cosmetic.1: src/cli/repl.ts line ~248 contains 'frondose ready.' and does NOT contain 'mai-agent ready'",
-    () => {
-      // Given: post-Step-4 src/cli/repl.ts
-      // When:  file text is read
-      // Then:  'frondose ready.' present; 'mai-agent ready' absent
+  it("T-FREN4b.Cosmetic.1: src/cli/repl.ts line ~248 contains 'frondose ready.' and does NOT contain 'mai-agent ready'", () => {
+    // Given: post-Step-4 src/cli/repl.ts
+    // When:  file text is read
+    // Then:  'frondose ready.' present; 'mai-agent ready' absent
 
-      const text = readFileSync(join(REPO, "src/cli/repl.ts"), "utf-8");
-      assert.ok(text.includes("frondose ready."), "T-FREN4b.Cosmetic.1: repl.ts must contain 'frondose ready.'");
-      assert.ok(!text.includes("mai-agent ready"), "T-FREN4b.Cosmetic.1: repl.ts must NOT contain 'mai-agent ready'");
-    },
-  );
+    const text = readFileSync(join(REPO, "src/cli/repl.ts"), "utf-8");
+    assert.ok(text.includes("frondose ready."), "T-FREN4b.Cosmetic.1: repl.ts must contain 'frondose ready.'");
+    assert.ok(!text.includes("mai-agent ready"), "T-FREN4b.Cosmetic.1: repl.ts must NOT contain 'mai-agent ready'");
+  });
 
-  it(
-    "T-FREN4b.Cosmetic.2: src/tools/webTools/webFetch.ts User-Agent string contains 'frondose/1.0' and 'kyoubelyu/frondose'; does NOT contain 'kyoubelyu/mai-agent'",
-    () => {
-      // Given: post-Step-4 src/tools/webTools/webFetch.ts
-      // When:  file text is read to inspect the User-Agent literal
-      // Then:  'frondose/1.0' and 'kyoubelyu/frondose' present; 'kyoubelyu/mai-agent' absent
+  it("T-FREN4b.Cosmetic.2: src/tools/webTools/webFetch.ts User-Agent string contains 'frondose/1.0' and 'kyoubelyu/frondose'; does NOT contain 'kyoubelyu/mai-agent'", () => {
+    // Given: post-Step-4 src/tools/webTools/webFetch.ts
+    // When:  file text is read to inspect the User-Agent literal
+    // Then:  'frondose/1.0' and 'kyoubelyu/frondose' present; 'kyoubelyu/mai-agent' absent
 
-      const text = readFileSync(join(REPO, "src/tools/webTools/webFetch.ts"), "utf-8");
-      assert.ok(text.includes("frondose/1.0"), "T-FREN4b.Cosmetic.2: webFetch.ts must contain 'frondose/1.0' in User-Agent");
-      assert.ok(
-        text.includes("kyoubelyu/frondose"),
-        "T-FREN4b.Cosmetic.2: webFetch.ts must contain 'kyoubelyu/frondose' in User-Agent",
-      );
-      assert.ok(
-        !text.includes("kyoubelyu/mai-agent"),
-        "T-FREN4b.Cosmetic.2: webFetch.ts must NOT contain 'kyoubelyu/mai-agent'",
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "src/tools/webTools/webFetch.ts"), "utf-8");
+    assert.ok(
+      text.includes("frondose/1.0"),
+      "T-FREN4b.Cosmetic.2: webFetch.ts must contain 'frondose/1.0' in User-Agent",
+    );
+    assert.ok(
+      text.includes("kyoubelyu/frondose"),
+      "T-FREN4b.Cosmetic.2: webFetch.ts must contain 'kyoubelyu/frondose' in User-Agent",
+    );
+    assert.ok(
+      !text.includes("kyoubelyu/mai-agent"),
+      "T-FREN4b.Cosmetic.2: webFetch.ts must NOT contain 'kyoubelyu/mai-agent'",
+    );
+  });
 
-  it(
-    "T-FREN4b.Cosmetic.3: src/tools/control/escalate.ts issue-title prefix is '[frondose escalation]'; does NOT contain '[mai-agent escalation]'",
-    () => {
-      // Given: post-Step-4 src/tools/control/escalate.ts
-      // When:  file text is read
-      // Then:  '[frondose escalation]' present; '[mai-agent escalation]' absent
+  it("T-FREN4b.Cosmetic.3: src/tools/control/escalate.ts issue-title prefix is '[frondose escalation]'; does NOT contain '[mai-agent escalation]'", () => {
+    // Given: post-Step-4 src/tools/control/escalate.ts
+    // When:  file text is read
+    // Then:  '[frondose escalation]' present; '[mai-agent escalation]' absent
 
-      const text = readFileSync(join(REPO, "src/tools/control/escalate.ts"), "utf-8");
-      assert.ok(
-        text.includes("[frondose escalation]"),
-        "T-FREN4b.Cosmetic.3: escalate.ts must contain '[frondose escalation]'",
-      );
-      assert.ok(
-        !text.includes("[mai-agent escalation]"),
-        "T-FREN4b.Cosmetic.3: escalate.ts must NOT contain '[mai-agent escalation]'",
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "src/tools/control/escalate.ts"), "utf-8");
+    assert.ok(
+      text.includes("[frondose escalation]"),
+      "T-FREN4b.Cosmetic.3: escalate.ts must contain '[frondose escalation]'",
+    );
+    assert.ok(
+      !text.includes("[mai-agent escalation]"),
+      "T-FREN4b.Cosmetic.3: escalate.ts must NOT contain '[mai-agent escalation]'",
+    );
+  });
 
-  it(
-    "T-FREN4b.Cosmetic.4: src/agent/systemPrompt/soul.ts default operator fallback name is 'frondose operator'; does NOT contain 'mai-agent operator'",
-    () => {
-      // Given: post-Step-4 src/agent/systemPrompt/soul.ts
-      // When:  file text is read
-      // Then:  'frondose operator' present at the fallback name site; 'mai-agent operator' absent
+  it("T-FREN4b.Cosmetic.4: src/agent/systemPrompt/soul.ts default operator fallback name is 'frondose operator'; does NOT contain 'mai-agent operator'", () => {
+    // Given: post-Step-4 src/agent/systemPrompt/soul.ts
+    // When:  file text is read
+    // Then:  'frondose operator' present at the fallback name site; 'mai-agent operator' absent
 
-      const text = readFileSync(join(REPO, "src/agent/systemPrompt/soul.ts"), "utf-8");
-      assert.ok(
-        text.includes("frondose operator"),
-        "T-FREN4b.Cosmetic.4: soul.ts must contain 'frondose operator' as fallback name",
-      );
-      assert.ok(
-        !text.includes("mai-agent operator"),
-        "T-FREN4b.Cosmetic.4: soul.ts must NOT contain 'mai-agent operator'",
-      );
-    },
-  );
+    const text = readFileSync(join(REPO, "src/agent/systemPrompt/soul.ts"), "utf-8");
+    assert.ok(
+      text.includes("frondose operator"),
+      "T-FREN4b.Cosmetic.4: soul.ts must contain 'frondose operator' as fallback name",
+    );
+    assert.ok(
+      !text.includes("mai-agent operator"),
+      "T-FREN4b.Cosmetic.4: soul.ts must NOT contain 'mai-agent operator'",
+    );
+  });
 });

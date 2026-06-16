@@ -29,14 +29,15 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { upsertRawCandidate } from "../../../src/persistence/sales/raw-candidates.js";
 import { closeSalesDatabase, openSalesDatabase } from "../../../src/persistence/salesDb.js";
 import { makePromoteCandidateToLeadTool } from "../../../src/tools/sales/promoteCandidateToLead.js";
 import { makeScoreLeadTool } from "../../../src/tools/sales/scoreLead.js";
-import { upsertRawCandidate } from "../../../src/persistence/sales/raw-candidates.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // biome-ignore lint/suspicious/noExplicitAny: test DB rows
 type AnyDb = any;
@@ -92,7 +93,7 @@ function setupTempHome(identityRecord: Record<string, unknown> | null): { tmpHom
       else delete process.env.HOME;
       if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
       else delete process.env.FRONDOSE_HOME_BASE;
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     },
   };
 }
@@ -194,7 +195,11 @@ describe("G-A15b.5 — QS-7.a: empty evidence + NO ICP → gate skips, promote s
       const cand = db.prepare("SELECT status FROM raw_candidates WHERE id = ?").get(candidateId) as {
         status: string;
       };
-      assert.equal(cand.status, "promoted", "G-A15b.5: raw_candidates.status must be 'promoted' after successful promote");
+      assert.equal(
+        cand.status,
+        "promoted",
+        "G-A15b.5: raw_candidates.status must be 'promoted' after successful promote",
+      );
     } finally {
       restore();
       closeSalesDatabase(path);
@@ -228,7 +233,11 @@ describe("G-A15b.5a — QS-7.a: bypassPersonaCheck:true does NOT bypass the QS-7
       );
 
       // TODO: Step-5 assertion fill
-      assert.equal(result.ok, false, "G-A15b.5a: bypassPersonaCheck must NOT bypass the evidence gate; must still fail");
+      assert.equal(
+        result.ok,
+        false,
+        "G-A15b.5a: bypassPersonaCheck must NOT bypass the evidence gate; must still fail",
+      );
       const errorMsg: string = result.error?.message ?? result.error?.reason ?? "";
       assert.ok(
         /re-inspect|evidence_summary/i.test(errorMsg),
@@ -265,7 +274,11 @@ describe("G-A15b.5b — QS-7.a: non-empty evidence + ICP passes the evidence gat
       const result = await makePromoteCandidateToLeadTool(path).execute({ candidateId }, toolOpts);
 
       // TODO: Step-5 assertion fill
-      assert.equal(result.ok, true, `G-A15b.5b: non-empty evidence + matching ICP must succeed; got ${JSON.stringify(result)}`);
+      assert.equal(
+        result.ok,
+        true,
+        `G-A15b.5b: non-empty evidence + matching ICP must succeed; got ${JSON.stringify(result)}`,
+      );
       const cand = db.prepare("SELECT status FROM raw_candidates WHERE id = ?").get(candidateId) as {
         status: string;
       };
@@ -310,7 +323,11 @@ describe("G-A15b.5c — QS-7.a: readIdentity() hoist — called exactly ONCE per
       const result = await makePromoteCandidateToLeadTool(path).execute({ candidateId }, toolOpts);
 
       // TODO: Step-5 assertion fill — spy on readIdentity to assert invocation count === 1
-      assert.equal(result.ok, true, `G-A15b.5c: promote with non-empty evidence must succeed; got ${JSON.stringify(result)}`);
+      assert.equal(
+        result.ok,
+        true,
+        `G-A15b.5c: promote with non-empty evidence must succeed; got ${JSON.stringify(result)}`,
+      );
       // Placeholder: at Step 5 this assertion is replaced with the spy count check
       // For now, verifying the tool runs is the compile/RED-state intent.
     } finally {

@@ -15,13 +15,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { fetchLatestPrerelease } from "../../src/cli/autoUpdate.js";
 import { compareVersions } from "../../src/cli/subcommands/update.js";
 import { readUpdateChannel, writeUpdateChannel } from "../../src/persistence/channel.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ afterEach(() => {
     const d = _tmpDirs.pop();
     if (d) {
       try {
-        rmSync(d, { recursive: true, force: true });
+        cleanupTmpDir(d);
       } catch {
         // best-effort cleanup
       }

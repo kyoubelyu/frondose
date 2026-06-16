@@ -15,12 +15,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runTelegramSubcommand } from "../../../src/cli/subcommands/telegram.js";
 import { readTelegramConfig } from "../../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 import { captureStdout, makeMockPrompter, stubInteractive } from "./_mockPrompter.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ function makeTmpTgDir(): { tcPath: string; cleanup: () => void; restoreHome: () 
   process.env.HOME = dir;
   return {
     tcPath: join(dir, "telegram.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
     restoreHome: () => {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;

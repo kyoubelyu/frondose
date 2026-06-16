@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { request as httpReq, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -22,10 +22,11 @@ import { describe, it } from "node:test";
 import { startServerHttp } from "../../src/cli/serverHttp.js";
 import { openServerInboxDb } from "../../src/persistence/serverInbox.js";
 import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p27-auth-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 async function startAndWait(

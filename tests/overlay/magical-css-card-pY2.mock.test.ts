@@ -25,6 +25,7 @@ const LEGACY_TS = readFileSync(join(REPO, "src", "overlay", "bootstrapLegacy.ts"
 const SHARED_BUNDLE_TS = readFileSync(join(REPO, "src", "overlay", "sharedRenderBundle.generated.ts"), "utf8");
 const GENERATED_CSS_TS = readFileSync(join(REPO, "src", "overlay", "frondoseCss.generated.ts"), "utf8");
 const CSS_TRANSFORM_TS = readFileSync(join(REPO, "src", "overlay", "cssTransform.ts"), "utf8");
+const skipOnWindows = process.platform === "win32" ? { skip: "POSIX symlink fixture" } : {};
 
 function copyIntoTempRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "p-y2-magical-gen-"));
@@ -118,7 +119,7 @@ describe("P-Y2-Magical badge-only scope (T-PY2MAG.Scope.1)", () => {
   });
 });
 
-describe("P-Y2-Magical generated CSS freshness (T-PY2MAG.Generated.1)", () => {
+describe("P-Y2-Magical generated CSS freshness (T-PY2MAG.Generated.1)", skipOnWindows, () => {
   it("T-PY2MAG.Generated.1: fresh build:overlay-assets output for frondoseCss.generated.ts equals the committed artifact", () => {
     // Given: a temp copy of the overlay asset generation inputs
     // When:  npm run build:overlay-assets runs there

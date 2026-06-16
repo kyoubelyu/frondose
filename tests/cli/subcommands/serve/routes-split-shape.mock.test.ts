@@ -22,11 +22,12 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const REPO = resolve(new URL("../../../../", import.meta.url).pathname);
+const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
 const ROUTES_TS = join(REPO, "src", "cli", "subcommands", "serve", "routes.ts");
 const ROUTES_DIR = join(REPO, "src", "cli", "subcommands", "serve", "routes");
 
@@ -62,9 +63,10 @@ function parseRuntimeImports(src: string): string[] {
   // Match: import ... from 'relative' and import 'relative'
   // Excludes: import type ... from '...'
   const re = /^import\s+(?!type\s)(?:[^'"]*from\s+)?['"](\.[^'"]+)['"]/gm;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
+  let m = re.exec(src);
+  while (m !== null) {
     results.push(m[1]);
+    m = re.exec(src);
   }
   return results;
 }
@@ -84,9 +86,7 @@ describe("routes.ts public surface after split (G-P72s6.5)", () => {
 
     assert.ok(existsSync(ROUTES_DIR), `routes/ directory must exist (post-split): ${ROUTES_DIR}`);
 
-    const routesMod = await import(
-      "../../../../src/cli/subcommands/serve/routes.js"
-    ) as Record<string, unknown>;
+    const routesMod = (await import("../../../../src/cli/subcommands/serve/routes.js")) as Record<string, unknown>;
 
     assert.equal(typeof routesMod.createRequestHandler, "function", "createRequestHandler is a function");
     assert.equal(typeof routesMod.ensureOverlaySubscription, "function", "ensureOverlaySubscription is exported");
@@ -97,22 +97,46 @@ describe("routes.ts public surface after split (G-P72s6.5)", () => {
     // Build a minimal stub and call createRequestHandler to check return shape
     const createRequestHandler = routesMod.createRequestHandler as (...args: unknown[]) => unknown;
     const state = {
-      currentTurn: null, overlayContextId: undefined, unsubscribeContextId: undefined,
-      unsubscribeOverlayEvents: undefined, cronEnabled: false, passiveEnabled: false,
-      autoRunId: null, lastEmittedAutoCounters: null, lastTurnUserPrompt: null,
-      lastFailedTurnPrompt: null, retryAttempts: 0, messages: [],
-      passiveProfileCache: new Map(), passiveLimiter: { tryConsume: () => true },
+      currentTurn: null,
+      overlayContextId: undefined,
+      unsubscribeContextId: undefined,
+      unsubscribeOverlayEvents: undefined,
+      cronEnabled: false,
+      passiveEnabled: false,
+      autoRunId: null,
+      lastEmittedAutoCounters: null,
+      lastTurnUserPrompt: null,
+      lastFailedTurnPrompt: null,
+      retryAttempts: 0,
+      messages: [],
+      passiveProfileCache: new Map(),
+      passiveLimiter: { tryConsume: () => true },
       sseClients: new Set(),
     };
     // Minimal deps stub — workflow is the tricky one; use a real controller
     const { createWorkflowController } = await import("../../../../src/agent/workflow/controller.js");
     const ctrl = createWorkflowController({ emitFrame: () => {}, writeWorkflowAudit: () => {} });
     const deps = {
-      model: {}, system: "", systemResume: "", tools: {}, maxSteps: 20,
-      auditWriter: {}, session: {}, schedulePath: "", salesDbPath: "", auditPath: "",
-      expectedToken: Buffer.from("t"), workflow: ctrl, emitFrame: () => {}, emitOverlayEvent: () => {},
+      model: {},
+      system: "",
+      systemResume: "",
+      tools: {},
+      maxSteps: 20,
+      auditWriter: {},
+      session: {},
+      schedulePath: "",
+      salesDbPath: "",
+      auditPath: "",
+      expectedToken: Buffer.from("t"),
+      workflow: ctrl,
+      emitFrame: () => {},
+      emitOverlayEvent: () => {},
     };
-    const turn = { runOneTurn: () => Promise.resolve(), resumeWorkflowTurn: () => Promise.resolve(), triggerAnalyzeProfile: () => Promise.resolve() };
+    const turn = {
+      runOneTurn: () => Promise.resolve(),
+      resumeWorkflowTurn: () => Promise.resolve(),
+      triggerAnalyzeProfile: () => Promise.resolve(),
+    };
     const dispatch = { dispatchOverlayEvent: () => {} };
 
     const result = createRequestHandler(state, deps, turn, dispatch) as Record<string, unknown>;
@@ -177,7 +201,7 @@ describe("routes.ts + routes/** have no circular runtime imports (G-P72s6.4)", (
       if (visited.has(node)) return;
       visited.add(node);
       inStack.add(node);
-      for (const neighbor of (adj[node] ?? new Set())) {
+      for (const neighbor of adj[node] ?? new Set()) {
         dfs(neighbor, [...path, node]);
         if (hasCycle) return;
       }
@@ -243,7 +267,7 @@ describe("serve.ts still resolves createRequestHandler + ensureOverlaySubscripti
     assert.ok(existsSync(ROUTES_DIR), `routes/ directory must exist (post-split): ${ROUTES_DIR}`);
 
     // Force fresh import by using the .js extension (tsx resolves .ts too)
-    const mod = await import("../../../../src/cli/subcommands/serve/routes.js") as Record<string, unknown>;
+    const mod = (await import("../../../../src/cli/subcommands/serve/routes.js")) as Record<string, unknown>;
 
     const crh = mod.createRequestHandler as ((...args: unknown[]) => unknown) | undefined;
     assert.equal(typeof crh, "function", "createRequestHandler is a function");
@@ -296,20 +320,20 @@ describe("extracted handlers follow §4.6 parameter-order convention (G-P72s6.1)
 
     // Handler → expected parameter sequence (only the captures; httpContext trailing)
     const HANDLER_PARAMS: Record<string, { required: string[]; file: string }> = {
-      handleHealth:           { required: [],                                          file: "health.ts" },
-      handleIdentity:         { required: [],                                          file: "health.ts" },
-      handleGetSettings:      { required: [],                                          file: "settings.ts" },
-      handlePostSettings:     { required: ["deps"],                                    file: "settings.ts" },
-      handleChromeEnsure:     { required: ["state", "deps", "dispatch"],               file: "cdp.ts" },
-      handlePostAgentTurn:    { required: ["state", "deps", "turn"],                   file: "agent.ts" },
-      handlePostAgentActivate:{ required: ["state", "turn"],                           file: "agent.ts" },
-      handlePostAgentAbort:   { required: ["state"],                                   file: "agent.ts" },
-      handlePostAgentRetry:   { required: ["state", "turn"],                           file: "agent.ts" },
-      handlePostCronMode:     { required: ["state", "deps"],                           file: "agent.ts" },
-      handlePostPassiveMode:  { required: ["state", "deps"],                           file: "agent.ts" },
-      handlePostWorkflow:     { required: ["state", "deps", "turn"],                   file: "workflow.ts" },
-      handleGetEvents:        { required: ["state"],                                   file: "events.ts" },
-      handleGetAuditTail:     { required: ["deps"],                                    file: "audit.ts" },
+      handleHealth: { required: [], file: "health.ts" },
+      handleIdentity: { required: [], file: "health.ts" },
+      handleGetSettings: { required: [], file: "settings.ts" },
+      handlePostSettings: { required: ["deps"], file: "settings.ts" },
+      handleChromeEnsure: { required: ["state", "deps", "dispatch"], file: "cdp.ts" },
+      handlePostAgentTurn: { required: ["state", "deps", "turn"], file: "agent.ts" },
+      handlePostAgentActivate: { required: ["state", "turn"], file: "agent.ts" },
+      handlePostAgentAbort: { required: ["state"], file: "agent.ts" },
+      handlePostAgentRetry: { required: ["state", "turn"], file: "agent.ts" },
+      handlePostCronMode: { required: ["state", "deps"], file: "agent.ts" },
+      handlePostPassiveMode: { required: ["state", "deps"], file: "agent.ts" },
+      handlePostWorkflow: { required: ["state", "deps", "turn"], file: "workflow.ts" },
+      handleGetEvents: { required: ["state"], file: "events.ts" },
+      handleGetAuditTail: { required: ["deps"], file: "audit.ts" },
     };
 
     // Convention order (§4.6): state → deps → turn → dispatch → [timerHolder] → httpContext
@@ -321,10 +345,7 @@ describe("extracted handlers follow §4.6 parameter-order convention (G-P72s6.1)
       const src = readFileSync(filePath, "utf8");
 
       // Find the function declaration in source
-      const re = new RegExp(
-        `(?:export\\s+)?(?:async\\s+)?function\\s+${handlerName}\\s*\\(([^)]+)\\)`,
-        "m",
-      );
+      const re = new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${handlerName}\\s*\\(([^)]+)\\)`, "m");
       const match = re.exec(src);
       assert.ok(match, `${handlerName} declaration not found in routes/${file}`);
 
@@ -332,7 +353,12 @@ describe("extracted handlers follow §4.6 parameter-order convention (G-P72s6.1)
       // Extract parameter names (strip type annotations)
       const params = paramStr
         .split(",")
-        .map((p) => p.trim().split(/[\s:]/)[0].replace(/^\.\.\./, ""))
+        .map((p) =>
+          p
+            .trim()
+            .split(/[\s:]/)[0]
+            .replace(/^\.\.\./, ""),
+        )
         .filter(Boolean);
 
       // Verify required capture params appear in the correct relative order
@@ -380,28 +406,30 @@ describe("each routes/*.ts exports its planned named functions (G-P72s6.5)", () 
     assert.ok(existsSync(ROUTES_DIR), `routes/ directory must exist (post-split): ${ROUTES_DIR}`);
 
     const EXPECTED_EXPORTS: Record<string, string[]> = {
-      "health.ts":   ["handleHealth", "handleIdentity"],
+      "health.ts": ["handleHealth", "handleIdentity"],
       "settings.ts": ["handleGetSettings", "handlePostSettings"],
-      "cdp.ts":      ["ensureOverlaySubscription", "handleChromeEnsure"],
-      "agent.ts":    ["handlePostAgentTurn", "handlePostAgentActivate", "handlePostAgentAbort",
-                      "handlePostAgentRetry", "handlePostCronMode", "handlePostPassiveMode"],
+      "cdp.ts": ["ensureOverlaySubscription", "handleChromeEnsure"],
+      "agent.ts": [
+        "handlePostAgentTurn",
+        "handlePostAgentActivate",
+        "handlePostAgentAbort",
+        "handlePostAgentRetry",
+        "handlePostCronMode",
+        "handlePostPassiveMode",
+      ],
       "workflow.ts": ["handlePostWorkflow"],
-      "events.ts":   ["handleGetEvents"],
-      "audit.ts":    ["handleGetAuditTail"],
+      "events.ts": ["handleGetEvents"],
+      "audit.ts": ["handleGetAuditTail"],
     };
 
     for (const [fileName, expectedNames] of Object.entries(EXPECTED_EXPORTS)) {
       // Import each as a module
-      const mod = await import(
+      const mod = (await import(
         `../../../../src/cli/subcommands/serve/routes/${fileName.replace(".ts", ".js")}`
-      ) as Record<string, unknown>;
+      )) as Record<string, unknown>;
 
       for (const name of expectedNames) {
-        assert.equal(
-          typeof mod[name],
-          "function",
-          `routes/${fileName}: ${name} must be exported as a function`,
-        );
+        assert.equal(typeof mod[name], "function", `routes/${fileName}: ${name} must be exported as a function`);
       }
     }
   });

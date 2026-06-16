@@ -18,11 +18,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { DEEPSEEK_THINKING_DEFAULT_MODELS, makeNoThinkingFetch, resolveModel } from "../../src/agent/modelResolver.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,11 @@ function saveEnv(...keys: string[]): () => void {
       else process.env[k] = saved[k];
     }
   };
+}
+
+function setIsolatedHome(home: string): void {
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
 }
 
 // ─── T-MR-FIX1.1: v4-flash returns a distinct wrapping function ──────────────
@@ -230,7 +236,14 @@ test("T-MR-FIX1.SET1: DEEPSEEK_THINKING_DEFAULT_MODELS contains deepseek-v4-flas
 test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-disabled (use non-reserved 'custom' name instead)", () => {
   // P-71: 'openai' is a reserved direct-provider name; resolveModel must throw scope-disabled.
   // Use a non-reserved name ('custom') with the same DeepSeek baseUrl for the passing smoke.
-  const restore = saveEnv("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME");
+  const restore = saveEnv(
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "HOME",
+    "FRONDOSE_HOME_BASE",
+  );
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m9-"));
   try {
     mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
@@ -244,7 +257,7 @@ test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-dis
       }),
       "utf-8",
     );
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     // 1. Verify 'openai' (reserved) throws scope-disabled
     assert.throws(
       () => resolveModel({ factory: "openai:deepseek-v4-flash" }),
@@ -264,7 +277,7 @@ test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-dis
     );
   } finally {
     restore();
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -273,7 +286,7 @@ test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-dis
 test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope-disabled (no Anthropic dispatch path)", () => {
   // P-71: direct Anthropic provider is scope-disabled. buildModel throws before any fetch.
   // This supersedes the old test that checked the anthropic dispatch path returned a model.
-  const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME");
+  const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME", "FRONDOSE_HOME_BASE");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m10-"));
   try {
     mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
@@ -286,7 +299,7 @@ test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope
       }),
       "utf-8",
     );
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     process.env.ANTHROPIC_API_KEY = "sk-ant-stub";
     // P-71 blocks anthropic at the reserved-name guard; throws before any SDK call
     assert.throws(
@@ -297,7 +310,7 @@ test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope
     );
   } finally {
     restore();
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -306,7 +319,7 @@ test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope
 test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-reserved 'another' provider with gpt-4o-mini modelId has no thinking wrapper", () => {
   // P-71: 'openai' is reserved. For the no-wrapper invariant, use non-reserved 'another' provider.
   // gpt-4o-mini is not in DEEPSEEK_THINKING_DEFAULT_MODELS → no thinking wrapper applied.
-  const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME");
+  const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME", "FRONDOSE_HOME_BASE");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m11-"));
   try {
     mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
@@ -320,7 +333,7 @@ test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-res
       }),
       "utf-8",
     );
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     // 1. 'openai' (reserved) throws
     assert.throws(
       () => resolveModel({ factory: "openai:gpt-4o-mini" }),
@@ -341,7 +354,7 @@ test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-res
     );
   } finally {
     restore();
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 

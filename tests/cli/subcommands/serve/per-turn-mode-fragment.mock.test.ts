@@ -23,16 +23,18 @@
  */
 
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import { before, describe, it } from "node:test";
 import { mock } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { BOUNDARY, BOUNDARY_RESUME } from "../../../../src/agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../../src/agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../../src/agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../../src/agent/systemPrompt/soul.js";
 import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
 import { modeFromState } from "../../../../src/tauri/ui/mode.js";
+
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 // ── Marker strings (verified on-disk per plan §) ────────────────────────────
 // soul.ts:154 — Auto fragment marker
@@ -82,7 +84,7 @@ let analyzePassiveEventFn:
 
 before(async () => {
   // 1. Mock src/agent/pi/loop.js — used by runOne.ts (operator/cron/resume turns)
-  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  const piLoopUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/loop.js")).href;
   mock.module(piLoopUrl, {
     namedExports: {
       // biome-ignore lint/suspicious/noExplicitAny: captures opts shape per call
@@ -97,8 +99,20 @@ before(async () => {
     },
   });
 
-  // 2. Mock src/agent/loop.js — used by passive.ts (triggerPassiveAnalysis calls runAgentLoop)
-  const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
+  // 2. Mock src/agent/pi/model.js — runOneTurn preflights Pi config before calling the loop.
+  const piModelUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => ({
+        model: { id: "test-model" },
+        apiKey: "test-key",
+        onPayload: (payload: unknown) => payload,
+      }),
+    },
+  });
+
+  // 3. Mock src/agent/loop.js — used by passive.ts (triggerPassiveAnalysis calls runAgentLoop)
+  const loopUrl = pathToFileURL(join(REPO_ROOT, "src/agent/loop.js")).href;
   mock.module(loopUrl, {
     namedExports: {
       // biome-ignore lint/suspicious/noExplicitAny: captures opts loosely
@@ -112,8 +126,8 @@ before(async () => {
     },
   });
 
-  // 3. Mock src/persistence/audit.js — no-op
-  const auditUrl = pathToFileURL(resolve(process.cwd(), "src/persistence/audit.js")).href;
+  // 4. Mock src/persistence/audit.js — no-op
+  const auditUrl = pathToFileURL(join(REPO_ROOT, "src/persistence/audit.js")).href;
   mock.module(auditUrl, {
     namedExports: {
       writeLlmErrorAudit: () => undefined,
@@ -123,8 +137,8 @@ before(async () => {
     },
   });
 
-  // 4. Mock src/overlay/inject.js — no-op
-  const injectUrl = pathToFileURL(resolve(process.cwd(), "src/overlay/inject.js")).href;
+  // 5. Mock src/overlay/inject.js — no-op
+  const injectUrl = pathToFileURL(join(REPO_ROOT, "src/overlay/inject.js")).href;
   mock.module(injectUrl, {
     namedExports: {
       OVERLAY_BOOTSTRAP_JS: "",
@@ -134,8 +148,8 @@ before(async () => {
     },
   });
 
-  // 5. Mock src/persistence/salesDb.js — no-op
-  const salesDbUrl = pathToFileURL(resolve(process.cwd(), "src/persistence/salesDb.js")).href;
+  // 6. Mock src/persistence/salesDb.js — no-op
+  const salesDbUrl = pathToFileURL(join(REPO_ROOT, "src/persistence/salesDb.js")).href;
   mock.module(salesDbUrl, {
     namedExports: {
       getCurrentAutoRun: () => null,
@@ -146,8 +160,8 @@ before(async () => {
     },
   });
 
-  // 6. Mock src/tools/sales/_dbHandle.js — no-op
-  const dbHandleUrl = pathToFileURL(resolve(process.cwd(), "src/tools/sales/_dbHandle.js")).href;
+  // 7. Mock src/tools/sales/_dbHandle.js — no-op
+  const dbHandleUrl = pathToFileURL(join(REPO_ROOT, "src/tools/sales/_dbHandle.js")).href;
   mock.module(dbHandleUrl, {
     namedExports: {
       getSalesDb: () => ({
@@ -157,20 +171,20 @@ before(async () => {
     },
   });
 
-  // 7. Mock src/cli/subcommands/serve/turn/reaper.js — no-op
-  const reaperUrl = pathToFileURL(resolve(process.cwd(), "src/cli/subcommands/serve/turn/reaper.js")).href;
+  // 8. Mock src/cli/subcommands/serve/turn/reaper.js — no-op
+  const reaperUrl = pathToFileURL(join(REPO_ROOT, "src/cli/subcommands/serve/turn/reaper.js")).href;
   mock.module(reaperUrl, {
     namedExports: {
       reapExpiredAutoRun: () => undefined,
     },
   });
 
-  // 8. Dynamic import createTurnRunner AFTER mocks are registered
+  // 9. Dynamic import createTurnRunner AFTER mocks are registered
   const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import — shape matches factory sig
   createTurnRunner = (turnMod as any).createTurnRunner as typeof createTurnRunner;
 
-  // 9. Dynamic import createPassiveHandlers AFTER mocks are registered
+  // 10. Dynamic import createPassiveHandlers AFTER mocks are registered
   // passive.ts exports createPassiveHandlers; triggerPassiveAnalysis is an internal function.
   // We expose it via a test wrapper that calls analyzePassiveEvent on the returned handlers.
   // Step-4 will make this compile and reach assertion-TODO branch.

@@ -16,23 +16,26 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { registerCrashHandlers } from "../../src/cli/crashLogger.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const LOG_DIR = join(tmpdir(), `mai-p18-cl-${process.pid}`);
 const LOG_PATH = join(LOG_DIR, "crash.log");
 const SRC_PATH = join(process.cwd(), "src", "cli", "crashLogger.ts");
+const SRC_URL = pathToFileURL(SRC_PATH).href;
 
 function makeHelperScript(eventLine: string, extraLines = ""): string {
   // Use an IIFE with dynamic import so tsx resolves the path correctly
   return `
-import { registerCrashHandlers } from "${SRC_PATH}";
-const logPath = "${LOG_PATH}";
+import { registerCrashHandlers } from ${JSON.stringify(SRC_URL)};
+const logPath = ${JSON.stringify(LOG_PATH)};
 registerCrashHandlers(logPath);
 ${eventLine}
 ${extraLines}
@@ -68,7 +71,7 @@ describe("Crash logger — T-CL.1..4", () => {
   before(() => {
     // Clean up any previous test's leftover log file
     try {
-      rmSync(LOG_DIR, { recursive: true, force: true });
+      cleanupTmpDir(LOG_DIR);
     } catch {
       // best-effort
     }
@@ -76,7 +79,7 @@ describe("Crash logger — T-CL.1..4", () => {
 
   after(() => {
     try {
-      rmSync(LOG_DIR, { recursive: true, force: true });
+      cleanupTmpDir(LOG_DIR);
     } catch {
       // best-effort
     }

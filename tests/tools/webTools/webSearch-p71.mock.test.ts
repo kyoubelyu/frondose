@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { writeSearchConfig } from "../../../src/persistence/search.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const FAKE_OPTS: ToolExecutionOptions = {
   toolCallId: "pbrave-web-search",
@@ -42,12 +43,8 @@ before(async () => {
   if (existsSync(mcpSource)) {
     mock.module(pathToFileURL(resolve(process.cwd(), "src/mcp/braveSearchClient.js")).href, {
       namedExports: {
-        callBraveWebSearch: (input: {
-          apiKey: string;
-          query: string;
-          maxResults: number;
-          abortSignal?: AbortSignal;
-        }) => callBraveWebSearchImpl(input),
+        callBraveWebSearch: (input: { apiKey: string; query: string; maxResults: number; abortSignal?: AbortSignal }) =>
+          callBraveWebSearchImpl(input),
       },
     });
   }
@@ -98,7 +95,7 @@ async function withIsolatedSearchHome(fn: () => Promise<void>): Promise<void> {
     await fn();
   } finally {
     restoreEnv(saved);
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 

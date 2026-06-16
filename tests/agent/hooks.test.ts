@@ -23,17 +23,23 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { HookRunner } from "../../src/agent/hooks.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+const posixShellTestOptions: { skip?: string } =
+  process.platform === "win32"
+    ? { skip: "HookRunner command hooks execute through /bin/sh, which is POSIX-only." }
+    : {};
+
 function makeTempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-hooks-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 function writeHooksJson(dir: string, content: unknown): string {
@@ -93,7 +99,10 @@ test("T-Hooks.2: Invalid JSON in hooks.json → no-op + stderr warning (does not
     const pre = await runner?.runPreToolUse("echo", {}, "c1");
     assert.equal(pre.blocked, false, "must be no-op after JSON parse failure");
     // Stderr should contain a warning
-    assert.ok(capturedStderr.includes("[frondose]"), `stderr must contain [frondose] warning; got: "${capturedStderr}"`);
+    assert.ok(
+      capturedStderr.includes("[frondose]"),
+      `stderr must contain [frondose] warning; got: "${capturedStderr}"`,
+    );
   } finally {
     cleanup();
   }
@@ -131,7 +140,7 @@ test("T-Hooks.3: Invalid schema in hooks.json (Zod fail) → no-op + stderr warn
 
 // ─── T-Hooks.4: PreToolUse exit 2 → blocked ──────────────────────────────────
 
-test("T-Hooks.4: PreToolUse hook exit 2 → blocked: true with message (D-3)", async () => {
+test("T-Hooks.4: PreToolUse hook exit 2 → blocked: true with message (D-3)", posixShellTestOptions, async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     const p = writeHooksJson(dir, {
@@ -159,7 +168,7 @@ test("T-Hooks.4: PreToolUse hook exit 2 → blocked: true with message (D-3)", a
 
 // ─── T-Hooks.5: PreToolUse exit 0 → allowed ──────────────────────────────────
 
-test("T-Hooks.5: PreToolUse hook exit 0 → blocked: false (tool allowed)", async () => {
+test("T-Hooks.5: PreToolUse hook exit 0 → blocked: false (tool allowed)", posixShellTestOptions, async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     const p = writeHooksJson(dir, {
@@ -183,7 +192,10 @@ test("T-Hooks.5: PreToolUse hook exit 0 → blocked: false (tool allowed)", asyn
 
 // ─── T-Hooks.6: PreToolUse spawn failure → BLOCK (D-3) ───────────────────────
 
-test("T-Hooks.6: PreToolUse with bad command → spawn fails (D-3) → blocked: true", async () => {
+test(
+  "T-Hooks.6: PreToolUse with bad command → spawn fails (D-3) → blocked: true",
+  posixShellTestOptions,
+  async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     // The shell can run "exit 1" but a totally invalid command causes shell to fail
@@ -216,11 +228,15 @@ test("T-Hooks.6: PreToolUse with bad command → spawn fails (D-3) → blocked: 
   } finally {
     cleanup();
   }
-});
+  },
+);
 
 // ─── T-Hooks.7: PostToolUse spawn failure → LOG+CONTINUE (D-4) ───────────────
 
-test("T-Hooks.7: PostToolUse hook fails → LOG+CONTINUE, tool result returned (D-4)", async () => {
+test(
+  "T-Hooks.7: PostToolUse hook fails → LOG+CONTINUE, tool result returned (D-4)",
+  posixShellTestOptions,
+  async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     // Hook that exits non-zero on PostToolUse
@@ -253,15 +269,22 @@ test("T-Hooks.7: PostToolUse hook fails → LOG+CONTINUE, tool result returned (
     }
 
     // Stderr should have a log entry
-    assert.ok(capturedStderr.includes("[frondose]"), `PostToolUse failure must log to stderr; got: "${capturedStderr}"`);
+    assert.ok(
+      capturedStderr.includes("[frondose]"),
+      `PostToolUse failure must log to stderr; got: "${capturedStderr}"`,
+    );
   } finally {
     cleanup();
   }
-});
+  },
+);
 
 // ─── T-Hooks.8: runStop fires with Stop payload ───────────────────────────────
 
-test("T-Hooks.8: runStop fires hook with Stop event payload; non-zero logs but does not throw", async () => {
+test(
+  "T-Hooks.8: runStop fires hook with Stop event payload; non-zero logs but does not throw",
+  posixShellTestOptions,
+  async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     const outputFile = join(dir, "stop-payload.json");
@@ -292,11 +315,12 @@ test("T-Hooks.8: runStop fires hook with Stop event payload; non-zero logs but d
   } finally {
     cleanup();
   }
-});
+  },
+);
 
 // ─── T-Hooks.9: Matcher regex filters entries ─────────────────────────────────
 
-test("T-Hooks.9: Matcher regex — only matching entries fire PreToolUse", async () => {
+test("T-Hooks.9: Matcher regex — only matching entries fire PreToolUse", posixShellTestOptions, async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     // Only hooks matching "^echo$" should fire; "scroll" should be ignored
@@ -335,7 +359,10 @@ test("T-Hooks.9: Matcher regex — only matching entries fire PreToolUse", async
 
 // ─── T-Hooks.10: Empty string matcher matches all tools ───────────────────────
 
-test("T-Hooks.10: Empty string matcher ('') matches all tool names (compiled as /.*/ internally)", async () => {
+test(
+  "T-Hooks.10: Empty string matcher ('') matches all tool names (compiled as /.*/ internally)",
+  posixShellTestOptions,
+  async () => {
   const { dir, cleanup } = makeTempDir();
   try {
     // Empty matcher should fire for any toolName
@@ -359,4 +386,5 @@ test("T-Hooks.10: Empty string matcher ('') matches all tool names (compiled as 
   } finally {
     cleanup();
   }
-});
+  },
+);

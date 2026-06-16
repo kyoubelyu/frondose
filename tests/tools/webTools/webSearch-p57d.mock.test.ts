@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, mock } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { BOUNDARY } from "../../../src/agent/systemPrompt/boundary.js";
 import { makeWebSearchTool } from "../../../src/tools/webTools/webSearch.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 const FAKE_OPTS: ToolExecutionOptions = {
   toolCallId: "p57d-pbrave-search",
@@ -34,7 +35,7 @@ async function withIsolatedHome(fn: () => Promise<void>): Promise<void> {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 

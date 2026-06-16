@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { detectAnyModelKey, resolveModel, resolveModelSpec } from "../../src/agent/modelResolver.js";
 import { readAuth, writeAuth } from "../../src/persistence/auth.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 const MODEL_ENV_KEYS = [
   "HOME",
@@ -46,7 +47,7 @@ function withIsolatedModelHome<T>(fn: (home: string) => T): T {
     return fn(home);
   } finally {
     restoreEnv(saved);
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   }
 }
 

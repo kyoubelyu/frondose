@@ -32,13 +32,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { Prompter } from "../../src/cli/subcommands/_prompts.js";
 import { runGhSubcommand } from "../../src/cli/subcommands/gh.js";
 import { readGithubConfig } from "../../src/persistence/github.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ function makeTmpDir(): { dir: string; cfgPath: string; cleanup: () => void } {
   return {
     dir,
     cfgPath: join(dir, "github.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
   };
 }
 

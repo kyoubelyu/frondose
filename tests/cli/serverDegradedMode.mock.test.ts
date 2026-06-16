@@ -15,8 +15,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(new URL(".", import.meta.url).pathname, "../../");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SERVER_REPL = resolve(ROOT, "src/cli/serverRepl.ts");
 const SERVER_DAEMON = resolve(ROOT, "src/cli/serverDaemon.ts");
 

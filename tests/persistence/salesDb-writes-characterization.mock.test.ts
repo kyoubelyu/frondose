@@ -28,7 +28,7 @@
  *     tests/persistence/salesDb-writes-characterization.mock.test.ts
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -45,6 +45,7 @@ import {
   updateLeadStage,
   upsertRawCandidate,
 } from "../../src/persistence/salesDb.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 let tmp: string;
 let dbPath: string;
@@ -63,7 +64,7 @@ afterEach(() => {
   } catch {
     /* already closed */
   }
-  rmSync(tmp, { recursive: true, force: true });
+  cleanupTmpDir(tmp);
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

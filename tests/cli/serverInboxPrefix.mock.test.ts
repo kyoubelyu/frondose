@@ -13,7 +13,7 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
@@ -22,12 +22,13 @@ import type { CoreMessage } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { handleTelegramTurn, type TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import { drainServerInbox, enqueueServerInbox, openServerInboxDb } from "../../src/persistence/serverInbox.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-sinbox-int-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 /** Immediate model: emits one "ok" text-delta then finish — runAgentLoop returns fast. */

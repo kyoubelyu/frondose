@@ -11,15 +11,15 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, after } from "node:test";
+import { after, describe, it } from "node:test";
 import type { Database as DB } from "better-sqlite3";
 import Database from "better-sqlite3";
 import {
-  CURRENT_SCHEMA_VERSION,
   appendPersonInteraction,
+  CURRENT_SCHEMA_VERSION,
   closeMemoryDatabase,
   getPersonMemory,
   normalizeProfileUrl,
@@ -27,6 +27,7 @@ import {
   searchMemory,
   setPersonScore,
 } from "../../src/persistence/memory.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── T-Memory.Open.1 ─────────────────────────────────────────────────────────
 
@@ -38,9 +39,9 @@ describe("T-Memory.Open — schema lifecycle on a fresh :memory: DB", () => {
     const db = openMemoryDatabase(":memory:");
 
     // Required tables
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as Array<{ name: string }>;
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{
+      name: string;
+    }>;
     const tableNames = tables.map((t) => t.name);
     assert.ok(tableNames.includes("person_memory_events"), "person_memory_events must exist");
     assert.ok(tableNames.includes("schema_version"), "schema_version must exist");
@@ -48,24 +49,22 @@ describe("T-Memory.Open — schema lifecycle on a fresh :memory: DB", () => {
     assert.ok(tableNames.includes("general_memory"), "general_memory must exist (V3)");
 
     // FTS5 virtual table — appears in sqlite_master as type='table' with name 'memory_fts'
-    const fts = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'")
-      .get() as { name: string } | undefined;
+    const fts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'").get() as
+      | { name: string }
+      | undefined;
     assert.ok(fts !== undefined, "memory_fts virtual table must exist (V3)");
 
     // schema_version MAX must be 3
-    const vRow = db
-      .prepare("SELECT MAX(version) AS maxVer FROM schema_version")
-      .get() as { maxVer: number };
+    const vRow = db.prepare("SELECT MAX(version) AS maxVer FROM schema_version").get() as { maxVer: number };
     assert.equal(vRow.maxVer, 3, "schema_version MAX(version) must be 3");
 
     // Exported constant must be 3
     assert.equal(CURRENT_SCHEMA_VERSION, 3, "CURRENT_SCHEMA_VERSION exported from barrel must be 3");
 
     // FTS5 triggers must exist (AI / AD / AU)
-    const triggers = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name")
-      .all() as Array<{ name: string }>;
+    const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name").all() as Array<{
+      name: string;
+    }>;
     const triggerNames = triggers.map((t) => t.name);
     assert.ok(triggerNames.includes("memory_fts_ai"), "memory_fts_ai trigger must exist");
     assert.ok(triggerNames.includes("memory_fts_ad"), "memory_fts_ad trigger must exist");
@@ -81,7 +80,7 @@ describe("T-Memory.Open — schema lifecycle on a fresh :memory: DB", () => {
     // When:  openMemoryDatabase(path) is called against the V2-state file
     // Then:  MAX(version) === 3; FTS5 tables exist; memory_fts has 2 rows (backfill ran)
     const dir = mkdtempSync(join(tmpdir(), `mai-p72s8-open2-${process.pid}-`));
-    after(() => rmSync(dir, { recursive: true, force: true }));
+    after(() => cleanupTmpDir(dir));
     const tmpPath = join(dir, "memory.sqlite");
 
     // Build V2 state manually (V1 + V2 DDL + version rows 1+2 + 2 data rows)
@@ -126,9 +125,7 @@ describe("T-Memory.Open — schema lifecycle on a fresh :memory: DB", () => {
     // Now open via the public API — triggers V3 migration + backfill
     const db = openMemoryDatabase(tmpPath);
 
-    const vRow = db
-      .prepare("SELECT MAX(version) AS maxVer FROM schema_version")
-      .get() as { maxVer: number };
+    const vRow = db.prepare("SELECT MAX(version) AS maxVer FROM schema_version").get() as { maxVer: number };
     assert.equal(vRow.maxVer, 3, "MAX(version) must be 3 after migration");
 
     // V3 tables must exist
@@ -143,9 +140,7 @@ describe("T-Memory.Open — schema lifecycle on a fresh :memory: DB", () => {
 
     // FTS backfill: the 2 pre-migration rows must appear in memory_fts
     // For FTS5 external-content tables, count the content table for row count
-    const contentCount = db
-      .prepare("SELECT COUNT(*) AS c FROM person_memory_events")
-      .get() as { c: number };
+    const contentCount = db.prepare("SELECT COUNT(*) AS c FROM person_memory_events").get() as { c: number };
     assert.equal(contentCount.c, 2, "person_memory_events must have 2 rows (pre-migration data preserved)");
 
     // Verify FTS search works on the backfilled data
@@ -189,9 +184,9 @@ describe("T-Memory.Append — appendPersonInteraction semantics", () => {
     assert.ok(typeof event.createdAt === "string" && event.createdAt.length > 0, "createdAt must be ISO-8601");
 
     // DB row must exist with normalized URL
-    const row = db
-      .prepare("SELECT * FROM person_memory_events WHERE id = ?")
-      .get(event.id) as Record<string, unknown> | undefined;
+    const row = db.prepare("SELECT * FROM person_memory_events WHERE id = ?").get(event.id) as
+      | Record<string, unknown>
+      | undefined;
     assert.ok(row !== undefined, "row must exist in person_memory_events");
     assert.equal(row.profile_url, "https://www.linkedin.com/in/alice/", "DB profile_url must be normalized");
 
@@ -215,9 +210,9 @@ describe("T-Memory.Append — appendPersonInteraction semantics", () => {
       },
       db,
     );
-    const rowWithAttrib = db
-      .prepare("SELECT * FROM person_memory_events WHERE id = ?")
-      .get(eventWithAttrib.id) as Record<string, unknown> | undefined;
+    const rowWithAttrib = db.prepare("SELECT * FROM person_memory_events WHERE id = ?").get(eventWithAttrib.id) as
+      | Record<string, unknown>
+      | undefined;
     assert.ok(rowWithAttrib !== undefined);
     assert.equal(rowWithAttrib.source_worker_id, "worker-1");
     assert.equal(rowWithAttrib.source_hostname, "host-a");
@@ -383,10 +378,7 @@ describe("T-Memory.Search — searchMemory FTS5 behavior", () => {
     }
 
     // bm25Rank ASC ordering (best rank = most negative bm25 comes first)
-    assert.ok(
-      hits[0].bm25Rank <= hits[1].bm25Rank,
-      "hits must be ordered ASC by bm25Rank (best first)",
-    );
+    assert.ok(hits[0].bm25Rank <= hits[1].bm25Rank, "hits must be ordered ASC by bm25Rank (best first)");
 
     // Edge case 1: empty query returns []
     const emptyHits = searchMemory("", 10, db);

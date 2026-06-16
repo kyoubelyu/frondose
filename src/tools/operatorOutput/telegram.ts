@@ -117,6 +117,11 @@ function mimeFor(filePath: string): string {
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }
 
+function isLocalMediaPath(media: string): boolean {
+  if (/^https?:\/\//i.test(media)) return false;
+  return path.isAbsolute(media) || path.win32.isAbsolute(media) || media.includes("/") || media.includes("\\");
+}
+
 /** D-22: return-style mutual-exclusivity check. Returns null if OK; otherwise an error message. */
 function validateExclusivity(p: TelegramParams): string | null {
   const errs: string[] = [];
@@ -179,7 +184,7 @@ function buildMediaGroupMultipart(group: NonNullable<TelegramParams["mediaGroup"
   fd.set("chat_id", chatId);
   // Build the JSON media array; replace local paths with attach://mediaN references.
   const mediaArr = group.map((item, i) => {
-    const isLocal = !/^https?:\/\//i.test(item.media) && item.media.includes("/");
+    const isLocal = isLocalMediaPath(item.media);
     if (isLocal) {
       assertFileReadable(item.media);
       const bytes = readFileSync(item.media);

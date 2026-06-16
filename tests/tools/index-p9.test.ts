@@ -19,7 +19,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import { HookRunner } from "../../src/agent/hooks.js";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
@@ -46,8 +47,8 @@ function makeFakeSession() {
 }
 
 const FAKE_PERSISTENCE = {
-  memoryDbPath: "/tmp/p9-t-make-tools.sqlite",
-  identityPath: "/tmp/p9-t-make-tools-identity.json",
+  memoryDbPath: join(tmpdir(), "p9-t-make-tools.sqlite"),
+  identityPath: join(tmpdir(), "p9-t-make-tools-identity.json"),
 };
 
 const FAKE_CONTROL = { requestStop: () => {} };
@@ -173,7 +174,7 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 52 tools (G-P9.14; c
       `must have exactly 52 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -203,7 +204,7 @@ test("T-MakeAllTools.4: all 52 expected tool names present (enumeration; clear_c
     assert.ok("query_lead_globally" in t, "query_lead_globally must be in tool set (P-26)");
     assert.ok("schedule_task" in t, "schedule_task must be in tool set (P-31)");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -288,7 +289,7 @@ test("T-MakeAllTools.6: with hookRunner present → ALL tools have hook wrapper 
 
     console.log("  T-MakeAllTools.6: hook wrapper is outermost (D-11 verified) ✓");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -331,6 +332,6 @@ test("T-MakeAllTools.9: HookRunner with ENOENT hooks.json → no-op; all tools c
       `echo must succeed with no-op hookRunner (ENOENT hooks.json); got: ${JSON.stringify(result)}`,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });

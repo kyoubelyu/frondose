@@ -25,10 +25,11 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { IDEMPOTENT_TOOLS } from "../../src/agent/retryWrapper.js";
 import { OUTREACH_TOOL_NAMES } from "../../src/agent/safeMode.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
@@ -38,12 +39,13 @@ import { makeBrowserTools } from "../../src/tools/browser/index.js"; // ← red 
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { makeLinkedinTools } from "../../src/tools/linkedin/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SRC_ROOT = resolve(new URL(".", import.meta.url).pathname, "../../src");
+const SRC_ROOT = fileURLToPath(new URL("../../src", import.meta.url));
 
 function makeFakeSession(): LinkedinSession {
   const fakeHandle = {};
@@ -60,7 +62,7 @@ function makeFakeSession(): LinkedinSession {
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p33-contract-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 const mockControl: ControlSignals = { requestStop: () => {} };
@@ -363,7 +365,11 @@ describe("Tool parameter schemas frozen (G-P33.7)", () => {
       launch: ["args", "destination"],
     };
 
-    assert.equal(Object.keys(allTools).length, 11, "must have exactly 11 browser+LinkedIn tools (clear_cookies removed)");
+    assert.equal(
+      Object.keys(allTools).length,
+      11,
+      "must have exactly 11 browser+LinkedIn tools (clear_cookies removed)",
+    );
 
     for (const [name, tool] of Object.entries(allTools)) {
       const expected = FROZEN_SCHEMAS[name];
@@ -528,15 +534,47 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   query_lead_globally: ["lookbackHours", "personRef"],
   record_auto_action: ["actionType", "countWeight", "leadId", "result", "runId"],
   record_lead_event: ["eventType", "leadId", "metadata"],
-  record_raw_candidate: ["accountId", "bypassIdentityCheck", "evidenceSummary", "personName", "profileUrl", "source", "sourceContext"],
+  record_raw_candidate: [
+    "accountId",
+    "bypassIdentityCheck",
+    "evidenceSummary",
+    "personName",
+    "profileUrl",
+    "source",
+    "sourceContext",
+  ],
   reload: [],
   remember: ["avoid", "interaction", "nextAction", "notes", "personName", "profileUrl", "score", "summary"],
   save_message_draft: ["createdBy", "evidence", "kind", "leadId", "text"],
   schedule_follow_up: ["dueAt", "leadId", "nextAction"],
   schedule_task: ["cron_expr", "task"],
-  score_account: ["accountScore", "candidateId", "companySize", "currentPainHypothesis", "evidence", "industry", "linkedinUrl", "name", "region"],
+  score_account: [
+    "accountScore",
+    "candidateId",
+    "companySize",
+    "currentPainHypothesis",
+    "evidence",
+    "industry",
+    "linkedinUrl",
+    "name",
+    "region",
+  ],
   // P-AUTO-5: "qualification" added (required param — ICP qualification anchors the score)
-  score_lead: ["authorityLevel", "buyingTrigger", "candidateId", "confidence", "evidenceJson", "icpFit", "leadId", "methodUsed", "nextAction", "painHypothesis", "qualification", "suggestedOpeningLine", "totalScore"],
+  score_lead: [
+    "authorityLevel",
+    "buyingTrigger",
+    "candidateId",
+    "confidence",
+    "evidenceJson",
+    "icpFit",
+    "leadId",
+    "methodUsed",
+    "nextAction",
+    "painHypothesis",
+    "qualification",
+    "suggestedOpeningLine",
+    "totalScore",
+  ],
   screenshot: ["out"],
   scroll: ["amount", "direction"],
   search_memory: ["limit", "query"],
@@ -544,9 +582,34 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   sleep: ["reason", "seconds"],
   start_auto_run: ["maxConnects", "maxDurationMinutes"],
   stop: ["reason"],
-  suggest_card: ["dismissed", "evidenceSummary", "icpMatch", "painChainHypothesis", "painChainStage", "reason", "suggestedMove", "title", "totalScore"],
+  suggest_card: [
+    "dismissed",
+    "evidenceSummary",
+    "icpMatch",
+    "painChainHypothesis",
+    "painChainStage",
+    "reason",
+    "suggestedMove",
+    "title",
+    "totalScore",
+  ],
   suggest_next_actions: ["actions", "summary"],
-  telegram_notify: ["body", "chatAction", "deleteMessageId", "editMessageId", "mediaFileId", "mediaGroup", "mediaPath", "mediaType", "mediaUrl", "parseMode", "pinMessageId", "replyMarkup", "severity", "unpinMessageId"],
+  telegram_notify: [
+    "body",
+    "chatAction",
+    "deleteMessageId",
+    "editMessageId",
+    "mediaFileId",
+    "mediaGroup",
+    "mediaPath",
+    "mediaType",
+    "mediaUrl",
+    "parseMode",
+    "pinMessageId",
+    "replyMarkup",
+    "severity",
+    "unpinMessageId",
+  ],
   todo_write: ["steps", "workflowTitle"],
   type: ["label", "ref", "scope", "text"],
   update_lead_stage: ["leadId", "stage"],

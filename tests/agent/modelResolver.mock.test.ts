@@ -11,6 +11,7 @@ import {
   resolveModelSpec,
 } from "../../src/agent/modelResolver.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // T-M1..T-M4: FRONDOSE_MODEL precedence chain + parseModelSpec contract
 
@@ -31,19 +32,24 @@ function restoreEnv(saved: Record<string, string | undefined>): void {
   }
 }
 
+function setIsolatedHome(home: string): void {
+  process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
+}
+
 // ─── T-M1: factory precedence ─────────────────────────────────────────────────
 
 test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm1-"));
-  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
   try {
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ factory: "anthropic:claude-sonnet-4-5", cli: "openai:deepseek-chat" });
     assert.equal(spec, "anthropic:claude-sonnet-4-5", "factory must beat cli/env/auth.json/default");
   } finally {
     restoreEnv(saved);
-    rmSync(tmpHome, { recursive: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -51,15 +57,15 @@ test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
 
 test("T-M2: cli takes precedence over env/auth.json/default when factory absent", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm2-"));
-  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
   try {
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ cli: "openai:deepseek-chat" });
     assert.equal(spec, "openai:deepseek-chat", "cli must beat env/auth.json/default");
   } finally {
     restoreEnv(saved);
-    rmSync(tmpHome, { recursive: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -67,12 +73,12 @@ test("T-M2: cli takes precedence over env/auth.json/default when factory absent"
 
 test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", async (t) => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm3-"));
-  const saved = saveEnv("HOME", "FRONDOSE_MODEL");
+  const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
 
   try {
     // (a) factory wins over cli + env + auth.json + default
     await t.test("(a) factory wins", () => {
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({ factory: "anthropic:factory-model", cli: "openai:cli-model" });
       assert.equal(result, "anthropic:factory-model");
@@ -80,7 +86,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
 
     // (b) cli wins over env + auth.json + default (no factory)
     await t.test("(b) cli wins when factory absent", () => {
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({ cli: "openai:cli-model" });
       assert.equal(result, "openai:cli-model");
@@ -88,7 +94,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
 
     // (c) env wins over auth.json + default (no factory, no cli)
     await t.test("(c) env wins when factory and cli absent", () => {
-      process.env.HOME = tmpHome; // no auth.json in tmpHome
+      setIsolatedHome(tmpHome); // no auth.json in tmpHome
       process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({});
       assert.equal(result, "openai:env-model");
@@ -96,7 +102,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
 
     // (d) auth.json default wins when factory/cli/env absent
     await t.test("(d) auth.json default wins when factory/cli/env absent", () => {
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       delete process.env.FRONDOSE_MODEL;
       const maiDir = join(tmpHome, ".frondose");
       mkdirSync(maiDir, { recursive: true });
@@ -114,7 +120,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     // (e) hardcoded fallback when all sources absent
     // P-71: default changed from anthropic:claude-sonnet-4-5 to deepseek:deepseek-v4-flash
     await t.test("(e) hardcoded fallback deepseek:deepseek-v4-flash when all unset", () => {
-      process.env.HOME = tmpHome; // no auth.json (removed in (d))
+      setIsolatedHome(tmpHome); // no auth.json (removed in (d))
       delete process.env.FRONDOSE_MODEL;
       const result = resolveModelSpec({});
       assert.equal(result, DEFAULT_MODEL_SPEC);
@@ -122,7 +128,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
     });
   } finally {
     restoreEnv(saved);
-    rmSync(tmpHome, { recursive: true });
+    cleanupTmpDir(tmpHome);
   }
 });
 
@@ -163,10 +169,10 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
   });
 
   await t.test("unknown provider throws on resolveModel (before SDK call)", () => {
-    const saved = saveEnv("HOME");
+    const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE");
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm4-"));
     try {
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       // P-21: error message changed from "Unknown provider" to "not configured in auth.json"
       // P-36 F-A: message changed again to "is not configured (model spec came from …)"
       assert.throws(
@@ -175,7 +181,7 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
       );
     } finally {
       restoreEnv(saved);
-      rmSync(tmpHome, { recursive: true });
+      cleanupTmpDir(tmpHome);
     }
   });
 });
@@ -202,6 +208,7 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
 describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)", () => {
   let tmpHome: string;
   let savedHome: string | undefined;
+  let savedHomeBase: string | undefined;
   let savedAnthropicKey: string | undefined;
   let savedOpenaiKey: string | undefined;
   let savedDeepseekKey: string | undefined;
@@ -210,11 +217,12 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), "mai-home-p21-build-"));
     savedHome = process.env.HOME;
+    savedHomeBase = process.env.FRONDOSE_HOME_BASE;
     savedAnthropicKey = process.env.ANTHROPIC_API_KEY;
     savedOpenaiKey = process.env.OPENAI_API_KEY;
     savedDeepseekKey = process.env.DEEPSEEK_API_KEY;
     savedDeepseekBase = process.env.DEEPSEEK_BASE_URL;
-    process.env.HOME = tmpHome;
+    setIsolatedHome(tmpHome);
     mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     // Clear env-var key overrides so tests control key resolution explicitly
     delete process.env.ANTHROPIC_API_KEY;
@@ -226,6 +234,8 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   afterEach(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
     if (savedAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = savedAnthropicKey;
     if (savedOpenaiKey === undefined) delete process.env.OPENAI_API_KEY;
@@ -234,7 +244,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     else process.env.DEEPSEEK_API_KEY = savedDeepseekKey;
     if (savedDeepseekBase === undefined) delete process.env.DEEPSEEK_BASE_URL;
     else process.env.DEEPSEEK_BASE_URL = savedDeepseekBase;
-    rmSync(tmpHome, { recursive: true, force: true });
+    cleanupTmpDir(tmpHome);
   });
 
   it("T-BUILD.1: P-71 — direct Anthropic provider is scope-disabled; resolveModel throws scope-disabled error", () => {
@@ -473,11 +483,13 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
 describe("detectAnyModelKey — iterates all configured providers, not just 3 hardcoded (G-P21.6)", () => {
   let tmpHome: string;
   let savedHome: string | undefined;
+  let savedHomeBase: string | undefined;
 
   beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), "mai-home-p21-detect-"));
     savedHome = process.env.HOME;
-    process.env.HOME = tmpHome;
+    savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+    setIsolatedHome(tmpHome);
     mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
     // Ensure no env-var keys interfere
     delete process.env.ANTHROPIC_API_KEY;
@@ -488,7 +500,9 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
   afterEach(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
-    rmSync(tmpHome, { recursive: true, force: true });
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+    cleanupTmpDir(tmpHome);
   });
 
   it("T-DETECT.1: when auth.json has only a non-standard provider key, detectAnyModelKey returns true", () => {
@@ -532,9 +546,9 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
     // When:  makeAllTools builds the exposed ToolSet for worker/server consumer+power tiers.
     // Then:  counts match the P-Y3 contract and only operator-output tools are power-only.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-tools-contract-"));
-    const saved = saveEnv("HOME", "FRONDOSE_TIER");
+    const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_TIER");
     try {
-      process.env.HOME = tmpHome;
+      setIsolatedHome(tmpHome);
       delete process.env.FRONDOSE_TIER;
       const persistence = {
         memoryDbPath: join(tmpHome, "memory.sqlite"),
@@ -589,7 +603,7 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
       }
     } finally {
       restoreEnv(saved);
-      rmSync(tmpHome, { recursive: true, force: true });
+      cleanupTmpDir(tmpHome);
     }
   });
 });

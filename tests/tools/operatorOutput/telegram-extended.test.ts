@@ -6,11 +6,12 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { makeTelegramNotifyTool } from "../../../src/tools/operatorOutput/telegram.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── fetch mock helpers ───────────────────────────────────────────────────────
 
@@ -158,7 +159,7 @@ describe("T-Media: outbound media types (G-P11.11)", () => {
         delete process.env.TELEGRAM_CHAT_ID;
         if (origAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = origAllowlist;
         else delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
-        rmSync(tmpDir, { recursive: true, force: true });
+        cleanupTmpDir(tmpDir);
       }
     });
   }
@@ -256,7 +257,7 @@ describe("T-Media.group: sendMediaGroup (G-P11.12)", () => {
       delete process.env.TELEGRAM_CHAT_ID;
       if (origAllowlist !== undefined) process.env.FRONDOSE_UPLOAD_ALLOWLIST = origAllowlist;
       else delete process.env.FRONDOSE_UPLOAD_ALLOWLIST;
-      rmSync(tmpDir, { recursive: true, force: true });
+      cleanupTmpDir(tmpDir);
     }
   });
 

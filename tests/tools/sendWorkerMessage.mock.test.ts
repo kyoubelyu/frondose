@@ -6,17 +6,18 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { openServerInboxDb } from "../../src/persistence/serverInbox.js";
 import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
 import { makeSendWorkerMessageTool } from "../../src/tools/server/sendWorkerMessage.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-swm-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
 describe("send_worker_message tool (G-P26.21)", () => {

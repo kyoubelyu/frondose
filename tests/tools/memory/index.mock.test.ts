@@ -9,13 +9,15 @@
  */
 
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { makeMemoryTools } from "../../../src/tools/memory/index.js";
 
 // ─── T-M119 ──────────────────────────────────────────────────────────────────
 
 test("T-M119: makeMemoryTools returns exactly 5 keys: remember, getMemory, search_memory, set_memory_note, get_memory_note", () => {
-  const tools = makeMemoryTools("/tmp/p4-t119-memory.sqlite");
+  const tools = makeMemoryTools(join(tmpdir(), "p4-t119-memory.sqlite"));
   const keys = Object.keys(tools).sort();
 
   // JS sort: 'M' (U+004D=77) < '_' (U+005F=95), so 'getMemory' < 'get_memory_note'

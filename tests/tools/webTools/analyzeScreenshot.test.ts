@@ -18,13 +18,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { CoreMessage, ToolExecutionOptions } from "ai";
 import { writeAuth } from "../../../src/persistence/auth.js";
 import { makeAnalyzeScreenshotTool } from "../../../src/tools/webTools/analyzeScreenshot.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ function withSeededVisionProvider(fn: () => Promise<void>): Promise<void> {
   return withEnv("FRONDOSE_VISION_MODEL", SEEDED_VISION_SPEC, fn).finally(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
-    rmSync(home, { recursive: true, force: true });
+    cleanupTmpDir(home);
   });
 }
 
@@ -239,7 +240,7 @@ test("T-AnalyzeScreenshot.5: .jpg and .jpeg extensions → mimeType: image/jpeg"
       ),
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -298,7 +299,11 @@ test("T-AnalyzeScreenshot.7: FRONDOSE_VISION_MODEL env override reflected in res
 
           // If the call succeeds, visionModel must reflect the override
           if (result.ok) {
-            assert.equal(result.data?.visionModel, "openai:gpt-4o", "visionModel must use FRONDOSE_VISION_MODEL override");
+            assert.equal(
+              result.data?.visionModel,
+              "openai:gpt-4o",
+              "visionModel must use FRONDOSE_VISION_MODEL override",
+            );
             console.log("  T-AnalyzeScreenshot.7: openai:gpt-4o mock succeeded ✓");
           } else {
             // OpenAI SDK may have different response shape; log and accept
@@ -355,6 +360,6 @@ test("T-Auth.5: when FRONDOSE_VISION_MODEL unset, visionModel from auth.json is 
     if (savedEnv !== undefined) process.env.FRONDOSE_VISION_MODEL = savedEnv;
     else delete process.env.FRONDOSE_VISION_MODEL;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });

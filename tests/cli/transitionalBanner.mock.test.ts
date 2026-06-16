@@ -10,13 +10,15 @@
  * child and inspects stderr for the banner sentinel string. Each spawn is
  * bounded by a hard timeout so a hung subcommand can't hold the suite.
  */
-import { execFile } from "node:child_process";
+
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
-const CLI = new URL("../../dist/cli/main.js", import.meta.url).pathname;
+const CLI = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
 const SENTINEL = "transitional CLI surface";
 
 interface RunResult {

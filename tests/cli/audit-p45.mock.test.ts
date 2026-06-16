@@ -12,14 +12,32 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 /** Project root resolved from this test file's location (tests/cli/ → ../../). */
-const ROOT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-function run(cmd: string): string {
-  return execSync(cmd, { cwd: ROOT, encoding: "utf-8" }).trim();
+function readRepo(relPath: string): string {
+  return readFileSync(join(ROOT, relPath), "utf-8");
+}
+
+function biomeCliArgs(args: string[]): string[] {
+  return [join(ROOT, "node_modules", "@biomejs", "biome", "bin", "biome"), ...args];
+}
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) files.push(...collectSourceFiles(full));
+    else if (stat.isFile()) files.push(full);
+  }
+  return files;
 }
 
 // ─── G-P45.7 — dead code + file size ─────────────────────────────────────────
@@ -29,7 +47,7 @@ describe("Dead code removal + file size compliance (G-P45.7)", () => {
     // Given: P-45 builder splits main.ts into main.ts + workerBoot.ts + identity-init.ts additions
     // When:  wc -l src/cli/main.ts
     // Then:  line count ≤ 800 (800-line rule satisfied)
-    const loc = parseInt(run("wc -l < src/cli/main.ts"), 10);
+    const loc = readRepo("src/cli/main.ts").split(/\r?\n/).length;
     assert.ok(loc <= 800, `T-LOC.1: src/cli/main.ts LOC must be ≤ 800; got ${loc}`);
   });
 
@@ -37,7 +55,12 @@ describe("Dead code removal + file size compliance (G-P45.7)", () => {
     // Given: A-11/B-3 — `const _configPath = ...; void _configPath` lines removed by builder
     // When:  grep -n "_configPath" src/cli/main.ts
     // Then:  empty output (0 matches)
-    const result = run("grep -n '_configPath' src/cli/main.ts || true");
+    const result = readRepo("src/cli/main.ts")
+      .split(/\r?\n/)
+      .map((line, index) => ({ line, lineNumber: index + 1 }))
+      .filter(({ line }) => line.includes("_configPath"))
+      .map(({ line, lineNumber }) => `${lineNumber}:${line}`)
+      .join("\n");
     assert.equal(result, "", `T-DEAD.1: src/cli/main.ts must NOT contain '_configPath'; got: ${result}`);
   });
 
@@ -45,7 +68,7 @@ describe("Dead code removal + file size compliance (G-P45.7)", () => {
     // Given: B-1 — barrel file deleted by builder
     // When:  ls / existsSync for src/tools/telegram/index.ts
     // Then:  file does not exist
-    const result = run("test -f src/tools/telegram/index.ts && echo PRESENT || echo ABSENT");
+    const result = existsSync(join(ROOT, "src", "tools", "telegram", "index.ts")) ? "PRESENT" : "ABSENT";
     assert.equal(result, "ABSENT", `T-DEAD.2: src/tools/telegram/index.ts must be absent; got: ${result}`);
   });
 
@@ -55,7 +78,12 @@ describe("Dead code removal + file size compliance (G-P45.7)", () => {
     // Then:  empty output
     // Check src/tools/index.ts for any `from "node:os"` import — should be zero
     // after A-2 migration (the file no longer needs homedir).
-    const result = run("grep -nE 'from \"node:os\"' src/tools/index.ts || true");
+    const result = readRepo("src/tools/index.ts")
+      .split(/\r?\n/)
+      .map((line, index) => ({ line, lineNumber: index + 1 }))
+      .filter(({ line }) => /from "node:os"/.test(line))
+      .map(({ line, lineNumber }) => `${lineNumber}:${line}`)
+      .join("\n");
     assert.equal(
       result,
       "",
@@ -75,13 +103,18 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
     // Exit-code 0 = no errors; non-zero = errors. Use spawnSync-equivalent.
     let exit = 0;
     try {
-      execSync("npx biome check src/agent/loop.ts src/linkedin/inspectSummary.ts src/tools/control/escalate.ts 2>&1", {
-        cwd: ROOT,
-        encoding: "utf-8",
-        stdio: "pipe",
-      });
-    } catch (e: unknown) {
-      exit = (e as { status?: number }).status ?? -1;
+      const result = spawnSync(
+        process.execPath,
+        biomeCliArgs(["check", "src/agent/loop.ts", "src/linkedin/inspectSummary.ts", "src/tools/control/escalate.ts"]),
+        {
+          cwd: ROOT,
+          encoding: "utf-8",
+          stdio: "pipe",
+        },
+      );
+      exit = result.status ?? (result.error ? -1 : 0);
+    } catch {
+      exit = -1;
     }
     assert.equal(exit, 0, `T-LINT.1: biome check on loop.ts/inspectSummary.ts/escalate.ts must exit 0; got ${exit}`);
   });
@@ -92,7 +125,7 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
     // Then:  output contains no path starting with .omx/
     // Check biome.json excludes .omx/ — direct config check is more reliable
     // than re-running biome (biome may not run cleanly if .omx/ is present).
-    const biomeJson = run("cat biome.json");
+    const biomeJson = readRepo("biome.json");
     assert.ok(
       biomeJson.includes(".omx") || biomeJson.includes("!**/.omx"),
       `T-LINT.2: biome.json must exclude .omx/ (via files.includes !.omx or equivalent); got: ${biomeJson.slice(0, 600)}`,
@@ -103,8 +136,8 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
     // Given: P-66 moves generated-runtime linting out of the maintained-source health gate.
     // When:  package.json and biome.json are inspected structurally, without running npm run lint inside test:fast.
     // Then:  top-level lint remains "biome check .", !build/runtime is excluded, and src/tools/** keeps child_process banned.
-    const pkg = JSON.parse(run("cat package.json")) as { scripts?: Record<string, string> };
-    const biome = JSON.parse(run("cat biome.json")) as {
+    const pkg = JSON.parse(readRepo("package.json")) as { scripts?: Record<string, string> };
+    const biome = JSON.parse(readRepo("biome.json")) as {
       files?: { includes?: string[] };
       overrides?: Array<{
         includes?: string[];
@@ -152,7 +185,7 @@ describe("ROADMAP.md approved CLI-layer child_process sites (G-P45.10)", () => {
     // Given: mutable child_process carve-out inventory lives in ROADMAP.md.
     // When:  reading the canonical section.
     // Then:  server.ts:231-234 remains listed as the approved server soul edit site.
-    const roadmap = run("cat ROADMAP.md");
+    const roadmap = readRepo("ROADMAP.md");
     assert.match(roadmap, /## Approved CLI-layer child_process sites/);
     assert.match(roadmap, /src\/cli\/subcommands\/server\.ts:231-234/);
   });
@@ -161,7 +194,7 @@ describe("ROADMAP.md approved CLI-layer child_process sites (G-P45.10)", () => {
     // Given: P-45 retroactively approved the server.ts:231-234 editor site on 2026-05-20.
     // When:  ROADMAP.md is scanned.
     // Then:  the server.ts row carries that date.
-    const roadmap = run("cat ROADMAP.md");
+    const roadmap = readRepo("ROADMAP.md");
     assert.match(roadmap, /src\/cli\/subcommands\/server\.ts:231-234`?\s*\|\s*2026-05-20/);
   });
 
@@ -169,7 +202,7 @@ describe("ROADMAP.md approved CLI-layer child_process sites (G-P45.10)", () => {
     // Given: CLAUDE.md is condensed and no longer duplicates the full approved-site inventory.
     // When:  the no-bash boundary paragraph is scanned.
     // Then:  it points to the canonical ROADMAP.md section.
-    const claudeMd = run("cat CLAUDE.md");
+    const claudeMd = readRepo("CLAUDE.md");
     assert.match(claudeMd, /ROADMAP\.md` § Approved CLI-layer `child_process` sites/);
   });
 
@@ -177,7 +210,7 @@ describe("ROADMAP.md approved CLI-layer child_process sites (G-P45.10)", () => {
     // Given: ROADMAP.md owns the approved-site inventory.
     // When:  the section is parsed for site positions.
     // Then:  the operator-approved sites appear in chronological order.
-    const roadmap = run("cat ROADMAP.md");
+    const roadmap = readRepo("ROADMAP.md");
     const start = roadmap.indexOf("## Approved CLI-layer child_process sites");
     assert.ok(start > 0, "T-DOC.4: ROADMAP carve-out section must exist");
     const end = roadmap.indexOf("\n## Current Validation Matrix", start);
@@ -214,9 +247,16 @@ describe("No-bash boundary regression guard (G-P45.11)", () => {
     // Given: P-45 does not add any new child_process imports to src/tools/**
     // When:  grep -rE "from ['\"](node:)?child_process['\"]" src/tools/
     // Then:  empty output (zero matches)
-    const result = run(
-      'grep -rE "from \'(node:)?child_process\'|from \\"(node:)?child_process\\"" src/tools/ 2>/dev/null || true',
-    );
+    const result = collectSourceFiles(join(ROOT, "src", "tools"))
+      .filter((file) => /\.(ts|tsx|js|mjs|cjs)$/.test(file))
+      .flatMap((file) =>
+        readFileSync(file, "utf-8")
+          .split(/\r?\n/)
+          .map((line, index) => ({ line, lineNumber: index + 1, file }))
+          .filter(({ line }) => /from ['"](?:node:)?child_process['"]/.test(line)),
+      )
+      .map(({ file, lineNumber, line }) => `${file}:${lineNumber}:${line}`)
+      .join("\n");
     assert.equal(
       result,
       "",
@@ -231,7 +271,7 @@ describe("No-bash boundary regression guard (G-P45.11)", () => {
     // The biome noRestrictedImports rule for src/tools/** is in biome.json.
     // Verify (a) the rule is configured AND (b) running biome check on src/tools/
     // doesn't surface any noRestrictedImports error.
-    const biomeJson = run("cat biome.json");
+    const biomeJson = readRepo("biome.json");
     assert.ok(
       biomeJson.includes("noRestrictedImports") || biomeJson.includes("restrictedImports"),
       "T-BND.2: biome.json must have a noRestrictedImports rule configured",
@@ -239,7 +279,12 @@ describe("No-bash boundary regression guard (G-P45.11)", () => {
     // Run biome check on src/tools/ and verify no `noRestrictedImports` errors.
     let lintOut = "";
     try {
-      lintOut = execSync("npx biome check src/tools/ 2>&1", { cwd: ROOT, encoding: "utf-8", stdio: "pipe" });
+      const result = spawnSync(process.execPath, biomeCliArgs(["check", "src/tools/"]), {
+        cwd: ROOT,
+        encoding: "utf-8",
+        stdio: "pipe",
+      });
+      lintOut = `${result.stdout ?? ""}${result.stderr ?? ""}`;
     } catch (e: unknown) {
       const out = (e as { stdout?: string | Buffer }).stdout;
       lintOut = typeof out === "string" ? out : (out?.toString("utf-8") ?? "");

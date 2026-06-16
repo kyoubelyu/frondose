@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -22,10 +22,11 @@ import {
   openWorkerInboxDb,
   peekPendingWorkerInboxMessages,
 } from "../../src/persistence/workerInbox.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 function makeTmpDb(): { dbPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-winbox-"));
-  return { dbPath: join(dir, "inbox.sqlite"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dbPath: join(dir, "inbox.sqlite"), cleanup: () => cleanupTmpDir(dir) };
 }
 
 describe("workerInbox persistence CRUD (G-P26.14)", () => {

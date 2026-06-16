@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -26,6 +26,7 @@ import {
   type TelegramTurnDeps,
 } from "../../src/cli/replTelegram.js";
 import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function makeTmpCfgDir(): { dir: string; cfgPath: string; cleanup: () => void; r
   return {
     dir,
     cfgPath,
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => cleanupTmpDir(dir),
     restoreHome: () => {
       if (savedHome !== undefined) process.env.HOME = savedHome;
       else delete process.env.HOME;
@@ -277,7 +278,7 @@ describe.skip("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
         delete process.env.TELEGRAM_TOKEN;
       }
     } finally {
-      rmSync(dir2, { recursive: true, force: true });
+      cleanupTmpDir(dir2);
       restoreHome();
       cleanup();
     }

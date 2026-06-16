@@ -197,8 +197,7 @@ test("T-M66: type tool execute via ref dispatches click → Ctrl+A → insertTex
 // ─── T-Type.3 — ambiguous_target on multi-input scope without label ────────────
 
 test("T-Type.3: ambiguous_target when >1 input matches scope and no label", { timeout: 5000 }, async () => {
-  // Given: session context with 2 textbox entries [{ ref: "@e1", role: "textbox", name: "Write a message…" },
-  //          { ref: "@e2", role: "textbox", name: "Recipient" }] under scope "threadInput"
+  // Given: session context with 2 textbox entries [{ ref: "@e1", role: "textbox", name: "Write a message…" }, //          { ref: "@e2", role: "textbox", name: "Recipient" }] under scope "threadInput"
   // When:  type({ text: "hello", scope: "threadInput" }) called — no label provided
   // Then:  ok=false; error.kind==="ambiguous_target"; error.candidates lists both inputs with ref and name
 
@@ -359,7 +358,7 @@ describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent betwee
       // Then:  (a) insertText called for "a" then "b" (2 single-char calls, in order)
       //         (b) dispatchKeyEvent called with {type:"keyDown", key:"Enter"} then
       //             {type:"keyUp", key:"Enter"} for the \n (in addition to Cmd+A+Backspace clear)
-      //         (c) dispatch ORDER is: [Cmd+A↓, Cmd+A↑, Backspace↓, Backspace↑,]
+      //         (c) dispatch ORDER is: [Cmd+A↓, Cmd+A↑, Backspace↓, Backspace↑, ]
       //             insertText("a") → Enter keyDown → Enter keyUp → insertText("b")
       const session = makeFakeSession();
       await session.getClient().snapshot();
@@ -408,8 +407,8 @@ describe("T-Type.2 (G-P47.2): \\n in text produces Enter dispatchKeyEvent betwee
 describe("T-Type.3 (G-P47.3): computeCharDelay — ~8s cap holds; 30ms floor for short/medium; jitter collapses for long text", () => {
   it("cap ≤8000ms; floor ≥30ms (short/medium); jitter varies for len≤200; jitter collapses for len≥500", async () => {
     // Given: exported pure function computeCharDelay(textLength, rand): number
-    //        rand ∈ [0,1] maps to a 0.3..1.0 multiplier; floor=min(30,budget); budget=min(8000/len,150)
-    // When:  called with textLength ∈ {1,54,100,266,300,500,1000,5000} and rand=0/rand=1
+    //        rand ∈ [0, 1] maps to a 0.3..1.0 multiplier; floor=min(30, budget); budget=min(8000/len, 150)
+    // When:  called with textLength ∈ {1, 54, 100, 266, 300, 500, 1000, 5000} and rand=0/rand=1
     // Then:  (a) CAP: for all lengths, textLength × computeCharDelay(textLength, 1) ≤ 8001 (fp tolerance)
     //         (b) FLOOR: computeCharDelay(3, 0) ≥ 30 AND computeCharDelay(54, 0) ≥ 30
     //             (30ms floor binds when budget ≥ 30, i.e. textLength ≲ 266)
@@ -425,15 +424,15 @@ describe("T-Type.3 (G-P47.3): computeCharDelay — ~8s cap holds; 30ms floor for
     }
 
     // (b) FLOOR: 30ms minimum for short/medium text (budget ≥ 30 when len ≤ ~266)
-    assert.ok(computeCharDelay(3, 0) >= 30, `T-Type.3 FLOOR: len=3,rand=0 → ${computeCharDelay(3, 0)} must be ≥30`);
-    assert.ok(computeCharDelay(54, 0) >= 30, `T-Type.3 FLOOR: len=54,rand=0 → ${computeCharDelay(54, 0)} must be ≥30`);
+    assert.ok(computeCharDelay(3, 0) >= 30, `T-Type.3 FLOOR: len=3, rand=0 → ${computeCharDelay(3, 0)} must be ≥30`);
+    assert.ok(computeCharDelay(54, 0) >= 30, `T-Type.3 FLOOR: len=54, rand=0 → ${computeCharDelay(54, 0)} must be ≥30`);
 
-    // (c) JITTER VARIES for short/medium text (len=200: budget=40,floor=30 → rand=0→30, rand=1→40)
+    // (c) JITTER VARIES for short/medium text (len=200: budget=40, floor=30 → rand=0→30, rand=1→40)
     const d200r0 = computeCharDelay(200, 0);
     const d200r1 = computeCharDelay(200, 1);
     assert.ok(d200r0 < d200r1, `T-Type.3 JITTER VARIES: len=200, rand=0 (${d200r0}) must be < rand=1 (${d200r1})`);
 
-    // (d) JITTER COLLAPSES for long text (len=500: budget=16,floor=16 → same for any rand)
+    // (d) JITTER COLLAPSES for long text (len=500: budget=16, floor=16 → same for any rand)
     const d500r0 = computeCharDelay(500, 0);
     const d500r1 = computeCharDelay(500, 1);
     assert.equal(
@@ -635,18 +634,22 @@ describe("T-P74.Clear.1 (D-RUN-3): React-safe-clear succeeds → Cmd+A+Backspace
       assert.equal(
         cmdAEvents.length,
         0,
-        `T-P74.Clear.1: Cmd+A (mod4) must NOT be dispatched when React-safe clear succeeds; got: ${cmdAEvents.join(",")}`,
+        `T-P74.Clear.1: Cmd+A (mod4) must NOT be dispatched when React-safe clear succeeds; got: ${cmdAEvents.join(", ")}`,
       );
       const backspaceEvents = callLog.filter((e) => e.includes(":Backspace:"));
       assert.equal(
         backspaceEvents.length,
         0,
-        `T-P74.Clear.1: Backspace must NOT be dispatched when React-safe clear succeeds; got: ${backspaceEvents.join(",")}`,
+        `T-P74.Clear.1: Backspace must NOT be dispatched when React-safe clear succeeds; got: ${backspaceEvents.join(", ")}`,
       );
 
       // Per-char insertText still fires ("h", "i")
       const insertCalls = callLog.filter((e) => e.startsWith("insertText:"));
-      assert.equal(insertCalls.length, 2, `T-P74.Clear.1: insertText must fire 2× for 'hi'; got: ${insertCalls.join(",")}`);
+      assert.equal(
+        insertCalls.length,
+        2,
+        `T-P74.Clear.1: insertText must fire 2× for 'hi'; got: ${insertCalls.join(", ")}`,
+      );
       assert.equal(insertCalls[0], "insertText:h", "T-P74.Clear.1: first char must be 'h'");
       assert.equal(insertCalls[1], "insertText:i", "T-P74.Clear.1: second char must be 'i'");
     },
@@ -683,11 +686,12 @@ test("T-M67: type tool execute without ref or label returns fail envelope", { ti
 // "Hi Linfeng — your blend of a PhD..." into "Hi Linfeng — PhD from HKUST + ...
 // impressive combo" on the way to send. Now: typed text must equal draft text exactly.
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
 import { insertDraft, insertLead, upsertRawCandidate } from "../../../src/persistence/salesDb.js";
 import { getSalesDb } from "../../../src/tools/sales/_dbHandle.js";
+import { cleanupTmpDir } from "../../_helpers/tmp";
 
 /** Build a fake session whose lastContext.pageUrl is a real /in/<slug>/ profile. */
 function makeFakeSessionOnProfile(slug: string, entries: Array<{ ref: string; role: string; name: string }>) {
@@ -768,10 +772,13 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
         { toolCallId: "tg-match", messages: [], abortSignal },
       );
       assert.equal(result.ok, true, "exact match must pass");
-      assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+      assert.ok(
+        session.callLog.some((c) => c.startsWith("insertText:")),
+        "insertText fired",
+      );
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 
@@ -797,7 +804,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0, "no insertText fired");
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 
@@ -821,7 +828,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.ok(/no saved.*draft|save_message_draft/i.test(err.message), "error directs to save_message_draft first");
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 
@@ -857,7 +864,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(result.ok, true, "vanityName preload URL must resolve the lead and pass on exact match");
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 
@@ -876,7 +883,10 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       { toolCallId: "tg-noop", messages: [], abortSignal },
     );
     assert.equal(result.ok, true, "feed search-box type must succeed");
-    assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+    assert.ok(
+      session.callLog.some((c) => c.startsWith("insertText:")),
+      "insertText fired",
+    );
   });
 
   // [P-D11-R4 — 2nd-degree modal variant coverage]
@@ -898,10 +908,13 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
         { toolCallId: "tg-2nd-match", messages: [], abortSignal },
       );
       assert.equal(result.ok, true, "2nd-deg exact match must pass — modal-detection vocabulary is variant-agnostic");
-      assert.ok(session.callLog.some((c) => c.startsWith("insertText:")), "insertText fired");
+      assert.ok(
+        session.callLog.some((c) => c.startsWith("insertText:")),
+        "insertText fired",
+      );
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 
@@ -926,7 +939,7 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0);
     } finally {
       delete process.env.FRONDOSE_HOME_BASE;
-      if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+      if (existsSync(home)) cleanupTmpDir(home);
     }
   });
 });

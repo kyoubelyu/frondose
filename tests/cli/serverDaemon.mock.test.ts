@@ -11,17 +11,32 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { removePid, writePid } from "../../src/persistence/processLock.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-srvdaemon-"));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, cleanup: () => cleanupTmpDir(dir) };
+}
+
+function setIsolatedHome(dir: string): () => void {
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = dir;
+  process.env.FRONDOSE_HOME_BASE = dir;
+  return () => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+  };
 }
 
 function mockProcessExit(): { captured: number | null; restore: () => void } {
@@ -94,7 +109,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     // test race. The daemon runs in the background; all assertions are checked AFTER the
     // 300ms startup window. The leaked promise is suppressed via .catch(()=>{}).
     const { dir, cleanup } = makeTmpDir();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     const savedToken = process.env.TELEGRAM_TOKEN;
     const stdoutChunks: string[] = [];
     const origStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -104,7 +119,6 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
       return true;
     };
     try {
-      process.env.HOME = dir;
       process.env.TELEGRAM_TOKEN = "test-daemon-token-123";
 
       // Create required dirs
@@ -131,14 +145,14 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
         "utf-8",
       );
 
-      // Write fake secrets.json so resolveModel({}) can find the anthropic provider.
+      // Write fake secrets.json so resolveModel({}) can find the deepseek provider.
       // Key is never validated — daemon never makes an API call before the test completes.
       writeFileSync(
         join(maiAgentDir, "secrets.json"),
         JSON.stringify({
           schema_version: 1,
           providers: {
-            anthropic: { key: "sk-fake-test-key-not-real", type: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
+            deepseek: { key: "sk-fake-test-key-not-real", type: "openai", baseUrl: "https://api.deepseek.com/v1" },
           },
         }),
         "utf-8",
@@ -170,17 +184,18 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
       // Static: readline NOT imported in serverDaemon.ts.
       // grep for import statements containing "readline" (not word-only; the comment at line 1
       // says "no readline" which grep -l would match without the import-line anchor).
-      const { execSync } = await import("node:child_process");
-      const projectRoot = new URL("../../", import.meta.url).pathname;
-      const grepResult = execSync(
-        'grep -n "^import.*readline\\|require.*readline" src/cli/serverDaemon.ts 2>/dev/null || true',
-        { cwd: projectRoot, encoding: "utf-8" },
+      const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+      const serverDaemonSource = readFileSync(join(projectRoot, "src", "cli", "serverDaemon.ts"), "utf-8");
+      const importLines = serverDaemonSource.split(/\r?\n/).filter((line) => /^import|require/.test(line));
+      assert.strictEqual(
+        importLines.filter((line) => line.includes("readline")).join("\n"),
+        "",
+        "serverDaemon.ts must NOT import readline",
       );
-      assert.strictEqual(grepResult.trim(), "", "serverDaemon.ts must NOT import readline");
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restore
       (process.stdout as any).write = origStdoutWrite;
-      process.env.HOME = savedHome;
+      restoreHome();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       else delete process.env.TELEGRAM_TOKEN;
       cleanup();
@@ -193,9 +208,8 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     // Then:  process.exit(1) called; stderr contains "already running, PID"
     const { dir, cleanup } = makeTmpDir();
     const { restore } = mockProcessExit();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       const maiServerDir = join(dir, ".frondose", "server");
       mkdirSync(maiServerDir, { recursive: true });
       // Write live PID (current test process)
@@ -209,7 +223,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
         `stderr must include the alive PID ${process.pid}; got: ${stderr}`,
       );
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       restore();
       cleanup();
     }
@@ -222,9 +236,8 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
     const { dir, cleanup } = makeTmpDir();
     const savedToken = process.env.TELEGRAM_TOKEN;
     const { restore } = mockProcessExit();
-    const savedHome = process.env.HOME;
+    const restoreHome = setIsolatedHome(dir);
     try {
-      process.env.HOME = dir;
       delete process.env.TELEGRAM_TOKEN;
       mkdirSync(join(dir, ".frondose", "server"), { recursive: true });
       // No server.pid → PID mutex passes
@@ -236,7 +249,7 @@ describe("runServerDaemon (G-P25.15, G-P25.16, G-P25.17)", () => {
         `stderr must mention TELEGRAM_TOKEN; got: ${stderr}`,
       );
     } finally {
-      process.env.HOME = savedHome;
+      restoreHome();
       restore();
       if (savedToken !== undefined) process.env.TELEGRAM_TOKEN = savedToken;
       cleanup();

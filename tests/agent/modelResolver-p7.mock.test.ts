@@ -13,12 +13,13 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { detectAnyModelKey } from "../../src/agent/modelResolver.js";
 import { readAuthJsonKey, writeAuth } from "../../src/persistence/auth.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── env-var isolation helpers ────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ test("T-MR2: buildModel uses auth.json key when ANTHROPIC_API_KEY env absent (F-
     console.log("T-MR2: auth.json fallback key path verified ✓");
   } finally {
     restoreEnv();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 
@@ -102,7 +103,7 @@ test("T-MR3: buildModel uses env var over auth.json when both set (env priority)
     console.log("T-MR3: env var priority over auth.json ✓");
   } finally {
     restoreEnv();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupTmpDir(dir);
   }
 });
 

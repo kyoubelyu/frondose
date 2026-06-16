@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -20,6 +20,7 @@ import {
   readIdentity,
   writeIdentity,
 } from "../../src/persistence/identity.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ function makeTempPath(suffix: string): string {
 
 function cleanup(path: string): void {
   try {
-    rmSync(join(path, ".."), { recursive: true, force: true });
+    cleanupTmpDir(join(path, ".."));
   } catch {
     // best-effort
   }
@@ -136,7 +137,7 @@ test("T-M94: writeIdentity creates parent directories and writes pretty JSON", (
   } finally {
     // Clean up the rootDir we created
     try {
-      rmSync(rootDir, { recursive: true, force: true });
+      cleanupTmpDir(rootDir);
     } catch {
       // best-effort
     }

@@ -19,13 +19,14 @@
 
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { attachWebSockets, checkBasicAuth, startWebHttp, type WebHttpDeps } from "../../src/cli/serverWeb.js";
 import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
+import { cleanupTmpDir } from "../_helpers/tmp";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ function makeWebHttpDeps(withWorker?: { id: string; hostname: string }): {
     assetDir,
     cleanup: () => {
       workersDb.close();
-      rmSync(assetDir, { recursive: true, force: true });
+      cleanupTmpDir(assetDir);
     },
   };
 }
