@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch as chromeLaunch } from "chrome-launcher";
 import { DEFAULT_FLAGS } from "chrome-launcher/dist/flags.js";
@@ -99,6 +100,7 @@ export async function ensureChrome(opts: ChromeLaunchOptions = {}): Promise<Chro
     // Not reachable; launch.
   }
 
+  mkdirSync(profileDir, { recursive: true });
   await clearStaleSingletonLocks(profileDir);
 
   // P-75 D-6.3 fix (supersedes P-15 rationale): the mai-browser shell-out is
