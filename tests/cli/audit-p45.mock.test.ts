@@ -135,7 +135,8 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
   it("T-LINT.3: lint gate is top-level only; biome excludes generated runtime and preserves src/tools no-bash rule", () => {
     // Given: P-66 moves generated-runtime linting out of the maintained-source health gate.
     // When:  package.json and biome.json are inspected structurally, without running npm run lint inside test:fast.
-    // Then:  top-level lint remains "biome check .", !build/runtime is excluded, and src/tools/** keeps child_process banned.
+    // Then:  top-level lint is "biome lint ." (CH-1b 2026-06-18: format/organizeImports split out of the health gate
+    //        into a separate "format" script), !build/runtime is excluded, and src/tools/** keeps child_process banned.
     const pkg = JSON.parse(readRepo("package.json")) as { scripts?: Record<string, string> };
     const biome = JSON.parse(readRepo("biome.json")) as {
       files?: { includes?: string[] };
@@ -145,7 +146,12 @@ describe("Lint cleanup — selected files + no new errors (G-P45.8)", () => {
       }>;
     };
 
-    assert.equal(pkg.scripts?.lint, "biome check .", 'T-LINT.3: package.json scripts.lint must stay "biome check ."');
+    assert.equal(pkg.scripts?.lint, "biome lint .", 'T-LINT.3: package.json scripts.lint must be "biome lint ." (rules-only health gate; CH-1b)');
+    assert.equal(
+      pkg.scripts?.format,
+      "biome format --write .",
+      'T-LINT.3: package.json scripts.format must be "biome format --write ." (formatting split out of the lint gate; CH-1b)',
+    );
     assert.ok(
       biome.files?.includes?.includes("!build/runtime"),
       "T-LINT.3: biome.json files.includes must exclude generated build/runtime output",
