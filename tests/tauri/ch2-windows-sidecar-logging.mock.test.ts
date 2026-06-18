@@ -37,7 +37,7 @@
 
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -45,8 +45,17 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MAIN_RS_PATH = join(REPO, "src/tauri/src-tauri/src/main.rs");
 
-// Read the source once; all tests share this string.
-const mainRs = readFileSync(MAIN_RS_PATH, "utf8");
+// CH-3 module split (2026-06-18): after CH-3, windows_sidecar_log_path moved to
+// resolve.rs and spawn_frondose_serve moved to sidecar.rs. Read all *.rs files in
+// the crate and concatenate them so every test finds the symbol it guards regardless
+// of which module it lives in. Intent of each test is preserved without weakening.
+// T-CH2.11 (windows_subsystem in main.rs) and T-CH2.12 (cargo check) are unaffected.
+const CRATE_SRC_DIR = join(REPO, "src/tauri/src-tauri/src");
+const mainRs = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 
 // ---------------------------------------------------------------------------
 // Helpers: extract function bodies by brace-matching

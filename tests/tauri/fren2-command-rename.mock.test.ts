@@ -35,7 +35,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,17 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
 
-const MAIN_RS = join(REPO_ROOT, "src", "tauri", "src-tauri", "src", "main.rs");
+// CH-3 module split (2026-06-18): #[tauri::command] fn definitions moved from main.rs
+// to commands.rs; generate_handler! and main() stay in main.rs. Concatenate all *.rs
+// files so T-REN.2a/3a (fn-name extraction) and T-REN.5 (route literals) find their
+// symbols regardless of which module now holds them. T-REN.2a/3b (generate_handler!
+// extraction) still works — main.rs is included in the concatenation.
+const CRATE_SRC_DIR = join(REPO_ROOT, "src", "tauri", "src-tauri", "src");
+const MAIN_RS = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 const APP_TS = join(REPO_ROOT, "src", "tauri", "ui", "app.ts");
 const SETTINGS_TS = join(REPO_ROOT, "src", "tauri", "ui", "settings.ts");
 const IPC_FIXTURE = join(
@@ -169,7 +179,7 @@ describe("F-REN-2 — zero legacy mai_* command token (T-REN.1)", () => {
     // Given: main.rs still contains mai_* fn definitions + registrations
     // When:  LEGACY_CMD_RE is tested against the full file text
     // Then:  no match found (0 legacy command tokens)
-    const src = readFileSync(MAIN_RS, "utf-8");
+    const src = MAIN_RS;
     const match = src.match(LEGACY_CMD_RE);
     assert.ok(
       !LEGACY_CMD_RE.test(src),
@@ -221,7 +231,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     // Given: main.rs has been renamed to frondose_* handlers + registrations
     // When:  fn-definition set and generate_handler! set are extracted independently
     // Then:  both sets are equal (every defined fn is registered; every registration has a fn)
-    const src = readFileSync(MAIN_RS, "utf-8");
+    const src = MAIN_RS;
     const fnNames = extractTauriCommandFnNames(src);
     const registrations = extractGenerateHandlerIds(src);
     // Filter to frondose_* command names only (excludes non-command helpers)
@@ -251,7 +261,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     // Given: app.ts + settings.ts have been renamed to frondose_* invoke strings
     // When:  all invoke("X") names are extracted and checked against the Rust handler set
     // Then:  every invoked name is in EXPECTED_FRONDOSE_COMMANDS (no orphan TS invoke)
-    const mainRsSrc = readFileSync(MAIN_RS, "utf-8");
+    const mainRsSrc = MAIN_RS;
     const appTsSrc = readFileSync(APP_TS, "utf-8");
     const settingsTsSrc = readFileSync(SETTINGS_TS, "utf-8");
     const handlerSet = extractGenerateHandlerIds(mainRsSrc);
@@ -301,7 +311,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
       );
     }
     // Bonus: verify frondose_health is in the Rust handler set (sanity check)
-    const mainRsSrc = readFileSync(MAIN_RS, "utf-8");
+    const mainRsSrc = MAIN_RS;
     const handlerSet = extractGenerateHandlerIds(mainRsSrc);
     for (const name of ZERO_TS_CALLER_COMMANDS) {
       assert.ok(
@@ -319,7 +329,7 @@ describe("F-REN-2 — exactly 15 frondose_* commands defined, registered, and in
     // Given: all 15 Rust handler fn names have been renamed to frondose_*
     // When:  tauri-command fn-names are extracted from main.rs
     // Then:  exactly 15 frondose_* names, set-equal to EXPECTED_FRONDOSE_COMMANDS
-    const src = readFileSync(MAIN_RS, "utf-8");
+    const src = MAIN_RS;
     const fnNames = extractTauriCommandFnNames(src);
     const frondoseFns = new Set([...fnNames].filter((n) => n.startsWith("frondose_")));
     assert.equal(
@@ -345,7 +355,7 @@ describe("F-REN-2 — exactly 15 frondose_* commands defined, registered, and in
     // Given: all 15 generate_handler! registrations have been renamed to frondose_*
     // When:  the generate_handler! identifier set is extracted
     // Then:  size===15 and set equals EXPECTED_FRONDOSE_COMMANDS
-    const src = readFileSync(MAIN_RS, "utf-8");
+    const src = MAIN_RS;
     const registrations = extractGenerateHandlerIds(src);
     const frondoseRegs = new Set([...registrations].filter((n) => n.startsWith("frondose_")));
     assert.equal(
@@ -405,7 +415,7 @@ describe("F-REN-2 — sidecar HTTP routes are byte-unchanged after the rename (T
     // Given: main.rs Rust fn names changed to frondose_*; route literals are separate string args
     // When:  route literals are extracted from main.rs handler bodies
     // Then:  all 11 expected route literals are still present byte-for-byte
-    const src = readFileSync(MAIN_RS, "utf-8");
+    const src = MAIN_RS;
     const EXPECTED_ROUTES = [
       "/health",
       "/identity",
