@@ -25,19 +25,27 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MAIN_RS_PATH = join(__dirname, "..", "..", "src", "tauri", "src-tauri", "src", "main.rs");
+// CH-3 module split (2026-06-18): frondose_set_passive_mode fn definition and
+// "/agent/passive-mode" route literal moved from main.rs to commands.rs as a pure
+// move. generate_handler! registration stays in main.rs. Concatenate all *.rs files.
+const CRATE_SRC_DIR = join(__dirname, "..", "..", "src", "tauri", "src-tauri", "src");
 
 // ─── T-Tauri.1 — frondose_set_passive_mode handler defined + registered + POSTs endpoint ─
 
 describe("main.rs — frondose_set_passive_mode invoke handler wired (G-P57g.4)", () => {
   it('T-Tauri.1: given main.rs source post-P-57g, WHEN substring-grep applied, THEN it contains `async fn frondose_set_passive_mode` handler + a `"/agent/passive-mode"` uds_request POST + `frondose_set_passive_mode` in the generate_handler! registration list (mirror frondose_set_cron_mode)', () => {
-    const src = readFileSync(MAIN_RS_PATH, "utf-8");
+    // CH-3: frondose_set_passive_mode fn + route literal moved to commands.rs; generate_handler! stays in main.rs
+    const src = readdirSync(CRATE_SRC_DIR)
+      .filter((f) => f.endsWith(".rs"))
+      .sort()
+      .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
+      .join("\n");
     assert.ok(
       src.includes("async fn frondose_set_passive_mode"),
       "main.rs must define `async fn frondose_set_passive_mode` handler",

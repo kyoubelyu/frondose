@@ -396,11 +396,17 @@ describe("GitHub repo refs — kyoubelyu/frondose throughout (T-FREN4b.RepoRef)"
 
 describe("Tauri path resolution — dual-name candidate arrays in main.rs (T-FREN4b.TauriPathResolution)", () => {
   it("T-FREN4b.MainRs.1: full rebrand — main.rs candidate arrays contain ONLY @kyoube/frondose paths for sidecarMain.js and cli/main.js; the @kyoube/mai-agent fallback paths are fully removed", () => {
-    // Given: full-rebrand src/tauri/src-tauri/src/main.rs (operator directive 2026-06-15 — drop mai-agent back-compat)
-    // When:  file text is read and searched for candidate path substrings
+    // Given: full-rebrand Rust crate (operator directive 2026-06-15 — drop mai-agent back-compat)
+    //        CH-3 module split: path resolution (including candidate arrays) moved from main.rs to resolve.rs
+    // When:  concatenated crate source is read and searched for candidate path substrings
     // Then:  the @kyoube/frondose paths are present AND no @kyoube/mai-agent path remains
 
-    const text = readFileSync(join(REPO, "src/tauri/src-tauri/src/main.rs"), "utf-8");
+    const crateDir = join(REPO, "src/tauri/src-tauri/src");
+    const text = readdirSync(crateDir)
+      .filter((f) => f.endsWith(".rs"))
+      .sort()
+      .map((f) => readFileSync(join(crateDir, f), "utf-8"))
+      .join("\n");
 
     // Sidecar + CLI frondose candidates (the only ones that should remain)
     const SIDECAR_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js";

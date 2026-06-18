@@ -29,7 +29,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -37,8 +37,19 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MAIN_RS_PATH = join(REPO, "src/tauri/src-tauri/src/main.rs");
 
-// Read the file once at module level — all tests share this string.
-const mainRs = readFileSync(MAIN_RS_PATH, "utf8");
+// CH-3 module split (2026-06-18): taskkill (T-Rust.Cfg.2) and libc::kill
+// (T-Rust.Cfg.3) moved from main.rs to sidecar.rs as a pure move. Read all *.rs
+// files in the crate and concatenate them so the cfg-guard invariants are verified
+// across the entire crate source, regardless of which module holds each symbol.
+// T-Rust.Cfg.1 (signal-handler arms) still passes: those stay in main.rs and are
+// present in the concatenated source. T-Rust.Cfg.3 still guards cfg(unix) proximity:
+// libc::kill in sidecar.rs is immediately preceded by #[cfg(unix)] (within 2 lines).
+const CRATE_SRC_DIR = join(REPO, "src/tauri/src-tauri/src");
+const mainRs = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 
 // ---------------------------------------------------------------------------
 // G-WIN3.1: Rust cfg-guard correctness — signal handler
