@@ -162,12 +162,23 @@ function spawnHook(command: string, payload: unknown, timeoutMs: number): Promis
       clearTimeout(timer);
       settle({ kind: "ok", exitCode: code ?? -1, stdout, stderr });
     });
+    // [CH-4b] A hook that exits before reading stdin (e.g. `exit 0`) closes the
+    // pipe, so writing the payload can race into EPIPE. That is benign — the child
+    // ran and the `close` handler above reports the real outcome. Route an async
+    // EPIPE to the stream error event (avoids an unhandled-error crash), and ignore
+    // a synchronous EPIPE in the catch so a normally-exiting hook is not mis-settled
+    // as spawn-error (the root cause of the T-Hooks.5 flake under parallel load).
+    child.stdin?.on("error", () => {});
     try {
       child.stdin?.write(`${JSON.stringify(payload)}\n`);
       child.stdin?.end();
     } catch (e) {
-      clearTimeout(timer);
-      settle({ kind: "spawn-error", message: e instanceof Error ? e.message : String(e) });
+      const code = e instanceof Error && "code" in e ? (e as NodeJS.ErrnoException).code : undefined;
+      if (code !== "EPIPE") {
+        clearTimeout(timer);
+        settle({ kind: "spawn-error", message: e instanceof Error ? e.message : String(e) });
+      }
+      // EPIPE: do nothing — `child.on("close")` settles the real exit outcome.
     }
   });
 }
