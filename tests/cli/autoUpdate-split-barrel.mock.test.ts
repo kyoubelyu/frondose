@@ -69,8 +69,8 @@ function parseRelativeImports(filePath: string): string[] {
   const text = readFileSync(filePath, "utf8");
   const matches: string[] = [];
   const re = /from\s+["'](\.[^"']+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
+  let m: RegExpExecArray | null = re.exec(text);
+  for (; m !== null; m = re.exec(text)) {
     // biome-ignore lint/style/noNonNullAssertion: regex has capture group
     matches.push(m[1]!);
   }

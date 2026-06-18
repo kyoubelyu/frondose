@@ -132,8 +132,8 @@ describe("T-Memory.NoCircular — no circular imports between memory modules", (
       // Match: import ... from "./something" or from "../something" (quoted)
       const importRe = /from\s+"(\.\/[^"]+|\.\.\/[^"]+)"/g;
       const deps: string[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = importRe.exec(content)) !== null) {
+      let m: RegExpExecArray | null = importRe.exec(content);
+      for (; m !== null; m = importRe.exec(content)) {
         const rawPath = m[1];
         // Resolve relative to the directory of the containing file
         const containing = path.dirname(FILES[key]);

@@ -64,14 +64,14 @@ function extractStaticImportSpecifiers(source: string): string[] {
   const specifiers: string[] = [];
   // Match top-level static import statements (lines starting with "import")
   const importLineRegex = /^import\s+[\s\S]*?from\s+["']([^"']+)["']\s*;?$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = importLineRegex.exec(source)) !== null) {
+  let match: RegExpExecArray | null = importLineRegex.exec(source);
+  for (; match !== null; match = importLineRegex.exec(source)) {
     const spec = match[1];
     if (spec !== undefined) specifiers.push(spec);
   }
   // Also match bare side-effect imports: import "specifier";
   const sideEffectRegex = /^import\s+["']([^"']+)["']\s*;?$/gm;
-  while ((match = sideEffectRegex.exec(source)) !== null) {
+  for (match = sideEffectRegex.exec(source); match !== null; match = sideEffectRegex.exec(source)) {
     const spec = match[1];
     if (spec !== undefined && !specifiers.includes(spec)) specifiers.push(spec);
   }
