@@ -25,7 +25,7 @@
 
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -186,7 +186,18 @@ const CONTEXT_TS = join(ROOT, "src", "cli", "subcommands", "serve", "context.ts"
 const WORKFLOW_TYPES_TS = join(ROOT, "src", "agent", "workflow", "types.ts");
 const APP_TS = join(ROOT, "src", "tauri", "ui", "app.ts");
 const ROUTES_TS = join(ROOT, "src", "cli", "subcommands", "serve", "routes.ts");
-const MAIN_RS = join(ROOT, "src", "tauri", "src-tauri", "src", "main.rs");
+// CH-3 module split (2026-06-18): various symbols moved from main.rs to sub-modules:
+//   127.0.0.1 / Authorization / Bearer → state.rs (uds_request fn)
+//   FRONDOSE_SIDECAR_OWNER → sidecar.rs (spawn_frondose_serve env)
+//   Method::GET/POST + route path literals → commands.rs (handler fns)
+//   generate_handler! → main.rs (unchanged)
+// Concatenate all *.rs files so all ipc-contract text-scan tests find their symbols.
+const CRATE_SRC_DIR = join(ROOT, "src", "tauri", "src-tauri", "src");
+const MAIN_RS = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 const HTTP_TS = join(ROOT, "src", "cli", "subcommands", "serve", "http.ts");
 const HOST_TS = join(ROOT, "src", "overlay", "host.ts");
 const SERVE_TS = join(ROOT, "src", "cli", "subcommands", "serve.ts");
@@ -384,7 +395,7 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
 
     // TODO (Step 5): fill assertion bodies after builder lands TCP transport.
     // The assertions below describe the NEW TCP contract — they will FAIL until Step 4.
-    const mainRs = readFileSync(MAIN_RS, "utf-8");
+    const mainRs = MAIN_RS;
     const httpTs = readFileSync(HTTP_TS, "utf-8");
 
     // App side — http_request (renamed from uds_request) builds http://127.0.0.1:<port><path>.
@@ -430,7 +441,7 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
     // When: both files are read as text
     // Then: main.rs contains "FRONDOSE_SIDECAR_OWNER" + the value; host.ts still has the value
 
-    const mainRs = readFileSync(MAIN_RS, "utf-8");
+    const mainRs = MAIN_RS;
     const hostTs = readFileSync(HOST_TS, "utf-8");
 
     assert.ok(
@@ -634,7 +645,7 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // When: parsed for Method::X + "/path" literals passed to uds_request + build_uri
     // Then: count===15 (fail-closed); subset parity holds (every app path accepted by a sidecar branch)
 
-    const mainRsSrc = readFileSync(MAIN_RS, "utf-8");
+    const mainRsSrc = MAIN_RS;
 
     const extracted = new Set<string>();
 
@@ -692,7 +703,7 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // When: the identifier list is extracted
     // Then: count===15 (fail-closed); any rename or drop fails
 
-    const mainRsSrc = readFileSync(MAIN_RS, "utf-8");
+    const mainRsSrc = MAIN_RS;
 
     // Extract the generate_handler![...] block
     const blockMatch = mainRsSrc.match(/generate_handler!\s*\[([\s\S]*?)\]/);

@@ -79,14 +79,19 @@ function findMaiLiterals(text: string): Array<{ lineNo: number; line: string }> 
 /**
  * After F-REN-4e, the ONLY non-test production files permitted to contain `.mai\b` are:
  *
- *   1. src/tauri/src-tauri/src/main.rs — the back-compat fallback lines (both code literals
- *      and prose doc-comments) inside read_update_server_url + read_update_check_interval_sec.
- *      These are the ONLY Rust allowlist entries. (§6.4 R-1 design)
+ *   1. src/tauri/src-tauri/src/updater.rs — the back-compat fallback lines (both code
+ *      literals and prose doc-comments) inside read_update_server_url +
+ *      read_update_check_interval_sec. These moved verbatim from main.rs to updater.rs
+ *      during the CH-3 module split. These are the ONLY Rust allowlist entries.
+ *      (§6.4 R-1 design; CH-3 pure move)
  *
  *   NOTE: src/persistence/dataDirMigration.ts was deleted in F-REN-4e — no longer allowlisted.
+ *   NOTE: src/tauri/src-tauri/src/main.rs previously contained these literals; after the
+ *         CH-3 module split they live in updater.rs. main.rs is no longer allowlisted
+ *         (it has 0 .mai literals post-split).
  */
 const ALLOWLISTED_RELATIVE_PATHS = new Set<string>([
-  "src/tauri/src-tauri/src/main.rs",
+  "src/tauri/src-tauri/src/updater.rs",
 ]);
 
 const EXCLUDED_PREFIXES = [

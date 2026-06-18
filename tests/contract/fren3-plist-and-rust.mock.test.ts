@@ -24,7 +24,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { DEFAULT_MODEL_SPEC, resolveModelSpec } from "../../src/agent/modelResolver.js";
@@ -33,8 +33,14 @@ import { renderPlist } from "../../src/cli/subcommands/launchd.js";
 import { renderServerPlist } from "../../src/cli/subcommands/serverLaunchd.js";
 
 const REPO = resolve(process.cwd());
-const MAIN_RS_PATH = resolve(REPO, "src/tauri/src-tauri/src/main.rs");
-const MAIN_RS = readFileSync(MAIN_RS_PATH, "utf8");
+// CH-3 module split (2026-06-18): spawn_frondose_serve moved from main.rs to sidecar.rs
+// as a pure move. Concatenate all *.rs files in the crate so T-FREN3.8 finds the body.
+const CRATE_SRC_DIR = resolve(REPO, "src/tauri/src-tauri/src");
+const MAIN_RS = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(resolve(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 
 // ─── Rust source helpers ──────────────────────────────────────────────────────
 

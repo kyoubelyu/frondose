@@ -182,18 +182,23 @@ describe("port-file identity — frondose-com.kyoube.frondose-* / frondose.port 
       // NOTE: This is a Rust source text-assertion mirroring T-FREN4b.MainRs.1 pattern.
       // main.rs is not unit-testable from Node; the text scan is the correct approach.
 
-      const mainRs = readFileSync(
-        join(REPO, "src/tauri/src-tauri/src/main.rs"),
-        "utf-8",
-      );
+      // CH-3 module split (2026-06-18): frondose-com.kyoube.frondose- and frondose.port
+      // moved from main.rs to resolve.rs (resolve_sidecar_bin / port-file path helpers).
+      // Concatenate all *.rs files in the crate so the assertion finds these symbols.
+      const crateDir = join(REPO, "src/tauri/src-tauri/src");
+      const mainRs = readdirSync(crateDir)
+        .filter((f) => f.endsWith(".rs"))
+        .sort()
+        .map((f) => readFileSync(join(crateDir, f), "utf-8"))
+        .join("\n");
 
       assert.ok(
         mainRs.includes("frondose-com.kyoube.frondose-"),
-        `T-FREN4d.Socket.1: main.rs must contain "frondose-com.kyoube.frondose-" (temp dir prefix)`,
+        `T-FREN4d.Socket.1: Rust crate must contain "frondose-com.kyoube.frondose-" (temp dir prefix; CH-3: now in resolve.rs)`,
       );
       assert.ok(
         mainRs.includes("frondose.port"),
-        `T-FREN4d.Socket.1: main.rs must contain "frondose.port" (WIN-1 port-file replacing frondose.sock)`,
+        `T-FREN4d.Socket.1: Rust crate must contain "frondose.port" (WIN-1 port-file; CH-3: now in resolve.rs)`,
       );
       assert.ok(
         !mainRs.includes("mai-com.kyoube.mai-"),
