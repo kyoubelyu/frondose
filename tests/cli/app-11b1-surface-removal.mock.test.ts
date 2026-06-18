@@ -60,7 +60,7 @@ interface RunResult {
 function runCliProcess(argv: string[], env?: Record<string, string>, stdinData?: string): Promise<RunResult> {
   return new Promise((resolve) => {
     const baseEnv: Record<string, string> = {
-      MAI_AUTOUPDATE: "skip",
+      FRONDOSE_AUTOUPDATE: "skip",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       USER: process.env.USER ?? "",
@@ -204,11 +204,11 @@ describe("T-App11b1.3: --version flag survives; version subcommand removal did n
 // ─── T-App11b1.4 — gh KEPT: still registered + dispatches under MAI_TIER=power ─
 
 describe("T-App11b1.4: gh KEPT — still registered + dispatches (G-PApp11b1.4)", () => {
-  it("T-App11b1.4a: 'node dist/cli/main.js gh status' under MAI_TIER=power does NOT print 'unknown command'", async () => {
-    // Given: the built dist/cli/main.js with MAI_TIER=power
+  it("T-App11b1.4a: 'node dist/cli/main.js gh status' under FRONDOSE_TIER=power does NOT print 'unknown command'", async () => {
+    // Given: the built dist/cli/main.js with FRONDOSE_TIER=power
     // When:  invoked as `gh status`
     // Then:  does not produce "unknown command"; prints a github-status line
-    const result = await runCli(["gh", "status"], { MAI_TIER: "power" });
+    const result = await runCli(["gh", "status"], { FRONDOSE_TIER: "power" });
     const combined = result.stdout + result.stderr;
     assert.ok(
       !combined.toLowerCase().includes("unknown command"),

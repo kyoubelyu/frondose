@@ -115,7 +115,9 @@ function cargoLockMaiTauriVersion(): string {
 // ---------------------------------------------------------------------------
 
 const EXPECTED_IDENTIFIER = "com.kyoube.frondose";
-const EXPECTED_VERSION = "0.5.0-alpha.56";
+const EXPECTED_VERSION = (
+  JSON.parse(readFileSync(join(resolve(process.cwd()), "package.json"), "utf-8")) as { version: string }
+).version;
 
 const SCAN_EXCLUDED_PREFIXES = [
   "src/tauri/src-tauri/target/", // Rust build artifacts
@@ -213,13 +215,13 @@ describe("port-file identity — frondose-com.kyoube.frondose-* / frondose.port 
 // T-FREN4d.Quad.1 — version bump to alpha.55 (all 5 quad sites)
 // ---------------------------------------------------------------------------
 
-describe("version quad — all 5 sites === '0.5.0-alpha.56' (T-FREN4d.Quad)", () => {
+describe(`version quad — all 5 sites === '${EXPECTED_VERSION}' (T-FREN4d.Quad)`, () => {
   it(
-    "T-FREN4d.Quad.1: package.json, package-lock.json root + packages[''], tauri.conf.json, Cargo.toml, Cargo.lock mai-tauri all share '0.5.0-alpha.56'",
+    `T-FREN4d.Quad.1: package.json, package-lock.json root + packages[''], tauri.conf.json, Cargo.toml, Cargo.lock mai-tauri all share '${EXPECTED_VERSION}'`,
     () => {
-      // Given: the 5 quad files at their post-Step-4 state
+      // Given: the 5 quad files at their post-Step-4 state; EXPECTED_VERSION derived from package.json
       // When:  each version field is read
-      // Then:  all 5 sites === "0.5.0-alpha.56" (the F-REN-4d version bump)
+      // Then:  all 5 sites === EXPECTED_VERSION (the quad must stay in sync across releases)
 
       const pkgJson = JSON.parse(
         readFileSync(join(REPO, "package.json"), "utf-8"),

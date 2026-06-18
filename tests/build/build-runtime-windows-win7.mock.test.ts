@@ -127,7 +127,7 @@ function materializeExtractedNodeDist(argv: string[], scenario: ExecScenario): v
   assert.ok(zipPath, "test harness: tar command must include -xf <zip>");
 
   const nodeDist = join(extractRoot, basename(zipPath, ".zip"));
-  rmSync(nodeDist, { recursive: true, force: true });
+  rmSync(nodeDist, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   mkdirSync(nodeDist, { recursive: true });
   writeFileSync(join(nodeDist, "node.exe"), "fixture node.exe");
   if (scenario.includeBundledNpm) {
