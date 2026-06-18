@@ -18,13 +18,25 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 const REPO = resolve(process.cwd());
 const MAIN_RS_PATH = resolve(REPO, "src/tauri/src-tauri/src/main.rs");
-const MAIN_RS = readFileSync(MAIN_RS_PATH, "utf8");
+
+// CH-3 module split (2026-06-18): spawn_frondose_serve moved to sidecar.rs;
+// resolve_sidecar_bin, FRONDOSE_SIDECAR_BIN_PATH, and resolve_frondose_bin moved
+// to resolve.rs. Concatenate all *.rs files in the crate so every T-Sidecar.Spawn
+// assertion continues to find the symbol it guards regardless of its module.
+// spawnMaiServeSource() extracts the function body from the concatenated source —
+// the function is still present and still ends with Ok(child)+closing brace.
+const CRATE_SRC_DIR = resolve(REPO, "src/tauri/src-tauri/src");
+const MAIN_RS = readdirSync(CRATE_SRC_DIR)
+  .filter((f) => f.endsWith(".rs"))
+  .sort()
+  .map((f) => readFileSync(resolve(CRATE_SRC_DIR, f), "utf8"))
+  .join("\n");
 
 /** Extract the body of a named Rust function (simple, non-nested approach). */
 function extractRustFn(name: string): string | null {

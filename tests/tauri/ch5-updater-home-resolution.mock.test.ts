@@ -39,10 +39,14 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const MAIN_RS_PATH = join(REPO, "src/tauri/src-tauri/src/main.rs");
 
-// Read the source once; all tests share this string.
-const mainRs = readFileSync(MAIN_RS_PATH, "utf8");
+// CH-3 module split (2026-06-18): config_home_dir, read_update_server_url, and
+// read_update_check_interval_sec moved from main.rs to updater.rs as a pure move.
+// Read updater.rs directly — all CH-5 tests assert on this module's content.
+// T-CH5.5 (regression guard) removes the config_home_dir body from updater.rs and
+// checks the remainder has zero var("HOME") calls — still correct in updater.rs.
+const UPDATER_RS_PATH = join(REPO, "src/tauri/src-tauri/src/updater.rs");
+const mainRs = readFileSync(UPDATER_RS_PATH, "utf8");
 
 // ---------------------------------------------------------------------------
 // Helpers: brace-matched function body extraction + literal counting
