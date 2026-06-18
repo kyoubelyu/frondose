@@ -346,6 +346,23 @@ fn bundled_resource_dir() -> Option<PathBuf> {
     }
 }
 
+#[cfg(windows)]
+fn windows_sidecar_log_path() -> Option<PathBuf> {
+    let profile = std::env::var("USERPROFILE").ok()?;
+    if profile.trim().is_empty() {
+        return None;
+    }
+    let dir = std::path::Path::new(&profile)
+        .join(".frondose")
+        .join("agent")
+        .join("logs");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("[frondose] sidecar log mkdir failed: {}", e);
+        return None;
+    }
+    Some(dir.join("sidecar.log"))
+}
+
 /// Resolve an absolute `node` executable. A GUI-launched `.app` inherits launchd's
 /// minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) — Homebrew node at
 /// `/opt/homebrew/bin` is NOT on it — so a bare `Command::new("node")` fails from
@@ -588,6 +605,26 @@ async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Result<Child,
     #[cfg(windows)]
     {
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let redirected = (|| -> std::io::Result<()> {
+            let path = windows_sidecar_log_path()
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no log path"))?;
+            let out_file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)?;
+            let err_file = out_file.try_clone()?;
+            command.stdout(std::process::Stdio::from(out_file));
+            command.stderr(std::process::Stdio::from(err_file));
+            Ok(())
+        })();
+        if let Err(e) = redirected {
+            eprintln!(
+                "[frondose] sidecar log redirect failed: {} — falling back to null",
+                e
+            );
+            command.stdout(std::process::Stdio::null());
+            command.stderr(std::process::Stdio::null());
+        }
     }
     let child = command
         .spawn()
