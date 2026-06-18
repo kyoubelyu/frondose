@@ -119,8 +119,8 @@ function extractTauriCommandFnNames(src: string): Set<string> {
   // Match the pattern: #[tauri::command] ... async fn <name>
   // The attribute and fn may be separated by a blank line or other attributes.
   const pattern = /#\[tauri::command\][\s\S]*?async fn (\w+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = pattern.exec(src)) !== null) {
+  let m: RegExpExecArray | null = pattern.exec(src);
+  for (; m !== null; m = pattern.exec(src)) {
     names.add(m[1]);
   }
   return names;
@@ -134,8 +134,8 @@ function extractTsInvokeNames(src: string): Set<string> {
   const names = new Set<string>();
   // Matches: invoke("name") or invoke('name') or invoke<SomeType>("name") etc.
   const pattern = /invoke(?:<[^>]*>)?\(["'](\w+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = pattern.exec(src)) !== null) {
+  let m: RegExpExecArray | null = pattern.exec(src);
+  for (; m !== null; m = pattern.exec(src)) {
     names.add(m[1]);
   }
   return names;
@@ -151,8 +151,8 @@ function extractFixtureGolden(src: string): Set<string> {
   const block = blockMatch[1];
   const names = new Set<string>();
   const strPattern = /["'](\w+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = strPattern.exec(block)) !== null) {
+  let m: RegExpExecArray | null = strPattern.exec(block);
+  for (; m !== null; m = strPattern.exec(block)) {
     names.add(m[1]);
   }
   return names;

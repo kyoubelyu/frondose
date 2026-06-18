@@ -134,8 +134,8 @@ describe("T-A16.PO8 — soul STOP CONDITIONS 5-split + cooldown precedence (P-AU
           `"User stop/cancel or no clear next action" (PO-8 splits this into (4a) and (4b))`,
       );
 
-      // (4a) directive regex: /(4a)[^]*?status='stopped_by_agent'/ must match
-      const directive4aToAgent = /(4a)[^]*?status='stopped_by_agent'/;
+      // (4a) directive regex: /(4a)[\s\S]*?status='stopped_by_agent'/ must match
+      const directive4aToAgent = /(4a)[\s\S]*?status='stopped_by_agent'/;
       assert.ok(
         directive4aToAgent.test(fragment),
         `G-A16.7: soul fragment must match /(4a)[^]*?status='stopped_by_agent'/ ` +
