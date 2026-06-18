@@ -481,14 +481,28 @@ fn resolve_frondose_bin() -> String {
     "../../../dist/cli/main.js".to_string() // dev fallback (cargo tauri dev)
 }
 
+/// CH-5: cross-platform home dir for the update-config reads. macOS/Unix use
+/// `$HOME`; Windows uses `%USERPROFILE%` (`$HOME` is empty there), matching the
+/// Node sidecar's `os.homedir()` so both sides resolve the same
+/// `~/.frondose/agent/config.json`. Without this the Windows auto-updater config
+/// was unreadable (server URL always None, interval always the default).
+fn config_home_dir() -> Option<String> {
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.trim().is_empty() {
+            return Some(home);
+        }
+    }
+    std::env::var("USERPROFILE").ok().filter(|p| !p.trim().is_empty())
+}
+
 /// P-58d.1: read the operator-set `updateServerUrl` directly from
 /// ~/.frondose/agent/config.json (independent of the sidecar; the updater runs
 /// around it). Falls back to ~/.mai/agent/config.json for the first-launch window
 /// where Tauri boots before the sidecar migrates the data dir. None when
-/// absent/null/empty → the updater is a clean no-op. Uses $HOME — no new crate dep
-/// (serde_json is already present).
+/// absent/null/empty → the updater is a clean no-op. Home via `config_home_dir()`
+/// (cross-platform); no new crate dep (serde_json is already present).
 fn read_update_server_url() -> Option<String> {
-    let home = std::env::var("HOME").ok()?;
+    let home = config_home_dir()?;
     let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
     let raw = std::fs::read_to_string(&new_path)
         .or_else(|_| {
@@ -514,7 +528,7 @@ fn read_update_server_url() -> Option<String> {
 /// updateServerUrl).
 fn read_update_check_interval_sec() -> u64 {
     let default_sec: u64 = 3600;
-    let Some(home) = std::env::var("HOME").ok() else {
+    let Some(home) = config_home_dir() else {
         return default_sec;
     };
     let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
