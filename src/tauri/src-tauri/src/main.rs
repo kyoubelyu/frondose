@@ -336,9 +336,14 @@ fn provision_state() -> Result<(String, PathBuf, PathBuf), String> {
 
 /// [P-58d.3] Resource dir WITHOUT an AppHandle — resolve_* run before Tauri is built.
 /// macOS: Contents/MacOS/Frondose -> Contents -> Contents/Resources.
+/// Windows: Frondose.exe sits beside bundled runtime/.
 fn bundled_resource_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    exe.parent()?.parent()?.join("Resources").into()
+    if cfg!(windows) {
+        exe.parent().map(PathBuf::from)
+    } else {
+        exe.parent()?.parent()?.join("Resources").into()
+    }
 }
 
 /// Resolve an absolute `node` executable. A GUI-launched `.app` inherits launchd's
@@ -360,7 +365,14 @@ fn resolve_node() -> String {
         }
     }
     if let Some(dir) = bundled_resource_dir() {
-        let node = dir.join("runtime").join("node");
+        let runtime = dir.join("runtime");
+        if cfg!(windows) {
+            let node_exe = runtime.join("node.exe");
+            if node_exe.is_file() {
+                return node_exe.to_string_lossy().into_owned();
+            }
+        }
+        let node = runtime.join("node");
         if node.is_file() {
             return node.to_string_lossy().into_owned();
         }
@@ -562,7 +574,8 @@ async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Result<Child,
         node_path.display(),
         sidecar_bin.display()
     );
-    let child = Command::new(&node_path)
+    let mut command = Command::new(&node_path);
+    command
         .arg(&sidecar_bin)
         .arg("--port-file")
         .arg(port_file.to_str().ok_or("invalid port-file path utf-8")?)
@@ -571,7 +584,12 @@ async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Result<Child,
         .env("FRONDOSE_AUTOUPDATE", "skip")
         .env("FRONDOSE_SIDECAR_OWNER", "frondose-app")
         .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+    #[cfg(windows)]
+    {
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let child = command
         .spawn()
         .map_err(|e| format!("spawn mai sidecar: {}", e))?;
     Ok(child)
