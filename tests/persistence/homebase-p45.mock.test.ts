@@ -16,11 +16,24 @@
 
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { cleanupTmpDir } from "../_helpers/tmp";
+
+/** Find a guaranteed-free ephemeral port by briefly binding to port 0. */
+function getFreePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(addr.port));
+    });
+    srv.on("error", reject);
+  });
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..", "..");
@@ -159,10 +172,15 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
     // When:  ensureChrome with no profileDir option; __setLaunchFn intercepts opts
     // Then:  opts.userDataDir seen by launch fn contains sandbox root (not real home)
     //        (verifies src/cdp/launcher.ts:10 uses getHomeBase() post-P-45)
+    //
+    // Port strategy: use a guaranteed-free ephemeral port so CDP.Version probe always
+    // fails and falls through to launchFn — prevents flakiness when anything listens
+    // on a hardcoded port at test time.
     const { dir, cleanup } = makeSandbox("4");
     const prior = setHomeBase(dir);
     const savedProfileDir = process.env.FRONDOSE_PROFILE_DIR;
     delete process.env.FRONDOSE_PROFILE_DIR;
+    const freePort = await getFreePort();
     try {
       // biome-ignore lint/suspicious/noExplicitAny: dynamic import for DI hook
       const launcherMod = (await import("../../src/cdp/launcher.js")) as any;
@@ -172,10 +190,8 @@ describe("homedir() → getHomeBase() sandbox migration (G-P45.2)", () => {
         throw new Error("T-HB.4: launch deliberately aborted — we only care about opts");
       });
       try {
-        // Use a port unlikely to have an existing Chrome (operator's real Chrome
-        // typically binds 9222). The launcher probes via CDP.Version first; if the
-        // port is unused, the probe fails and the launch fn is invoked.
-        await launcherMod.ensureChrome({ port: 19999 }).catch(() => {});
+        // CDP.Version on the free port fails → ensureChrome falls through to launchFn.
+        await launcherMod.ensureChrome({ port: freePort }).catch(() => {});
         const expected = join(dir, ".frondose", "agent", "chrome-profile");
         assert.equal(
           capturedProfileDir,

@@ -17,12 +17,25 @@
  */
 
 import assert from "node:assert/strict";
+import net from "node:net";
 import { test } from "node:test";
 import { launch as chromeLaunch } from "chrome-launcher";
 import { CdpClient } from "../../src/cdp/client.js";
 import { __setLaunchFn } from "../../src/cdp/launcher.js";
 import { createLinkedinSession } from "../../src/linkedin/session.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext } from "../../src/linkedin/types.js";
+
+/** Find a guaranteed-free ephemeral port by briefly binding to port 0. */
+function getFreePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(addr.port));
+    });
+    srv.on("error", reject);
+  });
+}
 
 // ─── Fake CDP handle ─────────────────────────────────────────────────────────
 
@@ -156,9 +169,10 @@ test("T-V031.6: first getOrInitClient() boots Chrome once and returns a CdpClien
   const fakeHandle = makeFakeCdpHandle();
   const launchCallCount = { count: 0 };
   const restore = installMockBootHooks(fakeHandle, { launchCallCount });
+  const freePort = await getFreePort();
 
   try {
-    const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-6" });
+    const session = createLinkedinSession({ port: freePort, profileDir: "/tmp/mai-tv031-6" });
 
     // P-23: getOrInitClient returns ClientOrUnavailable; unwrap the .client from ok=true result
     const result = (await session.getOrInitClient()) as ClientOrUnavailable;
@@ -177,9 +191,10 @@ test("T-V031.7: second getOrInitClient() returns the cached client without re-bo
   const fakeHandle = makeFakeCdpHandle();
   const launchCallCount = { count: 0 };
   const restore = installMockBootHooks(fakeHandle, { launchCallCount });
+  const freePort = await getFreePort();
 
   try {
-    const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-7" });
+    const session = createLinkedinSession({ port: freePort, profileDir: "/tmp/mai-tv031-7" });
 
     // P-23: unwrap ClientOrUnavailable to compare inner CdpClient references
     const result1 = (await session.getOrInitClient()) as ClientOrUnavailable;
@@ -201,9 +216,10 @@ test("T-V031.8: concurrent getOrInitClient() calls dedupe to a single boot", asy
   const fakeHandle = makeFakeCdpHandle();
   const launchCallCount = { count: 0 };
   const restore = installMockBootHooks(fakeHandle, { launchCallCount });
+  const freePort = await getFreePort();
 
   try {
-    const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-8" });
+    const session = createLinkedinSession({ port: freePort, profileDir: "/tmp/mai-tv031-8" });
 
     // P-23: unwrap ClientOrUnavailable from concurrent calls; compare inner CdpClient
     const [result1, result2] = await Promise.all([
@@ -227,9 +243,10 @@ test("T-V031.9: failed boot resets initPromise so next call retries", async () =
   const fakeHandle = makeFakeCdpHandle();
   const launchCallCount = { count: 0 };
   const restore = installMockBootHooks(fakeHandle, { launchCallCount, failFirstLaunch: true });
+  const freePort = await getFreePort();
 
   try {
-    const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-9" });
+    const session = createLinkedinSession({ port: freePort, profileDir: "/tmp/mai-tv031-9" });
 
     // First call: launchFn throws → getOrInitClient() rejects
     await assert.rejects(() => session.getOrInitClient(), /Mock Chrome launch failed/, "first call must reject");
@@ -254,9 +271,10 @@ test("T-V031.9: failed boot resets initPromise so next call retries", async () =
 test("T-V031.10: getClient() returns undefined before getOrInitClient, then the cached client after", async () => {
   const fakeHandle = makeFakeCdpHandle();
   const restore = installMockBootHooks(fakeHandle);
+  const freePort = await getFreePort();
 
   try {
-    const session = createLinkedinSession({ port: 19999, profileDir: "/tmp/mai-tv031-10" });
+    const session = createLinkedinSession({ port: freePort, profileDir: "/tmp/mai-tv031-10" });
 
     assert.equal(session.getClient(), undefined, "getClient() must be undefined before getOrInitClient()");
 
