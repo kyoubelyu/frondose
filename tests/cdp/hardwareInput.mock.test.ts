@@ -107,6 +107,9 @@ function makeFakeClient(opts: {
         [opts.refKey]: { backendNodeId: opts.backendNodeId, axNodeId: "1", role: "button", name: "btn" },
       };
     },
+    // P-AUTO-L3FIX-1: resolveScreenCoords now calls client.raceHandle(DOM.getBoxModel, label).
+    // Pass through transparently — the fake getBoxModel resolves normally (no abort needed here).
+    raceHandle(p: Promise<unknown>, _label: string): Promise<unknown> { return p; },
     handle: {
       DOM: {
         async getBoxModel(_arg: unknown) {

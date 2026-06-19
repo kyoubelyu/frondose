@@ -94,7 +94,10 @@ export async function resolveScreenCoords(client: CdpClient, ref: string): Promi
   ) as { sx: number; sy: number; ch: number };
   const entry = client.currentRefMap[ref.replace(/^@/, "")];
   if (!entry) throw new Error(`hardware input: ref ${ref} not in current snapshot`);
-  const box = await client.handle.DOM.getBoxModel({ backendNodeId: entry.backendNodeId });
+  const box = await client.raceHandle(
+    client.handle.DOM.getBoxModel({ backendNodeId: entry.backendNodeId }),
+    "hwinput.getBoxModel",
+  );
   const b = box.model.border as number[];
   const cx = ((b[0] ?? 0) + (b[4] ?? 0)) / 2;
   const cy = ((b[1] ?? 0) + (b[5] ?? 0)) / 2;

@@ -452,6 +452,8 @@ describe("G-A11.7 — regression pin: hardwareClickAt still works after extracti
             e1: { backendNodeId: 42, axNodeId: "ax1", role: "button", name: "Go" },
           };
         },
+        // P-AUTO-L3FIX-1: resolveScreenCoords now calls client.raceHandle(DOM.getBoxModel, label).
+        raceHandle(p: Promise<unknown>, _label: string): Promise<unknown> { return p; },
         handle: {
           DOM: {
             async getBoxModel(_arg: unknown) {
