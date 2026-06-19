@@ -81,6 +81,11 @@ export class CdpClient {
     return raceCdp(p, { label, deadlineMs: CDP_CALL_DEADLINE_MS, signal: this.turnSignal });
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: mirrors CdpHandle=any (types.ts:8), like the private race().
+  raceHandle(p: Promise<any>, label: string): Promise<any> {
+    return this.race(p, label);
+  }
+
   /** Connect to a Chrome on the given port (default page target). */
   static async connect(port: number): Promise<CdpClient> {
     // v0.3-fix1 B1: wait for an inspectable page target before connecting (resolves
@@ -114,6 +119,15 @@ export class CdpClient {
     return this.stealthInjected;
   }
 
+  private static isPreloadInviteUrl(url: string): boolean {
+    try {
+      const u = new URL(url);
+      return u.hostname.endsWith("linkedin.com") && /\/preload\/custom-invite\/?$/i.test(u.pathname);
+    } catch {
+      return false;
+    }
+  }
+
   async navigate(url: string, waitUntil?: WaitState): Promise<void> {
     // [P-62 F-1] Structural invariant: stealth MUST be injected before any navigation on this
     // target, or `"webdriver" in navigator === true` exposure recurs (92-reconnect regression).
@@ -123,7 +137,10 @@ export class CdpClient {
     await this.race(this.client.Page.enable(), "Page.enable");
     const r = await this.race(this.client.Page.navigate({ url }), "Page.navigate");
     if (r.errorText) throw new Error(`navigate failed: ${r.errorText}`);
-    await waitForLoad(this.client, waitUntil ?? "load");
+    const isPreload = CdpClient.isPreloadInviteUrl(url);
+    const effectiveWait: WaitState = isPreload ? "networkidle" : (waitUntil ?? "load");
+    const waitOpts = isPreload ? { timeout: 60_000 } : undefined;
+    await this.race(waitForLoad(this.client, effectiveWait, waitOpts), "waitForLoad");
   }
 
   /** [P-75 D-17] Verify that the AX node behind a ref still has the expected role/name.
@@ -345,18 +362,21 @@ export class CdpClient {
 
   /** Run document-rooted querySelectorAll; return matching nodeIds. */
   async querySelectorAll(selector: string): Promise<number[]> {
-    const doc = await this.client.DOM.getDocument({ depth: 0 });
-    const r = await this.client.DOM.querySelectorAll({
-      nodeId: doc.root.nodeId,
-      selector,
-    });
+    const doc = await this.race(this.client.DOM.getDocument({ depth: 0 }), "DOM.getDocument");
+    const r = await this.race(
+      this.client.DOM.querySelectorAll({
+        nodeId: doc.root.nodeId,
+        selector,
+      }),
+      "DOM.querySelectorAll",
+    );
     return r.nodeIds ?? [];
   }
 
   /** Set files on a file input. Resolves backendNodeId → nodeId internally. */
   async setFileInputFiles(backendNodeId: number, files: string[]): Promise<void> {
     const nodeId = await this.resolveBackendToNodeId(backendNodeId);
-    await this.client.DOM.setFileInputFiles({ nodeId, files });
+    await this.race(this.client.DOM.setFileInputFiles({ nodeId, files }), "DOM.setFileInputFiles");
   }
 
   /**
@@ -366,7 +386,7 @@ export class CdpClient {
    * `DOM.describeNode({ backendNodeId })` returns the nodeId directly.
    */
   private async resolveBackendToNodeId(backendNodeId: number): Promise<number> {
-    const desc = await this.client.DOM.describeNode({ backendNodeId });
+    const desc = await this.race(this.client.DOM.describeNode({ backendNodeId }), "DOM.describeNode");
     const nodeId = desc?.node?.nodeId;
     if (typeof nodeId !== "number") {
       throw new Error(`resolveBackendToNodeId: describeNode returned no nodeId for backendNodeId=${backendNodeId}`);
@@ -396,13 +416,16 @@ export class CdpClient {
 
   /** P-28.5: clear ALL browser cookies (pre-login profile cleanup). */
   async clearBrowserCookies(): Promise<void> {
-    await this.client.Network.enable();
-    await this.client.Network.clearBrowserCookies();
+    await this.race(this.client.Network.enable(), "Network.enable");
+    await this.race(this.client.Network.clearBrowserCookies(), "Network.clearBrowserCookies");
   }
 
   /** P-28.5: clear cookies + localStorage + IndexedDB + caches for one origin. */
   async clearOriginData(origin: string): Promise<void> {
-    await this.client.Storage.clearDataForOrigin({ origin, storageTypes: "all" });
+    await this.race(
+      this.client.Storage.clearDataForOrigin({ origin, storageTypes: "all" }),
+      "Storage.clearDataForOrigin",
+    );
   }
 
   /** Close the underlying CDP WebSocket (does NOT kill Chrome). */
