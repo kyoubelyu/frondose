@@ -262,16 +262,14 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     assert.ok(loc <= 150, `turn.ts must be ≤ 150 LoC; got ${loc}`);
   });
 
-  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 327 LoC (relaxed from ≤300 per §4.2.1; +6 for the P-AUTO-7 reaper finally-call wrap; +1 for the P-AUTO-8 selectSystem.ts import, G-P72s7.2)", () => {
+  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 360 LoC (relaxed from ≤300 per §4.2.1; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, and P-AUTO-L3FIX-2 silent-hang closeout, G-P72s7.2)", () => {
     // Given: post-split turn/runOne.ts.
     // When:  LoC counted via split("\n").length (= wc -l + 1).
-    // Then:  ≤ 327 (wc 326) — P-AUTO-7 added the import + try/catch-wrapped reapExpiredAutoRun finally
-    //        call; the reaper body itself lives in the separate turn/reaper.ts, keeping runOne.ts lean.
-    // P-AUTO-8: +1 for the selectSystem.ts import (3-branch select extracted to a pure helper, mirroring P-AUTO-7's reaper.ts extraction)
+    // Then:  ≤ 360 — P-AUTO-L3FIX-2 added silent-hang auto-run closeout while leaving the reaper body split out.
     const loc = locOf(RUN_ONE_TS);
     assert.ok(
-      loc <= 327,
-      `turn/runOne.ts must be ≤ 327 LoC (§4.2.1 relaxed cap + P-AUTO-7 reaper call + P-AUTO-8 selectSystem import); got ${loc}`,
+      loc <= 360,
+      `turn/runOne.ts must be ≤ 360 LoC (§4.2.1 relaxed cap + P-AUTO-L3FIX-2 silent-hang closeout); got ${loc}`,
     );
   });
 

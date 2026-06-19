@@ -6,7 +6,7 @@ import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
 import { DATA_DIR_NAME } from "../../../../persistence/paths.js";
-import { getCurrentAutoRun } from "../../../../persistence/salesDb.js";
+import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
@@ -58,6 +58,7 @@ export interface TurnArgs {
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
   const { turnId, abortController } = args;
+  let abortReason: "duration_cap" | "silent_hang" | "operator_or_other" | null = null;
   const disabledModelMessage = "configure your DeepSeek API key in Settings (gear icon)";
   if (deps.model === null) {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
@@ -98,6 +99,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       const elapsedMs = Date.now() - run.startedAt;
       const capMs = run.maxDurationMinutes * 60_000;
       if (elapsedMs >= capMs && !abortController.signal.aborted) {
+        abortReason = "duration_cap";
         deps.emitFrame({
           type: "error",
           turnId,
@@ -142,6 +144,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       status: undefined,
     });
     deps.emitFrame({ type: "error", turnId, message });
+    abortReason = "silent_hang";
     abortController.abort();
   }, 30_000);
   try {
@@ -225,7 +228,10 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
           isCronTurn: args.isCronTurn ?? false,
           resolvedMode: modeFromState({ cronEnabled: state.cronEnabled, passiveEnabled: state.passiveEnabled }),
         });
-        if (abort) abortController.abort();
+        if (abort) {
+          abortReason = "operator_or_other";
+          abortController.abort();
+        }
         deps.emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
       },
       onText: (delta) => {
@@ -318,7 +324,34 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     try {
-      reapExpiredAutoRun(getSalesDb(deps.salesDbPath), state, args.isCronTurn ?? false, deps.emitFrame);
+      const db = getSalesDb(deps.salesDbPath);
+      reapExpiredAutoRun(db, state, args.isCronTurn ?? false, deps.emitFrame);
+      if (abortReason === "silent_hang") {
+        const run = getCurrentAutoRun(db);
+        if (run?.status === "running") {
+          const counters = countAutoLedgerByAction(db, run.id);
+          const summary = "silent_hang_abort: LLM stream made no progress and the turn was aborted";
+          const res = endAutoRun(db, run.id, {
+            status: "stopped_by_agent",
+            summary,
+            counters,
+          });
+          const cronWillEmit = args.isCronTurn === true && state.autoRunId === run.id;
+          if (res.alreadyEnded === false && !cronWillEmit) {
+            deps.emitFrame({
+              type: "auto-run-completed",
+              runId: run.id,
+              status: "stopped_by_agent",
+              summary,
+              finalCounters: counters,
+              endedAt: Date.now(),
+              ts: Date.now(),
+            });
+            state.autoRunId = null;
+            state.lastEmittedAutoCounters = null;
+          }
+        }
+      }
     } catch {
       /* P-AUTO-7: reaper/db handle must never crash turn teardown */
     }

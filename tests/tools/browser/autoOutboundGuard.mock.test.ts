@@ -65,6 +65,9 @@ function makeMockSession(opts: {
     },
     getBox: async () => ({ x: 0, y: 0, width: 10, height: 10 }),
     verifyRef: async (_refKey: string, _expected: { role: string; name?: string }) => ({ matches: true }),
+    // [P-AUTO-L3FIX-2] click.ts T1: ref-staleness retry reads currentRefMap to get recorded role/name.
+    // Provide an empty map so tests that pass targetEntry do not crash when the stale-retry guard runs.
+    currentRefMap: {} as Record<string, { backendNodeId: number; role: string; name: string }>,
   };
 
   return {
