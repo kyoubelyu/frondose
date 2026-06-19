@@ -66,7 +66,7 @@ const SPURIOUS_LINKEDIN_TAB_RE = /^https:\/\/(?:www\.)?linkedin\.com\/campaignma
  *  NOT exported. */
 async function registerTargetCreatedAutoInject(client: CdpClient): Promise<void> {
   try {
-    await client.handle.Target.setDiscoverTargets({ discover: true });
+    await client.raceHandle(client.handle.Target.setDiscoverTargets({ discover: true }), "Target.setDiscoverTargets");
   } catch (e) {
     console.error("[frondose] Target.setDiscoverTargets failed (OQ-5):", e);
     return;

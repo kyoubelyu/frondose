@@ -76,11 +76,14 @@ export const STEALTH_INIT_SCRIPT = `
  */
 export async function injectStealth(client: CdpClient): Promise<string | undefined> {
   if (client.isStealthInjected()) return undefined;
-  await client.handle.Page.enable();
-  const result = await client.handle.Page.addScriptToEvaluateOnNewDocument({
-    source: STEALTH_INIT_SCRIPT,
-    runImmediately: true,
-  });
+  await client.raceHandle(client.handle.Page.enable(), "stealth.Page.enable");
+  const result = await client.raceHandle(
+    client.handle.Page.addScriptToEvaluateOnNewDocument({
+      source: STEALTH_INIT_SCRIPT,
+      runImmediately: true,
+    }),
+    "stealth.addScriptToEvaluateOnNewDocument",
+  );
   client.markStealthInjected();
   return result.identifier as string;
 }
