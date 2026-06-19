@@ -257,34 +257,21 @@ describe("T-A18 — connect-family region preference (P-AUTO-18)", () => {
   );
 
   // ─── T-A18.3 ───────────────────────────────────────────────────────────────
-  it(
-    "T-A18.3: when label is 'Message' (non-connect), region preference is no-op and resolveByLabel throws ambiguous_target for both main+aside candidates (G-A18.3)",
-    () => {
-      // Given: entries = [{ref:"@pa2", role:"button", name:"Message Jane" /* no region */},
-      //                   {ref:"@e88", role:"button", name:"Message in aside", region:"aside"}]
-      // When:  resolveByLabel(entries, "Message", {kind:"click"}) called
-      // Then:  throws ambiguous_target with BOTH @pa2 and @e88 (CONNECT_OPEN_RE does not match
-      //        "Message" → region clause is never activated)
-      const entries: SnapshotEntry[] = [
-        { ref: "@pa2", role: "button", name: "Message Jane" },
-        { ref: "@e88", role: "button", name: "Message in aside", region: "aside" },
-      ];
-      assert.throws(
-        () => resolveByLabel(entries, "Message", { kind: "click" }),
-        (err: unknown) => {
-          if (!(err instanceof Error)) return false;
-          // Must be ambiguous with BOTH candidates present (region clause did NOT fire)
-          const msg = err.message.toLowerCase();
-          return (
-            msg.includes("ambiguous") &&
-            err.message.includes("@pa2") &&
-            err.message.includes("@e88")
-          );
-        },
-        "non-connect label 'Message' must not activate region preference — both @pa2 (main) and @e88 (aside) stay → ambiguous_target",
-      );
-    },
-  );
+	  it(
+	    "T-A18.3: when label is 'Message' and one non-aside candidate remains after dropping aside, resolveByLabel returns the non-aside target (T2 generalized filter)",
+	    () => {
+	      // Given: entries = [{ref:"@pa2", role:"button", name:"Message Jane" /* no region */},
+	      //                   {ref:"@e88", role:"button", name:"Message in aside", region:"aside"}]
+	      // When:  resolveByLabel(entries, "Message", {kind:"click"}) called
+	      // Then:  generic non-aside filtering drops @e88 and returns @pa2 (P-AUTO-L3FIX-2 T2)
+	      const entries: SnapshotEntry[] = [
+	        { ref: "@pa2", role: "button", name: "Message Jane" },
+	        { ref: "@e88", role: "button", name: "Message in aside", region: "aside" },
+	      ];
+	      const result = resolveByLabel(entries, "Message", { kind: "click" });
+	      assert.equal(result.ref, "@pa2", "generic non-aside filter must resolve the only non-aside Message candidate");
+	    },
+	  );
 
   // ─── T-A18.4 ───────────────────────────────────────────────────────────────
   it(

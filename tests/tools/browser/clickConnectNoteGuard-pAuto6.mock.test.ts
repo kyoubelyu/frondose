@@ -62,8 +62,9 @@ function makeMockSession(opts: {
   } = opts;
 
   const fakeRef = "@e1";
-  const fakeClient = {
-    clickAt: async (_ref: string) => {
+	  const fakeClient = {
+	    currentRefMap: {},
+	    clickAt: async (_ref: string) => {
       if (clickAtSpy) clickAtSpy.called = true;
     },
     getBox: async () => ({ x: 0, y: 0, width: 10, height: 10 }),
