@@ -12,6 +12,7 @@ import { DEFAULT_SECRETS_PATH, readSecrets } from "../../persistence/secrets.js"
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+export const LLM_COMPLETE_TIMEOUT_MS = 120_000;
 /** DeepSeek models whose thinking output we disable to match the Vercel makeNoThinkingFetch behavior. */
 const THINKING_DEFAULT_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
 
@@ -20,6 +21,7 @@ export interface PiModelResolution {
   apiKey: string;
   /** Pi onPayload hook that injects thinking:disabled for the thinking-default models (parity with Vercel). */
   onPayload: (payload: unknown) => unknown;
+  timeoutMs: number;
 }
 
 /** Parse a `deepseek:deepseek-v4-flash` style spec to its bare model id. */
@@ -73,5 +75,5 @@ export function resolvePiModel(secretsPath: string = DEFAULT_SECRETS_PATH()): Pi
     return p;
   };
 
-  return { model, apiKey, onPayload };
+  return { model, apiKey, onPayload, timeoutMs: LLM_COMPLETE_TIMEOUT_MS };
 }

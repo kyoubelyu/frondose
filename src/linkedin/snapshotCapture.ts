@@ -5,17 +5,14 @@ import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { tagAsideClickables } from "./snapshotCapture/regionTag.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
 import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
-
 export * from "./snapshotCapture/feedPostSynth.js";
 export * from "./snapshotCapture/profileSynth.js";
 export * from "./snapshotCapture/searchResultSynth.js";
-
 interface FeedPostRaw {
   author: string;
   headline: string;
   profileUrl: string | null;
 }
-
 interface ProfileCardRaw {
   name: string;
   headline: string | null;
@@ -23,13 +20,11 @@ interface ProfileCardRaw {
   location: string | null;
   connections: string | null;
 }
-
 interface SearchResultRaw {
   slug: string;
   name: string;
   profileUrl: string;
 }
-
 // Mark visible overlay items with a transient data-attr (DOM query is NOT subject to the AX-tree
 // aria-hidden timing race — RC-1), return their {idx, role, label}. Skips aria-hidden subtrees +
 // invisible nodes (avoids surfacing CLOSED-dropdown items still in the DOM).
@@ -67,7 +62,6 @@ const OVERLAY_SYNTH_JS = `(() => {
   }
   return JSON.stringify(out);
 })()`;
-
 // Mark the PROFILE-level More button (NOT the nav More), return its name + label. Reuses the
 // PROFILE_SYNTH_JS NAV_SELECTOR + title/h1 anchor. evaluate-mark → querySelectorAll → describeNode
 // gives a real backendNodeId (clickable), like synthesizeOverlayEntries.
@@ -127,6 +121,11 @@ const PROFILE_ACTIONS_SYNTH_JS = `(() => {
     i++; el.setAttribute('data-frondose-pa', String(i));
     const role = (el.tagName === 'A' && el.getAttribute('role') !== 'button') ? 'link' : 'button';
     out.push({ i, role, label });
+  }
+  const hasMore = out.some(o => /^more\\b/i.test(o.label) || /more actions/i.test(o.label));
+  const hasConnectish = out.some(o => /^(?:connect|pending|following)\\b/i.test(o.label) || /\\binvite\\b.*\\bto\\s+connect\\b/i.test(o.label));
+  if (hasMore && !hasConnectish) {
+    out.push({ i: -1, role: 'text', label: 'Connect is under "More" — click the profile "More" action (@pm1), then inspect scope:"overlay" and click "Connect".' });
   }
   return JSON.stringify({ name, actions: out });
 })()`;
@@ -223,7 +222,7 @@ async function synthesizeOverlayEntries(client: CdpClient): Promise<{ entries: S
       const nodeIds = await client.querySelectorAll(`[data-frondose-ov="${it.i}"]`);
       const nodeId = nodeIds[0];
       if (typeof nodeId !== "number") continue;
-      const desc = await client.handle.DOM.describeNode({ nodeId });
+      const desc = await client.raceHandle(client.handle.DOM.describeNode({ nodeId }), "snapshot.describeNode");
       const backendNodeId = desc.node?.backendNodeId;
       if (typeof backendNodeId !== "number") continue;
       const ref = `ov${it.i}`;
@@ -261,7 +260,7 @@ async function synthesizeProfileMoreEntry(client: CdpClient): Promise<{ entries:
       // best-effort cleanup
     }
     if (typeof nodeId !== "number") return { entries: [], refs: {} };
-    const desc = await client.handle.DOM.describeNode({ nodeId });
+    const desc = await client.raceHandle(client.handle.DOM.describeNode({ nodeId }), "snapshot.describeNode");
     const backendNodeId = desc.node?.backendNodeId;
     if (typeof backendNodeId !== "number") return { entries: [], refs: {} };
     const ref = "pm1";
@@ -318,11 +317,15 @@ async function synthesizeProfileActionEntries(client: CdpClient): Promise<{ entr
   const entries: SnapshotEntry[] = [];
   const refs: RefMap = {};
   for (const a of info.actions) {
+    if (a.i === -1) {
+      entries.push({ ref: "", role: "text", name: a.label });
+      continue;
+    }
     try {
       const nodeIds = await client.querySelectorAll(`[data-frondose-pa="${a.i}"]`);
       const nodeId = nodeIds[0];
       if (typeof nodeId !== "number") continue;
-      const desc = await client.handle.DOM.describeNode({ nodeId });
+      const desc = await client.raceHandle(client.handle.DOM.describeNode({ nodeId }), "snapshot.describeNode");
       const backendNodeId = desc.node?.backendNodeId;
       if (typeof backendNodeId !== "number") continue;
       const ref = `pa${a.i}`;
@@ -377,7 +380,7 @@ async function synthesizeMessagingConversationOpeners(client: CdpClient): Promis
     const ref = `@mr${i}`;
     let label = "";
     try {
-      const attrs = await client.handle.DOM.getAttributes({ nodeId });
+      const attrs = await client.raceHandle(client.handle.DOM.getAttributes({ nodeId }), "snapshot.getAttributes");
       const arr = (attrs?.attributes ?? []) as string[];
       // Interleaved [name0, value0, name1, value1, ...] per CDP spec.
       for (let k = 0; k < arr.length - 1; k += 2) {

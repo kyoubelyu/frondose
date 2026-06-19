@@ -41,7 +41,7 @@ import { buildPiToolBundle } from "./toolAdapter.js";
  */
 export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
-  const { model, apiKey, onPayload } = resolvePiModel();
+  const { model, apiKey, onPayload, timeoutMs } = resolvePiModel();
   const { tools, dispatch } = buildPiToolBundle(opts.tools, opts.activeTools);
   const { piMessages } = coreMessagesToPi(opts.messages, model.id);
   const newCore: CoreMessage[] = [];
@@ -54,7 +54,7 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
       const assistant: AssistantMessage = await complete(
         model,
         { systemPrompt: opts.system, messages: piMessages, tools },
-        { apiKey, signal: opts.abortSignal, onPayload },
+        { apiKey, signal: opts.abortSignal, onPayload, timeoutMs },
       );
       count++;
 

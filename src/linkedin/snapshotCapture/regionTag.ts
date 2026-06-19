@@ -37,16 +37,19 @@ const REGION_TAG_CLEANUP_JS = `(() => {
 
 export async function tagAsideClickables(client: CdpClient): Promise<Set<number>> {
   try {
-    const evalResult = await client.handle.Runtime.evaluate({
-      expression: REGION_TAG_JS,
-      awaitPromise: false,
-      returnByValue: true,
-    });
+    const evalResult = await client.raceHandle(
+      client.handle.Runtime.evaluate({
+        expression: REGION_TAG_JS,
+        awaitPromise: false,
+        returnByValue: true,
+      }),
+      "regionTag.evaluate",
+    );
     if (evalResult?.exceptionDetails) throw new Error("region tag evaluate failed");
     const nodeIds = await client.querySelectorAll('[data-frondose-rg-aside="1"]');
     const out = new Set<number>();
     for (const nodeId of nodeIds) {
-      const desc = await client.handle.DOM.describeNode({ nodeId });
+      const desc = await client.raceHandle(client.handle.DOM.describeNode({ nodeId }), "regionTag.describeNode");
       const backendNodeId = desc.node?.backendNodeId;
       if (typeof backendNodeId === "number") out.add(backendNodeId);
     }
@@ -55,11 +58,14 @@ export async function tagAsideClickables(client: CdpClient): Promise<Set<number>
     return new Set();
   } finally {
     try {
-      await client.handle.Runtime.evaluate({
-        expression: REGION_TAG_CLEANUP_JS,
-        awaitPromise: false,
-        returnByValue: true,
-      });
+      await client.raceHandle(
+        client.handle.Runtime.evaluate({
+          expression: REGION_TAG_CLEANUP_JS,
+          awaitPromise: false,
+          returnByValue: true,
+        }),
+        "regionTag.cleanup",
+      );
     } catch {
       // Best-effort cleanup must not block snapshot capture.
     }
