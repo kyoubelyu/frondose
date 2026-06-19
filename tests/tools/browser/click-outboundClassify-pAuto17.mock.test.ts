@@ -163,8 +163,9 @@ function makeMockSession(opts: {
     autoRun,
   } = opts;
 
-  const fakeClient = {
-    clickAt: async (ref: string) => {
+	  const fakeClient = {
+	    currentRefMap: {},
+	    clickAt: async (ref: string) => {
       if (clickAtSpy) {
         clickAtSpy.called = true;
         clickAtSpy.calledWith = ref;
@@ -581,8 +582,9 @@ describe("T-A17.10..18 — click.ts classify-on-resolved + ledger integrity (P-A
       salesDbPath: undefined,
       getOrInitClient: async () => ({
         ok: true as const,
-        client: {
-          type: async (_ref: string, _text: string) => {},
+	        client: {
+	          currentRefMap: {},
+	          type: async (_ref: string, _text: string) => {},
           getBox: async () => ({ x: 0, y: 0, width: 10, height: 10 }),
           verifyRef: async (_refKey: string, _expected: { role: string; name?: string }) => ({
             matches: true,

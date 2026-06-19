@@ -1,7 +1,8 @@
 import {
   type AssistantMessage,
-  complete,
+  type AssistantMessageEvent,
   type Message as PiMessage,
+  stream,
   type ToolCall,
   type ToolResultMessage,
 } from "@earendil-works/pi-ai";
@@ -16,7 +17,7 @@ import {
 } from "../loop.js";
 import { DEFAULT_MAX_STEPS } from "../maxSteps.js";
 import { coreMessagesToPi, piAssistantToCore, piToolResultToCore } from "./messageAdapter.js";
-import { resolvePiModel } from "./model.js";
+import { LLM_STREAM_IDLE_MS, LLM_STREAM_MAX_RETRIES, resolvePiModel } from "./model.js";
 import { buildPiToolBundle } from "./toolAdapter.js";
 
 /**
@@ -51,7 +52,7 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
     let count = 0;
     for (let step = 0; step < stepCap; step++) {
       if (opts.abortSignal?.aborted) break;
-      const assistant: AssistantMessage = await complete(
+      const assistant: AssistantMessage = await completeWithIdleTimeout(
         model,
         { systemPrompt: opts.system, messages: piMessages, tools },
         { apiKey, signal: opts.abortSignal, onPayload, timeoutMs },
@@ -132,6 +133,77 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
     // abort/error the partial transcript is still recorded for audit + the next turn).
     opts.messages.push(...newCore);
   }
+}
+
+type PiStreamArgs = Parameters<typeof stream>;
+
+async function completeWithIdleTimeout(
+  model: PiStreamArgs[0],
+  context: PiStreamArgs[1],
+  opts: NonNullable<PiStreamArgs[2]>,
+): Promise<AssistantMessage> {
+  let lastIdleError: Error | null = null;
+  for (let attempt = 0; attempt <= LLM_STREAM_MAX_RETRIES; attempt++) {
+    const callAc = new AbortController();
+    const requestSignal = opts.signal ? AbortSignal.any([opts.signal, callAc.signal]) : callAc.signal;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const resetIdleTimer = (): void => {
+      if (idleTimer !== undefined) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        callAc.abort();
+      }, LLM_STREAM_IDLE_MS);
+    };
+
+    try {
+      const eventStream = stream(model, context, { ...opts, signal: requestSignal });
+      resetIdleTimer();
+      let terminal: AssistantMessage | null = null;
+      for await (const event of eventStream) {
+        resetIdleTimer();
+        terminal = assistantFromTerminalEvent(event);
+        if (terminal) break;
+      }
+      terminal ??= await eventStream.result();
+      if (terminal.stopReason === "aborted") {
+        throw classifyAbortedStream(callAc.signal, opts.signal);
+      }
+      return terminal;
+    } catch (e) {
+      if (opts.signal?.aborted) {
+        throw makeTurnAbortError();
+      }
+      if (callAc.signal.aborted) {
+        lastIdleError = e instanceof Error ? e : new Error(String(e));
+        if (attempt < LLM_STREAM_MAX_RETRIES) continue;
+        throw new Error(
+          `LLM stream idle timeout after ${LLM_STREAM_MAX_RETRIES + 1} attempts (${LLM_STREAM_IDLE_MS}ms idle window)`,
+          { cause: lastIdleError },
+        );
+      }
+      throw e;
+    } finally {
+      if (idleTimer !== undefined) clearTimeout(idleTimer);
+    }
+  }
+  throw lastIdleError ?? new Error("LLM stream idle timeout");
+}
+
+function assistantFromTerminalEvent(event: AssistantMessageEvent): AssistantMessage | null {
+  if (event.type === "done") return event.message;
+  if (event.type === "error") return event.error;
+  return null;
+}
+
+function classifyAbortedStream(callSignal: AbortSignal, turnSignal?: AbortSignal): Error {
+  if (turnSignal?.aborted) return makeTurnAbortError();
+  if (callSignal.aborted) return new Error("LLM stream idle timeout");
+  return new Error("LLM stream returned stopReason='aborted'");
+}
+
+function makeTurnAbortError(): Error {
+  const err = new Error("LLM stream aborted by turn signal");
+  err.name = "AbortError";
+  return err;
 }
 
 /** Convert a synthetic CoreMessage user-continuation (always a string) to a Pi UserMessage. */
