@@ -52,6 +52,9 @@ function makeFakeCdpClient(): { client: CdpClient; clickAtCalled: string[] } {
     async verifyRef(_refKey: string, _expected: { role: string; name?: string }) {
       return { matches: true };
     },
+    // [P-AUTO-L3FIX-2] click.ts T1: ref-staleness retry reads currentRefMap to get recorded role/name.
+    // Provide an empty map so tests that pass targetEntry do not crash when the stale-retry guard runs.
+    currentRefMap: {} as Record<string, { backendNodeId: number; role: string; name: string }>,
   } as unknown as CdpClient;
   return { client, clickAtCalled };
 }

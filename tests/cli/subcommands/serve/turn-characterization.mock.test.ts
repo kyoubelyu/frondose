@@ -167,6 +167,8 @@ before(async () => {
   const salesDbUrl = pathToFileURL(join(REPO_ROOT, "src/persistence/salesDb.js")).href;
   mock.module(salesDbUrl, {
     namedExports: {
+      countAutoLedgerByAction: () => ({}),
+      endAutoRun: () => ({ alreadyEnded: false }),
       getCurrentAutoRun: () => null,
       initSalesDb: () => ({ run: () => undefined, prepare: () => ({ all: () => [], get: () => null, run: () => undefined }) }),
     },

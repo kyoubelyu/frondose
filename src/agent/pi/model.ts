@@ -13,6 +13,8 @@ import { DEFAULT_SECRETS_PATH, readSecrets } from "../../persistence/secrets.js"
 const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
 export const LLM_COMPLETE_TIMEOUT_MS = 120_000;
+export const LLM_STREAM_IDLE_MS = 30_000;
+export const LLM_STREAM_MAX_RETRIES = 2;
 /** DeepSeek models whose thinking output we disable to match the Vercel makeNoThinkingFetch behavior. */
 const THINKING_DEFAULT_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
 

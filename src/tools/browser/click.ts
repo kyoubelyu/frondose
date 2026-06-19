@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import type { CdpClient } from "../../cdp/client.js";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
 import { failWithReason } from "../../linkedin/envelope.js";
 import {
@@ -16,6 +17,39 @@ import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/a
 import { getSalesDb } from "../sales/_dbHandle.js";
 import { classifyOutboundEntry, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
 
+const REF_STALE_RETRY_TIMEOUT_MS = 3000;
+const REF_STALE_MAX_RETRIES = 2;
+const REF_STALE_RETRY_STEP_MS = 300;
+
+function makeAbortError(): Error {
+  const err = new Error("click aborted");
+  err.name = "AbortError";
+  return err;
+}
+
+function throwIfAborted(abortSignal?: AbortSignal): void {
+  if (abortSignal?.aborted) throw makeAbortError();
+}
+
+async function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  throwIfAborted(abortSignal);
+  if (!abortSignal) {
+    await new Promise((r) => setTimeout(r, ms));
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      abortSignal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(makeAbortError());
+    };
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** [P-75 D-11 round 3] When click is called by `label` (not `ref`), the current ctx may be stale
  *  by 500–1500ms vs the live DOM — Chrome's AX tree lags after DOM mutations, especially
  *  disabled→enabled state changes LinkedIn does in React after type/click. The mai-linkedin
@@ -25,11 +59,12 @@ import { classifyOutboundEntry, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } f
  *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
 export async function resolveByLabelWithRetry(
   session: { getLastContext: () => { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" } | undefined },
-  label: string,
-  scope: string | undefined,
-  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
-  opts: { timeoutMs?: number; stepMs?: number } = {},
+	  label: string,
+	  scope: string | undefined,
+	  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
+	  opts: { timeoutMs?: number; stepMs?: number; abortSignal?: AbortSignal } = {},
 ): Promise<SnapshotEntry> {
+  throwIfAborted(opts.abortSignal);
   const ctx0 = session.getLastContext();
   if (ctx0) {
     try {
@@ -43,7 +78,8 @@ export async function resolveByLabelWithRetry(
   const stepMs = opts.stepMs ?? 300;
   let lastErr: unknown = new Error(`click: no label '${label}' visible`);
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, stepMs));
+    await sleepWithAbort(stepMs, opts.abortSignal);
+    throwIfAborted(opts.abortSignal);
     let fresh: { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" };
     try {
       fresh = await capture();
@@ -63,6 +99,61 @@ export async function resolveByLabelWithRetry(
   throw lastErr;
 }
 
+function sameRoleName(entry: SnapshotEntry, expected: { role: string; name?: string }): boolean {
+  if (entry.role !== expected.role) return false;
+  const expectedName = (expected.name ?? "").trim().toLowerCase();
+  const actualName = (entry.name ?? "").trim().toLowerCase();
+  return expectedName.length > 0 ? actualName === expectedName : true;
+}
+
+function findFreshRefByRoleName(
+  entries: SnapshotEntry[],
+  expected: { role: string; name?: string },
+): SnapshotEntry | undefined {
+  const matches = entries.filter((entry) => sameRoleName(entry, expected));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+async function recaptureFreshRefByRoleName(
+  session: LinkedinSession,
+  client: CdpClient,
+  expected: { role: string; name?: string },
+  opts: { timeoutMs?: number; stepMs?: number; maxRetries?: number; abortSignal?: AbortSignal } = {},
+): Promise<SnapshotEntry | undefined> {
+  const deadline = Date.now() + (opts.timeoutMs ?? REF_STALE_RETRY_TIMEOUT_MS);
+  const stepMs = opts.stepMs ?? REF_STALE_RETRY_STEP_MS;
+  const maxRetries = opts.maxRetries ?? REF_STALE_MAX_RETRIES;
+  for (let attempt = 0; attempt < maxRetries && Date.now() < deadline; attempt++) {
+    await sleepWithAbort(stepMs, opts.abortSignal);
+    throwIfAborted(opts.abortSignal);
+    try {
+      const fresh = await captureCurrentSurfaceContext(client);
+      session.setLastContext(fresh);
+      const entry = findFreshRefByRoleName(fresh.entries, expected);
+      if (entry) return entry;
+    } catch (e) {
+      if (opts.abortSignal?.aborted) throw e;
+      // Transient recapture failure — keep trying within the bounded retry window.
+    }
+  }
+  return undefined;
+}
+
+function refStaleFailure(
+  target: string,
+  targetEntry: SnapshotEntry,
+  verify: { currentRole?: string; currentName?: string },
+) {
+  return fail(
+    "click",
+    "runtime_error",
+    `ref_stale: ${target} no longer points at "${targetEntry.name}" (role=${targetEntry.role}). ` +
+      `Current state: role=${verify.currentRole ?? "<gone>"} name=${verify.currentName ?? "<gone>"}. ` +
+      `The DOM changed between your inspect and this click (e.g. a modal swapped its input role). ` +
+      `Call inspect again to refresh refs, then retry the click against the fresh ref.`,
+  );
+}
+
 const clickParams = z
   .object({
     ref: z.string().optional().describe("Element ref from inspect, e.g. '@e14'."),
@@ -79,8 +170,10 @@ export function makeClickTool(session: LinkedinSession) {
       "Click an element on the current page. Provide either a ref from the most-recent inspect (e.g. '@e14') " +
       "or a label (accessible name). If both are provided, ref wins.",
     parameters: clickParams,
-    execute: async ({ ref, label, scope }) => {
+    execute: async ({ ref, label, scope }, executeOpts) => {
       try {
+        const abortSignal = executeOpts?.abortSignal;
+        throwIfAborted(abortSignal);
         const r = await session.getOrInitClient();
         if (!r.ok) return r;
         const { client } = r;
@@ -90,11 +183,11 @@ export function makeClickTool(session: LinkedinSession) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
         } else {
           // biome-ignore lint/style/noNonNullAssertion: refine guarantees ref OR label is set; ref is undefined here so label is non-null.
-          const entry = await resolveByLabelWithRetry(session, label!, scope, async () => {
-            const next = await captureCurrentSurfaceContext(client);
-            session.setLastContext(next);
-            return next;
-          });
+	          const entry = await resolveByLabelWithRetry(session, label!, scope, async () => {
+	            const next = await captureCurrentSurfaceContext(client);
+	            session.setLastContext(next);
+	            return next;
+	          }, { abortSignal });
           target = entry.ref;
           targetEntry = entry;
         }
@@ -239,22 +332,28 @@ export function makeClickTool(session: LinkedinSession) {
         // this check, a click on a stale ref silently hits the wrong-purpose element.
         // Skip when the agent passed a label (resolveByLabel already used CURRENT entries)
         // OR when the entry wasn't in lastContext (selector fallback OR ad-hoc ref).
-        if (target.startsWith("@") && targetEntry) {
-          const verify = await client.verifyRef(target.slice(1), {
-            role: targetEntry.role,
-            name: targetEntry.name,
-          });
-          if (!verify.matches) {
-            return fail(
-              "click",
-              "runtime_error",
-              `ref_stale: ${target} no longer points at "${targetEntry.name}" (role=${targetEntry.role}). ` +
-                `Current state: role=${verify.currentRole ?? "<gone>"} name=${verify.currentName ?? "<gone>"}. ` +
-                `The DOM changed between your inspect and this click (e.g. a modal swapped its input role). ` +
-                `Call inspect again to refresh refs, then retry the click against the fresh ref.`,
-            );
-          }
-        }
+	        if (target.startsWith("@") && targetEntry) {
+	          const currentRef = client.currentRefMap?.[target.slice(1)];
+	          const expected = {
+	            role: targetEntry.role,
+	            name: targetEntry.name || currentRef?.name,
+	          };
+	          let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
+	          for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
+	            throwIfAborted(abortSignal);
+	            latestVerify = await client.verifyRef(target.slice(1), expected);
+	            if (latestVerify.matches) break;
+	            if (attempt >= REF_STALE_MAX_RETRIES) {
+	              return refStaleFailure(target, targetEntry, latestVerify);
+	            }
+	            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
+	            if (!freshEntry) {
+	              return refStaleFailure(target, targetEntry, latestVerify);
+	            }
+	            target = freshEntry.ref;
+	            targetEntry = freshEntry;
+	          }
+	        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
         else await client.clickAt(target);
