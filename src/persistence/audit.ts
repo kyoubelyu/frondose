@@ -14,6 +14,14 @@ export interface AuditEntry {
 }
 
 const TRUNCATE_BYTES = 2000;
+const PER_STRING_CAP = 2000;
+const MAX_ELEMS = 50;
+const MAX_KEYS = 50;
+const MAX_DEPTH = 10;
+const TRUNCATED_MARKER = "...[truncated]";
+const CIRCULAR_MARKER = "[circular]";
+const GETTER_MARKER = "[getter]";
+const UNREADABLE_MARKER = "[unreadable]";
 
 /**
  * Build a Vercel-compatible onStepFinish callback that appends one JSONL line
@@ -58,7 +66,7 @@ export function makeAuditWriter(auditPath: string): (step: StepResult<ToolSet>) 
           ts,
           toolCallId: tr.toolCallId,
           toolName: tr.toolName,
-          input: tr.args,
+          input: truncateForAudit(tr.args),
           output: truncateForAudit(tr.result),
           error: null,
           stepFinishReason: step.finishReason,
@@ -89,7 +97,7 @@ export function writeAuditRow(auditPath: string, row: AuditEntry): void {
   try {
     const dir = dirname(auditPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const sanitized: AuditEntry = { ...row, output: truncateForAudit(row.output) };
+    const sanitized: AuditEntry = { ...row, input: truncateForAudit(row.input), output: truncateForAudit(row.output) };
     appendFileSync(auditPath, `${JSON.stringify(sanitized)}\n`, "utf-8");
   } catch (e) {
     process.stderr.write(
@@ -151,19 +159,222 @@ export function writeLlmErrorAudit(auditPath: string, row: Omit<LlmErrorAuditRow
   }
 }
 
+export function boundedSanitize(value: unknown, maxBytes: number): { value: unknown; truncated: boolean } {
+  let remaining = Math.max(0, Math.floor(Number.isFinite(maxBytes) ? maxBytes : 0));
+  let truncated = false;
+  const seen = new WeakSet<object>();
+
+  const markTruncated = (): string => {
+    truncated = true;
+    return TRUNCATED_MARKER;
+  };
+
+  const spend = (bytes: number): boolean => {
+    if (remaining <= 0) {
+      truncated = true;
+      return false;
+    }
+    if (bytes > remaining) {
+      remaining = 0;
+      truncated = true;
+      return false;
+    }
+    remaining -= bytes;
+    return true;
+  };
+
+  const byteLength = (text: string): number => Buffer.byteLength(text, "utf8");
+
+  const sliceToBudget = (text: string, budget: number): string => {
+    if (budget <= 0) return "";
+    let used = 0;
+    let end = 0;
+    for (const char of text) {
+      const size = byteLength(char);
+      if (used + size > budget) break;
+      used += size;
+      end += char.length;
+    }
+    return text.slice(0, end);
+  };
+
+  const sanitizeString = (text: string): string => {
+    const capped = text.length > PER_STRING_CAP ? text.slice(0, PER_STRING_CAP) : text;
+    const needsPerStringTruncation = capped.length !== text.length;
+    const suffixBytes = needsPerStringTruncation ? byteLength(TRUNCATED_MARKER) : 0;
+    const cappedBytes = byteLength(capped) + suffixBytes;
+    if (cappedBytes <= remaining) {
+      remaining -= cappedBytes;
+      if (needsPerStringTruncation) truncated = true;
+      return needsPerStringTruncation ? `${capped}${TRUNCATED_MARKER}` : capped;
+    }
+
+    truncated = true;
+    const available = Math.max(0, remaining - byteLength(TRUNCATED_MARKER));
+    remaining = 0;
+    return `${sliceToBudget(capped, available)}${TRUNCATED_MARKER}`;
+  };
+
+  const sanitizeKey = (key: string): string | null => {
+    if (remaining <= 0) return null;
+    const capped = key.length > PER_STRING_CAP ? key.slice(0, PER_STRING_CAP) : key;
+    const needsPerKeyTruncation = capped.length !== key.length;
+    const suffixBytes = needsPerKeyTruncation ? byteLength(TRUNCATED_MARKER) : 0;
+    const cappedBytes = byteLength(capped) + suffixBytes + 4;
+    if (cappedBytes <= remaining) {
+      remaining -= cappedBytes;
+      if (needsPerKeyTruncation) truncated = true;
+      return needsPerKeyTruncation ? `${capped}${TRUNCATED_MARKER}` : capped;
+    }
+
+    truncated = true;
+    const available = Math.max(0, remaining - byteLength(TRUNCATED_MARKER) - 4);
+    remaining = 0;
+    return `${sliceToBudget(capped, available)}${TRUNCATED_MARKER}`;
+  };
+
+  const walk = (current: unknown, depth: number): unknown => {
+    if (remaining <= 0) return markTruncated();
+    if (depth > MAX_DEPTH) return markTruncated();
+
+    if (current === null) {
+      return spend(4) ? null : markTruncated();
+    }
+    if (typeof current === "string") return sanitizeString(current);
+    if (typeof current === "number" || typeof current === "boolean") {
+      const json = JSON.stringify(current);
+      return spend(byteLength(json)) ? current : markTruncated();
+    }
+    if (typeof current === "undefined") return undefined;
+    if (typeof current === "bigint") return sanitizeString(`${current.toString()}n`);
+    if (typeof current === "symbol") return sanitizeString(String(current));
+    if (typeof current === "function") return "[function]";
+    if (typeof current !== "object") return current;
+
+    if (seen.has(current)) {
+      truncated = true;
+      return CIRCULAR_MARKER;
+    }
+    if (!spend(2)) return markTruncated();
+
+    seen.add(current);
+    try {
+      if (Array.isArray(current)) return walkArray(current, depth);
+      return walkObject(current as Record<string, unknown>, depth);
+    } finally {
+      seen.delete(current);
+    }
+  };
+
+  const walkArray = (current: unknown[], depth: number): unknown[] => {
+    const clone: unknown[] = [];
+    const limit = Math.min(current.length, MAX_ELEMS);
+    for (let index = 0; index < limit; index += 1) {
+      if (remaining <= 0) {
+        clone.push(markTruncated());
+        return clone;
+      }
+
+      const key = String(index);
+      let descriptor: PropertyDescriptor | undefined;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(current, key);
+      } catch {
+        clone[index] = UNREADABLE_MARKER;
+        truncated = true;
+        continue;
+      }
+
+      if (!descriptor) {
+        clone.length = index + 1;
+        continue;
+      }
+      if (!descriptor.enumerable) continue;
+      if (!("value" in descriptor)) {
+        clone[index] = GETTER_MARKER;
+        truncated = true;
+        continue;
+      }
+
+      try {
+        clone[index] = walk(current[index], depth + 1);
+      } catch {
+        clone[index] = UNREADABLE_MARKER;
+        truncated = true;
+      }
+    }
+    if (current.length > MAX_ELEMS) {
+      clone.push(`...[+${current.length - MAX_ELEMS} more]`);
+      truncated = true;
+    } else {
+      clone.length = current.length;
+    }
+    return clone;
+  };
+
+  const walkObject = (current: Record<string, unknown>, depth: number): Record<string, unknown> => {
+    const clone: Record<string, unknown> = {};
+    let count = 0;
+
+    for (const key in current) {
+      if (!Object.hasOwn(current, key)) continue;
+      if (count >= MAX_KEYS) {
+        clone["...[+1 more]"] = true;
+        truncated = true;
+        break;
+      }
+      if (remaining <= 0) {
+        clone[TRUNCATED_MARKER] = TRUNCATED_MARKER;
+        truncated = true;
+        break;
+      }
+
+      let descriptor: PropertyDescriptor | undefined;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(current, key);
+      } catch {
+        const cloneKey = sanitizeKey(key) ?? TRUNCATED_MARKER;
+        clone[cloneKey] = UNREADABLE_MARKER;
+        truncated = true;
+        count += 1;
+        continue;
+      }
+
+      if (!descriptor?.enumerable) continue;
+      const cloneKey = sanitizeKey(key);
+      if (cloneKey === null) {
+        clone[TRUNCATED_MARKER] = TRUNCATED_MARKER;
+        truncated = true;
+        break;
+      }
+      if (!("value" in descriptor)) {
+        clone[cloneKey] = GETTER_MARKER;
+        truncated = true;
+        count += 1;
+        continue;
+      }
+
+      try {
+        clone[cloneKey] = walk(current[key], depth + 1);
+      } catch {
+        clone[cloneKey] = UNREADABLE_MARKER;
+        truncated = true;
+      }
+      count += 1;
+    }
+
+    return clone;
+  };
+
+  return { value: walk(value, 0), truncated };
+}
+
 function truncateForAudit(value: unknown): unknown {
   if (typeof value === "string") {
     return value.length > TRUNCATE_BYTES ? `${value.slice(0, TRUNCATE_BYTES)}…[truncated]` : value;
   }
   if (value && typeof value === "object") {
-    try {
-      const json = JSON.stringify(value);
-      if (json.length > TRUNCATE_BYTES) return `${json.slice(0, TRUNCATE_BYTES)}…[truncated]`;
-      // Returning the original object preserves typing through JSON.stringify in the line.
-      return value;
-    } catch {
-      return "[unserializable]";
-    }
+    return boundedSanitize(value, TRUNCATE_BYTES).value;
   }
   return value;
 }
