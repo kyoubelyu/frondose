@@ -265,16 +265,36 @@ export function createCronDriver(
         state.autoRunId = null;
         state.lastEmittedAutoCounters = null;
       }
-      const all = readSchedule(deps.schedulePath);
-      const idx = all.findIndex((record) => record.id === next.id);
-      if (idx >= 0) {
-        const target = all[idx];
-        if (target !== undefined) {
-          const updated = markRan(target, fireDate);
-          if (updated === null) all.splice(idx, 1);
-          else all[idx] = updated;
-          writeSchedule(deps.schedulePath, all);
+      try {
+        const all = readSchedule(deps.schedulePath);
+        const idx = all.findIndex((record) => record.id === next.id);
+        if (idx >= 0) {
+          const target = all[idx];
+          if (target !== undefined) {
+            const updated = markRan(target, fireDate);
+            if (updated === null) all.splice(idx, 1);
+            else all[idx] = updated;
+            writeSchedule(deps.schedulePath, all);
+          }
         }
+      } catch (markErr) {
+        try {
+          const all = readSchedule(deps.schedulePath);
+          const idx = all.findIndex((record) => record.id === next.id);
+          if (idx >= 0) {
+            const target = all[idx];
+            if (target !== undefined) {
+              all[idx] = { ...target, enabled: false, lastRunAt: fireDate.toISOString() };
+              writeSchedule(deps.schedulePath, all);
+            }
+          }
+        } catch {}
+        deps.emitFrame({
+          type: "error",
+          turnId,
+          message: `cron mark-ran failed; job ${next.id} disabled: ${markErr instanceof Error ? markErr.message : String(markErr)}`,
+          retryable: false,
+        });
       }
     } catch (e) {
       deps.emitFrame({

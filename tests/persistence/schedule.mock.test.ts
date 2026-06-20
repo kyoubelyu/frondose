@@ -49,6 +49,7 @@ import { describe, it } from "node:test";
 import {
   computeCronRunId,
   findDueJobs,
+  isOneShot,
   markRan,
   nextRunAfter,
   parseAtSpec,
@@ -361,6 +362,33 @@ describe("writeSchedule — schedule.jsonl writing", () => {
   });
 });
 
+describe("isOneShot — robust one-shot detection", () => {
+  it("T-CronOneShot.1: when type is oneshot with a recurring cron expression, isOneShot returns true", () => {
+    // Given/When/Then: a record marked type="oneshot" is treated as one-shot regardless of cronExpr shape.
+    const r = makeRecord({ type: "oneshot", cronExpr: "0 9 * * *" });
+    assert.equal(isOneShot(r), true);
+  });
+
+  it('T-CronOneShot.2: when type is recurring with an "at:" cron expression, isOneShot returns true', () => {
+    // Given/When/Then: a legacy/malformed record with cronExpr="at:<ISO>" is treated as one-shot.
+    const r = makeRecord({ type: "recurring", cronExpr: "at:2026-05-10T09:00:00.000Z" });
+    assert.equal(isOneShot(r), true);
+  });
+
+  it("T-CronOneShot.3: when type is recurring with a 5-field cron expression, isOneShot returns false", () => {
+    // Given/When/Then: a normal recurring cron record is not classified as one-shot.
+    const r = makeRecord({ type: "recurring", cronExpr: "0 9 * * *" });
+    assert.equal(isOneShot(r), false);
+  });
+
+  it("T-CronOneShot.4: when cronExpr is null and type is missing, isOneShot returns false without throwing", () => {
+    // Given/When/Then: a legacy null-cronExpr row without type does not throw and is not inferred as one-shot.
+    const r = { cronExpr: null } as unknown as Pick<ScheduleRecord, "type" | "cronExpr">;
+    assert.doesNotThrow(() => isOneShot(r));
+    assert.equal(isOneShot(r), false);
+  });
+});
+
 describe("findDueJobs — filtering due records", () => {
   it("T-Schedule.6: when recurring record has nextRunAt 30min in the past and enabled=true, findDueJobs returns it (CONCERN-MR-1 fix: nextRunAt drives due-ness, not lastRunAt)", () => {
     // Given: record with nextRunAt 30min in the past, enabled=true
@@ -428,6 +456,43 @@ describe("findDueJobs — filtering due records", () => {
     assert.deepEqual(result, []);
   });
 
+  it('T-CronOneShot.8: when a fired one-shot has type missing but cronExpr starts with "at:", findDueJobs excludes it', () => {
+    // Given/When/Then: lastRunAt suppresses re-fire for an at:<ISO> one-shot even when type is absent.
+    const r = makeRecord({
+      cronExpr: "at:2026-05-10T09:00:00.000Z",
+      lastRunAt: "2026-05-10T09:00:01.000Z",
+      nextRunAt: "2026-05-10T09:00:00.000Z",
+    }) as Partial<ScheduleRecord>;
+    delete r.type;
+    const result = findDueJobs([r as ScheduleRecord], new Date("2026-05-10T09:30:00Z"));
+    assert.deepEqual(result, []);
+  });
+
+  it('T-CronOneShot.9: when an unfired "at:" one-shot is due, findDueJobs returns it', () => {
+    // Given/When/Then: an at:<ISO> one-shot with lastRunAt=null and nextRunAt<=now is due once.
+    const r = makeRecord({
+      type: "recurring",
+      cronExpr: "at:2026-05-10T09:00:00.000Z",
+      lastRunAt: null,
+      nextRunAt: "2026-05-10T09:00:00.000Z",
+    });
+    const result = findDueJobs([r], new Date("2026-05-10T09:30:00Z"));
+    assert.equal(result.length, 1);
+    assert.deepEqual(result[0], r);
+  });
+
+  it("T-CronOneShot.10: when a legacy null-cronExpr one-shot row is scanned, findDueJobs does not throw", () => {
+    // Given/When/Then: a legacy type="oneshot" row with cronExpr=null is filtered without dereferencing null.
+    const r = makeRecord({
+      type: "oneshot",
+      cronExpr: null as unknown as string,
+      lastRunAt: "2026-05-10T09:00:01.000Z",
+      nextRunAt: "2026-05-10T09:00:00.000Z",
+    });
+    assert.doesNotThrow(() => findDueJobs([r], new Date("2026-05-10T09:30:00Z")));
+    assert.deepEqual(findDueJobs([r], new Date("2026-05-10T09:30:00Z")), []);
+  });
+
   it('T-SchedLocal.2: when findDueJobs is called at 14:25 local for a "30 14 * * *" job (due at 14:30), returns [] — but at 14:31 local, returns the job', () => {
     // Given: a recurring record with cron "30 14 * * *" and nextRunAt set to today's 14:30 local
     // When:  findDueJobs([record], nowAt14_25Local) is called at 14:25 local
@@ -475,6 +540,32 @@ describe("markRan — updating records after firing", () => {
     const r = makeRecord({ type: "oneshot", cronExpr: "at:2026-05-10T09:00:00.000Z" });
     const result = markRan(r, new Date());
     assert.equal(result, null);
+  });
+
+  it('T-CronOneShot.5: when markRan sees an "at:" cronExpr with type missing or recurring, it returns null without throwing', () => {
+    // Given/When/Then: either one-shot signal is enough for markRan to remove the job instead of parsing "at:".
+    const fireDate = new Date("2026-05-10T09:00:00Z");
+    const missingType = makeRecord({ cronExpr: "at:2026-05-10T09:00:00.000Z" }) as Partial<ScheduleRecord>;
+    delete missingType.type;
+    const recurringAt = makeRecord({ type: "recurring", cronExpr: "at:2026-05-10T09:00:00.000Z" });
+    assert.equal(markRan(missingType as ScheduleRecord, fireDate), null);
+    assert.equal(markRan(recurringAt, fireDate), null);
+  });
+
+  it("T-CronOneShot.6: when markRan sees a recurring 5-field cron expression, it advances nextRunAt", () => {
+    // Given/When/Then: normal recurring records still update lastRunAt and advance nextRunAt.
+    const r = makeRecord({ type: "recurring", cronExpr: "0 9 * * *" });
+    const updated = markRan(r, new Date("2026-05-10T09:00:00Z"));
+    assert.ok(updated !== null, "recurring markRan must return an updated record");
+    assert.equal(updated.lastRunAt, "2026-05-10T09:00:00.000Z");
+    assert.equal(updated.nextRunAt, "2026-05-11T01:00:00.000Z");
+  });
+
+  it("T-CronOneShot.7: when markRan sees a legacy one-shot row with cronExpr=null, it returns null without throwing", () => {
+    // Given/When/Then: type="oneshot" protects legacy null-cronExpr rows from parseCronExpr.
+    const r = makeRecord({ type: "oneshot", cronExpr: null as unknown as string });
+    assert.doesNotThrow(() => markRan(r, new Date("2026-05-10T09:00:00Z")));
+    assert.equal(markRan(r, new Date("2026-05-10T09:00:00Z")), null);
   });
 });
 
