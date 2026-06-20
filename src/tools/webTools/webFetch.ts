@@ -47,6 +47,10 @@ export function makeWebFetchTool() {
           method: "GET",
           redirect: "follow",
           headers: { "User-Agent": "frondose/1.0 (+https://github.com/kyoubelyu/frondose)" },
+          // [P-AUTO-L3FIX-6] bound the fetch so a slow/hung page can't stall the agent
+          // loop indefinitely (an unbounded fetch is an un-abortable-hang vector). The
+          // throw lands in the existing catch → graceful runtime_error envelope.
+          signal: AbortSignal.timeout(30_000),
         });
         if (!response.ok) {
           return fail("web_fetch", "runtime_error", `HTTP ${response.status} ${response.statusText} for ${url}`);
