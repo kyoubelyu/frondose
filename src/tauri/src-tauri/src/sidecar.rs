@@ -102,6 +102,25 @@ fn turn_heartbeat_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".frondose").join("agent").join("turn-heartbeat"))
 }
 
+fn watchdog_kills_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| {
+        home.join(".frondose")
+            .join("agent")
+            .join("watchdog-kills.jsonl")
+    })
+}
+
+fn record_watchdog_kill(path: &std::path::Path, now_ms: u128) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{{\"ts\":{}}}", now_ms);
+    }
+}
+
 fn heartbeat_says_stuck(
     mtime: Option<SystemTime>,
     spawn_time: SystemTime,
@@ -258,6 +277,16 @@ pub(crate) async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
                                 "[watchdog] turn heartbeat stale for {}s; force-restarting sidecar pid={}",
                                 stale_secs, pid
                             );
+                            if let Some(kills_path) = watchdog_kills_path() {
+                                if let Some(parent) = kills_path.parent() {
+                                    let _ = std::fs::create_dir_all(parent);
+                                }
+                                let now_ms = now
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis())
+                                    .unwrap_or(0);
+                                record_watchdog_kill(&kills_path, now_ms);
+                            }
                             force_kill_sidecar_pid(pid).await;
                             let exit = child.wait().await;
                             state.child_pid.store(0, Ordering::SeqCst);
@@ -387,5 +416,32 @@ mod tests {
             now,
             Duration::from_secs(STUCK_SECS),
         ));
+    }
+
+    #[test]
+    fn record_watchdog_kill_appends_parseable_lines() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "frondose-watchdog-kills-{}-{}.jsonl",
+            std::process::id(),
+            nanos
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        record_watchdog_kill(&path, 123);
+        record_watchdog_kill(&path, 456);
+
+        let raw = std::fs::read_to_string(&path).expect("watchdog kill marker file");
+        let lines: Vec<&str> = raw.lines().collect();
+        assert_eq!(lines.len(), 2);
+        for (line, expected) in lines.iter().zip([123_u64, 456_u64]) {
+            let parsed: serde_json::Value = serde_json::from_str(line).expect("parse marker line");
+            assert_eq!(parsed.get("ts").and_then(|v| v.as_u64()), Some(expected));
+        }
+
+        let _ = std::fs::remove_file(&path);
     }
 }

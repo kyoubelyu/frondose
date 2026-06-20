@@ -32,7 +32,7 @@ import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js"
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
-import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
+import { clearWatchdogKills, DATA_DIR_NAME, getHomeBase, readWatchdogKillTimestamps } from "../../persistence/paths.js";
 import {
   type AutoRunRow,
   countOutboundSince,
@@ -52,7 +52,7 @@ import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRate
 import type { ServeDeps, ServeEmitter, ServeState, SseFrame } from "./serve/context.js";
 import { createCronDriver } from "./serve/cron.js";
 import { createOverlayDispatcher } from "./serve/dispatch.js";
-import { reapOrphanIfIdle } from "./serve/turn/reaper.js";
+import { reapKillCappedRun, reapOrphanIfIdle } from "./serve/turn/reaper.js";
 import { removeFile } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
@@ -336,6 +336,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // close a run mid-outbound (only the CDP connect_sent click is running-gated)
   // or during a legit long sleep. See reapOrphanIfIdle.
   const REAP_IDLE_MS = 360_000;
+  const WATCHDOG_KILL_CAP = 3;
   const auditIdleMs = (): number => {
     try {
       return Date.now() - statSync(auditPath).mtimeMs;
@@ -343,11 +344,28 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       return Number.POSITIVE_INFINITY;
     }
   };
+  const maybeReapKillCappedRun = (): void => {
+    reapKillCappedRun(
+      getSalesDb(salesDbPath),
+      state,
+      false,
+      deps.emitFrame,
+      auditIdleMs(),
+      REAP_IDLE_MS,
+      readWatchdogKillTimestamps(),
+      WATCHDOG_KILL_CAP,
+      clearWatchdogKills,
+    );
+  };
   const maybeReapOrphanRun = (): void => {
     reapOrphanIfIdle(getSalesDb(salesDbPath), state, false, deps.emitFrame, auditIdleMs(), REAP_IDLE_MS);
   };
+  maybeReapKillCappedRun();
   maybeReapOrphanRun(); // boot reap: close a pre-existing orphan from a prior crash/watchdog-restart
-  reaperInterval = setInterval(maybeReapOrphanRun, 60_000);
+  reaperInterval = setInterval(() => {
+    maybeReapKillCappedRun();
+    maybeReapOrphanRun();
+  }, 60_000);
   reaperInterval.unref();
 
   const server = createServer((req, res) => {
