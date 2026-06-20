@@ -859,6 +859,7 @@ name = "frondose"
 version = "0.5.0-alpha.57"
 dependencies = [
  "bytes",
+ "dirs",
  "hyper 0.14.32",
  "libc",
  "rand",

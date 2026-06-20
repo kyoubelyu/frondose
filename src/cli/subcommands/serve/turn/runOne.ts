@@ -5,7 +5,7 @@ import type { StepResult, ToolSet } from "ai";
 import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
-import { DATA_DIR_NAME } from "../../../../persistence/paths.js";
+import { DATA_DIR_NAME, bumpTurnHeartbeat, removeTurnHeartbeat, writeTurnHeartbeat } from "../../../../persistence/paths.js";
 import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
@@ -57,18 +57,18 @@ export interface TurnArgs {
 }
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
-  const { turnId, abortController } = args;
+  const { turnId, abortController } = args; writeTurnHeartbeat();
   let abortReason: "duration_cap" | "silent_hang" | "operator_or_other" | null = null;
   const disabledModelMessage = "configure your DeepSeek API key in Settings (gear icon)";
   if (deps.model === null) {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
-    return;
+    removeTurnHeartbeat(); return;
   }
   try {
     (await import("../../../../agent/pi/model.js")).resolvePiModel();
   } catch {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
-    return;
+    removeTurnHeartbeat(); return;
   }
   // [P-75 P-WEDGE-1] Wire this turn's abort signal into the CDP layer so the D-16
   // cap watcher, the D-27 silent-hang watcher, and operator /agent/abort can
@@ -124,7 +124,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
   // turn end via clearInterval in finally.
   let lastProgressAt = Date.now();
   const noteProgress = (): void => {
-    lastProgressAt = Date.now();
+    lastProgressAt = Date.now(); bumpTurnHeartbeat(lastProgressAt);
   };
   const SILENT_HANG_MS = 180_000;
   const silentHangWatcher = setInterval(() => {
@@ -319,8 +319,8 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       void callInOverlay(client.handle, ctxId, fn);
     }
   } finally {
-    clearInterval(capWatcher); // [P-75 D-16] stop the auto-run cap watcher
-    clearInterval(silentHangWatcher); // [P-75 D-27] stop the silent-hang watcher
+    clearInterval(capWatcher); clearInterval(silentHangWatcher); // [P-75 D-16/D-27] stop turn watchers
+    removeTurnHeartbeat();
     deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     try {
