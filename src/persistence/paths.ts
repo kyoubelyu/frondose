@@ -14,6 +14,38 @@ export function HEARTBEAT_PATH(): string {
   return join(getHomeBase(), DATA_DIR_NAME, "agent", "turn-heartbeat");
 }
 
+export function WATCHDOG_KILLS_PATH(): string {
+  return join(getHomeBase(), DATA_DIR_NAME, "agent", "watchdog-kills.jsonl");
+}
+
+export function readWatchdogKillTimestamps(): number[] {
+  try {
+    const raw = fs.readFileSync(WATCHDOG_KILLS_PATH(), "utf8");
+    const out: number[] = [];
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const ts = (JSON.parse(trimmed) as { ts?: unknown }).ts;
+        if (typeof ts === "number" && Number.isFinite(ts)) out.push(ts);
+      } catch {
+        /* skip malformed marker lines */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function clearWatchdogKills(): void {
+  try {
+    fs.rmSync(WATCHDOG_KILLS_PATH(), { force: true });
+  } catch {
+    /* watchdog marker cleanup must never crash the reaper */
+  }
+}
+
 const HEARTBEAT_THROTTLE_MS = 5_000;
 let lastHeartbeatWriteAt = 0;
 
