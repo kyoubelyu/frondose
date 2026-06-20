@@ -79,6 +79,9 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
               Authorization: `Bearer ${token}`,
               Accept: "application/vnd.github+json",
             },
+            // [P-AUTO-L3FIX-6] bound the GitHub API call so a hung request can't stall
+            // the agent loop (un-abortable-hang vector); throw → existing catch.
+            signal: AbortSignal.timeout(15_000),
           });
           if (searchResp.ok) {
             const searchResult = (await searchResp.json()) as {
@@ -120,6 +123,8 @@ export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
             body: params.body,
             labels: params.labels,
           }),
+          // [P-AUTO-L3FIX-6] bound the GitHub API call (un-abortable-hang vector).
+          signal: AbortSignal.timeout(15_000),
         });
 
         if (!createResp.ok) {

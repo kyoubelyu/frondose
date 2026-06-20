@@ -70,6 +70,28 @@ test("T-WebFetch.1: happy path — HTTPS URL → ok envelope with status, conten
   );
 });
 
+// ─── T-WebFetch.9: fetch is bounded by a timeout (P-AUTO-L3FIX-6) ──────────────
+
+test("T-WebFetch.9: web_fetch passes an AbortSignal.timeout to fetch so a hung page cannot stall the agent loop (P-AUTO-L3FIX-6)", async () => {
+  const tool = makeWebFetchTool();
+  let captured: AbortSignal | null | undefined;
+
+  await withMockFetch(
+    async (_url, init) => {
+      captured = init?.signal;
+      return makeResponse("ok", 200, "text/plain");
+    },
+    async () => {
+      await tool.execute?.({ url: "https://example.com", maxChars: 8000 }, FAKE_OPTS);
+    },
+  );
+
+  assert.ok(
+    captured instanceof AbortSignal,
+    "web_fetch must bound the fetch with an AbortSignal (timeout) — unbounded fetch is an un-abortable-hang vector",
+  );
+});
+
 // ─── T-WebFetch.2: Large response → truncated ─────────────────────────────────
 
 test("T-WebFetch.2: response longer than maxChars → truncated:true + truncation suffix", async () => {
