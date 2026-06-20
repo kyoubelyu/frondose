@@ -228,7 +228,7 @@ describe("P-AUTO-L3FIX-7 watchdog kill marker file parsing", () => {
     } finally {
       if (prevHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
       else process.env.FRONDOSE_HOME_BASE = prevHomeBase;
-      rmSync(tmpHome, { recursive: true, force: true });
+      rmSync(tmpHome, { recursive: true, force: true, maxRetries: 3 });
     }
   });
 });
