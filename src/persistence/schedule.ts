@@ -148,11 +148,15 @@ export function writeSchedule(path: string, records: ScheduleRecord[]): void {
   renameSync(tmp, path);
 }
 
+export function isOneShot(record: Pick<ScheduleRecord, "type" | "cronExpr">): boolean {
+  return record.type === "oneshot" || (typeof record.cronExpr === "string" && record.cronExpr.startsWith("at:"));
+}
+
 /** Filter to records whose `nextRunAt <= now` AND `enabled === true`. Recurring + one-shot. */
 export function findDueJobs(records: ScheduleRecord[], now: Date): ScheduleRecord[] {
   return records.filter((r) => {
     if (!r.enabled) return false;
-    if (r.type === "oneshot" && r.lastRunAt) return false; // already fired
+    if (isOneShot(r) && r.lastRunAt) return false; // already fired
     return new Date(r.nextRunAt).getTime() <= now.getTime();
   });
 }
@@ -163,7 +167,7 @@ export function findDueJobs(records: ScheduleRecord[], now: Date): ScheduleRecor
  * One-shot:  returns null (caller filters; record is removed from schedule).
  */
 export function markRan(record: ScheduleRecord, fireDate: Date): ScheduleRecord | null {
-  if (record.type === "oneshot") return null;
+  if (isOneShot(record)) return null;
   const parsed = parseCronExpr(record.cronExpr);
   return {
     ...record,
