@@ -76,3 +76,55 @@ export function reapOrphanIfIdle(
   if (auditIdleMs < reapIdleMs) return;
   reapExpiredAutoRun(db, state, isCronTurn, emitFrame);
 }
+
+/**
+ * P-AUTO-L3FIX-7: close a run that the Rust watchdog has force-restarted >= `cap`
+ * times (kill->respawn churn). `killTimestamps` is injected so the marker-file
+ * read stays outside this pure helper, matching `auditIdleMs` in the orphan reaper.
+ */
+export function reapKillCappedRun(
+  db: DB,
+  state: { autoRunId: string | null; lastEmittedAutoCounters?: Record<string, number> | null },
+  isCronTurn: boolean,
+  emitFrame: (frame: SseFrame) => void,
+  auditIdleMs: number,
+  reapIdleMs: number,
+  killTimestamps: number[],
+  cap: number,
+  clearKills: () => void,
+): void {
+  try {
+    if (auditIdleMs < reapIdleMs) return;
+    const run = getCurrentAutoRun(db);
+    if (!run) {
+      if (killTimestamps.length > 0) clearKills();
+      return;
+    }
+    const kills = killTimestamps.filter((ts) => ts >= run.startedAt).length;
+    if (kills === 0) {
+      if (killTimestamps.length > 0) clearKills();
+      return;
+    }
+    if (kills < cap) return;
+    const counters = countAutoLedgerByAction(db, run.id);
+    const summary = `Watchdog restart cap reached (${kills}x; auto-closed)`;
+    const res = endAutoRun(db, run.id, { status: "stopped_by_agent", summary, counters });
+    const cronWillEmit = isCronTurn === true && state.autoRunId === run.id;
+    if (res.alreadyEnded === false && !cronWillEmit) {
+      emitFrame({
+        type: "auto-run-completed",
+        runId: run.id,
+        status: "stopped_by_agent",
+        summary,
+        finalCounters: counters,
+        endedAt: Date.now(),
+        ts: Date.now(),
+      });
+      state.autoRunId = null;
+      state.lastEmittedAutoCounters = null;
+    }
+    clearKills();
+  } catch {
+    /* reaper must never crash */
+  }
+}
