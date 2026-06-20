@@ -47,3 +47,32 @@ export function reapExpiredAutoRun(
     /* reaper must never crash turn teardown */
   }
 }
+
+/**
+ * P-AUTO-L3FIX-5: independent orphan-run closer. Closes a past-cap `running`
+ * auto_run when the agent has been IDLE (no tool step written to the audit log)
+ * longer than `reapIdleMs` — regardless of cron-mode (D-RUN-1 SSE-halt) or an
+ * active turn. Fixes the capstone orphan: a turn ended cleanly (heartbeat
+ * absent, abort=not_found) but the run stayed `running` past its cap because the
+ * per-turn-finally reaper + cron cap-close both need a turn/cron active.
+ *
+ * `auditIdleMs` is INJECTED (the caller stats audit.jsonl mtime) so this stays
+ * pure + unit-testable. The idle gate is the safety invariant: `reapIdleMs`
+ * (360s) > the 45s `raceCdp` deadline that bounds the CDP `connect_sent` click
+ * (`click.ts:372`, the ONLY ledger write gated on a running run) AND > the
+ * `sleep` tool's 300s max — so the reaper can never close a run with an in-flight
+ * running-only ledger write or a legit long sleep. `record_auto_action` appends
+ * by run existence (not running-status), so it survives a close. Delegates the
+ * actual past-cap close + exactly-once emit to `reapExpiredAutoRun`.
+ */
+export function reapOrphanIfIdle(
+  db: DB,
+  state: { autoRunId: string | null; lastEmittedAutoCounters?: Record<string, number> | null },
+  isCronTurn: boolean,
+  emitFrame: (frame: SseFrame) => void,
+  auditIdleMs: number,
+  reapIdleMs: number,
+): void {
+  if (auditIdleMs < reapIdleMs) return;
+  reapExpiredAutoRun(db, state, isCronTurn, emitFrame);
+}
