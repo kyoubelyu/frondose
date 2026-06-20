@@ -1,16 +1,23 @@
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
+#[cfg(windows)]
+use crate::resolve::windows_sidecar_log_path;
 use crate::resolve::{resolve_node, resolve_sidecar_bin};
-#[cfg(windows)] use crate::resolve::windows_sidecar_log_path;
 use crate::state::{uds_request, FrondoseServeState};
 use hyper::Method;
 use tokio::process::{Child, Command};
 
+const STUCK_SECS: u64 = 360;
+const POLL_SECS: u64 = 30;
+
 /// Spawn `node <sidecar_bin> --port-file <path> --token <tok>` as a child process.
-pub(crate) async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Result<Child, String> {
+pub(crate) async fn spawn_frondose_serve(
+    port_file: &PathBuf,
+    token: &str,
+) -> Result<Child, String> {
     // P-APP-6: resolve node + the dedicated app sidecar entrypoint by absolute
     // path so a Finder-launched bundle (launchd minimal PATH) can spawn it.
     let sidecar_bin = PathBuf::from(resolve_sidecar_bin());
@@ -65,7 +72,10 @@ pub(crate) async fn spawn_frondose_serve(port_file: &PathBuf, token: &str) -> Re
 /// GET /health on that port returns ok; on success store the port into `state.port`
 /// (so requests/SSE target it) and return. Used at boot AND after every supervised
 /// respawn (each respawn binds a NEW ephemeral port).
-pub(crate) async fn await_serve_ready(state: &FrondoseServeState, timeout_ms: u64) -> Result<(), String> {
+pub(crate) async fn await_serve_ready(
+    state: &FrondoseServeState,
+    timeout_ms: u64,
+) -> Result<(), String> {
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
     while std::time::Instant::now() < deadline {
         if let Ok(s) = std::fs::read_to_string(&state.port_file) {
@@ -73,7 +83,10 @@ pub(crate) async fn await_serve_ready(state: &FrondoseServeState, timeout_ms: u6
                 if port != 0 {
                     // Publish the port BEFORE the health check so uds_request targets it.
                     state.port.store(port, Ordering::SeqCst);
-                    if uds_request(state, Method::GET, "/health", None).await.is_ok() {
+                    if uds_request(state, Method::GET, "/health", None)
+                        .await
+                        .is_ok()
+                    {
                         return Ok(());
                     }
                 }
@@ -83,6 +96,42 @@ pub(crate) async fn await_serve_ready(state: &FrondoseServeState, timeout_ms: u6
     }
     state.port.store(0, Ordering::SeqCst);
     Err(format!("frondose serve not ready within {}ms", timeout_ms))
+}
+
+fn turn_heartbeat_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".frondose").join("agent").join("turn-heartbeat"))
+}
+
+fn heartbeat_says_stuck(
+    mtime: Option<SystemTime>,
+    spawn_time: SystemTime,
+    now: SystemTime,
+    stuck: Duration,
+) -> bool {
+    let Some(mtime) = mtime else {
+        return false;
+    };
+    if mtime < spawn_time {
+        return false;
+    }
+    now.duration_since(mtime).is_ok_and(|elapsed| elapsed > stuck)
+}
+
+async fn force_kill_sidecar_pid(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .output()
+            .await;
+    }
 }
 
 /// Tear down sidecar process + clean up UDS dir.
@@ -115,17 +164,7 @@ pub(crate) async fn shutdown_sidecar(state: &FrondoseServeState) {
         tokio::time::sleep(Duration::from_millis(800)).await;
         let still_alive = state.child_pid.load(Ordering::SeqCst) > 0;
         if still_alive {
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
-            }
-            #[cfg(windows)]
-            {
-                let _ = tokio::process::Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/T", "/F"])
-                    .output()
-                    .await;
-            }
+            force_kill_sidecar_pid(pid).await;
         }
     }
     let _ = std::fs::remove_dir_all(&state.parent_dir);
@@ -157,6 +196,7 @@ pub(crate) async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
     const MAX_CONSECUTIVE_SPAWN_FAILURES: u32 = 8;
     let mut backoff_ms = INITIAL_BACKOFF_MS;
     let mut consecutive_spawn_failures: u32 = 0;
+    let mut spawn_time = SystemTime::now();
 
     loop {
         if state.shutting_down.load(Ordering::SeqCst) {
@@ -174,22 +214,67 @@ pub(crate) async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
             state.child_pid.store(pid, Ordering::SeqCst);
             eprintln!("[frondose] D-24 supervisor: watching sidecar pid={}", pid);
 
-            let exit = child.wait().await;
-            state.child_pid.store(0, Ordering::SeqCst);
+            let mut watchdog = tokio::time::interval(Duration::from_secs(POLL_SECS));
+            watchdog.tick().await; // first tick fires immediately — discard so startup never self-kills
+            loop {
+                tokio::select! {
+                    exit = child.wait() => {
+                        state.child_pid.store(0, Ordering::SeqCst);
 
-            if state.shutting_down.load(Ordering::SeqCst) {
-                eprintln!(
-                    "[frondose] D-24 supervisor: child exited during shutdown (pid={}) — done",
-                    pid
-                );
-                return;
+                        if state.shutting_down.load(Ordering::SeqCst) {
+                            eprintln!(
+                                "[frondose] D-24 supervisor: child exited during shutdown (pid={}) — done",
+                                pid
+                            );
+                            return;
+                        }
+                        eprintln!(
+                            "[frondose] D-24 sidecar (pid={}) died UNEXPECTEDLY: {:?} — respawning",
+                            pid, exit
+                        );
+                        consecutive_spawn_failures = 0;
+                        backoff_ms = INITIAL_BACKOFF_MS;
+                        break;
+                    }
+                    _ = watchdog.tick() => {
+                        if state.shutting_down.load(Ordering::SeqCst) {
+                            continue;
+                        }
+                        let heartbeat_path = turn_heartbeat_path();
+                        let mtime = heartbeat_path.as_ref().and_then(|path| {
+                            std::fs::metadata(path).ok().and_then(|meta| meta.modified().ok())
+                        });
+                        let now = SystemTime::now();
+                        if heartbeat_says_stuck(
+                            mtime,
+                            spawn_time,
+                            now,
+                            Duration::from_secs(STUCK_SECS),
+                        ) {
+                            let stale_secs = mtime
+                                .and_then(|beat| now.duration_since(beat).ok())
+                                .map_or(0, |elapsed| elapsed.as_secs());
+                            eprintln!(
+                                "[watchdog] turn heartbeat stale for {}s; force-restarting sidecar pid={}",
+                                stale_secs, pid
+                            );
+                            force_kill_sidecar_pid(pid).await;
+                            let exit = child.wait().await;
+                            state.child_pid.store(0, Ordering::SeqCst);
+                            eprintln!(
+                                "[watchdog] sidecar pid={} reaped after watchdog kill: {:?}",
+                                pid, exit
+                            );
+                            if let Some(path) = heartbeat_path {
+                                let _ = std::fs::remove_file(path);
+                            }
+                            consecutive_spawn_failures = 0;
+                            backoff_ms = INITIAL_BACKOFF_MS;
+                            break;
+                        }
+                    }
+                }
             }
-            eprintln!(
-                "[frondose] D-24 sidecar (pid={}) died UNEXPECTEDLY: {:?} — respawning",
-                pid, exit
-            );
-            consecutive_spawn_failures = 0;
-            backoff_ms = INITIAL_BACKOFF_MS;
         } else {
             eprintln!("[frondose] D-24 supervisor: no child to wait on; attempting (re)spawn");
         }
@@ -210,6 +295,7 @@ pub(crate) async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
         match spawn_frondose_serve(&state.port_file, &state.token).await {
             Ok(new_child) => {
                 let new_pid = new_child.id().unwrap_or(0);
+                spawn_time = SystemTime::now();
                 state.child_pid.store(new_pid, Ordering::SeqCst);
                 eprintln!("[frondose] D-24 sidecar respawned: pid={}", new_pid);
                 // [WIN-1] Wait for the new sidecar to publish its port-file + pass /health,
@@ -240,5 +326,66 @@ pub(crate) async fn supervise_sidecar(state: Arc<FrondoseServeState>) {
                 backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::UNIX_EPOCH;
+
+    #[test]
+    fn heartbeat_absent_is_not_stuck() {
+        let spawn_time = UNIX_EPOCH + Duration::from_secs(100);
+        let now = UNIX_EPOCH + Duration::from_secs(500);
+
+        assert!(!heartbeat_says_stuck(
+            None,
+            spawn_time,
+            now,
+            Duration::from_secs(STUCK_SECS),
+        ));
+    }
+
+    #[test]
+    fn heartbeat_before_spawn_is_not_stuck() {
+        let spawn_time = UNIX_EPOCH + Duration::from_secs(100);
+        let mtime = UNIX_EPOCH + Duration::from_secs(99);
+        let now = UNIX_EPOCH + Duration::from_secs(500);
+
+        assert!(!heartbeat_says_stuck(
+            Some(mtime),
+            spawn_time,
+            now,
+            Duration::from_secs(STUCK_SECS),
+        ));
+    }
+
+    #[test]
+    fn fresh_heartbeat_is_not_stuck() {
+        let spawn_time = UNIX_EPOCH + Duration::from_secs(100);
+        let mtime = UNIX_EPOCH + Duration::from_secs(400);
+        let now = UNIX_EPOCH + Duration::from_secs(450);
+
+        assert!(!heartbeat_says_stuck(
+            Some(mtime),
+            spawn_time,
+            now,
+            Duration::from_secs(STUCK_SECS),
+        ));
+    }
+
+    #[test]
+    fn stale_heartbeat_after_spawn_is_stuck() {
+        let spawn_time = UNIX_EPOCH + Duration::from_secs(100);
+        let mtime = UNIX_EPOCH + Duration::from_secs(120);
+        let now = UNIX_EPOCH + Duration::from_secs(481);
+
+        assert!(heartbeat_says_stuck(
+            Some(mtime),
+            spawn_time,
+            now,
+            Duration::from_secs(STUCK_SECS),
+        ));
     }
 }
