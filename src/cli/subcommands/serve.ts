@@ -12,7 +12,7 @@
 //   GET  /audit/tail
 
 import { EventEmitter } from "node:events";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -52,6 +52,7 @@ import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRate
 import type { ServeDeps, ServeEmitter, ServeState, SseFrame } from "./serve/context.js";
 import { createCronDriver } from "./serve/cron.js";
 import { createOverlayDispatcher } from "./serve/dispatch.js";
+import { reapOrphanIfIdle } from "./serve/turn/reaper.js";
 import { removeFile } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
@@ -296,6 +297,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   emitter.on("overlay-event", (event) => broadcast({ type: "overlay-event", event }));
 
   let cronInterval: ReturnType<typeof setInterval> | null = null;
+  let reaperInterval: ReturnType<typeof setInterval> | null = null;
   const expectedToken = Buffer.from(opts.bearerToken, "utf-8");
   const deps: ServeDeps = {
     model,
@@ -325,6 +327,29 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   }, 60_000);
   cronInterval.unref();
 
+  // [P-AUTO-L3FIX-5] Independent orphan-run reaper. The per-turn-finally reaper
+  // (runOne.ts) + cron's cap-close both need a turn/cron active; when cron self-
+  // halts (D-RUN-1 SSE-disconnect) and no turn runs, a past-cap `running` row is
+  // never closed (capstone: orphaned 17min past a 12min cap, abort=not_found).
+  // This closes it based on audit IDLENESS, NOT cron/turn state. REAP_IDLE_MS
+  // (360s) > the 45s raceCdp click bound + the 300s sleep max, so it can never
+  // close a run mid-outbound (only the CDP connect_sent click is running-gated)
+  // or during a legit long sleep. See reapOrphanIfIdle.
+  const REAP_IDLE_MS = 360_000;
+  const auditIdleMs = (): number => {
+    try {
+      return Date.now() - statSync(auditPath).mtimeMs;
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  };
+  const maybeReapOrphanRun = (): void => {
+    reapOrphanIfIdle(getSalesDb(salesDbPath), state, false, deps.emitFrame, auditIdleMs(), REAP_IDLE_MS);
+  };
+  maybeReapOrphanRun(); // boot reap: close a pre-existing orphan from a prior crash/watchdog-restart
+  reaperInterval = setInterval(maybeReapOrphanRun, 60_000);
+  reaperInterval.unref();
+
   const server = createServer((req, res) => {
     void routes.handleRequest(req, res);
   });
@@ -337,6 +362,10 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     if (cronInterval) {
       clearInterval(cronInterval);
       cronInterval = null;
+    }
+    if (reaperInterval) {
+      clearInterval(reaperInterval);
+      reaperInterval = null;
     }
     for (const res of state.sseClients) {
       try {
