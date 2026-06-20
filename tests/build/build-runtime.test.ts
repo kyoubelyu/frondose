@@ -213,10 +213,22 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// G-WIN3.3 + G-WIN3.M-1: T-Runtime.1 — macOS (darwin) tree shape
+// RETIRED 2026-06-20 (P-WIN3-BUILDRUNTIME, option B). These 4 T-Runtime scaffolds
+// target a unified `scripts/build-runtime.mjs` that was DELIBERATELY never built:
+// WIN-3 pivoted to two platform-specific scripts (`build-runtime-windows.mjs` +
+// `build-release.sh` Phase 0) as the architect's "rescue fallback" so the macOS
+// byte-identity path is never touched (build-runtime-windows.mjs:7-9). A unified
+// builder would be unwired test-only code, and an FM-1 Codex critic found passing
+// these scaffolds needs significant scaffold rework (execImpl type, lipo/npm-ci/
+// extraction fixtures) for no production benefit. Skipped (not deleted) so the
+// contract survives if a future deliberate consolidation phase implements the
+// unified script. See docs/phase-win3-buildruntime-{plan,critics}.md + ROADMAP
+// § Incomplete / Deferred. To re-enable: build scripts/build-runtime.mjs, then
+// drop the `.skip` and fill the TODO assertion bodies.
 // ---------------------------------------------------------------------------
 
-describe("G-WIN3.3 + G-WIN3.M-1 — build-runtime.mjs: darwin produces expected tree", () => {
+// G-WIN3.3 + G-WIN3.M-1: T-Runtime.1 — macOS (darwin) tree shape
+describe.skip("G-WIN3.3 + G-WIN3.M-1 — build-runtime.mjs: darwin produces expected tree", () => {
   it("T-Runtime.1: when platform=darwin and mock-network fixtures provided, $RUNTIME/node + dist/ + better_sqlite3.node (+ cgevent.node if present) exist", async () => {
     // Given: a fresh tmp $ROOT dir; mock fetchImpl serving stub tar.gz fixtures for darwin
     //        arm64 + x64 node tarballs and darwin arm64 + x64 sqlite prebuilds;
@@ -241,7 +253,7 @@ describe("G-WIN3.3 + G-WIN3.M-1 — build-runtime.mjs: darwin produces expected 
 // G-WIN3.3 + G-WIN3.W-1: T-Runtime.2 — Windows (win32) tree shape
 // ---------------------------------------------------------------------------
 
-describe("G-WIN3.3 + G-WIN3.W-1 — build-runtime.mjs: win32 produces expected tree (no node unix binary, no cgevent)", () => {
+describe.skip("G-WIN3.3 + G-WIN3.W-1 — build-runtime.mjs: win32 produces expected tree (no node unix binary, no cgevent)", () => {
   it("T-Runtime.2: when platform=win32 and mock-network zip+tar.gz fixtures provided, $RUNTIME/node.exe + dist/ + better_sqlite3.node exist; NO $RUNTIME/node; NO cgevent.node", async () => {
     // Given: a fresh tmp $ROOT dir; mock fetchImpl serving stub zip for win32 node
     //        and stub tar.gz for win32-x64 sqlite prebuild
@@ -266,7 +278,7 @@ describe("G-WIN3.3 + G-WIN3.W-1 — build-runtime.mjs: win32 produces expected t
 // G-WIN3.3: T-Runtime.3 — pinned version constants
 // ---------------------------------------------------------------------------
 
-describe("G-WIN3.3 — build-runtime.mjs: pinned version constants match macOS contract", () => {
+describe.skip("G-WIN3.3 — build-runtime.mjs: pinned version constants match macOS contract", () => {
   it('T-Runtime.3: MODULE exports NODE_VERSION==="v22.22.3", SQLITE_VER==="v12.9.0", SQLITE_ABI==="v127"', () => {
     // Given: scripts/build-runtime.mjs imported as a module
     // When:  NODE_VERSION, SQLITE_VER, SQLITE_ABI named exports (or module-level consts) are read
@@ -300,7 +312,7 @@ describe("G-WIN3.3 — build-runtime.mjs: pinned version constants match macOS c
 // G-WIN3.3: T-Runtime.4 — wrong-ABI fixture → ABI mismatch error
 // ---------------------------------------------------------------------------
 
-describe("G-WIN3.3 — build-runtime.mjs: wrong-ABI node binary causes ABI mismatch error", () => {
+describe.skip("G-WIN3.3 — build-runtime.mjs: wrong-ABI node binary causes ABI mismatch error", () => {
   it('T-Runtime.4: when the bundled node binary reports a different ABI than SQLITE_ABI, buildRuntime() rejects/throws with message containing "ABI mismatch"', async () => {
     // Given: a tmp $ROOT; a mock fetchImpl that serves valid node/sqlite fixtures BUT
     //        the assembled node binary (or a stub exec) returns a different modules version
