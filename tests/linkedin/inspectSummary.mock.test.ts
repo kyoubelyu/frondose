@@ -1055,3 +1055,293 @@ describe("T-A15a.17 (G-A15a.5): scoped diagnostics — visibleTextCount from sco
     // That assertion lives in tests/tools/browser/inspect.mock.test.ts T-A15a.Full.2.
   });
 });
+
+// =============================================================================
+// P-MSG-REPLY Step 4/5 — assertions filled.
+// T-MsgReply.ScopeProj.1–5 (Group D): scope-projection tests for
+// filterEntriesByScope + buildInspectSummary on messaging-thread surfaces.
+// =============================================================================
+
+// ─── T-MsgReply.ScopeProj.1: messagingConversation scope filters to transcript + conversation buttons ─
+
+describe("T-MsgReply.ScopeProj.1 (Group D): buildInspectSummary(ctx, 'messagingConversation') — transcript in text[], nav filtered out", () => {
+  it(
+    "given messaging-thread ctx with 3 messagingTranscript entries + 8 nav staticText + 5 nav buttons, when buildInspectSummary(ctx, 'messagingConversation') runs, then text[] has 3 transcript lines in order, no nav text; buttons[] has only conversation-action buttons (or empty)",
+    () => {
+      // Given: a "messaging-thread" ctx whose entries are:
+      //   - 3 {role:"messagingTranscript"} text entries (the conversation)
+      //   - 8 {role:"staticText"} nav entries  (noise that must be filtered)
+      //   - 5 {role:"button"} nav buttons       (noise that must be filtered)
+      //   (No star/minimize/close conversation-action buttons in this fixture — buttons[] must be empty.)
+      // When:  buildInspectSummary(ctx, "messagingConversation")
+      // Then:  summary.text === the 3 transcript lines in entry order (messagingTranscript in TEXT_ROLES);
+      //        summary.buttons.length === 0 (no isMessagingConversationEntry buttons in the fixture);
+      //        no nav text appears in summary.text.
+      const entries: SnapshotEntry[] = [
+        { ref: "@mt1", role: "messagingTranscript", name: "[Antony Hubert] Hi Kyoube! (2h)" },
+        { ref: "@mt2", role: "messagingTranscript", name: "[You] Glad to connect" },
+        { ref: "@mt3", role: "messagingTranscript", name: "[Antony Hubert] How can I help? (1h)" },
+        ...Array.from({ length: 8 }, (_, i) => ({
+          ref: `@n${i + 1}`,
+          role: "staticText",
+          name: `Nav item ${i + 1}`,
+        })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          ref: `@nb${i + 1}`,
+          role: "button",
+          name: `Nav button ${i + 1}`,
+        })),
+      ];
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/test/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries: [
+          ...entries,
+          { ref: "@ca1", role: "button", name: "Star conversation" },
+          { ref: "@ca2", role: "button", name: "Minimize your conversation" },
+          { ref: "@ca3", role: "button", name: "Close your conversation with Antony Hubert" },
+        ],
+      };
+      const summary = buildInspectSummary(ctx, "messagingConversation");
+      assert.deepEqual(summary.text, [
+        "[Antony Hubert] Hi Kyoube! (2h)",
+        "[You] Glad to connect",
+        "[Antony Hubert] How can I help? (1h)",
+      ]);
+      assert.deepEqual(summary.buttons, [
+        { ref: "@ca1", label: "Star conversation" },
+        { ref: "@ca2", label: "Minimize your conversation" },
+        { ref: "@ca3", label: "Close your conversation with Antony Hubert" },
+      ]);
+      assert.equal(summary.text.some((text) => text.startsWith("Nav item")), false, "nav text must be filtered out");
+      assert.equal(summary.buttons.some((button) => button.label.startsWith("Nav button")), false, "nav buttons must be filtered out");
+    },
+  );
+});
+
+// ─── T-MsgReply.ScopeProj.2: threadInput scope filters to composer + Send only ─
+
+describe("T-MsgReply.ScopeProj.2 (Group D): buildInspectSummary(ctx, 'threadInput') — composer + Send only, nav filtered", () => {
+  it(
+    "given messaging-thread ctx with composer textbox 'Write a message…' + Send button + 8 nav buttons, when buildInspectSummary(ctx, 'threadInput') runs, then inputs[] has only the composer, buttons[] has only the Send button",
+    () => {
+      // Given: a "messaging-thread" ctx whose entries are:
+      //   - {role:"textbox", name:"Write a message…"} (the composer)
+      //   - {role:"button", name:"Send"} (the Send button — matches isThreadComposerButtonEntry)
+      //   - 8 {role:"button", name:"Nav button N"} (noise)
+      //   - 3 {role:"messagingTranscript"} transcript entries (must NOT appear in threadInput scope)
+      // When:  buildInspectSummary(ctx, "threadInput")
+      // Then:  summary.inputs.length === 1 AND inputs[0].label matches /write a message/i;
+      //        summary.buttons.length === 1 AND buttons[0].label matches /send/i;
+      //        no nav buttons, no transcript text.
+      const entries: SnapshotEntry[] = [
+        { ref: "@mc1", role: "textbox", name: "Write a message…" },
+        { ref: "@e207", role: "button", name: "Send" },
+        ...Array.from({ length: 8 }, (_, i) => ({
+          ref: `@nb${i + 1}`,
+          role: "button",
+          name: `Nav button ${i + 1}`,
+        })),
+        { ref: "@mt1", role: "messagingTranscript", name: "[Alice] Hello" },
+        { ref: "@mt2", role: "messagingTranscript", name: "[You] Hi" },
+        { ref: "@mt3", role: "messagingTranscript", name: "[Alice] How are you?" },
+      ];
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/test/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries,
+      };
+      const summary = buildInspectSummary(ctx, "threadInput");
+      assert.deepEqual(summary.inputs, [{ ref: "@mc1", label: "Write a message…" }]);
+      assert.deepEqual(summary.buttons, [{ ref: "@e207", label: "Send" }]);
+      assert.deepEqual(summary.text, [], "threadInput scope must not include transcript text");
+    },
+  );
+});
+
+// ─── T-MsgReply.ScopeProj.3: threadInput — recipient-picker variant (two composer inputs) ─
+
+describe("T-MsgReply.ScopeProj.3 (Group D): buildInspectSummary(ctx, 'threadInput') — new-message compose pane with TWO inputs (recipient + message)", () => {
+  it(
+    "given messaging-thread ctx with BOTH 'Enter message recipients' AND 'Write a message…' textboxes, when buildInspectSummary(ctx, 'threadInput') runs, then inputs[] contains BOTH entries",
+    () => {
+      // Given: a "messaging-thread" ctx whose entries include:
+      //   - {role:"textbox", name:"Enter message recipients"} (recipient picker)
+      //   - {role:"textbox", name:"Write a message…"} (body composer)
+      //   - {role:"button", name:"Send"} and various nav buttons
+      // When:  buildInspectSummary(ctx, "threadInput")
+      // Then:  summary.inputs.length === 2;
+      //        one input matches /enter message recipients/i;
+      //        one input matches /write a message/i;
+      //        (parity with references/surface-messaging.md:43-50 two-input spec).
+      const entries: SnapshotEntry[] = [
+        { ref: "@mc1", role: "textbox", name: "Enter message recipients" },
+        { ref: "@mc2", role: "textbox", name: "Write a message…" },
+        { ref: "@e207", role: "button", name: "Send" },
+        { ref: "@nb1", role: "button", name: "Nav button 1" },
+        { ref: "@nb2", role: "button", name: "Nav button 2" },
+      ];
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/new/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries,
+      };
+      const summary = buildInspectSummary(ctx, "threadInput");
+      assert.deepEqual(summary.inputs, [
+        { ref: "@mc1", label: "Enter message recipients" },
+        { ref: "@mc2", label: "Write a message…" },
+      ]);
+      assert.deepEqual(summary.buttons, [{ ref: "@e207", label: "Send" }]);
+    },
+  );
+});
+
+// ─── T-MsgReply.ScopeProj.4: unscoped — transcript cap MAX_TRANSCRIPT=20 + transcript leads text[] ─
+
+describe("T-MsgReply.ScopeProj.4 (Group D): unscoped buildInspectSummary — transcript cap MAX_TRANSCRIPT=20, transcript leads text[], remaining budget for nav", () => {
+  it(
+    "given messaging-thread ctx with 25 messagingTranscript entries + 30 nav staticText, when buildInspectSummary(ctx) runs, then transcript entries are capped at 20 and remaining 20 slots are nav text",
+    () => {
+      // Given: a "messaging-thread" ctx whose entries are:
+      //   - 25 {role:"messagingTranscript"} entries (above the MAX_TRANSCRIPT cap)
+      //   - 30 {role:"staticText"} nav entries
+      //   (total: 55 visible; but MAX_TRANSCRIPT=20 + remaining MAX_TEXT-MAX_TRANSCRIPT=20 = 40 shown)
+      // When:  buildInspectSummary(ctx) — no scope
+      // Then:  summary.text[0..19] are the 20 transcript lines in original order;
+      //        transcript count === 20 (capped at MAX_TRANSCRIPT);
+      //        next 20 slots (text[20..39]) are nav staticText entries;
+      //        total text.length === 41 (40 real + 1 hint: 55 visible, 40 shown)
+      const transcriptEntries: SnapshotEntry[] = Array.from({ length: 25 }, (_, i) => ({
+        ref: `@mt${i + 1}`,
+        role: "messagingTranscript",
+        name: `[Person] Message ${i + 1}`,
+      }));
+      const navEntries: SnapshotEntry[] = Array.from({ length: 30 }, (_, i) => ({
+        ref: `@n${i + 1}`,
+        role: "staticText",
+        name: `Nav item ${i + 1}`,
+      }));
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/test/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries: [...transcriptEntries, ...navEntries],
+      };
+      const summary = buildInspectSummary(ctx);
+      const realText = summary.text.filter((text) => !text.startsWith("[diagnostic]"));
+
+      assert.equal(realText.length, 40, "20 transcript + 20 nav text entries must be shown");
+      assert.deepEqual(realText.slice(0, 20), transcriptEntries.slice(0, 20).map((entry) => entry.name));
+      assert.equal(realText.some((text) => text === "[Person] Message 21"), false, "transcript entries beyond MAX_TRANSCRIPT=20 must be dropped");
+      assert.deepEqual(realText.slice(20), navEntries.slice(0, 20).map((entry) => entry.name));
+      assert.match(
+        summary.text[summary.text.length - 1] ?? "",
+        /^\[diagnostic\] 55 entries visible, 40 shown/,
+        "hint must account for transcript and nav truncation",
+      );
+    },
+  );
+
+  it(
+    "given messaging-thread ctx with transcript + person-bearing + nav text, when summary builds, then transcript leads before the P-AUTO-15a person partition consumes the remaining budget",
+    () => {
+      // Given: 3 transcript entries, 18 person-bearing feedPost entries, and 30 nav staticText entries.
+      // When:  buildInspectSummary(ctx) runs unscoped.
+      // Then:  text[] starts with transcript, then all 18 person-bearing entries, then 19 nav entries.
+      const transcriptEntries: SnapshotEntry[] = Array.from({ length: 3 }, (_, i) => ({
+        ref: `@mt${i + 1}`,
+        role: "messagingTranscript",
+        name: `[Person] Thread message ${i + 1}`,
+      }));
+      const navEntries: SnapshotEntry[] = Array.from({ length: 30 }, (_, i) => ({
+        ref: `@s${i + 1}`,
+        role: "staticText",
+        name: `Nav item ${i + 1}`,
+      }));
+      const feedPosts: SnapshotEntry[] = Array.from({ length: 18 }, (_, i) => ({
+        ref: `@fp${i + 1}`,
+        role: "feedPost",
+        name: `Post by Author${i + 1} (/in/author-${i + 1}): headline ${i + 1}`,
+      }));
+      const ctx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/test/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries: [...transcriptEntries, ...navEntries, ...feedPosts],
+      };
+      const summary = buildInspectSummary(ctx);
+      const realText = summary.text.filter((text) => !text.startsWith("[diagnostic]"));
+
+      assert.deepEqual(realText.slice(0, 3), transcriptEntries.map((entry) => entry.name));
+      assert.deepEqual(realText.slice(3, 21), feedPosts.map((entry) => entry.name));
+      assert.deepEqual(realText.slice(21), navEntries.slice(0, 19).map((entry) => entry.name));
+      assert.match(summary.text[summary.text.length - 1] ?? "", /^\[diagnostic\] 51 entries visible, 40 shown/);
+    },
+  );
+});
+
+// ─── T-MsgReply.ScopeProj.5: regression pin — non-messaging surface unaffected ─
+
+describe("T-MsgReply.ScopeProj.5 (Group D): regression — P-AUTO-15a person/non-person partition unchanged on non-messaging surfaces", () => {
+  it(
+    "given a non-messaging surface (feed) with NO messagingTranscript entries, when buildInspectSummary(ctx) runs, then existing T-A15a.9 partition output is byte-identical",
+    () => {
+      // Given: a plain "feed" ctx with 18 feedPost + 30 staticText entries
+      //        (identical to T-A15a.9 fixture — no messagingTranscript entries).
+      // When:  buildInspectSummary(ctx)
+      // Then:  text.length === 41 (40 real + 1 hint);
+      //        first 18 entries are feedPost in original order;
+      //        hint matches /^\[diagnostic\] 48 entries visible, 40 shown/;
+      //        — byte-identical to the T-A15a.9 expectation (regression pin: no change on feed surface).
+      const feedPosts = Array.from({ length: 18 }, (_, i) => ({
+        ref: `@fp${i + 1}`,
+        role: "feedPost",
+        name: `Post by Author${i + 1} (/in/author-${i + 1}): headline ${i + 1}`,
+      }));
+      const staticTexts = Array.from({ length: 30 }, (_, i) => ({
+        ref: `@s${i + 1}`,
+        role: "staticText",
+        name: `Static text entry ${i + 1}`,
+      }));
+      // feedPosts pushed after staticTexts to simulate push() ordering (feed surface)
+      const ctx = makeCtx("feed", [...staticTexts, ...feedPosts]);
+      const summary = buildInspectSummary(ctx);
+      const expectedText = [
+        ...feedPosts.map((entry) => entry.name),
+        ...staticTexts.slice(0, 22).map((entry) => entry.name),
+        "[diagnostic] 48 entries visible, 40 shown — scroll/refine to see more",
+      ];
+
+      assert.deepEqual(summary.text, expectedText, "T-MsgReply.ScopeProj.5: feed output must match T-A15a.9 exactly");
+    },
+  );
+
+  it("given a feed ctx, when scope='threadInput' is requested, then the messaging scope is surface-gated and summary is unchanged", () => {
+    // Given: a feed surface containing labels that would match threadInput on a real messaging thread.
+    // When:  buildInspectSummary(ctx, "threadInput") runs off-surface.
+    // Then:  the messaging scope remains a no-op and matches the unscoped feed summary.
+    const ctx = makeCtx("feed", [
+      { ref: "@e1", role: "textbox", name: "Write a message…" },
+      { ref: "@e2", role: "button", name: "Send" },
+      { ref: "@e3", role: "staticText", name: "Feed text" },
+    ]);
+
+    assert.deepEqual(buildInspectSummary(ctx, "threadInput"), buildInspectSummary(ctx));
+  });
+
+  it("given a feed ctx, when scope='messagingConversation' is requested, then the messaging scope is surface-gated and summary is unchanged", () => {
+    // Given: a feed surface containing a synthetic messagingTranscript-like row.
+    // When:  buildInspectSummary(ctx, "messagingConversation") runs off-surface.
+    // Then:  the messaging scope remains a no-op and matches the unscoped feed summary.
+    const ctx = makeCtx("feed", [
+      { ref: "@mt1", role: "messagingTranscript", name: "[Alice] Should remain ordinary feed text" },
+      { ref: "@e1", role: "button", name: "Like" },
+      { ref: "@e2", role: "staticText", name: "Feed text" },
+    ]);
+
+    assert.deepEqual(buildInspectSummary(ctx, "messagingConversation"), buildInspectSummary(ctx));
+  });
+});
