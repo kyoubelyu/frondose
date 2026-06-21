@@ -19,6 +19,12 @@ export { resolveByLabel } from "./labelResolver.js";
 export { applyPacing } from "./pacing.js";
 export { inferSurface, isLinkedInLoginUrl, LINKEDIN_APP_HOSTS } from "./scopeResolver.js";
 export { createLinkedinSession } from "./session.js";
+export type { MessagingComposerRaw, MessagingMessageRaw } from "./snapshotCapture/messagingConversationSynth.js";
+export {
+  formatMessagingMessage,
+  MESSAGING_COMPOSER_SYNTH_JS,
+  MESSAGING_CONVERSATION_SYNTH_JS,
+} from "./snapshotCapture/messagingConversationSynth.js";
 export { captureCurrentSurfaceContext } from "./snapshotCapture.js";
 export type {
   ClientOrUnavailable,
