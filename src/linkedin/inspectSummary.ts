@@ -26,6 +26,7 @@ export const TEXT_ROLES = new Set([
   "feedPost",
   "profileCard",
   "searchResult",
+  "messagingTranscript",
 ]);
 
 // P-AUTO-15a (CAP-3 (b)): person-bearing roles whose names may embed a /in/<slug>
@@ -55,6 +56,7 @@ export function dedupKeyFor(e: SnapshotEntry): string {
 const MAX_BUTTONS = 12;
 const MAX_INPUTS = 12;
 const MAX_TEXT = 40;
+export const MAX_TRANSCRIPT = 20;
 const TEXT_TRUNCATE = 180;
 // P-AUTO-15a (CAP-3 (c)): safety upper bound on person-bearing text entries.
 // Well above any real surface's upstream synth caps (FEED_POST_CAP=15 +
@@ -84,6 +86,30 @@ function isComposerInputEntry(e: SnapshotEntry): boolean {
 
 function isComposerPublishEntry(e: SnapshotEntry): boolean {
   return e.role === "button" && COMPOSER_PUBLISH_RE.test(e.name);
+}
+
+function isMessagingConversationEntry(e: SnapshotEntry): boolean {
+  return (
+    (e.role === "link" && e.name === "Jump to active conversation details") ||
+    (e.role === "button" &&
+      (/star conversation/i.test(e.name) ||
+        /^Minimize your conversation$/i.test(e.name) ||
+        /^Minimize your conversation with /i.test(e.name) ||
+        /^Close your draft conversation$/i.test(e.name) ||
+        /^Close your conversation with /i.test(e.name)))
+  );
+}
+
+function isThreadComposerInputEntry(e: SnapshotEntry): boolean {
+  return (
+    INPUT_ROLES.has(e.role) &&
+    !/search/i.test(e.name) &&
+    /message|reply|write a message|enter message recipients|recipient/i.test(e.name)
+  );
+}
+
+function isThreadComposerButtonEntry(e: SnapshotEntry): boolean {
+  return e.role === "button" && /(send|reply|attach|emoji|gif)/i.test(e.name);
 }
 
 /** [P-75 D-11 inspect-side] An outbound-action button: matches the OUTBOUND_LABEL_RE
@@ -161,7 +187,7 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
     return true;
   };
 
-  const filteredEntries = scope ? filterEntriesByScope(ctx.entries, scope) : ctx.entries;
+  const filteredEntries = scope ? filterEntriesByScope(ctx.entries, scope, ctx.surface) : ctx.entries;
   const deduped = filteredEntries.filter(dedupe);
 
   // P-46 D-3 (OQ-3): when a composer is open, promote composer buttons (esp.
@@ -172,7 +198,11 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   // and prefix their labels with `[OUTBOUND]` so the agent can't miss them when an
   // approved outbound step is in_progress. The list ranking + category prefix make
   // "which button executes the approved outbound" unambiguous at the inspect surface.
-  const clickables = deduped.filter((e) => CLICKABLE_ROLES.has(e.role));
+  const clickables = deduped.filter(
+    (e) =>
+      CLICKABLE_ROLES.has(e.role) &&
+      !(ctx.surface === "messaging-thread" && scope === "threadInput" && INPUT_ROLES.has(e.role)),
+  );
   // [P-75 D-11] Subject-scoped profile action controls (@pa*/@pm* synthesized refs from
   // snapshotCapture) ALWAYS lead the button list — they are the profile subject's OWN
   // Connect/Message/More/Follow, isolated from the sidebar "People you may know" invite/follow
@@ -212,14 +242,19 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   // slot). Invariant: person_shown ≥ what the old text.slice(0, MAX_TEXT) would
   // have surfaced, for every input (post-dedup, post-scope-filter).
   const textEligible = deduped.filter((e) => TEXT_ROLES.has(e.role) && e.name.length > 0);
-  const personEligible = textEligible.filter((e) => PERSON_BEARING_ROLES.has(e.role));
-  const nonPersonEligible = textEligible.filter((e) => !PERSON_BEARING_ROLES.has(e.role));
+  const transcriptEligible =
+    ctx.surface === "messaging-thread" ? textEligible.filter((e) => e.role === "messagingTranscript") : [];
+  const remainderEligible =
+    ctx.surface === "messaging-thread" ? textEligible.filter((e) => e.role !== "messagingTranscript") : textEligible;
+  const transcriptShown = transcriptEligible.slice(0, MAX_TRANSCRIPT);
+  const personEligible = remainderEligible.filter((e) => PERSON_BEARING_ROLES.has(e.role));
+  const nonPersonEligible = remainderEligible.filter((e) => !PERSON_BEARING_ROLES.has(e.role));
   const personShown = personEligible.slice(0, MAX_PERSON_HARD);
-  const nonPersonBudget = Math.max(0, MAX_TEXT - personShown.length);
+  const nonPersonBudget = Math.max(0, MAX_TEXT - transcriptShown.length - personShown.length);
   const nonPersonShown = nonPersonEligible.slice(0, nonPersonBudget);
   const renderText = (e: SnapshotEntry) =>
     e.name.length > TEXT_TRUNCATE ? `${e.name.slice(0, TEXT_TRUNCATE)}…` : e.name;
-  const text = [...personShown.map(renderText), ...nonPersonShown.map(renderText)];
+  const text = [...transcriptShown.map(renderText), ...personShown.map(renderText), ...nonPersonShown.map(renderText)];
   const visibleCount = textEligible.length;
   const shownCount = text.length; // real entries only; hint not yet appended
   if (shownCount < visibleCount) {
@@ -251,12 +286,22 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
  *  P-AUTO-15a: exported as `filterEntriesByScope` so the inspect tool can reuse
  *  the SAME scope filter when deriving full:true diagnostics (N2 fix — keeps
  *  the scoped count consistent with the scoped set the partition observed). */
-export function filterEntriesByScope(entries: SnapshotEntry[], scope: string): SnapshotEntry[] {
+export function filterEntriesByScope(
+  entries: SnapshotEntry[],
+  scope: string,
+  surface?: LinkedInSurface,
+): SnapshotEntry[] {
   if (scope === "composerModal") {
     return entries.filter((e) => isComposerButtonEntry(e) || isComposerInputEntry(e));
   }
   if (scope === "overlay") {
     return entries.filter((e) => e.ref.startsWith("@ov"));
+  }
+  if (surface === "messaging-thread" && scope === "messagingConversation") {
+    return entries.filter((e) => e.role === "messagingTranscript" || isMessagingConversationEntry(e));
+  }
+  if (surface === "messaging-thread" && scope === "threadInput") {
+    return entries.filter((e) => isThreadComposerInputEntry(e) || isThreadComposerButtonEntry(e));
   }
   return entries;
 }

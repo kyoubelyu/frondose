@@ -43,7 +43,7 @@ export function makeInspectTool(session: LinkedinSession) {
           // buildInspectSummary's partition + hint decision operated on. Pins
           // consistency between the hint string and the structured fields for
           // BOTH full-surface (scope=undefined) and scoped invocations.
-          const scopedEntries = scope ? filterEntriesByScope(ctx.entries, scope) : ctx.entries;
+          const scopedEntries = scope ? filterEntriesByScope(ctx.entries, scope, ctx.surface) : ctx.entries;
           const seenForDiag = new Set<string>();
           const dedupedTextEligible = scopedEntries.filter((e) => {
             if (!(TEXT_ROLES.has(e.role) && e.name.length > 0)) return false;

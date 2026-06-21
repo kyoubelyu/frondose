@@ -1,6 +1,10 @@
 import type { CdpClient } from "../cdp/client.js";
 import { inferSurface } from "./scopeResolver.js";
 import { FEED_POST_CAP, FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
+import {
+  synthesizeMessagingComposerEntries,
+  synthesizeMessagingTranscriptEntries,
+} from "./snapshotCapture/messagingConversationSynth.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { tagAsideClickables } from "./snapshotCapture/regionTag.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
@@ -8,23 +12,9 @@ import type { CurrentSurfaceContext, RefMap, SnapshotEntry } from "./types.js";
 export * from "./snapshotCapture/feedPostSynth.js";
 export * from "./snapshotCapture/profileSynth.js";
 export * from "./snapshotCapture/searchResultSynth.js";
-interface FeedPostRaw {
-  author: string;
-  headline: string;
-  profileUrl: string | null;
-}
-interface ProfileCardRaw {
-  name: string;
-  headline: string | null;
-  company: string | null;
-  location: string | null;
-  connections: string | null;
-}
-interface SearchResultRaw {
-  slug: string;
-  name: string;
-  profileUrl: string;
-}
+type FeedPostRaw = { author: string; headline: string; profileUrl: string | null };
+type ProfileCardRaw = { name: string; headline: string | null; company: string | null; location: string | null; connections: string | null };
+type SearchResultRaw = { slug: string; name: string; profileUrl: string };
 // Mark visible overlay items with a transient data-attr (DOM query is NOT subject to the AX-tree
 // aria-hidden timing race — RC-1), return their {idx, role, label}. Skips aria-hidden subtrees +
 // invisible nodes (avoids surfacing CLOSED-dropdown items still in the DOM).
@@ -145,7 +135,14 @@ export async function captureCurrentSurfaceContext(client: CdpClient): Promise<C
   const pageUrl = await client.getCurrentUrl();
   const surface = inferSurface(pageUrl);
 
-  if (surface === "messaging" || surface === "messaging-thread") {
+  if (surface === "messaging-thread") {
+    entries.unshift(...(await synthesizeMessagingTranscriptEntries(client)));
+    const composer = await synthesizeMessagingComposerEntries(client);
+    if (composer.entries.length > 0) {
+      entries.push(...composer.entries);
+      client.mergeRefs(composer.refs);
+    }
+  } else if (surface === "messaging") {
     const synth = await synthesizeMessagingConversationOpeners(client);
     entries.push(...synth);
   } else if (surface === "feed") {
