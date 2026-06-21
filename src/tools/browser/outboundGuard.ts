@@ -23,6 +23,8 @@ export const LINKEDIN_OUTBOUND_SURFACES = new Set([
   "notifications",
 ]);
 
+const MESSAGING_SURFACES = new Set(["messaging", "messaging-thread"]);
+
 export function isOutboundLabel(label: string): boolean {
   return OUTBOUND_LABEL_RE.test(label);
 }
@@ -34,6 +36,7 @@ export function isFollowLabel(label: string): boolean {
 export function requiresApproval(label: string, surface: string): boolean {
   if (isOutboundLabel(label)) return true;
   if (isFollowLabel(label)) return surface === "profile";
+  if (classifyOutboundLabel(label) === "message_send" && MESSAGING_SURFACES.has(surface)) return true;
   return false;
 }
 
@@ -57,7 +60,8 @@ export type OutboundClass = "connect_open" | "connect_send" | "message_send" | "
 const CONNECT_SEND_RE =
   /^(?:Send\s+invitation\b|Send\s+invite\b|Send\s+without\s+a\s+note\b|Send\s+now\b|发送邀请|直接发送|立即连接)/i;
 export const CONNECT_OPEN_RE = /^(?:Connect\b|Invite\b.*\bto\s+connect\b|邀请|添加好友|连接$)/i;
-const MESSAGE_SEND_RE = /^Send\s*$/i;
+const MESSAGE_SEND_RE =
+  /^(?:Send\s*|发送(?:\s*(?:消息|信息|私信))?|發送(?:\s*(?:消息|訊息|私訊))?|传送(?:\s*(?:消息|信息|私信))?|傳送(?:\s*(?:消息|訊息|私訊))?|送出)$/iu;
 
 export function classifyOutboundLabel(label: string): OutboundClass {
   const trimmed = label.trim();
@@ -91,7 +95,7 @@ export function normalizePersonName(name: string): string {
     .replace(/\s*\([^)]*\)\s*$/, "")
     .replace(/,\s*.*$/, "")
     .replace(/\s+(?:1st|2nd|3rd|1度|2度|3度)$/iu, "")
-    .replace(/[^\p{L}\p{M}\s.'’\-]/gu, "")
+    .replace(/[^\p{L}\p{M}\s.'’-]/gu, "")
     .normalize("NFC")
     .replace(/\s+/g, " ")
     .trim();
