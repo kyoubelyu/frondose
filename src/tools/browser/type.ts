@@ -182,7 +182,7 @@ export function makeTypeTool(session: LinkedinSession) {
         // ... an impressive combo" because the agent paraphrased on the way to send).
         // Replaces the round-2 modal-block guard (which forced linkedin_connect, now removed).
         const guardCtx = session.getLastContext();
-        if (inConnectModal(guardCtx?.entries)) {
+        if (inConnectModal(guardCtx?.entries) && guardCtx?.surface !== "messaging-thread") {
           const expected = latestDraftTextForCurrentLead(guardCtx?.pageUrl);
           if (expected === null) {
             return fail(
