@@ -58,7 +58,7 @@ export interface TurnArgs {
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
   const { turnId, abortController } = args; writeTurnHeartbeat();
-  let abortReason: "duration_cap" | "silent_hang" | "operator_or_other" | null = null;
+  let abortReason: "duration_cap" | "silent_hang" | "no_tool_progress" | "operator_or_other" | null = null;
   const disabledModelMessage = "configure your DeepSeek API key in Settings (gear icon)";
   if (deps.model === null) {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
@@ -123,9 +123,12 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
   // audit row, emit an SSE error frame, and abort the controller. Self-cancels on
   // turn end via clearInterval in finally.
   let lastProgressAt = Date.now();
-  const noteProgress = (): void => {
-    lastProgressAt = Date.now(); bumpTurnHeartbeat(lastProgressAt);
-  };
+  let lastToolProgressAt = Date.now();
+  const turnKind = args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator";
+  const auditLlmError = (errorName: string, errorMessage: string, status?: number): void =>
+    writeLlmErrorAudit(deps.auditPath, { turnId, errorMessage, errorName, turnKind, status });
+  const noteProgress = (): void => { lastProgressAt = Date.now(); bumpTurnHeartbeat(lastProgressAt); };
+  const noteToolProgress = (): void => { lastToolProgressAt = Date.now(); };
   const SILENT_HANG_MS = 180_000;
   const silentHangWatcher = setInterval(() => {
     if (abortController.signal.aborted) return;
@@ -136,16 +139,18 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       "Likely cause: SDK hanging on a network black hole (DNS retry, TCP stall, upstream not responding). " +
       "Aborting turn and surfacing as llm_error.";
     turnDbg(`[runOneTurn D-27] turnId=${turnId} silent-hang elapsed=${Math.round(elapsed / 1000)}s — aborting`);
-    writeLlmErrorAudit(deps.auditPath, {
-      turnId,
-      errorMessage: message,
-      errorName: "LlmSilentHang",
-      turnKind: args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator",
-      status: undefined,
-    });
-    deps.emitFrame({ type: "error", turnId, message });
-    abortReason = "silent_hang";
-    abortController.abort();
+    auditLlmError("LlmSilentHang", message);
+    deps.emitFrame({ type: "error", turnId, message }); abortReason = "silent_hang"; abortController.abort();
+  }, 30_000);
+  const TOOL_PROGRESS_TIMEOUT_MS = 210_000;
+  const toolProgressWatcher = setInterval(() => {
+    if (abortController.signal.aborted) return;
+    const elapsed = Date.now() - lastToolProgressAt;
+    if (elapsed < TOOL_PROGRESS_TIMEOUT_MS) return;
+    const message = `[llm-no-tool-progress] turn made no TOOL/step progress for ${Math.round(elapsed / 1000)}s ` +
+      "while (possibly) streaming text — degenerate text-only generation. Aborting turn as llm_error.";
+    auditLlmError("LlmNoToolProgress", message);
+    deps.emitFrame({ type: "error", turnId, message }); abortReason = "no_tool_progress"; abortController.abort();
   }, 30_000);
   try {
     // [P-75 D-23] Filter the `tools` parameter ITSELF instead of using Vercel SDK's
@@ -172,6 +177,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       maxSteps: args.maxSteps ?? deps.maxSteps,
       abortSignal: abortController.signal,
       onStepFinish: async (step: StepResult<ToolSet>) => {
+        noteToolProgress();
         await deps.auditWriter(step);
         const toolCalls = step.toolCalls as unknown as Array<{ toolName: string }>;
         const toolResults =
@@ -246,6 +252,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       },
       onToolCall: (toolName) => {
         noteProgress(); // [P-75 D-27] feed the silent-hang watcher
+        noteToolProgress();
         deps.emitFrame({ type: "tool-call", turnId, toolName });
         const ctxId = state.overlayContextId;
         const client = deps.session.getClient();
@@ -296,18 +303,11 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     // from "agent's LLM call failed" without scraping process logs. With this row,
     // every operator-facing audit reader (the in-app log panel, downstream analytics,
     // dogfood scripts) sees the failure surfaced as a first-class event.
-    const turnKind = args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator";
     // Try to extract an HTTP status from common SDK error shapes (AI SDK propagates
     // upstream status via .status, .statusCode, or .cause.status). Best-effort.
     const errAny = e as { status?: number; statusCode?: number; cause?: { status?: number } } | null;
     const status = errAny?.status ?? errAny?.statusCode ?? errAny?.cause?.status;
-    writeLlmErrorAudit(deps.auditPath, {
-      turnId,
-      errorMessage: message,
-      errorName: e instanceof Error ? e.name : "Unknown",
-      turnKind,
-      status,
-    });
+    auditLlmError(e instanceof Error ? e.name : "Unknown", message, status);
     deps.emitFrame({ type: "error", turnId, message, retryable });
     const ctxId = state.overlayContextId;
     const client = deps.session.getClient();
@@ -319,18 +319,18 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       void callInOverlay(client.handle, ctxId, fn);
     }
   } finally {
-    clearInterval(capWatcher); clearInterval(silentHangWatcher); // [P-75 D-16/D-27] stop turn watchers
+    clearInterval(capWatcher); clearInterval(silentHangWatcher); clearInterval(toolProgressWatcher); // [P-75 D-16/D-27] stop turn watchers
     removeTurnHeartbeat();
     deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     try {
       const db = getSalesDb(deps.salesDbPath);
       reapExpiredAutoRun(db, state, args.isCronTurn ?? false, deps.emitFrame);
-      if (abortReason === "silent_hang") {
+      if (abortReason === "silent_hang" || abortReason === "no_tool_progress") {
         const run = getCurrentAutoRun(db);
         if (run?.status === "running") {
           const counters = countAutoLedgerByAction(db, run.id);
-          const summary = "silent_hang_abort: LLM stream made no progress and the turn was aborted";
+          const summary = abortReason === "silent_hang" ? "silent_hang_abort: LLM stream made no progress and the turn was aborted" : "no_tool_progress_abort: turn made no tool/step progress and was aborted";
           const res = endAutoRun(db, run.id, {
             status: "stopped_by_agent",
             summary,
