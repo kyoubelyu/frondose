@@ -708,6 +708,24 @@ function makeFakeSessionOnProfile(slug: string, entries: Array<{ ref: string; ro
   };
 }
 
+function makeFakeSessionOnSurface(
+  surface: CurrentSurfaceContext["surface"],
+  pageUrl: string,
+  entries: Array<{ ref: string; role: string; name: string }>,
+) {
+  const base = makeFakeSessionWithEntries(entries);
+  return {
+    ...base,
+    getLastContext: () =>
+      ({
+        pageUrl,
+        surface,
+        activeLayer: "page",
+        entries,
+      }) as CurrentSurfaceContext,
+  };
+}
+
 /** Seed a temp sales.sqlite under MAI_HOME_BASE/<tmp>/.mai/agent/ with one candidate→lead→draft chain. */
 function seedSalesDb(slug: string, draftText: string): string {
   const home = mkdtempSync(pathJoin(tmpdir(), "d11r3-"));
@@ -755,6 +773,71 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
     { ref: "@e3", role: "button", name: "Cancel adding a note" },
     { ref: "@e4", role: "button", name: "Send invitation" },
   ];
+
+  const messageComposerEntries = [
+    { ref: "@e1", role: "textbox", name: "Write a message…" },
+    { ref: "@e2", role: "button", name: "Send" },
+  ];
+
+  it("T-MsgType.1: messaging-thread composer matching Connect-modal affordances is allowed", async () => {
+    // Given: messaging-thread lastContext has "Write a message…" + "Send", and no connect_note draft.
+    // When:  type({ ref, text }) runs against the composer textbox.
+    // Then:  the Connect-invite guard does not refuse; typing proceeds to CDP insertText.
+    const home = mkdtempSync(pathJoin(tmpdir(), "msgtype-thread-"));
+    process.env.FRONDOSE_HOME_BASE = home;
+    try {
+      const session = makeFakeSessionOnSurface(
+        "messaging-thread",
+        "https://www.linkedin.com/messaging/thread/urn:li:fsd_profile:test-thread/",
+        messageComposerEntries,
+      );
+      await session.getClient().snapshot();
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "Thanks for the note.", ref: "@e1" },
+        { toolCallId: "t-msgtype-thread", messages: [], abortSignal },
+      );
+
+      assert.equal(result.ok, true, "messaging-thread composer type must not be blocked by the Connect guard");
+      assert.ok(
+        session.callLog.some((c) => c.startsWith("insertText:")),
+        "type must proceed to CDP insertText on a message composer",
+      );
+    } finally {
+      delete process.env.FRONDOSE_HOME_BASE;
+      if (existsSync(home)) cleanupTmpDir(home);
+    }
+  });
+
+  it("T-MsgType.2: profile custom-invite affordances still refuse without a saved connect_note draft", async () => {
+    // Given: profile/preload-custom-invite lastContext has the same note-affordance + Send shape, and no draft.
+    // When:  type({ ref, text }) runs against the note textbox.
+    // Then:  the Connect-invite guard still refuses before any CDP insertText.
+    const home = mkdtempSync(pathJoin(tmpdir(), "msgtype-profile-"));
+    process.env.FRONDOSE_HOME_BASE = home;
+    try {
+      const session = makeFakeSessionOnSurface(
+        "profile",
+        "https://www.linkedin.com/preload/custom-invite/?vanityName=msgtype-no-draft",
+        messageComposerEntries,
+      );
+      const tool = makeTypeTool(session);
+      const result = await tool.execute(
+        { text: "Anything", ref: "@e1" },
+        { toolCallId: "t-msgtype-profile", messages: [], abortSignal },
+      );
+
+      assert.equal(result.ok, false, "profile custom-invite type without draft must be blocked");
+      // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+      const err = (result as any).error;
+      assert.equal(err.kind, "invalid_input");
+      assert.match(err.message, /Refusing to type into a Connect-invite modal: no saved connect_note draft/);
+      assert.equal(session.callLog.filter((c) => c.startsWith("insertText:")).length, 0, "no insertText fired");
+    } finally {
+      delete process.env.FRONDOSE_HOME_BASE;
+      if (existsSync(home)) cleanupTmpDir(home);
+    }
+  });
 
   // Given: Connect modal is open AND a draft exists for this lead AND typed text MATCHES the draft
   // When:  agent calls type with the exact draft text

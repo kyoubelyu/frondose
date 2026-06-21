@@ -194,3 +194,115 @@ describe("T-Pattern — outboundGuard.ts regex + surface constants", () => {
     );
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T-RequiresApproval — requiresApproval() now returns true for Send on messaging surfaces
+// (P-MSG-SEND Change A)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("T-RequiresApproval — requiresApproval() P-MSG-SEND: Send on messaging surfaces requires approval", () => {
+  // Dynamic import deferred so the scaffold compiles pre-builder (same as T-Pattern above).
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic import for pre-builder scaffold
+  let requiresApproval: ((...args: any[]) => any) | null = null;
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic import for pre-builder scaffold
+  let classifyOutboundLabel: ((...args: any[]) => any) | null = null;
+
+  before(async () => {
+    const mod = await import("../../../src/tools/browser/outboundGuard.js").catch(() => null);
+    if (mod) {
+      // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
+      requiresApproval = (mod as any).requiresApproval ?? null;
+      // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
+      classifyOutboundLabel = (mod as any).classifyOutboundLabel ?? null;
+    }
+  });
+
+  // ─── T-RequiresApproval.1 ─────────────────────────────────────────────────
+  it("T-RequiresApproval.1: requiresApproval('Send', 'messaging-thread') returns true (P-MSG-SEND: message_send on messaging surfaces now gated)", () => {
+    // Given: requiresApproval exported from outboundGuard.ts
+    // When:  requiresApproval("Send", "messaging-thread") called
+    // Then:  returns true (P-MSG-SEND Change A adds MESSAGE_SEND_RE + MESSAGING_SURFACES check)
+    if (!requiresApproval) {
+      assert.fail("T-RequiresApproval.1: requiresApproval not exported from outboundGuard.ts");
+    }
+    assert.equal(
+      requiresApproval("Send", "messaging-thread"),
+      true,
+      'T-RequiresApproval.1: requiresApproval("Send", "messaging-thread") must return true after P-MSG-SEND Change A',
+    );
+  });
+
+  // ─── T-RequiresApproval.2 ─────────────────────────────────────────────────
+  it("T-RequiresApproval.2: requiresApproval('Send', 'messaging') returns true (both messaging surfaces gated)", () => {
+    // Given: requiresApproval exported from outboundGuard.ts
+    // When:  requiresApproval("Send", "messaging") called (conversation-list surface)
+    // Then:  returns true
+    if (!requiresApproval) {
+      assert.fail("T-RequiresApproval.2: requiresApproval not exported from outboundGuard.ts");
+    }
+    assert.equal(
+      requiresApproval("Send", "messaging"),
+      true,
+      'T-RequiresApproval.2: requiresApproval("Send", "messaging") must return true after P-MSG-SEND Change A',
+    );
+  });
+
+  // ─── T-RequiresApproval.3 ─────────────────────────────────────────────────
+  it("T-RequiresApproval.3: requiresApproval('Send', 'profile') returns false (Send on non-messaging LinkedIn surface is NOT a message_send gate)", () => {
+    // Given: requiresApproval exported; surface=profile (not a messaging surface)
+    // When:  requiresApproval("Send", "profile") called
+    // Then:  returns false — "Send" on profile is benign (not classifiable as message_send there)
+    //        Regression guard: the gate must NOT over-extend to all LinkedIn surfaces.
+    if (!requiresApproval) {
+      assert.fail("T-RequiresApproval.3: requiresApproval not exported from outboundGuard.ts");
+    }
+    assert.equal(
+      requiresApproval("Send", "profile"),
+      false,
+      'T-RequiresApproval.3: requiresApproval("Send", "profile") must return false (not a messaging surface)',
+    );
+  });
+
+  // ─── T-RequiresApproval.4 ─────────────────────────────────────────────────
+  it("T-RequiresApproval.4: requiresApproval('Send invitation', 'messaging-thread') returns true (already gated as outbound label — no regression)", () => {
+    // Given: requiresApproval exported; label=Send invitation on messaging-thread
+    // When:  requiresApproval("Send invitation", "messaging-thread") called
+    // Then:  returns true — OUTBOUND_LABEL_RE still fires first (isOutboundLabel path)
+    //        Regression guard: pre-existing outbound labels are still gated on all surfaces.
+    if (!requiresApproval) {
+      assert.fail("T-RequiresApproval.4: requiresApproval not exported from outboundGuard.ts");
+    }
+    assert.equal(
+      requiresApproval("Send invitation", "messaging-thread"),
+      true,
+      'T-RequiresApproval.4: requiresApproval("Send invitation", "messaging-thread") must return true (outbound label always gated)',
+    );
+  });
+
+  // ─── T-RequiresApproval.5 ─────────────────────────────────────────────────
+  it("T-RequiresApproval.5: localized Chinese Send-family labels on messaging-thread classify as message_send and require approval", () => {
+    // Given: Chinese localized Send labels that can appear on messaging surfaces
+    // When:  classifyOutboundLabel(label) and requiresApproval(label, "messaging-thread") are called
+    // Then:  each label is classified as message_send and gated by operator approval
+    if (!requiresApproval) {
+      assert.fail("T-RequiresApproval.5: requiresApproval not exported from outboundGuard.ts");
+    }
+    if (!classifyOutboundLabel) {
+      assert.fail("T-RequiresApproval.5: classifyOutboundLabel not exported from outboundGuard.ts");
+    }
+
+    const labels = ["发送", "发送消息", "發送訊息"];
+    for (const label of labels) {
+      assert.equal(
+        classifyOutboundLabel(label),
+        "message_send",
+        `T-RequiresApproval.5: ${label} must classify as message_send`,
+      );
+      assert.equal(
+        requiresApproval(label, "messaging-thread"),
+        true,
+        `T-RequiresApproval.5: ${label} on messaging-thread must require approval`,
+      );
+    }
+  });
+});

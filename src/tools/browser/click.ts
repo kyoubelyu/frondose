@@ -246,6 +246,14 @@ export function makeClickTool(session: LinkedinSession) {
         // open click would overcount. The existing per-run cap stays attached to BOTH connect_open
         // and connect_send so the agent's first `Connect` click is still blocked when sent>=max.
         const outboundClass = classifyOutboundEntry(targetEntry, clickSurface);
+        if (outboundClass === "message_send" && session.resolvedMode?.() === "auto") {
+          return failWithReason(
+            "click",
+            "invalid_input",
+            "Auto message-send is not authorized. Switch to Manual mode and use operator approval before sending.",
+            "approval_required",
+          );
+        }
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
         if (outboundClass === "connect_send" && session.outboundDisabled === true) {
