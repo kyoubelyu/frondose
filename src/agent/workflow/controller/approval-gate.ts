@@ -60,17 +60,26 @@ export function approve(
   // the targets in front of it instead of guessing from prose.
   const isOutboundStep =
     step.requiresApproval && /(send|connect|invite|message|dm|note|comment|post|follow)/i.test(step.title);
-  const outboundExtra = isOutboundStep
-    ? ` THIS STEP IS THE OUTBOUND ACTION. Do NOT navigate, do NOT search, do NOT re-qualify, do NOT save another draft. ` +
-      `Your VERY FIRST tool call MUST be \`inspect\` on the current page (no \`navigate_to_url\`). ` +
-      `Then locate a button whose label matches one of these EXACT terms (case-insensitive): ` +
-      `"Connect", "Invite to connect", "Invite \${name} to connect", "Send invite", "Send now", "Send without a note", ` +
-      `"Add a note", "邀请", "添加好友", "发送邀请", "直接发送", "连接", "立即连接", "Follow". ` +
-      `\`click\` that button by its \`ref\` directly (not by label, to avoid ambiguous-target errors). ` +
-      `If the dialog asks "Add a note", click "Add a note" — DO NOT click "Send without a note" unless the operator explicitly declined to send a note. ` +
-      `Then \`type\` the draft text into the note textarea and \`click\` "Send invite". ` +
-      `Immediately after the outbound click, call \`mark_message_sent(draftId)\` AND \`update_lead_stage(leadId, "connect_sent")\` to close the loop.`
-    : "";
+  const isConnectStep = /(connect|invite|add a note|邀请|添加好友|连接|follow)/i.test(step.title);
+  const isMessageStep = isOutboundStep && !isConnectStep && /(message|reply|dm|消息|回复)/i.test(step.title);
+  const connectExtra =
+    ` THIS STEP IS THE OUTBOUND ACTION. Do NOT navigate, do NOT search, do NOT re-qualify, do NOT save another draft. ` +
+    `Your VERY FIRST tool call MUST be \`inspect\` on the current page (no \`navigate_to_url\`). ` +
+    `Then locate a button whose label matches one of these EXACT terms (case-insensitive): ` +
+    `"Connect", "Invite to connect", "Invite \${name} to connect", "Send invite", "Send now", "Send without a note", ` +
+    `"Add a note", "邀请", "添加好友", "发送邀请", "直接发送", "连接", "立即连接", "Follow". ` +
+    `\`click\` that button by its \`ref\` directly (not by label, to avoid ambiguous-target errors). ` +
+    `If the dialog asks "Add a note", click "Add a note" — DO NOT click "Send without a note" unless the operator explicitly declined to send a note. ` +
+    `Then \`type\` the draft text into the note textarea and \`click\` "Send invite". ` +
+    `Immediately after the outbound click, call \`mark_message_sent(draftId)\` AND \`update_lead_stage(leadId, "connect_sent")\` to close the loop.`;
+  const messageExtra =
+    ` THIS STEP IS THE OUTBOUND MESSAGE REPLY. Do NOT navigate, search, re-qualify, or save another draft. ` +
+    `Your VERY FIRST tool call MUST be \`inspect\` on the current messaging thread (scope \`threadInput\` or \`messagingConversation\`), NOT navigate_to_url. ` +
+    `This is a DIRECT MESSAGE, not a connection invite; there is NO note-dialog step and NO Connect/Invite button. ` +
+    `Ensure the approved reply text is already in the message composer ("Write a message…" textbox); if it is NOT, \`type\` the approved draft text there first. ` +
+    `Then \`click\` the thread's "Send" button (label "Send" / "发送") by its \`ref\` directly (not by label, to avoid ambiguous-target). ` +
+    `Immediately after the send, call \`mark_message_sent(draftId)\` to record it. Do NOT call \`update_lead_stage\` for a connection-request stage; this was a message reply, not a connection request.`;
+  const outboundExtra = isMessageStep ? messageExtra : isOutboundStep ? connectExtra : "";
   return {
     status: 200,
     response: { ok: true },
