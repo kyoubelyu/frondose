@@ -159,10 +159,12 @@ async function completeWithIdleTimeout(
       resetIdleTimer();
       let terminal: AssistantMessage | null = null;
       for await (const event of eventStream) {
+        if (opts.signal?.aborted) break;
         resetIdleTimer();
         terminal = assistantFromTerminalEvent(event);
         if (terminal) break;
       }
+      if (opts.signal?.aborted) throw makeTurnAbortError();
       terminal ??= await eventStream.result();
       if (terminal.stopReason === "aborted") {
         throw classifyAbortedStream(callAc.signal, opts.signal);
