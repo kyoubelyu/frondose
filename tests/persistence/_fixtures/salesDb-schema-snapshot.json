@@ -8,7 +8,7 @@
     {
       "name": "auto_run_ledger",
       "type": "table",
-      "sql": "CREATE TABLE auto_run_ledger (\n      id            TEXT    PRIMARY KEY,\n      run_id        TEXT    NOT NULL REFERENCES auto_runs(id),\n      action_type   TEXT    NOT NULL CHECK (action_type IN ('connect_sent','message_sent','follow_up_sent','comment_posted')),\n      lead_id       TEXT    REFERENCES leads(id),\n      ts            INTEGER NOT NULL,\n      count_weight  REAL    NOT NULL DEFAULT 1.0,\n      result        TEXT    NOT NULL CHECK (result IN ('success','failed','skipped'))\n    )"
+      "sql": "CREATE TABLE \"auto_run_ledger\" (\n      id            TEXT    PRIMARY KEY,\n      run_id        TEXT    REFERENCES auto_runs(id),\n      action_type   TEXT    NOT NULL CHECK (action_type IN ('connect_sent','message_sent','follow_up_sent','comment_posted')),\n      lead_id       TEXT    REFERENCES leads(id),\n      ts            INTEGER NOT NULL,\n      count_weight  REAL    NOT NULL DEFAULT 1.0,\n      result        TEXT    NOT NULL CHECK (result IN ('success','failed','skipped'))\n    )"
     },
     {
       "name": "auto_runs",
@@ -176,5 +176,5 @@
       "sql": null
     }
   ],
-  "schema_version_max": 3
+  "schema_version_max": 4
 }

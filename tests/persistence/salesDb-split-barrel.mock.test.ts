@@ -379,17 +379,75 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
   });
 
-  it("T-P72s4.Schema.1 edge: schema_version MAX(version) is 2 after open (applyV1 + applyV2 both ran)", async () => {
-    // Given: fresh :memory: DB opened post-split
-    // When:  SELECT MAX(version) FROM schema_version
-    // Then:  result is 2
+  it("T-P72s4.Schema.1 edge: schema_version MAX(version) is 4 after open (applyV1+V2+V3+V4 all ran)", async () => {
+    // Given: a raw better-sqlite3 DB pinned at schema v2 (no icp_qualification, no auto_run_ledger changes)
+    //        so the test does NOT call openSalesDatabase which would now run all migrations to v4.
+    // When:  openSalesDatabase is then called on the v2 fixture path → runs applyV3 + applyV4
+    // Then:  MAX(version) === 4
+    // NOTE: we use a real file (not :memory:) because openSalesDatabase caches by path.
     const { openSalesDatabase, closeSalesDatabase } = await import("../../src/persistence/salesDb.js");
+    const Database = (await import("better-sqlite3")).default;
     const tmpPath = join(tmpdir(), `p72s4-schema2-${randomUUID()}.sqlite`);
-    const db = openSalesDatabase(tmpPath);
 
+    // Build a minimal v2 fixture using raw better-sqlite3 (pre-v3, pre-v4)
+    const rawDb = new Database(tmpPath);
+    rawDb.exec(`
+      CREATE TABLE schema_version (version INTEGER NOT NULL);
+      INSERT INTO schema_version (version) VALUES (1);
+      INSERT INTO schema_version (version) VALUES (2);
+      CREATE TABLE raw_candidates (
+        id TEXT PRIMARY KEY, person_name TEXT NOT NULL, profile_url TEXT NOT NULL UNIQUE,
+        account_id TEXT, source TEXT NOT NULL, source_context TEXT,
+        observed_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new', latest_score_id TEXT, evidence_summary TEXT
+      );
+      CREATE TABLE lead_scores (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES raw_candidates(id),
+        lead_id TEXT, total_score INTEGER NOT NULL, icp_fit TEXT, pain_hypothesis TEXT,
+        buying_trigger TEXT, authority_level TEXT, suggested_opening_line TEXT,
+        confidence REAL, next_action TEXT, evidence_json TEXT, method_used TEXT, model TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE auto_run_ledger (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES auto_runs(id),
+        action_type TEXT NOT NULL, lead_id TEXT, ts INTEGER NOT NULL,
+        count_weight REAL NOT NULL DEFAULT 1.0, result TEXT NOT NULL
+      );
+      CREATE TABLE auto_runs (
+        id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, ended_at INTEGER,
+        max_duration_minutes INTEGER NOT NULL DEFAULT 480, max_connects INTEGER,
+        status TEXT NOT NULL, summary TEXT, counters TEXT
+      );
+      CREATE TABLE accounts (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, linkedin_url TEXT UNIQUE,
+        industry TEXT, company_size TEXT, region TEXT, current_pain_hypothesis TEXT,
+        account_score INTEGER, evidence TEXT, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE leads (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL UNIQUE REFERENCES raw_candidates(id),
+        account_id TEXT, person_name TEXT NOT NULL, profile_url TEXT NOT NULL,
+        stage TEXT NOT NULL, total_score INTEGER, confidence REAL, one_line_pain_chain TEXT,
+        next_action TEXT, next_action_due_at INTEGER, owner_mode TEXT NOT NULL,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE message_drafts (
+        id TEXT PRIMARY KEY, lead_id TEXT, kind TEXT NOT NULL, text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft', created_by TEXT NOT NULL, evidence TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE lead_timeline (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES raw_candidates(id),
+        lead_id TEXT, event_type TEXT NOT NULL, ts INTEGER NOT NULL, metadata TEXT
+      );
+    `);
+    rawDb.close();
+
+    // Now open via the migrator — must run applyV3 + applyV4
+    const db = openSalesDatabase(tmpPath);
     const row = db.prepare("SELECT MAX(version) AS maxVersion FROM schema_version").get() as { maxVersion: number };
-    // P-AUTO-5: applyV3 added (icp_qualification column) — max version is now 3
-    assert.strictEqual(row.maxVersion, 3, "schema_version MAX(version) must be 3 — applyV1 + applyV2 + applyV3 must have run");
+    // P-MSG-SEND-LEDGER: applyV4 added (nullable run_id) — max version is now 4
+    assert.strictEqual(row.maxVersion, 4, "schema_version MAX(version) must be 4 — applyV1+V2+V3+V4 must have run");
 
     closeSalesDatabase(tmpPath);
     try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
@@ -494,11 +552,11 @@ describe("T-P72s4.Importer — representative importer sample compiles and resol
     // Instead, verify the key symbol (CURRENT_SCHEMA_VERSION) directly via the barrel:
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
     const barrelForSchemaCheck = await import("../../src/persistence/salesDb.js") as Record<string, any>;
-    // P-AUTO-5: CURRENT_SCHEMA_VERSION bumped from 1 to 3 (reflects actual max after applyV3)
+    // P-MSG-SEND-LEDGER: CURRENT_SCHEMA_VERSION bumped from 3 to 4 (reflects nullable run_id applyV4)
     assert.strictEqual(
       barrelForSchemaCheck.CURRENT_SCHEMA_VERSION,
-      3,
-      "CURRENT_SCHEMA_VERSION must be 3 via barrel (P-AUTO-5 bump — runner now reaches v3)",
+      4,
+      "CURRENT_SCHEMA_VERSION must be 4 via barrel (P-MSG-SEND-LEDGER bump — runner now reaches v4)",
     );
     assert.strictEqual(typeof barrelForSchemaCheck.closeSalesDatabase, "function",
       "closeSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)");
@@ -549,8 +607,10 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
     //        connect-cap helper — cohesive with countAutoLedgerByAction/countOutboundSince in this
     //        module; extracting a ~7-line count helper to a new module would be over-engineering;
     //        182 is still far under the 800 global limit)
+    //        [P-MSG-SEND-LEDGER] schema 250→285 for the v4 applyV4 migration (nullable run_id
+    //        recreate-and-swap; ~30 lines; still far under the 800-line global hard rule)
     const LOC_BUDGETS: Record<string, number> = {
-      schema: 250,
+      schema: 285,
       urlNormalize: 15,
       rawCandidates: 90,
       leads: 140,

@@ -256,7 +256,7 @@ export function makeClickTool(session: LinkedinSession) {
         }
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
-        if (outboundClass === "connect_send" && session.outboundDisabled === true) {
+        if ((outboundClass === "connect_send" || outboundClass === "message_send") && session.outboundDisabled === true) {
           return failWithReason(
             "click",
             "invalid_input",
@@ -304,21 +304,23 @@ export function makeClickTool(session: LinkedinSession) {
               "no_daily_snapshot",
             );
           }
-          if (daily.remaining <= 0) {
-            return failWithReason(
-              "click",
-              "invalid_input",
-              `Daily outbound quota reached: remaining=${daily.remaining}. Wait for the next UTC day before sending more.`,
-              "daily_quota_reached",
-            );
-          }
-          if (daily.cooldownRemainingMs > 0) {
-            return failWithReason(
-              "click",
-              "invalid_input",
-              `Inter-outbound cooldown active: ${Math.ceil(daily.cooldownRemainingMs / 1000)}s remaining. Do read-only work until it elapses.`,
-              "cooldown_active",
-            );
+          if (mode === "auto") {
+            if (daily.remaining <= 0) {
+              return failWithReason(
+                "click",
+                "invalid_input",
+                `Daily outbound quota reached: remaining=${daily.remaining}. Wait for the next UTC day before sending more.`,
+                "daily_quota_reached",
+              );
+            }
+            if (daily.cooldownRemainingMs > 0) {
+              return failWithReason(
+                "click",
+                "invalid_input",
+                `Inter-outbound cooldown active: ${Math.ceil(daily.cooldownRemainingMs / 1000)}s remaining. Do read-only work until it elapses.`,
+                "cooldown_active",
+              );
+            }
           }
         }
         // P-AUTO-6: connect-surface integrity. The search/network sidebar "Invite <Name> to connect"
@@ -371,34 +373,55 @@ export function makeClickTool(session: LinkedinSession) {
         // to also call record_auto_action for connect-type → no double-count). Fires on connect_send
         // (final invite-send) ONLY, after a successful CDP dispatch.
         if (outboundClass === "connect_send" && session.salesDbPath !== undefined) {
-          const runRow = session.autoRun?.();
-          if (runRow !== null && runRow !== undefined) {
-            try {
-              const db = getSalesDb(session.salesDbPath);
-              appendAutoLedger(db, {
-                runId: runRow.runId,
-                actionType: "connect_sent",
-                result: "success",
-              });
-            } catch (ledgerErr) {
-              // GUARANTEED fail-closed (B-3): the in-memory latch cannot fail and blocks ALL further
-              // outbound this session even if the durable DB block below can't be written. Then
-              // best-effort persist 'blocked' so a fresh process also sees the run as stopped.
-              session.outboundDisabled = true;
+          const runRow = session.autoRun?.() ?? null;
+          const runId = session.resolvedMode?.() === "auto" ? (runRow?.runId ?? null) : null;
+          try {
+            const db = getSalesDb(session.salesDbPath);
+            appendAutoLedger(db, {
+              runId,
+              actionType: "connect_sent",
+              result: "success",
+            });
+          } catch (ledgerErr) {
+            // GUARANTEED fail-closed (B-3): the in-memory latch cannot fail and blocks ALL further
+            // outbound this session even if the durable DB block below can't be written. Then
+            // best-effort persist 'blocked' so a fresh process also sees the run as stopped.
+            session.outboundDisabled = true;
+            if (runId !== null) {
               try {
-                updateAutoRunStatus(getSalesDb(session.salesDbPath), runRow.runId, "blocked");
+                updateAutoRunStatus(getSalesDb(session.salesDbPath), runId, "blocked");
               } catch {
                 // Durable block unavailable (DB unreachable); the in-memory latch already fail-closes this session.
               }
-              return failWithReason(
-                "click",
-                "runtime_error",
-                `Connect dispatched but the ledger write failed (${ledgerErr instanceof Error ? ledgerErr.message : "db error"}). ` +
-                  "Outbound is now DISABLED for this session to prevent uncounted sends — do NOT retry this connect (it already sent). " +
-                  "Reconcile the ledger and start a fresh run.",
-                "ledger_write_failed",
-              );
             }
+            return failWithReason(
+              "click",
+              "runtime_error",
+              `Connect dispatched but the ledger write failed (${ledgerErr instanceof Error ? ledgerErr.message : "db error"}). ` +
+                "Outbound is now DISABLED for this session to prevent uncounted sends — do NOT retry this connect (it already sent). " +
+                "Reconcile the ledger and start a fresh run.",
+              "ledger_write_failed",
+            );
+          }
+        }
+        if (outboundClass === "message_send" && session.salesDbPath !== undefined) {
+          try {
+            const db = getSalesDb(session.salesDbPath);
+            appendAutoLedger(db, {
+              runId: null,
+              actionType: "message_sent",
+              result: "success",
+            });
+          } catch (ledgerErr) {
+            session.outboundDisabled = true;
+            return failWithReason(
+              "click",
+              "runtime_error",
+              `Message dispatched but the ledger write failed (${ledgerErr instanceof Error ? ledgerErr.message : "db error"}). ` +
+                "Outbound is now DISABLED for this session to prevent uncounted sends — do NOT retry this send (it already left the page). " +
+                "Reconcile the ledger and start a fresh run.",
+              "ledger_write_failed",
+            );
           }
         }
         // State-changing → emit data.hint per cli-primitives.md §click.
