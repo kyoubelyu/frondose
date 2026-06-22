@@ -7,7 +7,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { connectNoteRequiredForLabel } from "../../src/cli/subcommands/serve.js";
 import { inferSurface, isLinkedInLoginUrl, LINKEDIN_APP_HOSTS } from "../../src/linkedin/scopeResolver.js";
+import { classifyOutboundEntry } from "../../src/tools/browser/outboundGuard.js";
 
 // ─── T-M31 ─────────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,41 @@ test("T-M33: inferSurface routes remaining certified surfaces", () => {
   assert.equal(inferSurface("https://www.linkedin.com/in/me/"), "profile", "/in/me/ must be 'profile'");
   assert.equal(inferSurface("https://www.linkedin.com/in/john-doe/"), "profile", "/in/<name>/ must be 'profile'");
   assert.equal(inferSurface("https://www.linkedin.com/company/acme-corp/"), "company");
+});
+
+// ─── T-CIS.1 ─────────────────────────────────────────────────────────────────
+
+test("T-CIS.1: inferSurface routes custom-invite preload URLs to profile", () => {
+  // Given/When/Then: custom-invite preload URLs with query/no-query slash variants resolve to profile.
+  assert.equal(inferSurface("https://www.linkedin.com/preload/custom-invite/?vanityName=john-doe"), "profile");
+  assert.equal(inferSurface("https://linkedin.com/preload/custom-invite/"), "profile");
+  assert.equal(inferSurface("https://www.linkedin.com/preload/custom-invite"), "profile");
+});
+
+// ─── T-CIS.2 ─────────────────────────────────────────────────────────────────
+
+test("T-CIS.2: inferSurface does not treat custom-invite substring paths as profile", () => {
+  // Given/When/Then: a path containing the substring but not ending at the preload route stays unknown.
+  assert.equal(inferSurface("https://www.linkedin.com/preload/custom-invite/extra/foo"), "unknown");
+});
+
+// ─── T-CIS.3 ─────────────────────────────────────────────────────────────────
+
+test("T-CIS.3: custom-invite send labels classify as connect_send only on outbound profile surface", () => {
+  // Given/When/Then: modal send labels on profile classify as connect_send, while pre-fix unknown stays benign.
+  for (const label of ["Send without a note", "Send invitation"]) {
+    const entry = { name: label, role: "button" };
+    assert.equal(classifyOutboundEntry(entry, "profile"), "connect_send");
+    assert.equal(classifyOutboundEntry(entry, "unknown"), "benign");
+  }
+});
+
+// ─── T-CIS.4 ─────────────────────────────────────────────────────────────────
+
+test("T-CIS.4: profile custom-invite send-without-note does not use the search/network note blocker", () => {
+  // Given/When/Then: profile/custom-invite is outside the search/network instant-invite blocker.
+  const db = {} as Parameters<typeof connectNoteRequiredForLabel>[0];
+  assert.deepEqual(connectNoteRequiredForLabel(db, "Send without a note", "profile"), { block: false });
 });
 
 // ─── T-M34 ─────────────────────────────────────────────────────────────────────
