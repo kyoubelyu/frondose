@@ -44,7 +44,7 @@ export function getAutoRun(db: DB, id: string): AutoRunRow | null {
 export function appendAutoLedger(
   db: DB,
   input: {
-    runId: string;
+    runId: string | null;
     actionType: AutoActionType;
     leadId?: string | null;
     result: AutoActionResult;

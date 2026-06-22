@@ -9,7 +9,7 @@ export const DEFAULT_SALES_DB_PATH = (): string => join(getHomeBase(), DATA_DIR_
 /** Current sales schema version. P-SP-A ships v1 (initial 8 tables).
  *  Future P-SP-B+ extensions bump this and add applyV2/applyV3 etc.,
  *  following the same per-step transaction pattern as memory.ts. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 export const CURRENT_SALES_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
 
 /** Per-process singleton handle cache, keyed by path. */
@@ -70,6 +70,13 @@ function runSalesMigrations(db: DB): void {
     db.transaction(() => {
       applyV3(db);
       db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(3);
+    })();
+  }
+  if (current < 4) {
+    // P-MSG-SEND-LEDGER: auto_run_ledger.run_id becomes nullable — recreate-and-swap.
+    db.transaction(() => {
+      applyV4(db);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(4);
     })();
   }
 }
@@ -244,4 +251,30 @@ function applyV2(db: DB): void {
 
 function applyV3(db: DB): void {
   db.exec("ALTER TABLE lead_scores ADD COLUMN icp_qualification TEXT");
+}
+
+function applyV4(db: DB): void {
+  db.exec(`
+    CREATE TABLE auto_run_ledger_v4 (
+      id            TEXT    PRIMARY KEY,
+      run_id        TEXT    REFERENCES auto_runs(id),
+      action_type   TEXT    NOT NULL CHECK (action_type IN ('connect_sent','message_sent','follow_up_sent','comment_posted')),
+      lead_id       TEXT    REFERENCES leads(id),
+      ts            INTEGER NOT NULL,
+      count_weight  REAL    NOT NULL DEFAULT 1.0,
+      result        TEXT    NOT NULL CHECK (result IN ('success','failed','skipped'))
+    );
+    INSERT INTO auto_run_ledger_v4 (id, run_id, action_type, lead_id, ts, count_weight, result)
+      SELECT id, run_id, action_type, lead_id, ts, count_weight, result FROM auto_run_ledger;
+    DROP TABLE auto_run_ledger;
+    ALTER TABLE auto_run_ledger_v4 RENAME TO auto_run_ledger;
+    CREATE INDEX IF NOT EXISTS idx_ledger_run_action ON auto_run_ledger (run_id, action_type);
+    CREATE INDEX IF NOT EXISTS idx_ledger_lead ON auto_run_ledger (lead_id) WHERE lead_id IS NOT NULL;
+  `);
+  const violations = db.pragma("foreign_key_check") as unknown[];
+  if (violations.length > 0) {
+    throw new Error(
+      `applyV4: foreign_key_check failed after swap (${violations.length} violation(s)); migration aborted.`,
+    );
+  }
 }
