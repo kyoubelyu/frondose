@@ -266,6 +266,7 @@ describe("G-A2.HardGate — click.ts hard gates before clickAt (P-AUTO-1+2)", ()
       autoRun: () => ({ runId: "r1", maxConnects: 10, connectSentCount: 0 }),
       dailyOutbound: () => ({ remaining: 0, cooldownRemainingMs: 0 }),
       canClickOutbound: () => true,
+      resolvedMode: () => "auto", // required: daily/cooldown gate is mode=auto only
     });
 
     const mod = await import("../../../src/tools/browser/click.js").catch(() => null);
@@ -298,6 +299,7 @@ describe("G-A2.HardGate — click.ts hard gates before clickAt (P-AUTO-1+2)", ()
       autoRun: () => ({ runId: "r1", maxConnects: 10, connectSentCount: 0 }),
       dailyOutbound: () => ({ remaining: 5, cooldownRemainingMs: 120_000 }),
       canClickOutbound: () => true,
+      resolvedMode: () => "auto", // required: cooldown gate is mode=auto only
     });
 
     const mod = await import("../../../src/tools/browser/click.js").catch(() => null);
@@ -484,6 +486,7 @@ describe("G-A2.Count — click layer appends connect_sent/success on connect_sen
       autoRun: () => ({ runId: runRow.id, maxConnects: 5, connectSentCount: 0 }),
       dailyOutbound: () => ({ remaining: 14, cooldownRemainingMs: 0 }),
       canClickOutbound: () => true,
+      resolvedMode: () => "auto", // required: runId derived as auto runRow.id (not null)
     });
     // Builder must wire: session.salesDbPath = salesDbPath (or equivalent seam)
     // so click.ts can call appendAutoLedger after clickAt
