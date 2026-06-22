@@ -12,8 +12,9 @@ export function makeMarkMessageSentTool(salesDbPath: string) {
   return tool({
     description:
       "Mark a message draft as sent AFTER you have performed the actual LinkedIn action " +
-      "(connect button click, DM submit, etc). Updates message_drafts.status='sent' and appends " +
-      "a 'message_sent' event to the lead's timeline. Rejects if the draft is already sent.",
+      "(connect button click, DM submit, post publish, etc). Updates message_drafts.status='sent' and appends " +
+      "a 'message_sent' event to the lead's timeline. For kind='post' drafts (no leadId), marks the draft sent " +
+      "and returns leadId:null; no lead timeline event is appended (posts are self-anchored). Rejects if the draft is already sent.",
     parameters: markMessageSentParams,
     execute: async (input) => {
       try {
@@ -23,6 +24,10 @@ export function makeMarkMessageSentTool(salesDbPath: string) {
         if (!draft) return fail("mark_message_sent", "not_found", `No draft with id ${draftId}`);
         if (draft.status === "sent") {
           return fail("mark_message_sent", "invalid_input", `Draft ${draftId} is already sent`);
+        }
+        if (draft.kind === "post" && (draft as { leadId: string | null }).leadId == null) {
+          markDraftSent(db, draftId);
+          return ok("mark_message_sent", { draftId, leadId: null });
         }
         const lead = getLead(db, draft.leadId);
         if (!lead) {

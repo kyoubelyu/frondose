@@ -38,7 +38,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it, test } from "node:test";
-import { buildInspectSummary } from "../../src/linkedin/inspectSummary.js";
+import { buildInspectSummary, filterEntriesByScope } from "../../src/linkedin/inspectSummary.js";
 import type { CurrentSurfaceContext, SnapshotEntry } from "../../src/linkedin/types.js";
 import { inspectSummarySchema } from "../../src/linkedin/types.js";
 import { makeNavigateToUrlTool } from "../../src/tools/browser/navigateToUrl.js";
@@ -1344,4 +1344,234 @@ describe("T-MsgReply.ScopeProj.5 (Group D): regression — P-AUTO-15a person/non
 
     assert.deepEqual(buildInspectSummary(ctx, "messagingConversation"), buildInspectSummary(ctx));
   });
+});
+
+// =============================================================================
+// P-POST Step 2 — T-Post.Scope.1–5 (Group D): composerInput scope + advertisement
+// Gate: G-POST.Scope
+// =============================================================================
+
+// ─── T-Post.Scope.1: composer open → advertises BOTH composerModal AND composerInput ─
+
+describe("T-Post.Scope.1 (G-POST.Scope): composer open → buildInspectSummary advertises BOTH composerModal AND composerInput", () => {
+  it(
+    "given feed ctx with composer signals (button named 'Post'), when buildInspectSummary(ctx) runs, then availableScopes includes both 'composerModal' AND 'composerInput' in addition to the static feed scopes",
+    () => {
+      // Given: a feed ctx whose entries contain composer signals (a button named exactly "Post" —
+      //        the strongest single composer signal per hasComposerSignals in inspectSummary.ts:150-158).
+      // When:  buildInspectSummary(ctx) — no scope (unscoped, to observe availableScopes).
+      // Then:  availableScopes includes "composerModal" (pre-existing P-46 behavior);
+      //        availableScopes ALSO includes "composerInput" (NEW P-POST behavior);
+      //        both are in addition to the static feed scopes ["page","feed","post","postActions"].
+      const ctx = makeCtx("feed", [
+        { ref: "@e1", role: "button", name: "LinkedIn Home" },
+        { ref: "@e2", role: "button", name: "Post" }, // composer publish button — strong signal
+        { ref: "@e3", role: "textbox", name: "Text editor for creating content" },
+      ]);
+      const summary = buildInspectSummary(ctx);
+
+      // Post-Step-4: composerInput is dynamically advertised alongside composerModal
+      // when hasComposerSignals returns true (button named "Post" is a strong signal).
+      assert.ok(
+        summary.availableScopes.includes("composerModal"),
+        `T-Post.Scope.1: availableScopes must include 'composerModal' when composer is open; got: ${JSON.stringify(summary.availableScopes)}`,
+      );
+      assert.ok(
+        summary.availableScopes.includes("composerInput"),
+        `T-Post.Scope.1: availableScopes must include 'composerInput' when composer is open; got: ${JSON.stringify(summary.availableScopes)}`,
+      );
+      // Static scopes still present
+      assert.ok(summary.availableScopes.includes("page"), "T-Post.Scope.1: 'page' must always be in availableScopes");
+      assert.ok(summary.availableScopes.includes("feed"), "T-Post.Scope.1: 'feed' must be in availableScopes for feed surface");
+    },
+  );
+});
+
+// ─── T-Post.Scope.2: composer closed → composerInput NOT advertised ───────────
+
+describe("T-Post.Scope.2 (G-POST.Scope): composer closed → composerInput NOT in availableScopes", () => {
+  it(
+    "given feed ctx with NO composer signals (plain feed — Start a post button only), when buildInspectSummary(ctx) runs, then availableScopes does NOT include 'composerInput' (nor 'composerModal')",
+    () => {
+      // Given: a plain feed ctx with no composer-signal entries
+      //        ("Start a post" alone is NOT a strong signal; hasComposerSignals returns false).
+      // When:  buildInspectSummary(ctx) — unscoped.
+      // Then:  availableScopes does NOT include "composerInput";
+      //        availableScopes does NOT include "composerModal";
+      //        availableScopes equals the static feed list: ["page","feed","post","postActions"].
+      const ctx = makeCtx("feed", [
+        { ref: "@e1", role: "button", name: "Start a post" },
+        { ref: "@e2", role: "button", name: "My Network" },
+        { ref: "@e3", role: "link", name: "Feed" },
+      ]);
+      const summary = buildInspectSummary(ctx);
+
+      // This assertion PASSES even pre-Step-4 (composerInput is not in the current static list).
+      // But it is listed as a scaffold test to pin the regression guard contract.
+      // It will fail at Step 4 if the builder mistakenly advertises composerInput unconditionally.
+      if (summary.availableScopes.includes("composerInput")) {
+        assert.fail(
+          `T-Post.Scope.2: 'composerInput' must NOT be in availableScopes for plain feed (no composer signals); ` +
+            `got: ${JSON.stringify(summary.availableScopes)}`,
+        );
+      }
+      if (summary.availableScopes.includes("composerModal")) {
+        assert.fail(
+          `T-Post.Scope.2: 'composerModal' must NOT be in availableScopes for plain feed (no composer signals); ` +
+            `got: ${JSON.stringify(summary.availableScopes)}`,
+        );
+      }
+      // Post-Step-4: the composerInput branch is only advertised dynamically when
+      // hasComposerSignals returns true. On a plain feed with no composer signals,
+      // availableScopes must exactly equal the static list.
+      assert.deepEqual(
+        summary.availableScopes,
+        ["page", "feed", "post", "postActions"],
+        `T-Post.Scope.2: plain feed availableScopes must equal the static list (no composerInput/composerModal without composer signals); got: ${JSON.stringify(summary.availableScopes)}`,
+      );
+    },
+  );
+});
+
+// ─── T-Post.Scope.3: filterEntriesByScope("composerInput", …) returns @pc* only ─
+
+describe("T-Post.Scope.3 (G-POST.Scope): filterEntriesByScope('composerInput', entries, 'feed') returns editor + Post entries only", () => {
+  it(
+    "given entries containing @pc1 (textbox 'Text editor for creating content') + @pc2 (button 'Post') + ~10 unrelated @e*/@fp* entries, when filterEntriesByScope(entries, 'composerInput', 'feed') runs, then result is exactly [@pc1, @pc2]",
+    () => {
+      // Given: a mixed entries array containing:
+      //   - @pc1 (role:textbox, name:"Text editor for creating content") — post-composer synth ref
+      //   - @pc2 (role:button, name:"Post") — post-composer synth ref
+      //   - 5 @e* buttons (nav/non-composer)
+      //   - 3 @fp* feedPost entries
+      //   - 2 @n* staticText entries
+      // When:  filterEntriesByScope(entries, "composerInput", "feed") runs.
+      // Then:  result is exactly [@pc1, @pc2] — ref-prefix filter on "@pc".
+      //        Order preserved; length === 2.
+      // CONCERN-MR-2 hardening (load-bearing): this assertion runs BEFORE any trailing TODO
+      // so a faulty Step-4 that leaves filterEntriesByScope("composerInput") broken cannot
+      // pass by just not having the branch at all (an undefined branch returns [] which would
+      // also fail the assertion, but explicitly so — not silently).
+      const entries: SnapshotEntry[] = [
+        { ref: "@pc1", role: "textbox", name: "Text editor for creating content" },
+        { ref: "@pc2", role: "button", name: "Post" },
+        { ref: "@e1", role: "button", name: "LinkedIn Home" },
+        { ref: "@e2", role: "button", name: "My Network" },
+        { ref: "@e3", role: "button", name: "Start a post" },
+        { ref: "@e4", role: "button", name: "Like" },
+        { ref: "@e5", role: "button", name: "Comment" },
+        { ref: "@fp1", role: "feedPost", name: "Post by Alice (/in/alice): headline 1" },
+        { ref: "@fp2", role: "feedPost", name: "Post by Bob (/in/bob): headline 2" },
+        { ref: "@fp3", role: "feedPost", name: "Post by Carol (/in/carol): headline 3" },
+        { ref: "@n1", role: "staticText", name: "Feed nav text 1" },
+        { ref: "@n2", role: "staticText", name: "Feed nav text 2" },
+      ];
+
+      // Load-bearing assertion: call the live filterEntriesByScope and assert refs+order.
+      // Pre-Step-4: "composerInput" branch does not exist in filterEntriesByScope →
+      //             the function falls through to a default (likely returns [] or all entries),
+      //             and the deepEqual below FAILS.
+      // Post-Step-4: the "@pc" prefix filter returns exactly [@pc1, @pc2].
+      const result = filterEntriesByScope(entries, "composerInput", "feed");
+      assert.deepEqual(
+        result.map((e) => e.ref),
+        ["@pc1", "@pc2"],
+        `T-Post.Scope.3: filterEntriesByScope(entries, 'composerInput', 'feed') must return exactly [@pc1, @pc2]; got: ${JSON.stringify(result.map((e) => e.ref))}`,
+      );
+      // Also verify order is preserved and length is exactly 2.
+      assert.equal(result.length, 2, "T-Post.Scope.3: result must have exactly 2 entries");
+    },
+  );
+});
+
+// ─── T-Post.Scope.4: composerInput filter is ref-prefix-based (surface-agnostic) ─
+
+describe("T-Post.Scope.4 (G-POST.Scope): filterEntriesByScope('composerInput') is ref-prefix-based, surface-agnostic", () => {
+  it(
+    "given the SAME entries with surface='profile', when filterEntriesByScope(entries, 'composerInput', 'profile') runs, then result is still exactly [@pc1, @pc2] (filter is ref-prefix-based, not surface-dependent)",
+    () => {
+      // Given: entries containing @pc1 + @pc2 + unrelated entries (same shape as T-Post.Scope.3);
+      //        surface="profile" (not "feed").
+      // When:  filterEntriesByScope(entries, "composerInput", "profile") runs.
+      // Then:  result is exactly [@pc1, @pc2].
+      //        Documents intentional behavior: the FILTER is surface-agnostic (ref-prefix on "@pc");
+      //        the ADVERTISEMENT is surface-conditional (only on "feed" when composer is open).
+      //        Mirrors the overlay scope filter at inspectSummary.ts:297-299.
+      // CONCERN-MR-2 hardening (load-bearing): call filterEntriesByScope directly and assert
+      // refs+order BEFORE any trailing TODO — mirrors the T-Post.Scope.3 hardening.
+      // Pre-Step-4: "composerInput" branch does not exist → filterEntriesByScope returns [] or
+      //             all entries (neither is [@pc1,@pc2]) → deepEqual FAILS.
+      // Post-Step-4: the "@pc" prefix filter is surface-agnostic → returns [@pc1,@pc2].
+      const entries: SnapshotEntry[] = [
+        { ref: "@pc1", role: "textbox", name: "Text editor for creating content" },
+        { ref: "@pc2", role: "button", name: "Post" },
+        { ref: "@e1", role: "button", name: "Connect" },
+        { ref: "@e2", role: "button", name: "Message" },
+        { ref: "@e3", role: "button", name: "More" },
+      ];
+
+      // Load-bearing assertion (CONCERN-MR-2 hardening):
+      const result = filterEntriesByScope(entries, "composerInput", "profile");
+      assert.deepEqual(
+        result.map((e) => e.ref),
+        ["@pc1", "@pc2"],
+        `T-Post.Scope.4: filterEntriesByScope(entries, 'composerInput', 'profile') must return exactly [@pc1, @pc2]; got: ${JSON.stringify(result.map((e) => e.ref))}`,
+      );
+      assert.equal(result.length, 2, "T-Post.Scope.4: result must have exactly 2 entries");
+    },
+  );
+});
+
+// ─── T-Post.Scope.5: existing scopes unchanged (regression guard) ─────────────
+
+describe("T-Post.Scope.5 (G-POST.Scope): existing scopes unchanged — AVAILABLE_SCOPES_BY_SURFACE static map regression guard", () => {
+  it(
+    "given a plain feed ctx (no composer) AND a messaging-thread ctx (no transcript), when buildInspectSummary runs on each, then availableScopes exactly matches the pre-P-POST static snapshot for each surface",
+    () => {
+      // Given: (1) plain feed ctx with no composer signals
+      //        (2) messaging-thread ctx with no transcript or composer entries
+      // When:  buildInspectSummary(ctx) runs on each.
+      // Then:  (1) feed availableScopes === ["page","feed","post","postActions"]
+      //             (composerInput and composerModal must NOT appear — no composer signals)
+      //        (2) messaging-thread availableScopes ===
+      //             ["page","messagingThread","messagingConversation","threadInput"]
+      //             per src/linkedin/inspectSummary.ts:168-174 — NIT fix from Step-3a critic.
+      //        Pre-P-POST baseline. If the builder accidentally widens AVAILABLE_SCOPES_BY_SURFACE
+      //        unconditionally, this test catches it.
+      const feedCtx = makeCtx("feed", [
+        { ref: "@e1", role: "button", name: "Start a post" },
+        { ref: "@e2", role: "link", name: "Feed" },
+      ]);
+      const feedSummary = buildInspectSummary(feedCtx);
+
+      const messagingThreadCtx: CurrentSurfaceContext = {
+        pageUrl: "https://www.linkedin.com/messaging/thread/test/",
+        surface: "messaging-thread",
+        activeLayer: "page",
+        entries: [
+          { ref: "@e1", role: "link", name: "Back to Messaging" },
+          { ref: "@e2", role: "button", name: "More options" },
+        ],
+      };
+      const threadSummary = buildInspectSummary(messagingThreadCtx);
+
+      // Feed: pre-P-POST static list (composerInput must NOT be in static list)
+      assert.deepEqual(
+        feedSummary.availableScopes,
+        ["page", "feed", "post", "postActions"],
+        "T-Post.Scope.5: plain feed availableScopes must equal pre-P-POST static list",
+      );
+
+      // Messaging-thread: pre-P-POST static list per inspectSummary.ts:168-174.
+      // The exact static scopes for messaging-thread are:
+      //   ["page","messagingThread","messagingConversation","threadInput"]
+      // (NIT fix from Step-3a critic: the old scaffold cited ["page","messaging-thread"] which
+      //  is WRONG — the real static map key is "messaging-thread" but the scopes list is the above.)
+      assert.deepEqual(
+        threadSummary.availableScopes,
+        ["page", "messagingThread", "messagingConversation", "threadInput"],
+        "T-Post.Scope.5: messaging-thread availableScopes must match the static list from inspectSummary.ts:168-174 — [\"page\",\"messagingThread\",\"messagingConversation\",\"threadInput\"]",
+      );
+    },
+  );
 });

@@ -56,9 +56,10 @@ describe("T-SP-D.Checkpoint — draft-before-outbound invariant + DM-send-verify
 
     // Soft cap invariant (Phase 9 2026-06-08: raised from 4400 → 5100 to fit the
     // no-note autonomous fallback directive — a load-bearing safety contract).
+    // P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge.
     assert.ok(
-      CHECKPOINT.length <= 5100,
-      `CHECKPOINT.length must be ≤ 5100 chars (got ${CHECKPOINT.length}) — Phase 9 cap, raised from 4400 (G-PSPD.3)`,
+      CHECKPOINT.length <= 5400,
+      `CHECKPOINT.length must be ≤ 5400 chars (got ${CHECKPOINT.length}) — P-POST cap, raised from 5100 (G-PSPD.3)`,
     );
   });
 

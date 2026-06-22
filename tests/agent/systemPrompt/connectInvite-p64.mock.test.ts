@@ -60,18 +60,20 @@ describe("T-P64 — P-64 checkpoint F1 directive: preload-URL connect-invite wor
   });
 
   // ─── T-P64.4 ─────────────────────────────────────────────────────────────────
-  it("T-P64.4 (G-P64.2): CHECKPOINT.length is within [4900, 5100] — Phase 9 raised the cap from [4350, 4400] to fit the no-note fallback directive", () => {
+  it("T-P64.4 (G-P64.2): CHECKPOINT.length is within [4900, 5400] — P-POST raised the cap from [4900, 5100] to fit the **Post (feed)** compose nudge", () => {
     // Given: CHECKPOINT imported from checkpoint.ts.
     //        Phase-9 (2026-06-08) added the No-note autonomous fallback directive
     //        (operator pre-authorizes degradation when with-note Send fails) — this
     //        is a load-bearing safety contract that earned a cap raise. Post-edit:
     //        ~5014 chars. New band [4900, 5100] — same regression-bracket pattern
     //        as the pre-Phase-9 [4350, 4400] band, just centered around the new mass.
+    //        P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge (~5279 post-edit).
     // When:  CHECKPOINT.length measured
-    // Then:  4900 <= CHECKPOINT.length <= 5100
+    // Then:  4900 <= CHECKPOINT.length <= 5400
+    // P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge.
     const len = CHECKPOINT.length;
     assert.ok(len >= 4900, `T-P64.4: CHECKPOINT.length must be >= 4900 (lower regression bracket); got ${len}`);
-    assert.ok(len <= 5100, `T-P64.4: CHECKPOINT.length must be <= 5100 (upper budget cap, post-Phase-9 raise); got ${len}`);
+    assert.ok(len <= 5400, `T-P64.4: CHECKPOINT.length must be <= 5400 (upper budget cap, post-P-POST raise); got ${len}`);
   });
 
   // ─── T-P9.1 + T-P9.2: no-note autonomous fallback (Phase 9) ─────────────────

@@ -254,6 +254,14 @@ export function makeClickTool(session: LinkedinSession) {
             "approval_required",
           );
         }
+        if (outboundClass === "post" && session.resolvedMode?.() === "auto") {
+          return failWithReason(
+            "click",
+            "invalid_input",
+            "Auto post is not authorized. Switch to Manual mode and use operator approval before publishing.",
+            "approval_required",
+          );
+        }
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
         if ((outboundClass === "connect_send" || outboundClass === "message_send") && session.outboundDisabled === true) {
