@@ -101,18 +101,19 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
 
 // ─── T-Checkpoint.7 — character count budget (P-39 update) ──────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 5100 characters (Phase 9 2026-06-08 raised the budget for the no-note autonomous fallback directive)", () => {
+test("T-Checkpoint.7: CHECKPOINT.length is <= 5400 characters (P-POST 2026-06-22 raised the budget for the **Post (feed)** compose nudge)", () => {
   // Given: CHECKPOINT constant (P-39 added 'Session-end persistence' + 'Daily memory organization'
   //        subsections → grew from ~1786 chars to ~2620; P-49 added 'Task-start context lookup'
   //        subsection → grew from ~2620 chars to ~3626; P-Y5 D-RUN-4 R2b added the task-start-ritual
   //        cross-link sentence → grew ~50 chars to ~4250; Phase 9 added the No-note fallback
-  //        directive → grew ~620 chars to ~5014)
+  //        directive → grew ~620 chars to ~5014; P-POST added the Post (feed) compose nudge → ~5279)
   // When: CHECKPOINT.length measured
-  // Then: <= 5100 — Phase 9 raised the cap from 4400 to 5100 to fit the load-bearing safety
-  //        contract for autonomous degradation. Same regression-guard pattern; new ceiling.
+  // Then: <= 5400 — P-POST raised the cap from 5100 to 5400 to fit the **Post (feed)** compose nudge.
+  //        Same soft regression-bracket pattern as Phase 9 raise (4400→5100); new ceiling.
+  // P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge.
   assert.ok(
-    CHECKPOINT.length <= 5100,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 5100-char budget (Phase-9 regression guard)`,
+    CHECKPOINT.length <= 5400,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 5400-char budget (P-POST regression guard)`,
   );
 });
 

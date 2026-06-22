@@ -62,6 +62,12 @@ export function approve(
     step.requiresApproval && /(send|connect|invite|message|dm|note|comment|post|follow)/i.test(step.title);
   const isConnectStep = /(connect|invite|add a note|邀请|添加好友|连接|follow)/i.test(step.title);
   const isMessageStep = isOutboundStep && !isConnectStep && /(message|reply|dm|消息|回复)/i.test(step.title);
+  const isPostStep =
+    isOutboundStep &&
+    !isConnectStep &&
+    !isMessageStep &&
+    /(\b(post|publish)\b|发布|発信)/i.test(step.title) &&
+    !/\b(comment|react|repost)\b/i.test(step.title);
   const connectExtra =
     ` THIS STEP IS THE OUTBOUND ACTION. Do NOT navigate, do NOT search, do NOT re-qualify, do NOT save another draft. ` +
     `Your VERY FIRST tool call MUST be \`inspect\` on the current page (no \`navigate_to_url\`). ` +
@@ -79,7 +85,15 @@ export function approve(
     `Ensure the approved reply text is already in the message composer ("Write a message…" textbox); if it is NOT, \`type\` the approved draft text there first. ` +
     `Then \`click\` the thread's "Send" button (label "Send" / "发送") by its \`ref\` directly (not by label, to avoid ambiguous-target). ` +
     `Immediately after the send, call \`mark_message_sent(draftId)\` to record it. Do NOT call \`update_lead_stage\` for a connection-request stage; this was a message reply, not a connection request.`;
-  const outboundExtra = isMessageStep ? messageExtra : isOutboundStep ? connectExtra : "";
+  const postExtra =
+    ` THIS STEP IS THE OUTBOUND POST PUBLISH. Do NOT navigate, search, re-qualify, or save another draft. ` +
+    `Your VERY FIRST tool call MUST be \`inspect\` on the CURRENT feed page (scope \`composerInput\` or \`composerModal\`), NOT navigate_to_url. ` +
+    `This is a SELF-AUTHORED POST to your own LinkedIn feed; there is NO Connect/Invite button, NO note-dialog step, NO recipient lead. ` +
+    `Ensure the approved post body is already in the composer text editor ("Text editor for creating content"); if it is NOT, \`type\` the approved draft text there first. ` +
+    `Then \`click\` the composer's "Post" button (label exactly "Post", normally \`@pc2\`) BY ITS \`ref\` directly (not by label, to avoid ambiguous-target). ` +
+    `Immediately after the click, call \`mark_message_sent(draftId)\` to close the post draft. ` +
+    `Do NOT update any lead stage - posts are self-anchored and have no leadId.`;
+  const outboundExtra = isMessageStep ? messageExtra : isPostStep ? postExtra : isOutboundStep ? connectExtra : "";
   return {
     status: 200,
     response: { ok: true },

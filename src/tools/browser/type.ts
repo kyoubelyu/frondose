@@ -174,15 +174,21 @@ export function makeTypeTool(session: LinkedinSession) {
         const r = await session.getOrInitClient();
         if (!r.ok) return r;
         const { client } = r;
-        // [P-75 D-11 round 3] Text-fidelity guard for Connect-invite modals.
-        // When typing into a detected Connect modal (Add-a-note OR note textarea + Send button
+        // [P-75 D-11 round 3 / P-POST-PUBLISHFIX] Text-fidelity guard for Connect-invite modals.
+        // Fires ONLY on genuine connect surfaces — profile (/in/<slug>/) and the custom-invite
+        // preload URL (/preload/custom-invite/?vanityName=<slug>). On those surfaces, when the
+        // captured entries look like a Connect modal (Add-a-note OR note textarea + Send button
         // both visible), the typed text MUST exactly match the most-recent connect_note draft
         // saved for the lead currently on screen. Catches the Linfeng-rewrite hazard
         // (operator-vetted "Hi Linfeng — your blend of a PhD..." came out as "...PhD from HKUST +
         // ... an impressive combo" because the agent paraphrased on the way to send).
+        // Surface gate via profileSlugFromUrl SUBSUMES the older messaging-thread carve-out
+        // (messaging URLs aren't profile slugs) AND fixes the P-POST-PUBLISHFIX feed false-
+        // positive (the feed's always-present "Send" button + the post composer's note-like
+        // editor name used to satisfy inConnectModal on the feed → every post type was refused).
         // Replaces the round-2 modal-block guard (which forced linkedin_connect, now removed).
         const guardCtx = session.getLastContext();
-        if (inConnectModal(guardCtx?.entries) && guardCtx?.surface !== "messaging-thread") {
+        if (inConnectModal(guardCtx?.entries) && profileSlugFromUrl(guardCtx?.pageUrl ?? "") !== null) {
           const expected = latestDraftTextForCurrentLead(guardCtx?.pageUrl);
           if (expected === null) {
             return fail(

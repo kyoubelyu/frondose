@@ -1025,4 +1025,208 @@ describe("T-D11.R3 (D-11 round 3): Connect-modal text-fidelity guard", () => {
       if (existsSync(home)) cleanupTmpDir(home);
     }
   });
+
+  // ── P-POST-PUBLISHFIX gate tests ──────────────────────────────────────────────
+  //
+  // Coverage notes for T-PFix.2 / T-PFix.3:
+  //   The existing tests "REJECTS when no saved draft exists for the lead (no approval trail)"
+  //   (line ~897) and "PASSES when typed text exactly matches saved connect_note draft for the
+  //   lead" (line ~845) plus "PASSES on 2nd-degree modal variant …" (line ~981) ARE the
+  //   coverage of record for T-PFix.2 and T-PFix.3 (profile-surface preserved behavior).
+  //   No duplicate copies are added here per CLAUDE.md §1 Simplicity First + plan §6 note.
+  //   Those tests must continue to pass after the gate substitution in Step 4 — if they
+  //   regress, the fix over-narrowed the guard. (profileSlugFromUrl is non-null on /in/<slug>/
+  //   URLs so the new gate fires identically on profile surfaces — preserving those tests.)
+  //
+  // Coverage note for T-PFix.5 (messaging-thread subsumed):
+  //   The existing "T-MsgType.1: messaging-thread composer matching Connect-modal affordances
+  //   is allowed" test (line ~782) IS the regression record. Under the new gate,
+  //   profileSlugFromUrl("https://www.linkedin.com/messaging/thread/…") returns null, so the
+  //   guard does not fire — identical outcome to the old surface !== "messaging-thread" carve-out.
+  //   That test must continue to pass (subsumed, not broken) and is the coverage of record for
+  //   T-PFix.5. No new copy is added; the new T-PFix.5 it() below is an EXPLICIT additional
+  //   confirmation using the messaging-thread surface with full modal-shaped entries (the
+  //   strongest possible inConnectModal-tripping set), to make the subsumption claim visible.
+
+  // T-PFix.1 [G-PFix.1 — THE FIX, load-bearing]:
+  // feed surface + post-composer entries that trip inConnectModal → guard does NOT fire → type proceeds.
+  //
+  // This is the core regression guard for P-POST-PUBLISHFIX.
+  // FAILS pre-Step-4 (OLD gate: surface !== "messaging-thread" fires on "feed" → refusal).
+  // PASSES post-Step-4 (NEW gate: profileSlugFromUrl("…/feed/") === null → guard skipped).
+  //
+  // Text fixture is intentionally short ("Hi") — the load-bearing assertion is that the guard
+  // does NOT fire (guard check is URL-based and fires before any typing), not that a long
+  // post is typed. A 50+ char fixture at computeCharDelay budget (~143ms/char) takes >8s,
+  // exceeding the test timeout; a 2-char fixture exercises the SAME guard path in <300ms.
+  it(
+    "T-PFix.1: feed surface + inConnectModal-tripping entries → guard does NOT fire → type proceeds (THE FIX)",
+    { timeout: 5000 },
+    async () => {
+      // Given: pageUrl="https://www.linkedin.com/feed/", surface="feed"; entries include
+      //        a "Send" button (trips SEND_BTN_RE) and a "Message" textbox (trips NOTE_FIELD_RE)
+      //        — the exact false-positive composition documented in intake §2 defect 1.
+      //        No draft seeded (any DB lookup on the feed URL returns null regardless —
+      //        but with the fix the guard must not even reach the DB lookup).
+      //        FRONDOSE_HOME_BASE is set to a fresh empty tmpdir so any accidental DB lookup
+      //        would return null and cause a refusal — making the test correctly red pre-fix.
+      // When:  type({ ref: "@e1", text: "Hi" }) — short text keeps wall-time <300ms so the
+      //        5s test timeout is never at risk; the guard fires (or not) before any character
+      //        is dispatched, so text length is irrelevant to the load-bearing assertion.
+      // Then:  result.ok === true; session.callLog contains insertText: calls (per-char path ran);
+      //        the "Refusing to type into a Connect-invite modal" message does NOT appear.
+      const feedComposerEntries = [
+        // "Message" textbox → matches NOTE_FIELD_RE (/message/i) → note affordance present
+        { ref: "@e1", role: "textbox", name: "Message" },
+        // bare "Send" button → matches SEND_BTN_RE (/^send\s*$/i) → send button present
+        // Together with the textbox above, inConnectModal() returns true.
+        { ref: "@e2", role: "button", name: "Send" },
+      ];
+      const home = mkdtempSync(pathJoin(tmpdir(), "pfix1-feed-"));
+      process.env.FRONDOSE_HOME_BASE = home;
+      try {
+        const session = makeFakeSessionOnSurface("feed", "https://www.linkedin.com/feed/", feedComposerEntries);
+        await session.getClient().snapshot();
+        const tool = makeTypeTool(session);
+        const result = await tool.execute(
+          {
+            ref: "@e1",
+            text: "Hi",
+          },
+          { toolCallId: "t-pfix1-feed", messages: [], abortSignal },
+        );
+
+        // Post-fix assertion (FAILS pre-Step-4 because the OLD gate fires on feed):
+        assert.equal(
+          result.ok,
+          true,
+          "T-PFix.1: feed type must NOT be blocked by the Connect-invite guard — " +
+            "profileSlugFromUrl('/feed/') === null so the new gate must not fire",
+        );
+        assert.ok(
+          session.callLog.some((c) => c.startsWith("insertText:")),
+          "T-PFix.1: insertText must fire (per-char path ran)",
+        );
+        assert.ok(
+          !(result as any).error?.message?.includes("Refusing to type into a Connect-invite modal"),
+          "T-PFix.1: the Connect-invite guard refusal message must NOT appear",
+        );
+      } finally {
+        delete process.env.FRONDOSE_HOME_BASE;
+        if (existsSync(home)) cleanupTmpDir(home);
+      }
+    },
+  );
+
+  // T-PFix.4v1 [G-PFix.4 — custom-invite preserved, no-regression guard]:
+  // /preload/custom-invite/?vanityName=<slug> + connect-modal entries + NO draft →
+  // guard STILL fires (profileSlugFromUrl is non-null on this URL) → refusal preserved.
+  //
+  // This confirms the new gate does NOT accidentally exclude the custom-invite surface.
+  // Should PASS both pre- and post-Step-4 (the old gate also fires here; new gate matches).
+  it(
+    "T-PFix.4v1: /preload/custom-invite/?vanityName=<slug> + connect-modal entries + no draft → guard still refuses (custom-invite preserved)",
+    { timeout: 5000 },
+    async () => {
+      // Given: pageUrl="https://www.linkedin.com/preload/custom-invite/?vanityName=pfix4-slug",
+      //        surface="profile"; entries are the canonical 3rd-deg connect-modal shape.
+      //        No draft seeded → latestDraftTextForCurrentLead returns null.
+      // When:  type({ ref: "@e2", text: "any text" }) called.
+      // Then:  result.ok === false; error.kind === "invalid_input";
+      //        error.message matches /Refusing to type into a Connect-invite modal: no saved connect_note draft/
+      //        (guard fires because profileSlugFromUrl("…/preload/custom-invite/?vanityName=pfix4-slug")
+      //         returns "pfix4-slug" — non-null — so the new gate IS true on custom-invite).
+      const home = mkdtempSync(pathJoin(tmpdir(), "pfix4-ci-"));
+      process.env.FRONDOSE_HOME_BASE = home;
+      try {
+        const session = makeFakeSessionOnSurface(
+          "profile",
+          "https://www.linkedin.com/preload/custom-invite/?vanityName=pfix4-slug",
+          modalEntries,
+        );
+        const tool = makeTypeTool(session);
+        const result = await tool.execute(
+          { ref: "@e2", text: "Any text — no draft exists so this must be refused." },
+          { toolCallId: "t-pfix4v1-ci", messages: [], abortSignal },
+        );
+
+        assert.equal(
+          result.ok,
+          false,
+          "T-PFix.4v1: custom-invite type without a draft must still be blocked — " +
+            "profileSlugFromUrl is non-null on /preload/custom-invite/ so the guard fires",
+        );
+        // biome-ignore lint/suspicious/noExplicitAny: test shape assertion
+        const err = (result as any).error;
+        assert.equal(err.kind, "invalid_input", "T-PFix.4v1: error.kind must be invalid_input");
+        assert.match(
+          err.message,
+          /Refusing to type into a Connect-invite modal: no saved connect_note draft/,
+          "T-PFix.4v1: error.message must name the no-draft refusal",
+        );
+        assert.equal(
+          session.callLog.filter((c) => c.startsWith("insertText:")).length,
+          0,
+          "T-PFix.4v1: no insertText must fire on a refused type",
+        );
+      } finally {
+        delete process.env.FRONDOSE_HOME_BASE;
+        if (existsSync(home)) cleanupTmpDir(home);
+      }
+    },
+  );
+
+  // T-PFix.5 [G-PFix.5 — messaging-thread subsumption, explicit confirmation]:
+  // messaging-thread surface + FULL connect-modal entries (the strongest inConnectModal-tripping
+  // set) → guard does NOT fire under the new gate (subsumed).
+  //
+  // Should PASS both pre- and post-Step-4.
+  // The existing T-MsgType.1 is the coverage of record; this test uses modalEntries (the full
+  // 3rd-deg modal shape) rather than messageComposerEntries to make the subsumption
+  // claim explicit: even with a canonical Connect-modal AX tree, the URL gate short-circuits.
+  it(
+    "T-PFix.5: messaging-thread + full Connect-modal entries → guard does NOT fire (subsumed by URL gate)",
+    { timeout: 5000 },
+    async () => {
+      // Given: pageUrl="https://www.linkedin.com/messaging/thread/urn:li:fsd_profile:test-id/",
+      //        surface="messaging-thread"; entries are the canonical 3rd-deg connect-modal shape
+      //        (heading "Add a note to your invitation" + "Message" textbox + "Send invitation" button)
+      //        — inConnectModal() returns true on these entries.
+      //        No draft seeded. Under the NEW gate: profileSlugFromUrl(messagingThreadUrl) === null
+      //        → the guard block is skipped entirely → type proceeds.
+      //        Under the OLD gate: surface !== "messaging-thread" === false → also skipped.
+      //        Both gates produce the same outcome here; this test is a no-regression guard.
+      // When:  type({ ref: "@e2", text: "Thanks for the note." }) called.
+      // Then:  result.ok === true; insertText fires.
+      const home = mkdtempSync(pathJoin(tmpdir(), "pfix5-msg-"));
+      process.env.FRONDOSE_HOME_BASE = home;
+      try {
+        const session = makeFakeSessionOnSurface(
+          "messaging-thread",
+          "https://www.linkedin.com/messaging/thread/urn:li:fsd_profile:test-id/",
+          modalEntries,
+        );
+        await session.getClient().snapshot();
+        const tool = makeTypeTool(session);
+        const result = await tool.execute(
+          { ref: "@e2", text: "Thanks for the note." },
+          { toolCallId: "t-pfix5-msg", messages: [], abortSignal },
+        );
+
+        assert.equal(
+          result.ok,
+          true,
+          "T-PFix.5: messaging-thread type must not be blocked even with full Connect-modal entries — " +
+            "profileSlugFromUrl(messagingThreadUrl) === null subsumes the old surface carve-out",
+        );
+        assert.ok(
+          session.callLog.some((c) => c.startsWith("insertText:")),
+          "T-PFix.5: insertText must fire (type proceeded)",
+        );
+      } finally {
+        delete process.env.FRONDOSE_HOME_BASE;
+        if (existsSync(home)) cleanupTmpDir(home);
+      }
+    },
+  );
 });

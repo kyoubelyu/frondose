@@ -280,7 +280,7 @@ describe("T-RequiresApproval — requiresApproval() P-MSG-SEND: Send on messagin
   });
 
   // ─── T-RequiresApproval.5 ─────────────────────────────────────────────────
-  it("T-RequiresApproval.5: localized Chinese Send-family labels on messaging-thread classify as message_send and require approval", () => {
+  it("T-RequiresApproval.5: localized Chinese Send-family labels on messaging-thread classify as message_send and require approval (pre-existing, unchanged)", () => {
     // Given: Chinese localized Send labels that can appear on messaging surfaces
     // When:  classifyOutboundLabel(label) and requiresApproval(label, "messaging-thread") are called
     // Then:  each label is classified as message_send and gated by operator approval
@@ -302,6 +302,227 @@ describe("T-RequiresApproval — requiresApproval() P-MSG-SEND: Send on messagin
         requiresApproval(label, "messaging-thread"),
         true,
         `T-RequiresApproval.5: ${label} on messaging-thread must require approval`,
+      );
+    }
+  });
+});
+
+// =============================================================================
+// P-POST Step 2 — T-Post.Class.1–4 + T-Post.Approval.1–4
+// Gates: G-POST.Class + G-POST.Approval
+// =============================================================================
+
+describe("T-Post.Class — outboundGuard: post OutboundClass classification (G-POST.Class)", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic import for scaffold
+  let classifyOutboundLabelPost: ((...args: any[]) => any) | null = null;
+
+  before(async () => {
+    const mod = await import("../../../src/tools/browser/outboundGuard.js").catch(() => null);
+    if (mod) {
+      // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
+      classifyOutboundLabelPost = (mod as any).classifyOutboundLabel ?? null;
+    }
+  });
+
+  // ─── T-Post.Class.1 ───────────────────────────────────────────────────────
+  it("T-Post.Class.1: classifyOutboundLabel('Post') returns 'post' (anchored ^post$ regex)", () => {
+    // Given: label "Post" (the share-composer publish button accessible name).
+    // When:  classifyOutboundLabel("Post") runs.
+    // Then:  returns "post" (new OutboundClass added by P-POST).
+    if (!classifyOutboundLabelPost) {
+      assert.fail("T-Post.Class.1: classifyOutboundLabel not exported from outboundGuard.ts");
+    }
+    // Pre-Step-4: classifyOutboundLabel("Post") currently returns "benign" (no "post" class yet).
+    // This assertion FAILS until Step 4 adds the POST_PUBLISH_RE branch.
+    assert.equal(
+      classifyOutboundLabelPost("Post"),
+      "post",
+      'T-Post.Class.1: classifyOutboundLabel("Post") must return "post" after P-POST adds POST_PUBLISH_RE branch',
+    );
+  });
+
+  // ─── T-Post.Class.2 — SAFETY-CRITICAL: Repost MUST NOT classify as post ──
+  it("T-Post.Class.2: classifyOutboundLabel('Repost') returns 'benign' — anchor guard (safety-critical)", () => {
+    // Given: label "Repost" (the most likely false-positive on LinkedIn feed).
+    // When:  classifyOutboundLabel("Repost") runs.
+    // Then:  returns "benign" — the leading 'R' defeats the ^post$ anchor.
+    //        Safety-critical: if "Repost" were mistakenly classified as "post",
+    //        every Repost click on feed would be approval-gated (breakage) or blocked in Auto.
+    if (!classifyOutboundLabelPost) {
+      assert.fail("T-Post.Class.2: classifyOutboundLabel not exported from outboundGuard.ts");
+    }
+    // Pre-Step-4: already returns "benign" (no "post" class exists yet).
+    // This assertion PASSES pre-Step-4 but is CRITICAL to keep passing post-Step-4.
+    // The test is included here to make the safety anchor explicit and prevent regression.
+    assert.equal(
+      classifyOutboundLabelPost("Repost"),
+      "benign",
+      'T-Post.Class.2: classifyOutboundLabel("Repost") must return "benign" — ^post$ anchor must NOT match "Repost"',
+    );
+  });
+
+  // ─── T-Post.Class.3 ───────────────────────────────────────────────────────
+  it("T-Post.Class.3: post is case-insensitive but anchored — 'post', 'POST', 'Post ' → 'post'; 'Reposted', 'Post message', 'Repost with thoughts' → 'benign'", () => {
+    // Given: labels ["post", "POST", "Post "] (trimmed variants that should match)
+    //        AND labels ["Reposted", "Post message", "Repost with thoughts"] (plausible false positives).
+    // When:  classifyOutboundLabel(label) runs (existing .trim() in the classify function).
+    // Then:  "post"/"POST"/"Post " → "post";
+    //        "Reposted"/"Post message"/"Repost with thoughts" → "benign".
+    if (!classifyOutboundLabelPost) {
+      assert.fail("T-Post.Class.3: classifyOutboundLabel not exported from outboundGuard.ts");
+    }
+    // Case-insensitive matches (all return "post" after trim + regex)
+    for (const label of ["post", "POST", "Post "]) {
+      // Pre-Step-4: returns "benign". Will return "post" after Step 4.
+      assert.equal(
+        classifyOutboundLabelPost(label),
+        "post",
+        `T-Post.Class.3: classifyOutboundLabel("${label}") must return "post" (case-insensitive ^post$ after trim)`,
+      );
+    }
+    // False-positive guard (should already pass + continue passing post-Step-4)
+    for (const label of ["Reposted", "Post message", "Repost with thoughts"]) {
+      assert.equal(
+        classifyOutboundLabelPost(label),
+        "benign",
+        `T-Post.Class.3: classifyOutboundLabel("${label}") must return "benign" (not matched by ^post$)`,
+      );
+    }
+  });
+
+  // ─── T-Post.Class.4 ───────────────────────────────────────────────────────
+  it("T-Post.Class.4: existing label classifications unchanged — regression guard", () => {
+    // Given: the legacy fixture of labels from the existing outboundGuard tests.
+    // When:  classifyOutboundLabel(label) runs for each.
+    // Then:  every pre-existing classification is unchanged.
+    //        Regression guard: P-POST must not break the existing classifyOutboundLabel behavior.
+    if (!classifyOutboundLabelPost) {
+      assert.fail("T-Post.Class.4: classifyOutboundLabel not exported from outboundGuard.ts");
+    }
+    const regressionFixture: Array<[string, string]> = [
+      ["Send invitation", "connect_send"],
+      ["Send invite", "connect_send"],
+      ["Send without a note", "connect_send"],
+      ["Send now", "connect_send"],
+      ["发送邀请", "connect_send"],
+      ["Connect", "connect_open"],
+      ["Invite Jane to connect", "connect_open"],
+      ["Send", "message_send"],
+      ["发送", "message_send"],
+      ["Follow", "benign"],
+      ["Like", "benign"],
+      ["Comment", "benign"],
+    ];
+    for (const [label, expected] of regressionFixture) {
+      assert.equal(
+        classifyOutboundLabelPost(label),
+        expected,
+        `T-Post.Class.4 regression: classifyOutboundLabel("${label}") must return "${expected}" (unchanged from pre-P-POST)`,
+      );
+    }
+  });
+});
+
+describe("T-Post.Approval — outboundGuard: requiresApproval post+feed surface gating (G-POST.Approval)", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic import for scaffold
+  let requiresApprovalPost: ((...args: any[]) => any) | null = null;
+
+  before(async () => {
+    const mod = await import("../../../src/tools/browser/outboundGuard.js").catch(() => null);
+    if (mod) {
+      // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
+      requiresApprovalPost = (mod as any).requiresApproval ?? null;
+    }
+  });
+
+  // ─── T-Post.Approval.1 ────────────────────────────────────────────────────
+  it("T-Post.Approval.1: requiresApproval('Post', 'feed') returns true (closes the previously UNGATED Post button)", () => {
+    // Given: label="Post", surface="feed".
+    // When:  requiresApproval("Post", "feed") runs.
+    // Then:  returns true — the new P-POST branch gates Post on the feed surface.
+    //        Safety: the Post publish button is now gated; unapproved clicks return approval_required.
+    if (!requiresApprovalPost) {
+      assert.fail("T-Post.Approval.1: requiresApproval not exported from outboundGuard.ts");
+    }
+    // Pre-Step-4: returns false (no "post" class, no feed branch). Will return true after Step 4.
+    assert.equal(
+      requiresApprovalPost("Post", "feed"),
+      true,
+      'T-Post.Approval.1: requiresApproval("Post","feed") must return true after P-POST adds the feed gate',
+    );
+  });
+
+  // ─── T-Post.Approval.2 ────────────────────────────────────────────────────
+  it("T-Post.Approval.2: Post on non-feed surfaces returns false — surface-locked gate", () => {
+    // Given: label="Post", surface ∈ {"profile","messaging","messaging-thread","company","network","notifications","search","unknown",""}.
+    // When:  requiresApproval("Post", surface) runs.
+    // Then:  returns false for all non-feed surfaces.
+    //        Guards against spurious approval gates on random LinkedIn UI that renders a "Post" button.
+    if (!requiresApprovalPost) {
+      assert.fail("T-Post.Approval.2: requiresApproval not exported from outboundGuard.ts");
+    }
+    const nonFeedSurfaces = [
+      "profile",
+      "messaging",
+      "messaging-thread",
+      "company",
+      "network",
+      "notifications",
+      "search",
+      "unknown",
+      "",
+    ];
+    // Pre-Step-4: already returns false on non-feed surfaces (no "post" class exists yet).
+    // Critical regression guard post-Step-4: must remain false on non-feed surfaces.
+    for (const surface of nonFeedSurfaces) {
+      assert.equal(
+        requiresApprovalPost("Post", surface),
+        false,
+        `T-Post.Approval.2: requiresApproval("Post","${surface}") must return false (gate is feed-surface-locked)`,
+      );
+    }
+  });
+
+  // ─── T-Post.Approval.3 — SAFETY-CRITICAL: Repost on feed → false ─────────
+  it("T-Post.Approval.3: requiresApproval('Repost', 'feed') returns false — anchor guard defense-in-depth (safety-critical)", () => {
+    // Given: label="Repost", surface="feed".
+    // When:  requiresApproval("Repost", "feed") runs.
+    // Then:  returns false — classifyOutboundLabel("Repost") === "benign" (not "post"),
+    //        so the feed branch is NOT triggered.
+    //        Safety-critical: if this returned true, every Repost click on feed would be gated.
+    if (!requiresApprovalPost) {
+      assert.fail("T-Post.Approval.3: requiresApproval not exported from outboundGuard.ts");
+    }
+    // Passes pre-Step-4 AND must continue to pass post-Step-4.
+    assert.equal(
+      requiresApprovalPost("Repost", "feed"),
+      false,
+      'T-Post.Approval.3: requiresApproval("Repost","feed") must return false — ^post$ anchor prevents "Repost" match',
+    );
+  });
+
+  // ─── T-Post.Approval.4 ────────────────────────────────────────────────────
+  it("T-Post.Approval.4: existing approval semantics unchanged — regression guard", () => {
+    // Given: the legacy fixture of (label, surface) pairs from pre-P-POST tests.
+    // When:  requiresApproval(label, surface) runs.
+    // Then:  every pre-existing verdict is unchanged.
+    if (!requiresApprovalPost) {
+      assert.fail("T-Post.Approval.4: requiresApproval not exported from outboundGuard.ts");
+    }
+    const regressionFixture: Array<[string, string, boolean]> = [
+      ["Send invitation", "profile", true],   // outbound label → always true
+      ["Follow", "profile", true],             // Follow on profile → true
+      ["Follow", "feed", false],               // Follow on feed → false (profile-only)
+      ["Send", "messaging-thread", true],      // message_send on messaging surface → true
+      ["Like", "feed", false],                 // benign → false
+      ["Comment", "feed", false],              // benign → false
+      ["Send", "profile", false],              // message_send on non-messaging → false
+    ];
+    for (const [label, surface, expected] of regressionFixture) {
+      assert.equal(
+        requiresApprovalPost(label, surface),
+        expected,
+        `T-Post.Approval.4 regression: requiresApproval("${label}","${surface}") must return ${expected} (unchanged)`,
       );
     }
   });
