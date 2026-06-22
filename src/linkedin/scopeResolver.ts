@@ -23,6 +23,10 @@ export function inferSurface(pageUrl: string): LinkedInSurface {
   if (/\/notifications\//i.test(p)) return "notifications";
   if (/\/search\/results\//i.test(p)) return "search";
   if (/\/mynetwork\//i.test(p)) return "network";
+  // Custom-invite preload overlay is a profile-connect invite surface — route it to
+  // "profile" so the click.ts outbound guard chain (approval/ledger/cap/cooldown) engages.
+  // Same regex used by src/cdp/client.ts + src/tools/browser/type.ts. (P-FIX-CUSTOM-INVITE-SURFACE)
+  if (/\/preload\/custom-invite\/?$/i.test(p)) return "profile";
   if (/\/in\/[^/]+/i.test(p)) return "profile";
   if (/\/company\/[^/]+/i.test(p)) return "company";
   if (/^\/feed(\/|$)/i.test(p) || p === "/" || p === "") return "feed";
