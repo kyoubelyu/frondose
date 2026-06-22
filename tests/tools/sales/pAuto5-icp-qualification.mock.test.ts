@@ -41,46 +41,94 @@ function schemaVersionMax(db: AnyDb): number {
 // ─── T-A5.Mig.1 ──────────────────────────────────────────────────────────────
 
 describe("T-A5.Mig — sales DB schema v3 migration (icp_qualification column)", () => {
-  it("T-A5.Mig.1: when a FRESH sales DB is opened, lead_scores has icp_qualification column and schema_version MAX = 3", () => {
-    // Given: a brand-new temp file path. When: openSalesDatabase runs v1→v2→v3.
-    // Then: lead_scores has icp_qualification; schema_version MAX = 3.
+  it("T-A5.Mig.1: when a FRESH sales DB is opened, lead_scores has icp_qualification column and schema_version MAX = 4", () => {
+    // Given: a brand-new temp file path. When: openSalesDatabase runs v1→v2→v3→v4.
+    // Then: lead_scores has icp_qualification; schema_version MAX = 4.
     const path = join(tmpdir(), `a5-mig1-${randomUUID()}.sqlite`);
     const db = openSalesDatabase(path) as AnyDb;
     try {
       assert.ok(colNames(db, "lead_scores").includes("icp_qualification"), "fresh DB lead_scores must have icp_qualification");
-      assert.equal(schemaVersionMax(db), 3, "fresh DB schema_version MAX must be 3");
+      assert.equal(schemaVersionMax(db), 4, "fresh DB schema_version MAX must be 4 (v1+v2+v3+v4 all ran)");
     } finally {
       closeSalesDatabase(path);
     }
   });
 
-  it("T-A5.Mig.2: a v2 DB (no icp_qualification) re-opened → applyV3 adds the column; pre-v3 rows NULL; version=3; re-open is a no-op", () => {
+  it("T-A5.Mig.2: a v2 DB re-opened → applyV3 + applyV4 run; icp_qualification added; run_id nullable; version=4; re-open is a no-op", () => {
     // Given: a DB hand-built at v2 (lead_scores WITHOUT icp_qualification; schema_version max=2; one row).
-    // When: openSalesDatabase runs the migration runner (current=2 → applyV3 only).
-    // Then: the column exists; the pre-v3 row's icp_qualification IS NULL; version=3; a second open does not throw.
+    //        The fixture includes auto_run_ledger + auto_runs tables (needed so applyV4's
+    //        foreign_key_check passes — it validates the entire DB, not just the migrated table).
+    // When: openSalesDatabase runs the migration runner (current=2 → applyV3 → applyV4).
+    // Then: icp_qualification column exists; auto_run_ledger.run_id is nullable; version=4;
+    //       a second open does not throw.
     const path = join(tmpdir(), `a5-mig2-${randomUUID()}.sqlite`);
     const raw = new Database(path);
     raw.exec(`
-      CREATE TABLE lead_scores (
-        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL, total_score INTEGER NOT NULL, created_at INTEGER NOT NULL
-      );
       CREATE TABLE schema_version (version INTEGER NOT NULL);
       INSERT INTO schema_version (version) VALUES (1);
       INSERT INTO schema_version (version) VALUES (2);
-      INSERT INTO lead_scores (id, candidate_id, total_score, created_at) VALUES ('old-row', 'cand-x', 50, 1000);
+      CREATE TABLE raw_candidates (
+        id TEXT PRIMARY KEY, person_name TEXT NOT NULL, profile_url TEXT NOT NULL UNIQUE,
+        account_id TEXT, source TEXT NOT NULL, source_context TEXT,
+        observed_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new', latest_score_id TEXT, evidence_summary TEXT
+      );
+      CREATE TABLE lead_scores (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES raw_candidates(id),
+        total_score INTEGER NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE auto_runs (
+        id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, ended_at INTEGER,
+        max_duration_minutes INTEGER NOT NULL DEFAULT 480, max_connects INTEGER,
+        status TEXT NOT NULL, summary TEXT, counters TEXT
+      );
+      CREATE TABLE auto_run_ledger (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES auto_runs(id),
+        action_type TEXT NOT NULL, lead_id TEXT, ts INTEGER NOT NULL,
+        count_weight REAL NOT NULL DEFAULT 1.0, result TEXT NOT NULL
+      );
+      CREATE TABLE accounts (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, linkedin_url TEXT UNIQUE,
+        industry TEXT, company_size TEXT, region TEXT, current_pain_hypothesis TEXT,
+        account_score INTEGER, evidence TEXT, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE leads (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL UNIQUE REFERENCES raw_candidates(id),
+        account_id TEXT, person_name TEXT NOT NULL, profile_url TEXT NOT NULL,
+        stage TEXT NOT NULL, total_score INTEGER, confidence REAL, one_line_pain_chain TEXT,
+        next_action TEXT, next_action_due_at INTEGER, owner_mode TEXT NOT NULL,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE message_drafts (
+        id TEXT PRIMARY KEY, lead_id TEXT, kind TEXT NOT NULL, text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft', created_by TEXT NOT NULL, evidence TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE lead_timeline (
+        id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES raw_candidates(id),
+        lead_id TEXT, event_type TEXT NOT NULL, ts INTEGER NOT NULL, metadata TEXT
+      );
+      INSERT INTO raw_candidates (id, person_name, profile_url, source, observed_at, last_seen_at)
+        VALUES ('cand-x', 'Test Person', 'https://linkedin.com/in/test', 'search', 1000, 1000);
+      INSERT INTO lead_scores (id, candidate_id, total_score, created_at)
+        VALUES ('old-row', 'cand-x', 50, 1000);
     `);
     raw.close();
 
     const db = openSalesDatabase(path) as AnyDb;
     try {
       assert.ok(colNames(db, "lead_scores").includes("icp_qualification"), "applyV3 must add icp_qualification to the v2 DB");
-      assert.equal(schemaVersionMax(db), 3, "schema_version MAX must be 3 after applyV3");
+      assert.equal(schemaVersionMax(db), 4, "schema_version MAX must be 4 after applyV3 + applyV4");
       const oldRow = db.prepare("SELECT icp_qualification AS q FROM lead_scores WHERE id = 'old-row'").get() as { q: string | null };
       assert.equal(oldRow.q, null, "pre-v3 row must have icp_qualification = NULL (additive nullable column)");
-      // Idempotency: close + re-open → runner sees current=3, applies nothing, no throw.
+      // Verify applyV4 made run_id nullable (no NOT NULL in DDL)
+      const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='auto_run_ledger'").get() as { sql: string };
+      assert.ok(!ddlRow.sql.includes("run_id TEXT NOT NULL"), "applyV4 must remove NOT NULL from auto_run_ledger.run_id");
+      // Idempotency: close + re-open → runner sees current=4, applies nothing, no throw.
       closeSalesDatabase(path);
       const db2 = openSalesDatabase(path) as AnyDb;
-      assert.equal(schemaVersionMax(db2), 3, "re-open is a no-op; version stays 3 (idempotent)");
+      assert.equal(schemaVersionMax(db2), 4, "re-open is a no-op; version stays 4 (idempotent)");
     } finally {
       closeSalesDatabase(path);
     }
