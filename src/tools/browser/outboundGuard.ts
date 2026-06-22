@@ -37,6 +37,7 @@ export function requiresApproval(label: string, surface: string): boolean {
   if (isOutboundLabel(label)) return true;
   if (isFollowLabel(label)) return surface === "profile";
   if (classifyOutboundLabel(label) === "message_send" && MESSAGING_SURFACES.has(surface)) return true;
+  if (classifyOutboundLabel(label) === "post" && surface === "feed") return true;
   return false;
 }
 
@@ -52,22 +53,25 @@ export function requiresApproval(label: string, surface: string): boolean {
  *                     "Send invitation" | "Send invite" | "Send without a note" | "Send now".
  * - `message_send`  — a plain DM "Send" (messaging surfaces); NOT in P-AUTO-1+2 connect-gate
  *                     scope (per Critic CONCERN-5: message/follow-up hard gating is a later phase).
+ * - `post`          — a feed share-composer publish button named exactly "Post"; NOT "Repost".
  * - `benign`        — everything else (Follow uses FOLLOW_LABEL_RE separately, never counts
  *                     toward the connect cap).
  */
-export type OutboundClass = "connect_open" | "connect_send" | "message_send" | "benign";
+export type OutboundClass = "connect_open" | "connect_send" | "message_send" | "post" | "benign";
 
 const CONNECT_SEND_RE =
   /^(?:Send\s+invitation\b|Send\s+invite\b|Send\s+without\s+a\s+note\b|Send\s+now\b|发送邀请|直接发送|立即连接)/i;
 export const CONNECT_OPEN_RE = /^(?:Connect\b|Invite\b.*\bto\s+connect\b|邀请|添加好友|连接$)/i;
 const MESSAGE_SEND_RE =
   /^(?:Send\s*|发送(?:\s*(?:消息|信息|私信))?|發送(?:\s*(?:消息|訊息|私訊))?|传送(?:\s*(?:消息|信息|私信))?|傳送(?:\s*(?:消息|訊息|私訊))?|送出)$/iu;
+export const POST_PUBLISH_RE = /^post$/i;
 
 export function classifyOutboundLabel(label: string): OutboundClass {
   const trimmed = label.trim();
   if (CONNECT_SEND_RE.test(trimmed)) return "connect_send";
   if (CONNECT_OPEN_RE.test(trimmed)) return "connect_open";
   if (MESSAGE_SEND_RE.test(trimmed)) return "message_send";
+  if (POST_PUBLISH_RE.test(trimmed)) return "post";
   return "benign";
 }
 

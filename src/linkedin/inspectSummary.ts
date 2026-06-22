@@ -147,7 +147,7 @@ function isSendFamilyEntry(e: SnapshotEntry): boolean {
  * ("Post") button, OR the composer text editor input together with at least
  * one composer action button — those co-occur only inside the open modal.
  */
-function hasComposerSignals(entries: SnapshotEntry[]): boolean {
+export function hasComposerSignals(entries: SnapshotEntry[]): boolean {
   let hasPublish = false;
   let hasActionButton = false;
   let hasInput = false;
@@ -267,6 +267,9 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   if (hasComposerSignals(ctx.entries) && !availableScopes.includes("composerModal")) {
     availableScopes.push("composerModal");
   }
+  if (hasComposerSignals(ctx.entries) && !availableScopes.includes("composerInput")) {
+    availableScopes.push("composerInput");
+  }
   if (ctx.activeLayer === "overlay" && !availableScopes.includes("overlay")) {
     availableScopes.push("overlay");
   }
@@ -293,6 +296,9 @@ export function filterEntriesByScope(
 ): SnapshotEntry[] {
   if (scope === "composerModal") {
     return entries.filter((e) => isComposerButtonEntry(e) || isComposerInputEntry(e));
+  }
+  if (scope === "composerInput") {
+    return entries.filter((e) => e.ref.startsWith("@pc"));
   }
   if (scope === "overlay") {
     return entries.filter((e) => e.ref.startsWith("@ov"));
