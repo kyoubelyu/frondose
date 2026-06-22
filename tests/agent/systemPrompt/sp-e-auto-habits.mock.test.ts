@@ -112,15 +112,17 @@ describe("T-E.Checkpoint — CHECKPOINT 4-stop-condition reminder (P-SP-E Sketch
   });
 
   // ─── T-E.Checkpoint.2 ────────────────────────────────────────────────────────
-  it("T-E.Checkpoint.2 (NIT-2): CHECKPOINT.length <= 5100 (Phase 9 raised cap for no-note autonomous fallback directive)", () => {
+  it("T-E.Checkpoint.2 (NIT-2): CHECKPOINT.length <= 5400 (P-POST raised cap for **Post (feed)** compose nudge)", () => {
     // Given: CHECKPOINT after Sketch H addition (~85 chars added → estimated ~4344);
     //        Phase 9 2026-06-08 added the No-note autonomous fallback directive
     //        (~620 chars) — a load-bearing safety contract that earned a cap raise.
+    //        P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge (~5279 post-edit).
     // When:  CHECKPOINT.length measured
-    // Then:  CHECKPOINT.length <= 5100 (cap raised from 4400 to 5100 in Phase 9);
+    // Then:  CHECKPOINT.length <= 5400 (cap raised from 5100 to 5400 in P-POST);
     //        no lower-bound assertion (round-0 ≥4310 was brittle per NIT-2)
+    // P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge.
     assert.ok(CHECKPOINT !== undefined, "T-E.Checkpoint.2: CHECKPOINT must be importable");
     const len = CHECKPOINT!.length;
-    assert.ok(len <= 5100, `T-E.Checkpoint.2: CHECKPOINT.length must be <= 5100; got ${len}`);
+    assert.ok(len <= 5400, `T-E.Checkpoint.2: CHECKPOINT.length must be <= 5400; got ${len}`);
   });
 });

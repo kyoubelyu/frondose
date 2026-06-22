@@ -5,6 +5,8 @@ import {
   synthesizeMessagingComposerEntries,
   synthesizeMessagingTranscriptEntries,
 } from "./snapshotCapture/messagingConversationSynth.js";
+import { synthesizePostComposerEntries } from "./snapshotCapture/postComposerSynth.js";
+import { hasComposerSignals } from "./inspectSummary.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { tagAsideClickables } from "./snapshotCapture/regionTag.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
@@ -147,6 +149,7 @@ export async function captureCurrentSurfaceContext(client: CdpClient): Promise<C
     entries.push(...synth);
   } else if (surface === "feed") {
     entries.push(...(await synthesizeFeedPostEntries(client))); // P-37 B4
+    if (hasComposerSignals(entries)) { const post = await synthesizePostComposerEntries(client); if (post.entries.length > 0) { entries.push(...post.entries); client.mergeRefs(post.refs); } }
   } else if (surface === "search" || surface === "network") {
     // P-AUTO-3 (B3): synthesize person entries on the search + network discovery
     // surfaces. unshift so synthetic rows lead the list and survive MAX_TEXT truncation.
