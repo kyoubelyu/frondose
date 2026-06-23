@@ -1040,6 +1040,7 @@ export class FakeLinkedInWorld {
       DOM: {
         getDocument: async () => ({ root: { nodeId: 1 } }),
         querySelectorAll: async (_args: { nodeId: number; selector: string }) => ({ nodeIds: [42] }),
+        scrollIntoViewIfNeeded: async (_arg: unknown) => {},
         getBoxModel: async (args: { backendNodeId?: number; nodeId?: number }) => {
           this._lastQueriedBackendNodeId = args.backendNodeId ?? args.nodeId;
           this._callLog.push({ method: "DOM.getBoxModel", args });
