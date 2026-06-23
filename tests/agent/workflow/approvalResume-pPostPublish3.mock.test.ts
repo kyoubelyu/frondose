@@ -412,41 +412,53 @@ describe("T-NoReg.ByteEqual — byte-equality snapshots for connect and message 
 describe("T-PPub3.Checkpoint — CHECKPOINT post-flow hint and length budget", () => {
   // ─── T-PPub3.Checkpoint.1 ─────────────────────────────────────────────────
   it(
-    "T-PPub3.Checkpoint.1: CHECKPOINT contains '**Post (feed)**:' AND matches /re-?type the saved body|re-?open the composer if closed/i",
+    "T-PPub3.Checkpoint.1: CHECKPOINT contains '**Post (feed)**:' AND contains the P6 deterministic directive ('click `Post` once' + 'do NOT press Escape')",
     () => {
-      // Given: the CHECKPOINT constant imported from src/agent/systemPrompt/checkpoint.ts.
+      // Given: the CHECKPOINT constant imported from src/agent/systemPrompt/checkpoint.ts
+      //        after the P-POST-PUBLISH-6 Codex edit.
       // When:  the string is searched.
-      // Then:  contains "**Post (feed)**:" (existing P-POST pin);
-      //        AND matches /re-?type the saved body|re-?open the composer if closed/i
-      //        (the new one-clause hint added by P-POST-PUBLISH-3).
+      // Then:  contains "**Post (feed)**:" (structural label — unchanged by P6);
+      //        AND contains 'click `Post` once' (new P6 deterministic approval-resume directive).
+      //        AND matches /do NOT press Escape/i (one of the four P6 prohibitions).
       //
-      // FAIL-ON-HEAD: HEAD's **Post (feed)**: line does NOT contain "re-type the saved body"
-      // or "re-open the composer if closed". The new clause is what Step 4 adds.
+      // Updated from P-POST-PUBLISH-3 (which checked /re-?type the saved body|re-?open the composer if closed/i)
+      // to P-POST-PUBLISH-6 (which replaces the unconditional re-type with the deterministic click-once +
+      // four prohibitions + gated fallback). The P3 unconditional phrasing is now ABSENT (see T-P6.NoUnconditionalReType).
+      //
+      // FAIL-ON-HEAD: 'click `Post` once' absent on HEAD.
+      // PASSES after Codex applies the P6 line-65 rewrite.
       assert.ok(
         CHECKPOINT.includes("**Post (feed)**:"),
-        `T-PPub3.Checkpoint.1: CHECKPOINT must contain "**Post (feed)**:" (existing P-POST pin); got length=${CHECKPOINT.length}`,
+        `T-PPub3.Checkpoint.1: CHECKPOINT must contain "**Post (feed)**:" (structural Post(feed) label); got length=${CHECKPOINT.length}`,
+      );
+      assert.ok(
+        CHECKPOINT.includes("click `Post` once"),
+        "T-PPub3.Checkpoint.1: CHECKPOINT must contain 'click `Post` once' (P6 deterministic approval-resume directive). FAIL-ON-HEAD.",
       );
       assert.match(
         CHECKPOINT,
-        /re-?type the saved body|re-?open the composer if closed/i,
-        "T-PPub3.Checkpoint.1: CHECKPOINT must contain the re-type-on-resume hint matching /re-?type the saved body|re-?open the composer if closed/i",
+        /do NOT press Escape/i,
+        "T-PPub3.Checkpoint.1: CHECKPOINT must contain 'do NOT press Escape' (P6 anti-dithering prohibition). FAIL-ON-HEAD.",
       );
     },
   );
 
   // ─── T-PPub3.Checkpoint.2 ─────────────────────────────────────────────────
   it(
-    "T-PPub3.Checkpoint.2: CHECKPOINT.length <= 5400 (length budget regression guard after new clause addition)",
+    "T-PPub3.Checkpoint.2: CHECKPOINT.length <= 5700 (length budget regression guard; P6 raised cap from 5400 to 5700 to fit the deterministic directive + four prohibitions + gated fallback)",
     () => {
-      // Given: CHECKPOINT.length after the new re-type-on-resume clause is added (~80 chars).
+      // Given: CHECKPOINT.length after the P6 line-65 rewrite adds ~207 chars
+      //        (click-once instruction + four prohibitions + gated-fallback clause).
       // When:  the length is measured.
-      // Then:  <= 5400 (pre-edit HEAD ~5279; post-edit estimated ~5360; fits within existing cap).
+      // Then:  <= 5700 (pre-P6 HEAD ~5279 + ~207 new chars = ~5486; P6 cap raised from 5400→5700).
       //
-      // PASS-ON-HEAD AS REGRESSION BASELINE: HEAD length is ~5279, well within 5400. This test
-      // confirms the new clause stays within budget. Mirrors T-Checkpoint.7 in checkpoint.mock.test.ts.
+      // Updated from P-POST-PUBLISH-3 cap 5400 to P-POST-PUBLISH-6 cap 5700.
+      // The 5400 cap was set to fit the P3 re-type-on-resume hint (~80 chars extra over P-POST).
+      // The P6 deterministic directive is ~207 chars longer than the old P3 line, requiring
+      // the cap to be raised. Mirrors T-Checkpoint.7 in checkpoint.mock.test.ts (also updated).
       assert.ok(
-        CHECKPOINT.length <= 5400,
-        `T-PPub3.Checkpoint.2: CHECKPOINT.length=${CHECKPOINT.length} exceeds 5400-char budget (P-POST-PUBLISH-3 regression guard)`,
+        CHECKPOINT.length <= 5700,
+        `T-PPub3.Checkpoint.2: CHECKPOINT.length=${CHECKPOINT.length} exceeds 5700-char budget (P-POST-PUBLISH-6 regression guard)`,
       );
     },
   );
