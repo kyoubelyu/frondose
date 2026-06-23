@@ -64,6 +64,8 @@ test("T-M18: clickAt(selector) does getDocument + querySelectorAll + getBoxModel
         boxModelCalls.push(args);
         return { model: { border: FAKE_BORDER } };
       },
+      // P-POST-PUBLISH-5 no-op stub: hardened clickAt calls scrollIntoViewIfNeeded unconditionally.
+      scrollIntoViewIfNeeded: async (_args: unknown) => {},
     },
     Input: {
       dispatchMouseEvent: async (args: MouseEventCall) => {
@@ -158,6 +160,8 @@ test("T-M19: clickAt(@e1) uses RefMap from prior snapshot (backendNodeId path)",
         boxModelCalls.push(args);
         return { model: { border: FAKE_BORDER } };
       },
+      // P-POST-PUBLISH-5 no-op stub
+      scrollIntoViewIfNeeded: async (_args: unknown) => {},
     },
     Input: {
       dispatchMouseEvent: async () => {},
@@ -218,6 +222,8 @@ test("T-M21: typeAt clicks first then Input.insertText({ text })", async () => {
         callLog.push("getBoxModel");
         return { model: { border: [0, 0, 10, 0, 10, 10, 0, 10] } };
       },
+      // P-POST-PUBLISH-5 no-op stub
+      scrollIntoViewIfNeeded: async (_args: unknown) => {},
     },
     Input: {
       dispatchMouseEvent: async (args: { type: string }) => {

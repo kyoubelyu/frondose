@@ -157,6 +157,7 @@ function makeFullFakeHandle(overrides?: {
       describeNode: overrides?.describeNode ?? ((_args: unknown) => Promise.resolve({ node: { nodeId: 1, backendNodeId: 10 } })),
       setFileInputFiles: overrides?.setFileInputFiles ?? ((_args: unknown) => Promise.resolve({})),
       getAttributes: overrides?.getAttributes ?? ((_args: unknown) => Promise.resolve({ attributes: [] })),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: overrides?.domGetBoxModel ?? ((_args: unknown) => Promise.resolve({ model: { border: [0, 0, 100, 0, 100, 100, 0, 100] } })),
     },
     Network: {

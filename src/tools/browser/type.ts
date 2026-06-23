@@ -4,9 +4,11 @@ import { z } from "zod";
 import type { CdpClient } from "../../cdp/client.js";
 import { hardwareTypeAt } from "../../cdp/hardwareInput.js";
 import {
+  clearFeedComposerEditorLive,
   composerTextMatches,
   focusFeedComposerEditorLive,
   isFeedComposerLiveInDOM,
+  isFeedComposerPostButtonEnabled,
   READBACK_RETRY_MS,
 } from "../../linkedin/composerReadiness.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
@@ -138,7 +140,15 @@ export function computeCharDelay(textLength: number, rand: number, prevChar: str
   return Math.max(floor, Math.floor(budget * (0.3 + rand * 0.7) * wbMul));
 }
 
-async function clearActiveInput(client: CdpClient): Promise<void> {
+async function clearActiveInput(client: CdpClient, isFeedComposer: boolean): Promise<void> {
+  if (isFeedComposer) {
+    const beforeClear = await isFeedComposerLiveInDOM(client);
+    if (beforeClear.editorText.trim() === "") return;
+
+    const cleared = await clearFeedComposerEditorLive(client);
+    if (cleared) return;
+  }
+
   let reactSafeClearSucceeded = false;
   try {
     reactSafeClearSucceeded = await client.evaluate<boolean>(REACT_SAFE_CLEAR_ACTIVE_INPUT_JS);
@@ -318,7 +328,7 @@ export function makeTypeTool(session: LinkedinSession) {
           }
           // [P-59 D-RUN-3] Try React-safe DOM clear first; fall back to Cmd+A+Backspace only when the
           // focused element is not a native input/textarea or the evaluate path fails.
-          await clearActiveInput(client);
+          await clearActiveInput(client, isFeedComposer);
           // P-47 G-2: per-character dispatch — replaces the atomic insertText.
           // Each printable char is its own insertText call (fires a discrete
           // `input` event React/LinkedIn listens to); `\n` is a real Enter key
@@ -386,6 +396,21 @@ export function makeTypeTool(session: LinkedinSession) {
                 `${READBACK_RETRY_MS}ms. Intended: "${preview(text)}" (${text.length} chars). ` +
                 `Observed in DOM: "${preview(observedText)}" (${observedText.length} chars). ` +
                 `Re-inspect the composerInput scope and retry once the surface settles.`,
+            );
+          }
+
+          let postEnabled = await isFeedComposerPostButtonEnabled(client);
+          if (!postEnabled) {
+            await sleep(READBACK_RETRY_MS);
+            postEnabled = await isFeedComposerPostButtonEnabled(client);
+          }
+          if (!postEnabled) {
+            return fail(
+              "type",
+              "runtime_error",
+              "Feed post composer body is present in the DOM, but the composer's Post button did not enable. " +
+                "This matches the Lexical desync signature: the typed text reached the DOM, but Lexical did " +
+                "not accept it, so clicking Post would be a no-op. Re-open the composer, inspect again, and retry.",
             );
           }
         }
