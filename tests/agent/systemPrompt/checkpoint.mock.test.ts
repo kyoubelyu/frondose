@@ -101,19 +101,21 @@ test("T-Checkpoint.6: composeSystemPrompt with CHECKPOINT as checkpoint band end
 
 // ─── T-Checkpoint.7 — character count budget (P-39 update) ──────────────────
 
-test("T-Checkpoint.7: CHECKPOINT.length is <= 5400 characters (P-POST 2026-06-22 raised the budget for the **Post (feed)** compose nudge)", () => {
+test("T-Checkpoint.7: CHECKPOINT.length is <= 5700 characters (P-POST-PUBLISH-6 2026-06-23 raised the budget for the deterministic post-approval directive + four prohibitions + gated fallback)", () => {
   // Given: CHECKPOINT constant (P-39 added 'Session-end persistence' + 'Daily memory organization'
   //        subsections → grew from ~1786 chars to ~2620; P-49 added 'Task-start context lookup'
   //        subsection → grew from ~2620 chars to ~3626; P-Y5 D-RUN-4 R2b added the task-start-ritual
   //        cross-link sentence → grew ~50 chars to ~4250; Phase 9 added the No-note fallback
-  //        directive → grew ~620 chars to ~5014; P-POST added the Post (feed) compose nudge → ~5279)
+  //        directive → grew ~620 chars to ~5014; P-POST added the Post (feed) compose nudge → ~5279;
+  //        P-POST-PUBLISH-6 rewrote line 65 with deterministic click-once + 4 prohibitions +
+  //        gated fallback → ~5486)
   // When: CHECKPOINT.length measured
-  // Then: <= 5400 — P-POST raised the cap from 5100 to 5400 to fit the **Post (feed)** compose nudge.
-  //        Same soft regression-bracket pattern as Phase 9 raise (4400→5100); new ceiling.
-  // P-POST raised 5100→5400 to fit the **Post (feed)** compose nudge.
+  // Then: <= 5700 — P-POST-PUBLISH-6 raised the cap from 5400 to 5700 to fit the new deterministic
+  //        directive (~207 chars longer than the P3 unconditional re-type clause).
+  //        Same soft regression-bracket pattern as prior cap raises; new ceiling.
   assert.ok(
-    CHECKPOINT.length <= 5400,
-    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 5400-char budget (P-POST regression guard)`,
+    CHECKPOINT.length <= 5700,
+    `CHECKPOINT.length=${CHECKPOINT.length} exceeds 5700-char budget (P-POST-PUBLISH-6 regression guard)`,
   );
 });
 
