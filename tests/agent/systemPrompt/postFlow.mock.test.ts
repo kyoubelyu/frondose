@@ -66,24 +66,31 @@ describe("T-Post.Prompt.2 (G-POST.Prompt): Checkpoint contains the post-flow nud
   );
 });
 
-describe("T-Post.Prompt.4 (G-PPub3.Checkpoint.Hint): Checkpoint post-flow line includes the re-type-on-resume clause (P-POST-PUBLISH-3)", () => {
+describe("T-Post.Prompt.4 (G-P6.Directive): Checkpoint Post(feed) line contains the P6 deterministic directive — click Post once, four prohibitions, gated fallback", () => {
   it(
-    "given the CHECKPOINT constant, when the string is searched, then it matches /re-?type the saved body|re-?open the composer if closed/i (new P-POST-PUBLISH-3 clause)",
+    "given the CHECKPOINT constant after P6 edit, when the string is searched, then it contains 'click `Post` once' (new deterministic approval-resume directive) and matches /do NOT press Escape/i (one of the four prohibitions)",
     () => {
-      // Given: the CHECKPOINT constant from checkpoint.ts (after P-POST-PUBLISH-3 Step 4 edit).
-      // When:  the string is searched for the re-type-on-resume hint.
-      // Then:  matches /re-?type the saved body|re-?open the composer if closed/i
-      //        — the clause added to the **Post (feed)**: line so the agent's initial plan
-      //        anticipates re-typing the saved body on approval-resume.
+      // Given: the CHECKPOINT constant from checkpoint.ts after P-POST-PUBLISH-6 Codex edit.
+      // When:  the string is searched for the new deterministic post-approval directive.
+      // Then:  contains 'click `Post` once' (the approval-resume single-action instruction)
+      //        AND matches /do NOT press Escape/i (first of the four dithering prohibitions).
       //
-      // FAIL-ON-HEAD: HEAD's **Post (feed)**: line does NOT contain this clause.
-      // This test fails until Step 4 (builder/Codex) adds the clause to checkpoint.ts.
+      // Updated from P-POST-PUBLISH-3 (which pinned the unconditional re-type clause) to
+      // P-POST-PUBLISH-6 (which replaces it with the deterministic click-once + four prohibitions
+      // + gated-fallback form). Old assertion: /re-?type the saved body|re-?open the composer if closed/i.
+      // New assertion: pins the NEW directive instead of the old unconditional one.
+      //
+      // FAIL-ON-HEAD: HEAD line 65 has no 'click `Post` once' phrasing.
+      // PASSES after Codex applies the P6 line-65 rewrite.
+      assert.ok(
+        CHECKPOINT.includes("click `Post` once"),
+        `T-Post.Prompt.4: CHECKPOINT must contain 'click \`Post\` once' (P6 deterministic approval-resume directive). ` +
+          `Got CHECKPOINT (truncated): ${CHECKPOINT.slice(0, 400)}…`,
+      );
       assert.match(
         CHECKPOINT,
-        /re-?type the saved body|re-?open the composer if closed/i,
-        `T-Post.Prompt.4: CHECKPOINT must contain the re-type-on-resume clause matching ` +
-          `/re-?type the saved body|re-?open the composer if closed/i (P-POST-PUBLISH-3 addition). ` +
-          `Got CHECKPOINT (truncated): ${CHECKPOINT.slice(0, 400)}…`,
+        /do NOT press Escape/i,
+        "T-Post.Prompt.4: CHECKPOINT must contain 'do NOT press Escape' (P6 anti-dithering prohibition 1 of 4).",
       );
     },
   );
