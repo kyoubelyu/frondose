@@ -86,13 +86,11 @@ export function approve(
     `Then \`click\` the thread's "Send" button (label "Send" / "发送") by its \`ref\` directly (not by label, to avoid ambiguous-target). ` +
     `Immediately after the send, call \`mark_message_sent(draftId)\` to record it. Do NOT call \`update_lead_stage\` for a connection-request stage; this was a message reply, not a connection request.`;
   const postExtra =
-    ` THIS STEP IS THE OUTBOUND POST PUBLISH. Do NOT navigate, search, re-qualify, or save another draft. ` +
-    `Your VERY FIRST tool call MUST be \`inspect\` on the CURRENT feed page (scope \`composerInput\` or \`composerModal\`), NOT navigate_to_url. ` +
-    `This is a SELF-AUTHORED POST to your own LinkedIn feed; there is NO Connect/Invite button, NO note-dialog step, NO recipient lead. ` +
-    `Ensure the approved post body is already in the composer text editor ("Text editor for creating content"); if it is NOT, \`type\` the approved draft text there first. ` +
-    `Then \`click\` the composer's "Post" button (label exactly "Post", normally \`@pc2\`) BY ITS \`ref\` directly (not by label, to avoid ambiguous-target). ` +
-    `Immediately after the click, call \`mark_message_sent(draftId)\` to close the post draft. ` +
-    `Do NOT update any lead stage - posts are self-anchored and have no leadId.`;
+    ` THIS STEP IS THE OUTBOUND POST PUBLISH. Do NOT navigate, search, re-qualify, or save another draft. This is a SELF-AUTHORED POST to your own LinkedIn feed; there is NO Connect/Invite button, NO note-dialog step, NO recipient lead. ` +
+    `IMPORTANT: the LinkedIn share composer RESETS its text during the approval pause, so do NOT assume your earlier type still holds. Run these tool calls in this exact order: ` +
+    `(1) \`inspect\` on the CURRENT feed page with scope \`composerInput\` (NOT navigate_to_url). (2) If \`inspect\` does NOT show the composer (no \`@pc1\` "Text editor for creating content" entry, OR \`type\` returns \`not_found\` in step 3), \`click\` the "Start a post" button on the feed to re-open the composer, then \`inspect\` scope \`composerInput\` again. ` +
+    `(3) ALWAYS \`type\` the approved post body into \`composerInput\` (label "Text editor for creating content") again — re-type the EXACT saved draft text verbatim, do NOT paraphrase, do NOT rewrite, do NOT shorten; the operator approved that exact text. Do this regardless of whether the composer appears to still contain text from your earlier type. (4) Confirm via the \`type\` envelope's read-back (\`composerTextMatches:true\`) that the body landed; if it did not, repeat steps 2-3 once. ` +
+    `(5) \`click\` the composer's "Post" button (label exactly "Post", normally \`@pc2\`) BY ITS \`ref\` directly (not by label, to avoid ambiguous-target). The Post button must be enabled (not aria-disabled) before you click; the successful re-type in step 3 is what enables it. Immediately after the click, call \`mark_message_sent(draftId)\` to close the post draft. Do NOT update any lead stage - posts are self-anchored and have no leadId.`;
   const outboundExtra = isMessageStep ? messageExtra : isPostStep ? postExtra : isOutboundStep ? connectExtra : "";
   return {
     status: 200,
