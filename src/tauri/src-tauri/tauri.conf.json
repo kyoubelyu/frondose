@@ -34,11 +34,11 @@
       "hardenedRuntime": false
     },
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "webviewInstallMode": { "type": "offlineInstaller", "silent": true },
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "perMachine",
-        "languages": ["English"]
+        "languages": ["English", "SimpChinese"]
       }
     },
     "resources": {
