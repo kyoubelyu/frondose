@@ -112,6 +112,7 @@ function makeFakeClient(opts: {
     raceHandle(p: Promise<unknown>, _label: string): Promise<unknown> { return p; },
     handle: {
       DOM: {
+        async scrollIntoViewIfNeeded(_arg: unknown) {},
         async getBoxModel(_arg: unknown) {
           return { model: { border: opts.border } };
         },

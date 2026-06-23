@@ -27,6 +27,7 @@ function fakeHandle(opts: { border?: number[]; nodeIds?: number[] } = {}) {
     DOM: {
       getDocument: async () => ({ root: { nodeId: 1 } }),
       querySelectorAll: async () => ({ nodeIds: opts.nodeIds ?? [5] }),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: async () => ({ model: { border } }),
     },
     // biome-ignore lint/suspicious/noExplicitAny: minimal fake handle for the resolve-path test

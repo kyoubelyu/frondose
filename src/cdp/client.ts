@@ -206,6 +206,8 @@ export class CdpClient {
       nodeId = first;
     }
     const arg = backendNodeId !== undefined ? { backendNodeId } : { nodeId };
+    await this.race(this.client.DOM.scrollIntoViewIfNeeded(arg), "DOM.scrollIntoViewIfNeeded");
+    await sleep(60);
     const box = await this.race(this.client.DOM.getBoxModel(arg), "DOM.getBoxModel");
     // P-AUTO-11 (M4): human-shaped click — jittered target + curved path + press-dwell, tracking lastPointerPos.
     const c = center(box.model.border);

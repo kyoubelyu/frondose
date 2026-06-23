@@ -1,5 +1,7 @@
 /**
  * P-POST-PUBLISH-2 — T-Helper.* composerReadiness unit tests (Step 5 — assertions filled).
+ * P-POST-PUBLISH-4 — T-ClearHelper.1–.3 scaffolds (Step 2 outside-in TDD; filled at Step 5).
+ * P-POST-PUBLISH-4 Step-5a — T-PostEnabledHelper.1–.3 (new: isFeedComposerPostButtonEnabled).
  *
  * Step-5 change vs Step-3a:
  *  - Assertion bodies filled for all 7 tests (T-Helper.1 – T-Helper.7).
@@ -16,6 +18,15 @@
  *  - T-Helper.6: asserts resolves false on throw (fail-closed).
  *  - T-Helper.7: exhaustive composerTextMatches matrix.
  *
+ * P-POST-PUBLISH-4 additions (Step 2 scaffold):
+ *  - T-ClearHelper.1/2/3: clearFeedComposerEditorLive → true / false / false-on-throw.
+ *    These tests use dynamic import inside each it() body to load clearFeedComposerEditorLive
+ *    + FEED_COMPOSER_CLEAR_JS. Until Step 4 ships those exports, the dynamic import throws
+ *    (or the named export is absent) and the tests reach assert.fail("TODO…") → RED on HEAD.
+ *    This mirrors the focusFeedComposerEditorLive T-Helper.4/5/6 pattern exactly.
+ *    The fake client harness is extended with a clearJsResult / clearJsShouldThrow option
+ *    (analogous to the existing evaluateResult / evaluateShouldThrow options).
+ *
  * Runner: node --import tsx --test --experimental-test-module-mocks --test-force-exit
  *         tests/linkedin/composerReadiness.mock.test.ts
  */
@@ -25,9 +36,11 @@ import { describe, it } from "node:test";
 import {
   FEED_COMPOSER_EDITOR_JS,
   FEED_COMPOSER_FOCUS_JS,
+  FEED_COMPOSER_POST_ENABLED_JS,
   composerTextMatches,
   focusFeedComposerEditorLive,
   isFeedComposerLiveInDOM,
+  isFeedComposerPostButtonEnabled,
 } from "../../src/linkedin/composerReadiness.js";
 import { CdpClient } from "../../src/cdp/client.js";
 
@@ -43,29 +56,51 @@ const FAKE_BORDER = [0, 0, 10, 0, 10, 10, 0, 10]; // center: x=5, y=5
 /**
  * STRICT-EQUAL HARNESS (Step-5 NIT fix):
  *
- * Dispatches fake client.evaluate by expr === FEED_COMPOSER_EDITOR_JS or
- * expr === FEED_COMPOSER_FOCUS_JS (imported constants — strict-equal, no substring).
+ * Dispatches fake client.evaluate by expr === FEED_COMPOSER_EDITOR_JS,
+ * FEED_COMPOSER_FOCUS_JS, FEED_COMPOSER_POST_ENABLED_JS (imported constants — strict-equal).
  * Anything else (including REACT_SAFE_CLEAR_ACTIVE_INPUT_JS which is file-private
  * in type.ts and cannot be imported) returns false (safe default).
  *
- * Per-payload call logs: editorJsCallLog (for EDITOR_JS calls), focusJsCallLog
- * (for FOCUS_JS calls). A combined callLogAll is available for debugging.
+ * Per-payload call logs: editorJsCallLog, focusJsCallLog, postEnabledJsCallLog.
  *
  * evaluateResult: the raw value returned when the expression matches the relevant payload.
  *   - For EDITOR_JS tests (T-Helper.1/2/3): a JSON-encoded string.
  *   - For FOCUS_JS tests (T-Helper.4/5/6): a boolean.
- * evaluateShouldThrow: if true, Runtime.evaluate rejects for any call (T-Helper.3/6).
+ *   - For CLEAR_JS tests (T-ClearHelper.*): a boolean (clearJsResult).
+ *   - For POST_ENABLED_JS tests (T-PostEnabledHelper.*): a boolean (postEnabledJsResult).
+ * evaluateShouldThrow: if true, Runtime.evaluate rejects for any call (T-Helper.3/6 / T-ClearHelper.3 / T-PostEnabledHelper.3).
+ *
+ * P-POST-PUBLISH-4: clearJsConstant + clearJsResult + clearJsShouldThrow are OPTIONAL.
+ *   clearJsConstant: the FEED_COMPOSER_CLEAR_JS string loaded at test-body runtime via dynamic
+ *     import (undefined until Step 4 ships the export). When provided, an additional dispatch
+ *     branch fires on strict-equal match.
+ *   clearJsResult: boolean returned by CLEAR_JS dispatch (default false).
+ *   clearJsShouldThrow: if true, throw on CLEAR_JS dispatch (T-ClearHelper.3).
+ *   clearJsCallLog: per-call log for CLEAR_JS dispatches.
+ *
+ * P-POST-PUBLISH-4 Step-5a: postEnabledJsResult for T-PostEnabledHelper.*.
+ *   postEnabledJsResult: boolean returned by POST_ENABLED_JS dispatch (default true).
  */
 function makeFakeClientWithEvaluate(opts: {
   evaluateResult?: string | boolean;
   evaluateShouldThrow?: boolean;
+  // P-POST-PUBLISH-4 CLEAR_JS options:
+  clearJsConstant?: string;
+  clearJsResult?: boolean;
+  clearJsShouldThrow?: boolean;
+  // P-POST-PUBLISH-4 Step-5a POST_ENABLED_JS options:
+  postEnabledJsResult?: boolean;
 }): {
   client: CdpClient;
   editorJsCallLog: string[];
   focusJsCallLog: string[];
+  clearJsCallLog: string[];
+  postEnabledJsCallLog: string[];
 } {
   const editorJsCallLog: string[] = [];
   const focusJsCallLog: string[] = [];
+  const clearJsCallLog: string[] = [];
+  const postEnabledJsCallLog: string[] = [];
 
   const fakeHandle = {
     Accessibility: {
@@ -76,7 +111,7 @@ function makeFakeClientWithEvaluate(opts: {
       evaluate: async (args: { expression: string }) => {
         // STRICT-EQUAL dispatch (no substring matching).
         if (opts.evaluateShouldThrow) {
-          throw new Error("Fake evaluate error (T-Helper.3 / T-Helper.6)");
+          throw new Error("Fake evaluate error (T-Helper.3 / T-Helper.6 / T-ClearHelper.3 / T-PostEnabledHelper.3)");
         }
         if (args.expression === FEED_COMPOSER_EDITOR_JS) {
           editorJsCallLog.push("FEED_COMPOSER_EDITOR_JS");
@@ -90,6 +125,18 @@ function makeFakeClientWithEvaluate(opts: {
           focusJsCallLog.push("FEED_COMPOSER_FOCUS_JS");
           return { result: { value: opts.evaluateResult ?? false } };
         }
+        // P-POST-PUBLISH-4 Step-5a: POST_ENABLED_JS dispatch.
+        if (args.expression === FEED_COMPOSER_POST_ENABLED_JS) {
+          postEnabledJsCallLog.push("FEED_COMPOSER_POST_ENABLED_JS");
+          return { result: { value: opts.postEnabledJsResult ?? true } };
+        }
+        // P-POST-PUBLISH-4: CLEAR_JS dispatch (when clearJsConstant is provided and matches).
+        // clearJsConstant is loaded via dynamic import inside each T-ClearHelper.* test body.
+        if (opts.clearJsConstant !== undefined && args.expression === opts.clearJsConstant) {
+          clearJsCallLog.push("FEED_COMPOSER_CLEAR_JS");
+          if (opts.clearJsShouldThrow) throw new Error("Fake CLEAR_JS throw (T-ClearHelper.3)");
+          return { result: { value: opts.clearJsResult ?? false } };
+        }
         // Anything else (non-matched): safe default false.
         return { result: { value: false } };
       },
@@ -97,6 +144,7 @@ function makeFakeClientWithEvaluate(opts: {
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
       querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
     },
     Input: {
@@ -106,7 +154,7 @@ function makeFakeClientWithEvaluate(opts: {
     },
   };
 
-  return { client: CdpClient.fromHandle(fakeHandle), editorJsCallLog, focusJsCallLog };
+  return { client: CdpClient.fromHandle(fakeHandle), editorJsCallLog, focusJsCallLog, clearJsCallLog, postEnabledJsCallLog };
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +354,229 @@ describe("composerTextMatches — negative/positive matrix pinning Frondose whit
         true,
         "composerTextMatches(LONG_2000_CHAR, ...) must be true — >1000-char prefix rule: observed startsWith first 200 of intended",
       );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// P-POST-PUBLISH-4 — T-ClearHelper.1–.3 (Step 2 scaffolds; outside-in TDD)
+//
+// COMPILE APPROACH: clearFeedComposerEditorLive + FEED_COMPOSER_CLEAR_JS are loaded via
+// dynamic import INSIDE each it() body. Until Step 4 ships the named exports, the dynamic
+// import resolves the module (composerReadiness.ts exists) but the named export is absent,
+// so `mod.clearFeedComposerEditorLive` is undefined and `mod.FEED_COMPOSER_CLEAR_JS` is
+// undefined. Each test body then reaches assert.fail("TODO…") and FAILS → RED on HEAD.
+// After Step 4 adds the exports, the dynamic import resolves them and tests become fillable
+// at Step 5. No static import of missing exports; no TS2307; file compiles clean on HEAD.
+//
+// Pattern mirrors T-Helper.4/5/6 (focusFeedComposerEditorLive) exactly:
+//   T-ClearHelper.1 → evaluate returns true  → clearFeedComposerEditorLive resolves true
+//   T-ClearHelper.2 → evaluate returns false → clearFeedComposerEditorLive resolves false
+//   T-ClearHelper.3 → evaluate throws        → clearFeedComposerEditorLive resolves false (fail-closed)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// T-ClearHelper.1 — clearFeedComposerEditorLive: evaluate returns true → resolves true
+// ---------------------------------------------------------------------------
+
+describe("clearFeedComposerEditorLive — returns true when evaluate(FEED_COMPOSER_CLEAR_JS) returns true", () => {
+  it(
+    "T-ClearHelper.1: when evaluate returns boolean true for FEED_COMPOSER_CLEAR_JS, resolves true",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate returns boolean true when invoked with
+      //        FEED_COMPOSER_CLEAR_JS (strict-equal dispatch, constant loaded via dynamic import).
+      // When:  clearFeedComposerEditorLive(client) is awaited.
+      // Then:  the result is true.
+      try {
+        const spec = "../../src/linkedin/composerReadiness.js";
+        const mod = await import(spec) as Record<string, unknown>;
+        const clearFn = mod["clearFeedComposerEditorLive"] as
+          | ((client: unknown) => Promise<boolean>)
+          | undefined;
+        const clearJs = mod["FEED_COMPOSER_CLEAR_JS"] as string | undefined;
+        if (typeof clearFn !== "function" || typeof clearJs !== "string") {
+          assert.fail(
+            "TODO Step 5: clearFeedComposerEditorLive + FEED_COMPOSER_CLEAR_JS not yet exported " +
+            "from composerReadiness.ts (Step 4 pending). After Step 4, fill: " +
+            "makeFakeClientWithEvaluate({clearJsConstant:FEED_COMPOSER_CLEAR_JS, clearJsResult:true}) → " +
+            "clearFeedComposerEditorLive(client) resolves true.",
+          );
+        }
+        const { client } = makeFakeClientWithEvaluate({
+          clearJsConstant: clearJs,
+          clearJsResult: true,
+        });
+        const result = await clearFn(client);
+        assert.equal(result, true, "T-ClearHelper.1: clearFeedComposerEditorLive must resolve true when evaluate returns true");
+      } catch (err) {
+        // Re-throw assert failures; catch only module-resolution errors (missing export).
+        if (err instanceof assert.AssertionError) throw err;
+        assert.fail(
+          "TODO Step 5: dynamic import of clearFeedComposerEditorLive failed (Step 4 pending). " +
+          String(err),
+        );
+      }
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-ClearHelper.2 — clearFeedComposerEditorLive: evaluate returns false → resolves false
+// ---------------------------------------------------------------------------
+
+describe("clearFeedComposerEditorLive — returns false when evaluate(FEED_COMPOSER_CLEAR_JS) returns false", () => {
+  it(
+    "T-ClearHelper.2: when evaluate returns boolean false (editor not found or clear failed), resolves false (not throw)",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate returns boolean false for FEED_COMPOSER_CLEAR_JS.
+      // When:  clearFeedComposerEditorLive(client) is awaited.
+      // Then:  the result is false (NOT a throw — fail-closed means caller gets boolean not exception).
+      try {
+        const spec = "../../src/linkedin/composerReadiness.js";
+        const mod = await import(spec) as Record<string, unknown>;
+        const clearFn = mod["clearFeedComposerEditorLive"] as
+          | ((client: unknown) => Promise<boolean>)
+          | undefined;
+        const clearJs = mod["FEED_COMPOSER_CLEAR_JS"] as string | undefined;
+        if (typeof clearFn !== "function" || typeof clearJs !== "string") {
+          assert.fail(
+            "TODO Step 5: clearFeedComposerEditorLive + FEED_COMPOSER_CLEAR_JS not yet exported " +
+            "(Step 4 pending). After Step 4, fill: " +
+            "makeFakeClientWithEvaluate({clearJsConstant:FEED_COMPOSER_CLEAR_JS, clearJsResult:false}) → " +
+            "clearFeedComposerEditorLive(client) resolves false.",
+          );
+        }
+        const { client } = makeFakeClientWithEvaluate({
+          clearJsConstant: clearJs,
+          clearJsResult: false,
+        });
+        const result = await clearFn(client);
+        assert.equal(result, false, "T-ClearHelper.2: clearFeedComposerEditorLive must resolve false when evaluate returns false");
+      } catch (err) {
+        if (err instanceof assert.AssertionError) throw err;
+        assert.fail(
+          "TODO Step 5: dynamic import of clearFeedComposerEditorLive failed (Step 4 pending). " +
+          String(err),
+        );
+      }
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-ClearHelper.3 — clearFeedComposerEditorLive: evaluate THROWS → resolves false (fail-closed)
+// ---------------------------------------------------------------------------
+
+describe("clearFeedComposerEditorLive — fail-closed: evaluate throws → false (never re-throws)", () => {
+  it(
+    "T-ClearHelper.3: when client.evaluate throws, resolves false without re-throwing (mirrors focusFeedComposerEditorLive T-Helper.6 contract verbatim)",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate THROWS for any expression (CDP error, etc.).
+      // When:  clearFeedComposerEditorLive(client) is awaited.
+      // Then:  the result is false (NEVER throws to caller — fail-closed pattern mirrors
+      //        focusFeedComposerEditorLive; composerReadiness.ts:101-108 try/catch shape).
+      try {
+        const spec = "../../src/linkedin/composerReadiness.js";
+        const mod = await import(spec) as Record<string, unknown>;
+        const clearFn = mod["clearFeedComposerEditorLive"] as
+          | ((client: unknown) => Promise<boolean>)
+          | undefined;
+        const clearJs = mod["FEED_COMPOSER_CLEAR_JS"] as string | undefined;
+        if (typeof clearFn !== "function" || typeof clearJs !== "string") {
+          assert.fail(
+            "TODO Step 5: clearFeedComposerEditorLive + FEED_COMPOSER_CLEAR_JS not yet exported " +
+            "(Step 4 pending). After Step 4, fill: " +
+            "makeFakeClientWithEvaluate({clearJsConstant:FEED_COMPOSER_CLEAR_JS, evaluateShouldThrow:true}) → " +
+            "clearFeedComposerEditorLive(client) resolves false (catch swallows the throw).",
+          );
+        }
+        const { client } = makeFakeClientWithEvaluate({
+          clearJsConstant: clearJs,
+          evaluateShouldThrow: true,
+        });
+        const result = await clearFn(client);
+        assert.equal(result, false, "T-ClearHelper.3: clearFeedComposerEditorLive must resolve false on throw (fail-closed)");
+      } catch (err) {
+        if (err instanceof assert.AssertionError) throw err;
+        assert.fail(
+          "TODO Step 5: dynamic import of clearFeedComposerEditorLive failed (Step 4 pending). " +
+          String(err),
+        );
+      }
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// P-POST-PUBLISH-4 Step-5a — T-PostEnabledHelper.1–.3
+//
+// Helper-level tests for isFeedComposerPostButtonEnabled (Fix 2).
+// Mirror the existing T-Helper.4/5/6 pattern exactly (focusFeedComposerEditorLive).
+// FEED_COMPOSER_POST_ENABLED_JS and isFeedComposerPostButtonEnabled are statically
+// imported (both exported from Step 4 onward).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// T-PostEnabledHelper.1 — isFeedComposerPostButtonEnabled: evaluate returns true → resolves true
+// ---------------------------------------------------------------------------
+
+describe("isFeedComposerPostButtonEnabled — returns true when evaluate(FEED_COMPOSER_POST_ENABLED_JS) returns true", () => {
+  it(
+    "T-PostEnabledHelper.1: when evaluate returns boolean true for FEED_COMPOSER_POST_ENABLED_JS, resolves true",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate returns boolean true when invoked with
+      //        FEED_COMPOSER_POST_ENABLED_JS (strict-equal dispatch).
+      // When:  isFeedComposerPostButtonEnabled(client) is awaited.
+      // Then:  the result is true.
+      const { client, postEnabledJsCallLog } = makeFakeClientWithEvaluate({
+        postEnabledJsResult: true,
+      });
+      const result = await isFeedComposerPostButtonEnabled(client);
+      assert.equal(result, true, "T-PostEnabledHelper.1: isFeedComposerPostButtonEnabled must resolve true when evaluate returns true");
+      assert.equal(postEnabledJsCallLog.length, 1, "T-PostEnabledHelper.1: FEED_COMPOSER_POST_ENABLED_JS must be called exactly once");
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-PostEnabledHelper.2 — isFeedComposerPostButtonEnabled: evaluate returns false → resolves false
+// ---------------------------------------------------------------------------
+
+describe("isFeedComposerPostButtonEnabled — returns false when evaluate(FEED_COMPOSER_POST_ENABLED_JS) returns false", () => {
+  it(
+    "T-PostEnabledHelper.2: when evaluate returns boolean false (button absent or disabled), resolves false (not throw)",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate returns boolean false for FEED_COMPOSER_POST_ENABLED_JS.
+      // When:  isFeedComposerPostButtonEnabled(client) is awaited.
+      // Then:  the result is false (NOT a throw — fail-closed means caller gets boolean not exception).
+      const { client } = makeFakeClientWithEvaluate({ postEnabledJsResult: false });
+      const result = await isFeedComposerPostButtonEnabled(client);
+      assert.equal(result, false, "T-PostEnabledHelper.2: isFeedComposerPostButtonEnabled must resolve false when evaluate returns false");
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-PostEnabledHelper.3 — isFeedComposerPostButtonEnabled: evaluate THROWS → resolves false (fail-closed)
+// ---------------------------------------------------------------------------
+
+describe("isFeedComposerPostButtonEnabled — fail-closed: evaluate throws → false (never re-throws)", () => {
+  it(
+    "T-PostEnabledHelper.3: when client.evaluate throws, resolves false without re-throwing (mirrors focusFeedComposerEditorLive T-Helper.6 contract verbatim)",
+    { timeout: 5000 },
+    async () => {
+      // Given: fake CdpClient whose evaluate THROWS for any expression (CDP error, etc.).
+      // When:  isFeedComposerPostButtonEnabled(client) is awaited.
+      // Then:  the result is false (NEVER throws to caller — fail-closed pattern mirrors
+      //        focusFeedComposerEditorLive / clearFeedComposerEditorLive try/catch).
+      const { client } = makeFakeClientWithEvaluate({ evaluateShouldThrow: true });
+      const result = await isFeedComposerPostButtonEnabled(client);
+      assert.equal(result, false, "T-PostEnabledHelper.3: isFeedComposerPostButtonEnabled must resolve false on throw (fail-closed)");
     },
   );
 });
