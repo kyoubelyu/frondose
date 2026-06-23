@@ -45,6 +45,7 @@ function makeFakeSession(opts: { withLastCtx?: boolean } = {}) {
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
       querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
     },
     Input: {

@@ -84,6 +84,9 @@ function makeFakeHandle(opts: {
         // border quad: [x0,y0, x1,y1, x2,y2, x3,y3] where center = ((x0+x2)/2, (y0+y2)/2)
         return { model: { border: [cx - 20, cy - 20, cx + 20, cy - 20, cx + 20, cy + 20, cx - 20, cy + 20] } };
       },
+      // P-POST-PUBLISH-5 no-op stub: hardened clickAt unconditionally calls scrollIntoViewIfNeeded.
+      // Default: resolves immediately (element already visible). Existing assertions are unaffected.
+      async scrollIntoViewIfNeeded(_: unknown) {},
     },
     Input: {
       async dispatchMouseEvent(p: { type: string; x: number; y: number }) {
@@ -272,6 +275,8 @@ describe("G-A11.4 — lastPointerPos tracked across calls: second click curves f
               model: { border: [cx - 20, cy - 20, cx + 20, cy - 20, cx + 20, cy + 20, cx - 20, cy + 20] },
             };
           },
+          // P-POST-PUBLISH-5 no-op stub (see T-Click5.SelectorPath / T-Click5.NoRegression)
+          async scrollIntoViewIfNeeded(_: unknown) {},
         },
         Input: {
           async dispatchMouseEvent(p: { type: string; x: number; y: number }) {
@@ -522,6 +527,8 @@ describe("G-A11.8 — zero/near-distance: stub Math.random to 0.5 → jitter=0 �
             // Both clicks target center (200, 300)
             return { model: { border: [180, 280, 220, 280, 220, 320, 180, 320] } };
           },
+          // P-POST-PUBLISH-5 no-op stub
+          async scrollIntoViewIfNeeded(_: unknown) {},
         },
         Input: {
           async dispatchMouseEvent(p: { type: string; x: number; y: number }) {
@@ -609,6 +616,8 @@ describe("G-A11.9 — @ref path: same realism shape as selector; DOM.getBoxModel
             // center (400, 500)
             return { model: { border: [380, 480, 420, 480, 420, 520, 380, 520] } };
           },
+          // P-POST-PUBLISH-5 no-op stub
+          async scrollIntoViewIfNeeded(_: unknown) {},
         },
         Input: {
           async dispatchMouseEvent(p: { type: string; x: number; y: number }) {
@@ -722,6 +731,8 @@ describe("G-A11.10 — @ref near-distance: combine Math.random stub + @ref path 
             // center (300, 200)
             return { model: { border: [280, 180, 320, 180, 320, 220, 280, 220] } };
           },
+          // P-POST-PUBLISH-5 no-op stub
+          async scrollIntoViewIfNeeded(_: unknown) {},
         },
         Input: {
           async dispatchMouseEvent(p: { type: string; x: number; y: number }) {

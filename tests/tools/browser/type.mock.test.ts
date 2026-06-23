@@ -43,6 +43,7 @@ function makeFakeSessionWithEntries(entries: Array<{ ref: string; role: string; 
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
       querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
     },
     Input: {
@@ -96,6 +97,7 @@ function makeFakeSession() {
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
       querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+      scrollIntoViewIfNeeded: async (_arg: unknown) => {},
       getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
     },
     Input: {
@@ -588,6 +590,7 @@ describe("T-P74.Clear.1 (D-RUN-3): React-safe-clear succeeds → Cmd+A+Backspace
         DOM: {
           getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
           querySelectorAll: async (_args: unknown) => ({ nodeIds: [] }),
+          scrollIntoViewIfNeeded: async (_arg: unknown) => {},
           getBoxModel: async (_args: unknown) => ({ model: { border: FAKE_BORDER } }),
         },
         Input: {
