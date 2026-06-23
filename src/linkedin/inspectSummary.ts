@@ -71,7 +71,7 @@ const MAX_PERSON_HARD = 60;
 // surface, which stays "feed" while the modal is open).
 const COMPOSER_BUTTON_RE =
   /(post to anyone|edit media preview|remove media|open emoji keyboard|open grammarly\.?|add media|schedule post|create a post|create an event|celebrate an occasion|^post$)/i;
-const COMPOSER_INPUT_RE = /creating content|what do you want to talk about/i;
+export const COMPOSER_INPUT_RE = /creating content|what do you want to talk about/i;
 // The composer's publish control — accessible name exactly "Post" (anchored,
 // so it does NOT match "Repost"). This is the strongest single composer signal.
 const COMPOSER_PUBLISH_RE = /^post$/i;
