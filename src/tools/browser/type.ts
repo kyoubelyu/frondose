@@ -3,7 +3,14 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { CdpClient } from "../../cdp/client.js";
 import { hardwareTypeAt } from "../../cdp/hardwareInput.js";
+import {
+  composerTextMatches,
+  focusFeedComposerEditorLive,
+  isFeedComposerLiveInDOM,
+  READBACK_RETRY_MS,
+} from "../../linkedin/composerReadiness.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
+import { COMPOSER_INPUT_RE } from "../../linkedin/inspectSummary.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
@@ -274,6 +281,20 @@ export function makeTypeTool(session: LinkedinSession) {
             );
           }
         }
+        const isFeedComposer =
+          typeCtx?.surface === "feed" && typeEntry !== undefined && COMPOSER_INPUT_RE.test(typeEntry.name);
+        if (isFeedComposer) {
+          const probe = await isFeedComposerLiveInDOM(client);
+          if (!probe.present) {
+            return fail(
+              "type",
+              "not_found",
+              "Feed post composer is not present in the live DOM. The composer modal closed or never " +
+                "stably opened between inspect and type. Re-open the composer by clicking 'Start a post' " +
+                "on the feed, inspect again, then retry.",
+            );
+          }
+        }
         // P-Y2.3: paint the agent cursor + highlight on the resolved target before the focus click. Best-effort,
         // visual-only (a getBox/overlay failure must NEVER block typing); the injected driver Auto-gates (no paint
         // + no dwell in Manual/headless/REPL). The type dispatch is OUTSIDE this try (unaffected on failure).
@@ -287,8 +308,14 @@ export function makeTypeTool(session: LinkedinSession) {
         if (session.inputMode === "hardware") {
           await hardwareTypeAt(client, target, text);
         } else {
-          // Focus the input.
-          await client.clickAt(target);
+          let liveFocused = false;
+          if (isFeedComposer) {
+            liveFocused = await focusFeedComposerEditorLive(client);
+          }
+          if (!liveFocused) {
+            // Focus the input.
+            await client.clickAt(target);
+          }
           // [P-59 D-RUN-3] Try React-safe DOM clear first; fall back to Cmd+A+Backspace only when the
           // focused element is not a native input/textarea or the evaluate path fails.
           await clearActiveInput(client);
@@ -327,6 +354,39 @@ export function makeTypeTool(session: LinkedinSession) {
               await sleep(d);
               prevChar = ch;
             }
+          }
+        }
+        if (isFeedComposer) {
+          const after = await isFeedComposerLiveInDOM(client);
+          if (!after.present) {
+            return fail(
+              "type",
+              "runtime_error",
+              "Feed post composer body verification failed: composer is no longer present after typing. " +
+                "Likely the composer closed during dispatch. Re-open the composer, inspect, then retry.",
+            );
+          }
+
+          let observedText = after.editorText;
+          let matched = composerTextMatches(text, observedText);
+          if (!matched) {
+            await sleep(READBACK_RETRY_MS);
+            const after2 = await isFeedComposerLiveInDOM(client);
+            if (after2.present) {
+              observedText = after2.editorText;
+              matched = composerTextMatches(text, observedText);
+            }
+          }
+          if (!matched) {
+            const preview = (s: string): string => (s.length > 80 ? `${s.slice(0, 38)}...${s.slice(-38)}` : s);
+            return fail(
+              "type",
+              "runtime_error",
+              `Feed post composer body did not match the typed text after dispatch; re-probed once after ` +
+                `${READBACK_RETRY_MS}ms. Intended: "${preview(text)}" (${text.length} chars). ` +
+                `Observed in DOM: "${preview(observedText)}" (${observedText.length} chars). ` +
+                `Re-inspect the composerInput scope and retry once the surface settles.`,
+            );
           }
         }
         const pacing = await applyPacing();
