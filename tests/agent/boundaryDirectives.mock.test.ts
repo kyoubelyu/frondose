@@ -3,11 +3,11 @@
  *
  * B6 + B8: combined BOUNDARY / SERVER_BOUNDARY directive additions.
  *   B6: "after any tool failure, produce a text response; never exit silently"
- *   B8: "reply in English by default unless operator requests another language"
+ *   B8: "operator-facing replies mirror the latest operator language"
  *
  * Gate coverage:
  *   G-P37.9 (no-silent-exit directive present in BOUNDARY + SERVER_BOUNDARY),
- *   G-P37.10 (reply-English directive present in BOUNDARY + SERVER_BOUNDARY),
+ *   G-P37.10 (mirror-language directive present in BOUNDARY + SERVER_BOUNDARY),
  *   G-P37.12 (3-band composition order Boundary→Soul→Checkpoint unchanged)
  *
  * All assertion bodies are TODO — tests intentionally fail at Step 4a.
@@ -25,16 +25,20 @@ import { SERVER_BOUNDARY } from "../../src/agent/systemPrompt/serverBoundary.js"
 // ─── T-B68.1 ─────────────────────────────────────────────────────────────────
 
 describe("B6+B8: BOUNDARY contains both directives (G-P37.9 + G-P37.10)", () => {
-  it("T-B68.1: BOUNDARY contains the no-silent-exit directive AND the reply-English directive", () => {
+  it("T-B68.1: BOUNDARY contains the no-silent-exit directive AND the mirror-language directive", () => {
     // Given: BOUNDARY constant exported from boundary.ts
     // When:  BOUNDARY string is inspected for both P-37 directive additions
     // Then:  BOUNDARY contains text about "tool" failure → text response (no silent exit);
-    //        BOUNDARY contains text about replying in English by default
+    //        BOUNDARY says operator-facing replies mirror the operator language
 
-    // G-P37.10: English-default directive (exact string from boundary.ts)
+    // G-P37.10: mirror-language directive (content lock from boundary.ts)
     assert.ok(
-      BOUNDARY.includes("Reply in English by default"),
-      `BOUNDARY must contain 'Reply in English by default'; got excerpt: "${BOUNDARY.slice(-200)}"`,
+      BOUNDARY.includes("mirror the language the operator writes"),
+      `BOUNDARY must contain 'mirror the language the operator writes'; got excerpt: "${BOUNDARY.slice(-500)}"`,
+    );
+    assert.ok(
+      BOUNDARY.includes("does NOT govern outbound"),
+      `BOUNDARY must contain 'does NOT govern outbound'; got excerpt: "${BOUNDARY.slice(-500)}"`,
     );
     // G-P37.9: no-silent-exit directive
     assert.ok(
@@ -47,16 +51,20 @@ describe("B6+B8: BOUNDARY contains both directives (G-P37.9 + G-P37.10)", () => 
 // ─── T-B68.2 ─────────────────────────────────────────────────────────────────
 
 describe("B6+B8: SERVER_BOUNDARY contains both directives (G-P37.9 + G-P37.10)", () => {
-  it("T-B68.2: SERVER_BOUNDARY contains the no-silent-exit directive AND the reply-English directive", () => {
+  it("T-B68.2: SERVER_BOUNDARY contains the no-silent-exit directive AND the mirror-language directive", () => {
     // Given: SERVER_BOUNDARY constant exported from serverBoundary.ts (standalone string — NOT importing BOUNDARY)
     // When:  SERVER_BOUNDARY string is inspected for both P-37 directive additions
     // Then:  SERVER_BOUNDARY contains text about tool failure → text response (no silent exit);
-    //        SERVER_BOUNDARY contains text about replying in English by default
+    //        SERVER_BOUNDARY says operator-facing replies mirror the operator language
 
-    // G-P37.10: English-default directive — serverBoundary uses lowercase style
+    // G-P37.10: mirror-language directive — serverBoundary uses lowercase style
     assert.ok(
-      SERVER_BOUNDARY.includes("reply in English by default"),
-      `SERVER_BOUNDARY must contain 'reply in English by default'; got excerpt: "${SERVER_BOUNDARY.slice(-200)}"`,
+      SERVER_BOUNDARY.includes("mirror the language the operator writes"),
+      `SERVER_BOUNDARY must contain 'mirror the language the operator writes'; got excerpt: "${SERVER_BOUNDARY.slice(-500)}"`,
+    );
+    assert.ok(
+      SERVER_BOUNDARY.includes("does not govern outbound content"),
+      `SERVER_BOUNDARY must contain 'does not govern outbound content'; got excerpt: "${SERVER_BOUNDARY.slice(-500)}"`,
     );
     // G-P37.9: no-silent-exit directive
     assert.ok(
