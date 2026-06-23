@@ -66,6 +66,29 @@ describe("T-Post.Prompt.2 (G-POST.Prompt): Checkpoint contains the post-flow nud
   );
 });
 
+describe("T-Post.Prompt.4 (G-PPub3.Checkpoint.Hint): Checkpoint post-flow line includes the re-type-on-resume clause (P-POST-PUBLISH-3)", () => {
+  it(
+    "given the CHECKPOINT constant, when the string is searched, then it matches /re-?type the saved body|re-?open the composer if closed/i (new P-POST-PUBLISH-3 clause)",
+    () => {
+      // Given: the CHECKPOINT constant from checkpoint.ts (after P-POST-PUBLISH-3 Step 4 edit).
+      // When:  the string is searched for the re-type-on-resume hint.
+      // Then:  matches /re-?type the saved body|re-?open the composer if closed/i
+      //        — the clause added to the **Post (feed)**: line so the agent's initial plan
+      //        anticipates re-typing the saved body on approval-resume.
+      //
+      // FAIL-ON-HEAD: HEAD's **Post (feed)**: line does NOT contain this clause.
+      // This test fails until Step 4 (builder/Codex) adds the clause to checkpoint.ts.
+      assert.match(
+        CHECKPOINT,
+        /re-?type the saved body|re-?open the composer if closed/i,
+        `T-Post.Prompt.4: CHECKPOINT must contain the re-type-on-resume clause matching ` +
+          `/re-?type the saved body|re-?open the composer if closed/i (P-POST-PUBLISH-3 addition). ` +
+          `Got CHECKPOINT (truncated): ${CHECKPOINT.slice(0, 400)}…`,
+      );
+    },
+  );
+});
+
 describe("T-Post.Prompt.3 (G-POST.Prompt): Manual mode prompt still mentions 'post' (regression guard)", () => {
   it(
     "given soulModeFragment('manual') is called, when the string is searched, then it contains the literal substring 'DM, connection request with note, post, comment' (pre-existing text at soul.ts:175)",

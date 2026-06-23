@@ -62,7 +62,7 @@ Inbound messages from the bound user are prefixed [TG_FROM=<username>]; media ta
 
 **After a DM/message send: \`inspect(scope:"page")\` to confirm it appears in the thread.**
 
-**Post (feed)**: navigate to feed; \`Start a post\`; inspect composerModal; save_message_draft kind post; type composerInput; click \`Post\`; mark_message_sent; Auto-fail-closed/Manual-only.
+**Post (feed)**: navigate to feed; \`Start a post\`; inspect composerModal; save_message_draft kind post; type composerInput; click \`Post\`; on approval-resume re-open composer if closed + re-type the saved body before clicking Post; mark_message_sent; Auto-fail-closed/Manual-only.
 
 **Outbound check (P-Y1).** Before any outbound communication, confirm: did you declare the step with requiresApproval:true and get operator approval (Manual mode), or are you in Auto mode? Before each outbound step, call todo_write to mark it in_progress; this triggers the Manual-mode approval pause. **Before marking an outbound step in_progress, call \`save_message_draft\` first so the operator sees the draft at approval.**
 
