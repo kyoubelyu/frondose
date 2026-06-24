@@ -1,4 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { PublishResult } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
+import { publishApprovedFeedPost } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
+import { writeWorkflowAudit } from "../../../../persistence/audit.js";
 import { countAutoLedgerByAction, endAutoRun, getAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { ServeDeps, ServeState } from "../context.js";
@@ -73,6 +76,45 @@ export async function handlePostWorkflow(
       return;
     }
   }
-  if (r.resumePrompt) void turn.resumeWorkflowTurn(r.resumePrompt);
+  const resumePrompt = r.resumePrompt;
+  if (resumePrompt) {
+    const killSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH === "skip";
+    const draftId = r.draftId;
+    const stepId = r.stepId;
+    if (!killSwitch && url === "/workflow/approve" && r.isPostPublish === true && draftId && stepId) {
+      const publish = deps.publishApprovedFeedPost ?? publishApprovedFeedPost;
+      void (async () => {
+        let result: PublishResult;
+        try {
+          const clientRes = await deps.session.getOrInitClient();
+          if (!clientRes.ok) {
+            await turn.resumeWorkflowTurn(resumePrompt);
+            return;
+          }
+          const wfState = deps.workflow.getState();
+          result = await publish({
+            session: deps.session,
+            client: clientRes.client,
+            salesDbPath: deps.salesDbPath,
+            auditPath: deps.auditPath,
+            workflowDeps: {
+              emitFrame: deps.emitFrame,
+              writeWorkflowAudit: (event) => writeWorkflowAudit(deps.auditPath, event),
+            },
+            workflowId: wfState.current?.id ?? null,
+            stepId,
+            draftId,
+          });
+        } catch {
+          await turn.resumeWorkflowTurn(resumePrompt);
+          return;
+        }
+        if (result.dispatchAttempted) return;
+        if (result.fallbackAllowed) await turn.resumeWorkflowTurn(resumePrompt);
+      })();
+    } else {
+      void turn.resumeWorkflowTurn(resumePrompt);
+    }
+  }
   sendJson(res, r.status, r.response);
 }
