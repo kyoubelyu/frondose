@@ -1,4 +1,5 @@
 import type { WorkflowControllerDeps } from "../controller.js";
+import { emitCommitWarning } from "../runtime/commitWarning.js";
 import type { WorkflowState } from "../types.js";
 import { clickLabel, isSaveDraftSuccess, isTodoWriteResult } from "./helpers.js";
 import {
@@ -29,7 +30,7 @@ export function onToolResults(
     }
     if (tr.toolName === "save_message_draft" && isSaveDraftSuccess(tr.result)) {
       ensureWorkflowForSaveDraft(state, deps, ctx, tr); // [D-14] synthesize workflow if agent skipped todo_write
-      abort = autoAdvanceOnSaveDraft(state, approvedStepIds, deps, ctx).abort || abort;
+      abort = autoAdvanceOnSaveDraft(state, approvedStepIds, deps, ctx, tr).abort || abort;
     }
     if (manualMode && (tr.toolName === "telegram_notify" || tr.toolName === "gh_issue")) {
       const workflowId = state.current?.id ?? null;
@@ -47,19 +48,7 @@ export function onToolResults(
       const label = clickLabel(tr);
       if (/Send|Connect|Post|Comment|Invite/i.test(label)) {
         const stepId = state.current?.steps.find((s) => s.state === "in_progress")?.id;
-        deps.emitFrame({
-          type: "commit-warning",
-          workflowId: state.current?.id ?? null,
-          label,
-          severity: "low",
-          ts: Date.now(),
-        });
-        deps.writeWorkflowAudit({
-          kind: "commit_warning",
-          workflowId: state.current?.id ?? null,
-          detectedLabel: label,
-          stepId,
-        });
+        emitCommitWarning(deps, { workflowId: state.current?.id ?? null, stepId, label, severity: "low" });
       }
     }
   }

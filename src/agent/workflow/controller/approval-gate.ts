@@ -2,6 +2,9 @@ import type { WorkflowControllerDeps } from "../controller.js";
 import type { Workflow, WorkflowState } from "../types.js";
 import type { WorkflowReconcileCtx } from "./reconcile.js";
 
+// biome-ignore format: file LoC budget per controller-split-shape <= 160
+type ApprovalResult = { status: number; response: unknown; resumePrompt?: string; isPostPublish?: boolean; draftId?: string; stepId?: string };
+
 export function checkApprovalGate(
   state: WorkflowState,
   approvedStepIds: Set<string>,
@@ -37,7 +40,7 @@ export function approve(
   deps: WorkflowControllerDeps,
   wf: Workflow | null,
   stepId: string | null,
-): { status: number; response: unknown; resumePrompt?: string } {
+): ApprovalResult {
   const step = wf?.steps.find((s) => s.id === stepId);
   if (!wf || !step || state.awaitingApprovalStepId !== stepId) {
     return { status: 200, response: { ok: false, reason: "no_pending_approval" } };
@@ -62,12 +65,8 @@ export function approve(
     step.requiresApproval && /(send|connect|invite|message|dm|note|comment|post|follow)/i.test(step.title);
   const isConnectStep = /(connect|invite|add a note|邀请|添加好友|连接|follow)/i.test(step.title);
   const isMessageStep = isOutboundStep && !isConnectStep && /(message|reply|dm|消息|回复)/i.test(step.title);
-  const isPostStep =
-    isOutboundStep &&
-    !isConnectStep &&
-    !isMessageStep &&
-    /(\b(post|publish)\b|发布|発信)/i.test(step.title) &&
-    !/\b(comment|react|repost)\b/i.test(step.title);
+  // biome-ignore format: P7 requires this exact predicate; keep compact for controller LoC budget.
+  const isPostStep = isOutboundStep && !isConnectStep && !isMessageStep && /(\b(post|publish)\b|发布|発信)/i.test(step.title) && !/\b(comment|react|repost)\b/i.test(step.title);
   const connectExtra =
     ` THIS STEP IS THE OUTBOUND ACTION. Do NOT navigate, do NOT search, do NOT re-qualify, do NOT save another draft. ` +
     `Your VERY FIRST tool call MUST be \`inspect\` on the current page (no \`navigate_to_url\`). ` +
@@ -95,6 +94,9 @@ export function approve(
   return {
     status: 200,
     response: { ok: true },
+    isPostPublish: isPostStep,
+    draftId: isPostStep ? step.draftId : undefined,
+    stepId: step.id,
     resumePrompt:
       `WORKFLOW RESUME (not a new task). ` +
       `Operator approved step "${step.title}" in workflow "${wf.title}". ` +

@@ -2,7 +2,23 @@ import type { WorkflowControllerDeps } from "../controller.js";
 import type { Workflow, WorkflowState } from "../types.js";
 import { approve, decline } from "./approval-gate.js";
 
-export function handleEndpoint(state: WorkflowState, approvedStepIds: Set<string>, terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, url: string, body: Record<string, unknown> | null): { status: number; response: unknown; resumePrompt?: string } {
+export interface WorkflowEndpointResult {
+  status: number;
+  response: unknown;
+  resumePrompt?: string;
+  isPostPublish?: boolean;
+  draftId?: string;
+  stepId?: string;
+}
+
+export function handleEndpoint(
+  state: WorkflowState,
+  approvedStepIds: Set<string>,
+  terminalWorkflowIds: Set<string>,
+  deps: WorkflowControllerDeps,
+  url: string,
+  body: Record<string, unknown> | null,
+): WorkflowEndpointResult {
   const wf = state.current;
   const stepId = typeof body?.stepId === "string" ? body.stepId : null;
   if (url === "/workflow/approve") return approve(state, approvedStepIds, deps, wf, stepId);
@@ -13,7 +29,11 @@ export function handleEndpoint(state: WorkflowState, approvedStepIds: Set<string
   return { status: 404, response: { ok: false, reason: "unknown_workflow_endpoint" } };
 }
 
-export function handoff(state: WorkflowState, deps: WorkflowControllerDeps, wf: Workflow | null): { status: number; response: unknown; resumePrompt?: string } {
+export function handoff(
+  state: WorkflowState,
+  deps: WorkflowControllerDeps,
+  wf: Workflow | null,
+): WorkflowEndpointResult {
   if (!wf) return { status: 200, response: { ok: false, reason: "no_workflow" } };
   wf.approvalMode = "auto";
   wf.handoff = true;
@@ -28,7 +48,12 @@ export function handoff(state: WorkflowState, deps: WorkflowControllerDeps, wf: 
   };
 }
 
-export function cancel(state: WorkflowState, terminalWorkflowIds: Set<string>, deps: WorkflowControllerDeps, wf: Workflow | null): { status: number; response: unknown } {
+export function cancel(
+  state: WorkflowState,
+  terminalWorkflowIds: Set<string>,
+  deps: WorkflowControllerDeps,
+  wf: Workflow | null,
+): WorkflowEndpointResult {
   if (!wf) return { status: 200, response: { ok: false, reason: "no_workflow" } };
   wf.state = "cancelled";
   state.awaitingApprovalStepId = null;
