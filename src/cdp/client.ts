@@ -119,6 +119,46 @@ export class CdpClient {
     return this.stealthInjected;
   }
 
+  async dispatchHumanLikeClickAtCoords(x: number, y: number): Promise<void> {
+    // P-AUTO-11 (M4): human-shaped click - jittered target + curved path + press-dwell,
+    // tracking lastPointerPos. Shared by clickAt and deterministic runtime post publish.
+    const target = { x: jitter(x), y: jitter(y) };
+    for (const p of mouseCurve(this.lastPointerPos, target)) {
+      await this.race(this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x: p.x, y: p.y }), "Input.mouseMoved");
+      await sleep(2 + Math.random() * 6);
+    }
+    await this.race(
+      this.client.Input.dispatchMouseEvent({
+        type: "mousePressed",
+        x: target.x,
+        y: target.y,
+        button: "left",
+        clickCount: 1,
+      }),
+      "Input.mousePressed",
+    );
+    await sleep(40 + Math.random() * 80); // P-AUTO-11: 40-120ms human press-dwell
+    await this.race(
+      this.client.Input.dispatchMouseEvent({
+        type: "mouseReleased",
+        x: target.x,
+        y: target.y,
+        button: "left",
+        clickCount: 1,
+      }),
+      "Input.mouseReleased",
+    );
+    // Race-safety: the serve path uses abort-then-replace (routes/agent.ts:21-24,58 - aborts the prior
+    // turn then `void runOneTurn(...)` without awaiting), NOT TurnLock, so two clickAt on this shared
+    // session CdpClient CAN briefly overlap on an explicit operator /agent/turn interruption (Auto/cron
+    // turns are sequential and never race here). Benign because: this write runs ONLY on a fully-completed
+    // click - an aborted click rejects at its next this.race(...) (signal.aborted) before reaching here,
+    // so an interrupted click never writes lastPointerPos; JS is single-threaded so the plain reference
+    // assignment cannot tear; and lastPointerPos is a best-effort stealth hint (next click's curve origin)
+    // where a stale-but-plausible value is biometrically harmless, not a correctness or security issue.
+    this.lastPointerPos = target;
+  }
+
   private static isPreloadInviteUrl(url: string): boolean {
     try {
       const u = new URL(url);
@@ -209,43 +249,8 @@ export class CdpClient {
     await this.race(this.client.DOM.scrollIntoViewIfNeeded(arg), "DOM.scrollIntoViewIfNeeded");
     await sleep(60);
     const box = await this.race(this.client.DOM.getBoxModel(arg), "DOM.getBoxModel");
-    // P-AUTO-11 (M4): human-shaped click — jittered target + curved path + press-dwell, tracking lastPointerPos.
     const c = center(box.model.border);
-    const target = { x: jitter(c.x), y: jitter(c.y) };
-    for (const p of mouseCurve(this.lastPointerPos, target)) {
-      await this.race(this.client.Input.dispatchMouseEvent({ type: "mouseMoved", x: p.x, y: p.y }), "Input.mouseMoved");
-      await sleep(2 + Math.random() * 6);
-    }
-    await this.race(
-      this.client.Input.dispatchMouseEvent({
-        type: "mousePressed",
-        x: target.x,
-        y: target.y,
-        button: "left",
-        clickCount: 1,
-      }),
-      "Input.mousePressed",
-    );
-    await sleep(40 + Math.random() * 80); // P-AUTO-11: 40-120ms human press-dwell
-    await this.race(
-      this.client.Input.dispatchMouseEvent({
-        type: "mouseReleased",
-        x: target.x,
-        y: target.y,
-        button: "left",
-        clickCount: 1,
-      }),
-      "Input.mouseReleased",
-    );
-    // Race-safety: the serve path uses abort-then-replace (routes/agent.ts:21-24,58 — aborts the prior
-    // turn then `void runOneTurn(...)` without awaiting), NOT TurnLock, so two clickAt on this shared
-    // session CdpClient CAN briefly overlap on an explicit operator /agent/turn interruption (Auto/cron
-    // turns are sequential and never race here). Benign because: this write runs ONLY on a fully-completed
-    // click — an aborted click rejects at its next this.race(...) (signal.aborted) before reaching here,
-    // so an interrupted click never writes lastPointerPos; JS is single-threaded so the plain reference
-    // assignment cannot tear; and lastPointerPos is a best-effort stealth hint (next click's curve origin)
-    // where a stale-but-plausible value is biometrically harmless, not a correctness or security issue.
-    this.lastPointerPos = target;
+    await this.dispatchHumanLikeClickAtCoords(c.x, c.y);
   }
 
   /** P-Y2.3: resolve an element's viewport box for the takeover highlight. Same resolution as clickAt
