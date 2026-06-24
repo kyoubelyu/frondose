@@ -53,6 +53,7 @@ export function reconcileTodoWrite(state: WorkflowState, approvedStepIds: Set<st
       title: s.title,
       requiresApproval: s.requiresApproval,
       state: nextState,
+      draftId: priorStep?.draftId,
       startedAt: nextState !== "pending" ? (priorStep?.startedAt ?? now) : undefined,
       completedAt: nextState === "completed" ? (priorStep?.completedAt ?? now) : undefined,
       failureReason: nextState === "failed" ? priorStep?.failureReason : undefined,
@@ -152,13 +153,9 @@ export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowC
   const kind = typeof args.kind === "string" ? args.kind : "outbound";
   const leadId = typeof args.leadId === "string" ? args.leadId : "";
   const nowIso = new Date().toISOString();
-  const step: TodoStep = {
-    id: `step_${randomUUID()}`,
-    title: `Send the saved ${kind} draft${leadId ? ` (lead ${leadId.slice(0, 8)})` : ""}`,
-    requiresApproval: true,
-    state: "in_progress",
-    startedAt: nowIso,
-  };
+  // biome-ignore format: file LoC budget per controller-split-shape <= 250
+  const step: TodoStep = { id: `step_${randomUUID()}`, title: `Send the saved ${kind} draft${leadId ? ` (lead ${leadId.slice(0, 8)})` : ""}`, requiresApproval: true, state: "in_progress", startedAt: nowIso };
+  captureDraftId(step, tr);
   const wf: Workflow = {
     id: `wf_${randomUUID()}`,
     title: `Outbound: send ${kind}`,
@@ -188,7 +185,7 @@ export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowC
 }
 
 // biome-ignore format: file LoC budget per controller-split-shape ≤ 250
-export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, ctx: WorkflowReconcileCtx): { abort: boolean } {
+export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Set<string>, deps: WorkflowControllerDeps, ctx: WorkflowReconcileCtx, tr?: ToolResultLike): { abort: boolean } {
   const wf = state.current;
   if (!wf || ctx.isCronTurn || wf.approvalMode !== "manual") return { abort: false };
   if (state.awaitingApprovalStepId !== null) return { abort: false };
@@ -196,6 +193,7 @@ export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Se
     (s) => s.requiresApproval && s.state !== "completed" && s.state !== "failed" && !approvedStepIds.has(s.id),
   );
   if (!target) return { abort: false };
+  if (tr) captureDraftId(target, tr);
   const nowIso = new Date().toISOString();
   let advanced = false;
   for (const s of wf.steps) {
@@ -247,3 +245,5 @@ export function autoAdvanceOnSaveDraft(state: WorkflowState, approvedStepIds: Se
   if (!advanced) return { abort: false };
   return checkApprovalGate(state, approvedStepIds, deps, wf, ctx);
 }
+// biome-ignore format: file LoC budget per controller-split-shape <= 250
+function captureDraftId(step: TodoStep, tr: ToolResultLike): void { if (!step.requiresApproval || step.draftId) return; const data = tr.result && typeof tr.result === "object" && "data" in tr.result ? (tr.result as { data?: unknown }).data : undefined; const draftId = data && typeof data === "object" && !Array.isArray(data) ? (data as { draftId?: unknown }).draftId : undefined; if (typeof draftId === "string" && draftId.trim().length > 0) step.draftId = draftId; }

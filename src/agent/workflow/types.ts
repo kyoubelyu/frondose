@@ -6,6 +6,8 @@ export interface TodoStep {
   title: string;
   state: "pending" | "in_progress" | "completed" | "failed";
   requiresApproval: boolean;
+  /** Set when save_message_draft auto-advances this approval-gated outbound step. */
+  draftId?: string;
   startedAt?: string;
   completedAt?: string;
   failureReason?: string;
@@ -45,7 +47,14 @@ export interface WorkflowAuditEntry {
         declineReason?: string;
       }
     | { kind: "always_ask"; workflowId: string | null; toolName: "telegram_notify" | "gh_issue"; turnId: string }
-    | { kind: "commit_warning"; workflowId: string | null; detectedLabel: string; stepId?: string }
+    | {
+        kind: "commit_warning";
+        workflowId: string | null;
+        detectedLabel: string;
+        stepId?: string;
+        dispatchAmbiguous?: boolean;
+        accountingError?: string;
+      }
     | { kind: "completed"; workflowId: string; finalState: string };
 }
 
@@ -86,4 +95,4 @@ export type WorkflowSseFrame =
     }
   | { type: "workflow-mode-changed"; workflowId: string; approvalMode: Workflow["approvalMode"]; ts: number }
   | { type: "workflow-completed"; workflowId: string; finalState: Workflow["state"]; ts: number }
-  | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low"; ts: number };
+  | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" | "high"; ts: number };
