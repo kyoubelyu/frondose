@@ -626,3 +626,143 @@ describe("handlePostWorkflow — cron turn: publishApprovedFeedPost is NEVER cal
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// T-Recover.6 (P-POST-PUBLISH-8 Step 3a REVISED — outcome-based kill-switch
+// test driving a REAL createWorkflowController)
+//
+// REVISED from original Step-2 scaffold per BLOCKER 1 resolution:
+//   Option (b): the kill-switch's load-bearing job is "no deterministic runtime
+//   publish" (route guard at workflow.ts:84). An approve-time recovery inside
+//   approve() under the kill-switch is harmless — the route still short-circuits
+//   to LLM resume. T-Recover.6 now asserts the OUTCOME: publishApprovedFeedPost
+//   NOT invoked + resumeWorkflowTurn IS called. The recoverPostDraftId thunk MAY
+//   be called inside approve() — that is harmless. We do NOT assert thunk count
+//   zero (that was the vacuous assertion the critic rejected).
+//
+//   The test drives a REAL createWorkflowController (not a fake handleEndpoint)
+//   with the internal state seeded via getState() (which returns the mutable
+//   state object by reference) so that approve() sees a real pending post step
+//   with step.draftId undefined — triggering recovery — but the kill-switch in
+//   the route means publishApprovedFeedPost is never invoked regardless.
+// ---------------------------------------------------------------------------
+
+describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH=skip makes the route NOT publish; LLM fallback wins (SC-4)", () => {
+  it(
+    "T-Recover.6: when MAI_DETERMINISTIC_POST_PUBLISH=skip AND a REAL createWorkflowController has a pending post step with step.draftId undefined and recoverPostDraftId returning {id:'draft_recovered'}, the route does NOT call publishApprovedFeedPost AND calls turn.resumeWorkflowTurn exactly once (LLM fallback wins; kill-switch carries the load-bearing invariant)",
+    { timeout: 5000 },
+    async () => {
+      // Given: MAI_DETERMINISTIC_POST_PUBLISH = 'skip' (kill-switch active).
+      //        A REAL createWorkflowController whose deps include a recoverPostDraftId
+      //        thunk returning { id: 'draft_recovered' }, so approve() would recover a
+      //        draftId — but the route kill-switch fires before publishApprovedFeedPost.
+      //        The controller's internal state is seeded with an awaiting-approval post
+      //        step with step.draftId undefined (PPUB7B re-title scenario).
+      // When:  handlePostWorkflow runs for POST /workflow/approve.
+      // Then:  (a) deps.publishApprovedFeedPost stub is NOT called (kill-switch wins).
+      //        (b) turn.resumeWorkflowTurn IS called exactly once (LLM fallback).
+      //        The recoverPostDraftId thunk MAY be called — its call count is NOT asserted.
+      //        Covers SC-4: Option (b) — kill-switch's load-bearing job is "no publish".
+      const { handlePostWorkflow: hwpKs2 } = await import(
+        "../../../../src/cli/subcommands/serve/routes/workflow.js"
+      );
+      const { createWorkflowController } = await import(
+        "../../../../src/agent/workflow/controller.js"
+      );
+
+      let resumeCallCountKs2 = 0;
+      let publishCallCountKs2 = 0;
+
+      const scratchDirKs2 = join(tmpdir(), "frondose-p8-recover6", `${Date.now()}`);
+      mkdirSync(scratchDirKs2, { recursive: true });
+
+      // Build a REAL controller with the recoverPostDraftId thunk injected.
+      // The thunk returns a valid id — but the kill-switch means the route never
+      // invokes publishApprovedFeedPost regardless of what draftId approve() returns.
+      const realController = createWorkflowController({
+        emitFrame: () => {},
+        writeWorkflowAudit: () => {},
+        // recoverPostDraftId: cast via `as never` because Step 4 has not yet added
+        // the field to WorkflowControllerDeps. The forward-cast pattern from the
+        // group-B scaffold is applied at the createWorkflowController call site.
+        ...({ recoverPostDraftId: () => ({ id: "draft_recovered_ks2" }) } as never),
+      } as never);
+
+      // Seed the controller's internal state via getState() (returns mutable ref).
+      // This simulates the PPUB7B scenario: the agent set up a workflow with a
+      // post-approval step but step.draftId was lost on re-title.
+      const STEP_ID_KS2 = "step-p8-ks2";
+      const seedState = realController.getState();
+      seedState.current = {
+        id: "wf-p8-ks2",
+        title: "P8 kill-switch test workflow",
+        approvalMode: "manual",
+        steps: [
+          {
+            id: STEP_ID_KS2,
+            title: "Publish post",   // matches isPostStep heuristic
+            state: "in_progress",
+            requiresApproval: true,
+            // step.draftId intentionally absent — PPUB7B re-title scenario
+          },
+        ],
+        state: "awaiting_approval",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      } as never;
+      seedState.awaitingApprovalStepId = STEP_ID_KS2;
+
+      const fakeDepsKs2 = {
+        workflow: realController,
+        salesDbPath: join(scratchDirKs2, "sales.db"),
+        auditPath: join(scratchDirKs2, "audit.jsonl"),
+        emitFrame: () => {},
+        session: {
+          inputMode: "cdp" as const,
+          getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+          resolvedMode: () => "manual" as const,
+        },
+        publishApprovedFeedPost: async () => {
+          publishCallCountKs2++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+      };
+
+      const fakeTurnKs2 = {
+        resumeWorkflowTurn: async () => { resumeCallCountKs2++; },
+      };
+
+      const prevKillSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      try {
+        const reqKs2 = makeFakeReq({ stepId: STEP_ID_KS2 });
+        const { res: resKs2 } = makeFakeRes();
+        await hwpKs2(
+          { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+          fakeDepsKs2 as never,
+          fakeTurnKs2 as never,
+          reqKs2, resKs2, "/workflow/approve",
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      } finally {
+        if (prevKillSwitch === undefined) {
+          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+        } else {
+          process.env.MAI_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
+        }
+      }
+
+      // SC-4 assertions: kill-switch wins — no publish, LLM fallback fires
+      assert.equal(
+        publishCallCountKs2,
+        0,
+        "T-Recover.6: publishApprovedFeedPost must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)"
+      );
+      assert.equal(
+        resumeCallCountKs2,
+        1,
+        "T-Recover.6: turn.resumeWorkflowTurn must be called exactly once (LLM fallback) when kill-switch=skip"
+      );
+    },
+  );
+});
