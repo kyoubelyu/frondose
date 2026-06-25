@@ -580,3 +580,446 @@ describe("isFeedComposerPostButtonEnabled — fail-closed: evaluate throws → f
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// P-POST-PUBLISH-10 Step 2 — T-Regex.1–.4 (TARGET 2a label tolerance scaffold)
+//
+// Tests for the loosened FEED_START_A_POST_CENTER_JS regex (plan §3c TARGET 2a):
+//   Current (HEAD): const START_RE = /^Start a post$/i;   ← exact-anchored
+//   Target (P10):   const START_RE = /^(start|create)\s+a\s+post\b/i;  ← word-boundary
+//
+// These tests FAIL on HEAD because the current /^Start a post$/i regex:
+//   - T-Regex.1: "Start a post" → passes on HEAD (but test scaffolded to confirm it still passes)
+//   - T-Regex.2: "Start a post, Kyoube" → FAILS on HEAD ($ anchor blocks trailing comma+name)
+//   - T-Regex.3: "Create a post" → FAILS on HEAD (Start-only)
+//   - T-Regex.4: "Start a poll" → passes on HEAD (but the failing NEW tests above ensure
+//                the scaffold is genuinely RED before the regex fix lands)
+//
+// HOW THE REGEX IS EXERCISED: FEED_START_A_POST_CENTER_JS is a JS string injected via
+// Runtime.evaluate. We eval the JS string in-process using a Node.js Function constructor
+// with a stub document that simulates the LinkedIn DOM (one button with the given aria-label).
+// This mirrors what the browser would execute and exercises the real regex inside the string.
+// Pattern: build a minimal stub-document with a visible button, run the JS string as a Function,
+// assert the return value is non-null (match) or null (no match).
+//
+// Import: FEED_START_A_POST_CENTER_JS is statically imported from composerReadiness.js.
+// On HEAD, T-Regex.2 and T-Regex.3 FAIL (null returned by the exact regex).
+// T-Regex.1 and T-Regex.4 pass on HEAD AND after P10 (confirming no regression).
+// ---------------------------------------------------------------------------
+
+// Stub-document builder: creates a minimal DOM-like object with a single visible button.
+// The button's aria-label is set to the provided label string.
+// Returned stub is used as the `document` global when invoking FEED_START_A_POST_CENTER_JS.
+function makeStubDocument(ariaLabel: string): Record<string, unknown> {
+  const el: Record<string, unknown> = {
+    tagName: "BUTTON",
+    getAttribute: (attr: string) => {
+      if (attr === "aria-label") return ariaLabel;
+      if (attr === "role") return "button";
+      if (attr === "aria-labelledby") return null;
+      if (attr === "aria-hidden") return null;
+      if (attr === "title") return null;
+      if (attr === "disabled") return null;
+      return null;
+    },
+    hasAttribute: (attr: string) => attr === "aria-label",
+    shadowRoot: null,
+    disabled: false,
+    innerText: "",
+    textContent: "",
+    closest: (_: string) => null,
+    querySelectorAll: (_: string) => [el], // querySelectorAll('*') returns [el]
+    getBoundingClientRect: () => ({
+      left: 100,
+      top: 200,
+      width: 120,
+      height: 40,
+    }),
+  };
+
+  const root: Record<string, unknown> = {
+    tagName: "DOCUMENT",
+    querySelectorAll: (_: string) => [el],
+    shadowRoot: null,
+    getElementById: (_: string) => null,
+  };
+
+  // getComputedStyle returns a style indicating visible element
+  const globalStubs = {
+    document: root,
+    getComputedStyle: (_: unknown) => ({
+      display: "block",
+      visibility: "visible",
+      opacity: "1",
+    }),
+    JSON,
+  };
+
+  return globalStubs;
+}
+
+// Invoke FEED_START_A_POST_CENTER_JS using a Function constructor with a stub document.
+// Returns the parsed result: { cx, cy } on match, null on no-match.
+function runFeedStartAPostJs(
+  jsString: string,
+  ariaLabel: string,
+): { cx: number; cy: number } | null {
+  const stubs = makeStubDocument(ariaLabel);
+  // Wrap the IIFE in a function with the stubs as injected globals.
+  // The JS string is an IIFE: (() => { ... })()
+  // We inject document + getComputedStyle + JSON as locals overriding the undefined globals.
+  // biome-ignore lint/security/noGlobalEval: intentional — testing JS string behavior in-process
+  const wrappedFn = new Function(
+    "document",
+    "getComputedStyle",
+    "JSON",
+    `return ${jsString}`,
+  );
+  const raw = wrappedFn(stubs.document, stubs.getComputedStyle, stubs.JSON) as string | null;
+  if (raw === null || raw === "null" || raw === undefined) return null;
+  try {
+    const parsed = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as {
+      cx?: number;
+      cy?: number;
+    } | null;
+    if (!parsed || typeof parsed.cx !== "number" || typeof parsed.cy !== "number") return null;
+    return { cx: parsed.cx, cy: parsed.cy };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// T-Regex.1 — exact "Start a post" still matches after regex loosening
+// ---------------------------------------------------------------------------
+
+describe("FEED_START_A_POST_CENTER_JS — TARGET 2a label tolerance: exact 'Start a post' still matches (T-Regex.1)", () => {
+  it(
+    "T-Regex.1: when button aria-label==='Start a post', FEED_START_A_POST_CENTER_JS returns non-null coords (regression: must still match after /^(start|create)\\s+a\\s+post\\b/i loosening)",
+    { timeout: 5000 },
+    async () => {
+      // Given: a DOM stub with one visible button aria-label="Start a post".
+      // When:  FEED_START_A_POST_CENTER_JS is executed against the stub.
+      // Then:  the return value is a non-null {cx, cy} object (the button was found).
+      //        (This test PASSES on HEAD and MUST ALSO PASS after P10 — regression guard.)
+      const mod = (await import("../../src/linkedin/composerReadiness.js")) as Record<string, unknown>;
+      const jsString = mod["FEED_START_A_POST_CENTER_JS"] as string | undefined;
+      if (typeof jsString !== "string") {
+        assert.fail("TODO P10: T-Regex.1 — FEED_START_A_POST_CENTER_JS not exported (Step 4 pending or module load issue)");
+      }
+      const result = runFeedStartAPostJs(jsString, "Start a post");
+      assert.ok(
+        result !== null && typeof result.cx === "number" && typeof result.cy === "number",
+        `T-Regex.1: 'Start a post' must match FEED_START_A_POST_CENTER_JS. Got: ${JSON.stringify(result)}`,
+      );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-Regex.2 — personalized "Start a post, Kyoube" matches (FAILS on HEAD)
+// ---------------------------------------------------------------------------
+
+describe("FEED_START_A_POST_CENTER_JS — TARGET 2a label tolerance: 'Start a post, Kyoube' matches (T-Regex.2)", () => {
+  it(
+    "T-Regex.2: when button aria-label==='Start a post, Kyoube', FEED_START_A_POST_CENTER_JS returns non-null coords (FAILS on HEAD with /^Start a post$/i; passes after \\b loosening)",
+    { timeout: 5000 },
+    async () => {
+      // Given: a DOM stub with one visible button aria-label="Start a post, Kyoube"
+      //        (LinkedIn personalizes this label with the operator's first name).
+      // When:  FEED_START_A_POST_CENTER_JS is executed against the stub.
+      // Then:  the return value is a non-null {cx, cy} object (the button was found).
+      //        This FAILS on HEAD because /^Start a post$/i has a $ that blocks "..., Kyoube".
+      //        After P10 TARGET 2a: /^(start|create)\s+a\s+post\b/i matches the stem.
+      const mod = (await import("../../src/linkedin/composerReadiness.js")) as Record<string, unknown>;
+      const jsString = mod["FEED_START_A_POST_CENTER_JS"] as string | undefined;
+      if (typeof jsString !== "string") {
+        assert.fail("TODO P10: T-Regex.2 — FEED_START_A_POST_CENTER_JS not exported (Step 4 pending or module load issue)");
+      }
+      const result = runFeedStartAPostJs(jsString, "Start a post, Kyoube");
+      assert.ok(
+        result !== null && typeof result.cx === "number" && typeof result.cy === "number",
+        `T-Regex.2: 'Start a post, Kyoube' must match FEED_START_A_POST_CENTER_JS after /^(start|create)\\s+a\\s+post\\b/i loosening. Got: ${JSON.stringify(result)}`,
+      );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-Regex.3 — alternate verb "Create a post" matches (FAILS on HEAD)
+// ---------------------------------------------------------------------------
+
+describe("FEED_START_A_POST_CENTER_JS — TARGET 2a label tolerance: 'Create a post' matches (T-Regex.3)", () => {
+  it(
+    "T-Regex.3: when button aria-label==='Create a post', FEED_START_A_POST_CENTER_JS returns non-null coords (FAILS on HEAD with Start-only regex; passes after (start|create) group)",
+    { timeout: 5000 },
+    async () => {
+      // Given: a DOM stub with one visible button aria-label="Create a post"
+      //        (LinkedIn alternate phrasing in some locales/UI variants).
+      // When:  FEED_START_A_POST_CENTER_JS is executed against the stub.
+      // Then:  the return value is a non-null {cx, cy} object (the button was found).
+      //        This FAILS on HEAD because /^Start a post$/i only accepts "Start" as the verb.
+      //        After P10 TARGET 2a: /^(start|create)\s+a\s+post\b/i also accepts "create".
+      const mod = (await import("../../src/linkedin/composerReadiness.js")) as Record<string, unknown>;
+      const jsString = mod["FEED_START_A_POST_CENTER_JS"] as string | undefined;
+      if (typeof jsString !== "string") {
+        assert.fail("TODO P10: T-Regex.3 — FEED_START_A_POST_CENTER_JS not exported (Step 4 pending or module load issue)");
+      }
+      const result = runFeedStartAPostJs(jsString, "Create a post");
+      assert.ok(
+        result !== null && typeof result.cx === "number" && typeof result.cy === "number",
+        `T-Regex.3: 'Create a post' must match FEED_START_A_POST_CENTER_JS after /^(start|create)\\s+a\\s+post\\b/i loosening. Got: ${JSON.stringify(result)}`,
+      );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-Regex.4 — "Start a poll" does NOT match (must return null, both HEAD and P10)
+// ---------------------------------------------------------------------------
+
+describe("FEED_START_A_POST_CENTER_JS — TARGET 2a label tolerance: 'Start a poll' does NOT match (T-Regex.4)", () => {
+  it(
+    "T-Regex.4: when button aria-label==='Start a poll', FEED_START_A_POST_CENTER_JS returns null (false positive guard — 'poll' must NOT be caught by the /post\\b/ word-boundary)",
+    { timeout: 5000 },
+    async () => {
+      // Given: a DOM stub with one visible button aria-label="Start a poll".
+      //        This simulates an adjacent LinkedIn button that must NOT trigger the composer open.
+      // When:  FEED_START_A_POST_CENTER_JS is executed against the stub.
+      // Then:  the return value is null (button NOT found — regex does not match "poll" after \\b).
+      //        This should PASS on HEAD (/^Start a post$/i clearly rejects "poll") AND after P10
+      //        (/^(start|create)\s+a\s+post\b/i: "post" word boundary does not match "poll").
+      //        (Test is a regression guard for the P10 regex loosening: \b correctly gates it.)
+      const mod = (await import("../../src/linkedin/composerReadiness.js")) as Record<string, unknown>;
+      const jsString = mod["FEED_START_A_POST_CENTER_JS"] as string | undefined;
+      if (typeof jsString !== "string") {
+        assert.fail("TODO P10: T-Regex.4 — FEED_START_A_POST_CENTER_JS not exported (Step 4 pending or module load issue)");
+      }
+      const result = runFeedStartAPostJs(jsString, "Start a poll");
+      assert.equal(
+        result,
+        null,
+        `T-Regex.4: 'Start a poll' must NOT match FEED_START_A_POST_CENTER_JS. Got: ${JSON.stringify(result)}`,
+      );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// P-POST-PUBLISH-10 Step 3a — T-Exact.1–.5 (REVISED 3a — F-1 BLOCKER: composerTextExact helper)
+//
+// Tests for the NEW exported helper `composerTextExact(intended, observed)` in
+// src/linkedin/composerReadiness.ts (plan §3a-bis + §6d).
+//
+// `composerTextExact` uses the SAME normalization as `composerTextMatches`
+// (via a shared private `normForCompare`: NFC + \r\n?→\n + strip trailing \n +
+//  collapse [ \t]+ to single space + trim) but ends at strict === (no prefix branch).
+//
+// ALL FIVE TESTS FAIL ON HEAD because `composerTextExact` does not exist yet.
+// They are loaded via dynamic import inside each it() body (same pattern as T-ClearHelper.*).
+// After Step 4 ships the export, assertion bodies in T-Exact.1–.4 pass; T-Exact.5 is
+// already-asserting (it re-runs composerTextMatches to confirm byte-identical semantics
+// on the normForCompare refactor — composerTextMatches is statically imported).
+//
+// The load-bearing F-1 assertion is T-Exact.3:
+//   composerTextExact("A".repeat(1500), "A".repeat(200)) MUST return FALSE
+//   while composerTextMatches RETURNS TRUE for the same inputs (per T-Helper.7 above).
+// This is the exact predicate that would have allowed the fast-path to publish a truncated
+// post on the old plan; it MUST fail on the new exact-match helper.
+// ---------------------------------------------------------------------------
+
+describe(
+  "composerTextExact — REVISED 3a F-1 helper: exact normalized equality (no prefix-tolerance branch) (T-Exact.1–.5)",
+  () => {
+
+    // T-Exact.1 — identical short strings → true
+    it(
+      "T-Exact.1: when intended==='hello' and observed==='hello', composerTextExact returns true",
+      { timeout: 5000 },
+      async () => {
+        // Given: identical short strings "hello" / "hello".
+        // When:  composerTextExact("hello", "hello") is called.
+        // Then:  returns true (exact match after normForCompare applies NFC + collapse + trim).
+        //        FAILS ON HEAD: composerTextExact does not exist (Step 4 pending).
+        try {
+          const mod = await import("../../src/linkedin/composerReadiness.js") as Record<string, unknown>;
+          const exactFn = mod["composerTextExact"] as
+            | ((intended: string, observed: string) => boolean)
+            | undefined;
+          if (typeof exactFn !== "function") {
+            assert.fail(
+              "TODO P10: T-Exact.1 — composerTextExact not yet exported from composerReadiness.ts " +
+              "(Step 4 pending). After Step 4: composerTextExact('hello', 'hello') must return true.",
+            );
+          }
+          const result = exactFn("hello", "hello");
+          assert.equal(result, true, "T-Exact.1: composerTextExact('hello', 'hello') must return true");
+        } catch (err) {
+          if (err instanceof assert.AssertionError) throw err;
+          assert.fail(`T-Exact.1: dynamic import failed (Step 4 pending). ${String(err)}`);
+        }
+      },
+    );
+
+    // T-Exact.2 — NFC + whitespace normalization applied identically to composerTextMatches
+    it(
+      "T-Exact.2: when intended==='café  hello\\r\\n' and observed==='café hello\\n', composerTextExact returns true (NFC + \\r\\n→\\n + trailing \\n stripped + spaces collapsed)",
+      { timeout: 5000 },
+      async () => {
+        // Given: intended has a precomposed 'é' (NFC U+00E9) + double space + \r\n trailing;
+        //        observed has a precomposed 'é' + single space + \n trailing.
+        //        normForCompare applies: NFC (both 'é' → U+00E9 if not already); \r\n?→\n;
+        //        \n+$ strip; [ \t]+ → " "; trim. Result for both: "café hello".
+        // When:  composerTextExact("café  hello\r\n", "café hello\n") is called.
+        // Then:  returns true.
+        //        FAILS ON HEAD: composerTextExact does not exist (Step 4 pending).
+        try {
+          const mod = await import("../../src/linkedin/composerReadiness.js") as Record<string, unknown>;
+          const exactFn = mod["composerTextExact"] as
+            | ((intended: string, observed: string) => boolean)
+            | undefined;
+          if (typeof exactFn !== "function") {
+            assert.fail(
+              "TODO P10: T-Exact.2 — composerTextExact not yet exported from composerReadiness.ts " +
+              "(Step 4 pending). After Step 4: normalization-equivalence check must pass.",
+            );
+          }
+          // "café  hello\r\n" and "café hello\n" normalize identically via normForCompare
+          const result = exactFn("café  hello\r\n", "café hello\n");
+          assert.equal(result, true, "T-Exact.2: NFC + whitespace normalization must produce equal strings");
+        } catch (err) {
+          if (err instanceof assert.AssertionError) throw err;
+          assert.fail(`T-Exact.2: dynamic import failed (Step 4 pending). ${String(err)}`);
+        }
+      },
+    );
+
+    // T-Exact.3 — long-draft (>1000 chars) prefix-only observed → FALSE (THE F-1 PIN)
+    it(
+      "T-Exact.3: when intended==='A'.repeat(1500) and observed==='A'.repeat(200), composerTextExact returns FALSE; composerTextMatches returns TRUE for same inputs (F-1 BLOCKER pin)",
+      { timeout: 5000 },
+      async () => {
+        // Given: intended = "A".repeat(1500), observed = "A".repeat(200).
+        //        composerTextMatches("A".repeat(1500), "A".repeat(200)) returns TRUE
+        //        (the >1000-char prefix branch: observed starts with first 200 normalized chars).
+        //        composerTextExact for the same inputs: normForCompare("A".repeat(1500)) is
+        //        "A".repeat(1500) (no collapse/trim applies); normForCompare("A".repeat(200)) is
+        //        "A".repeat(200). These are NOT equal → composerTextExact returns FALSE.
+        // When:  composerTextExact("A".repeat(1500), "A".repeat(200)) is called.
+        // Then:  returns FALSE. This is the LOAD-BEARING F-1 assertion at the helper layer.
+        //        The contrast with composerTextMatches (which returns TRUE) is what makes the
+        //        fast-path safe — only composerTextExact is used at the entry gate and readback.
+        //        FAILS ON HEAD: composerTextExact does not exist (Step 4 pending).
+        try {
+          const mod = await import("../../src/linkedin/composerReadiness.js") as Record<string, unknown>;
+          const exactFn = mod["composerTextExact"] as
+            | ((intended: string, observed: string) => boolean)
+            | undefined;
+          if (typeof exactFn !== "function") {
+            assert.fail(
+              "TODO P10: T-Exact.3 — composerTextExact not yet exported from composerReadiness.ts " +
+              "(Step 4 pending). After Step 4: composerTextExact('A'.repeat(1500), 'A'.repeat(200)) MUST return false " +
+              "(while composerTextMatches returns true for the same inputs — the F-1 safety delta).",
+            );
+          }
+          const LONG = "A".repeat(1500);
+          const PREFIX = "A".repeat(200);
+          // Assert composerTextExact rejects the prefix case (the F-1 BLOCKER fix)
+          const exactResult = exactFn(LONG, PREFIX);
+          assert.equal(exactResult, false,
+            "T-Exact.3: composerTextExact('A'.repeat(1500), 'A'.repeat(200)) MUST return false " +
+            "(exact-match; prefix not tolerated)");
+          // Confirm composerTextMatches returns TRUE for the same inputs (cross-check that the
+          // refactor did NOT accidentally change composerTextMatches semantics — T-Exact.5 covers this
+          // more broadly, but this cite makes the F-1 safety delta explicit in T-Exact.3).
+          const tolerantResult = composerTextMatches(LONG, PREFIX);
+          assert.equal(tolerantResult, true,
+            "T-Exact.3 cross-check: composerTextMatches('A'.repeat(1500), 'A'.repeat(200)) must STILL return true " +
+            "(the prefix-tolerance branch in composerTextMatches is unchanged by the P10 refactor)");
+        } catch (err) {
+          if (err instanceof assert.AssertionError) throw err;
+          assert.fail(`T-Exact.3: dynamic import failed (Step 4 pending). ${String(err)}`);
+        }
+      },
+    );
+
+    // T-Exact.4 — long-draft (>1000 chars) full match → TRUE
+    it(
+      "T-Exact.4: when intended===observed==='A'.repeat(1500), composerTextExact returns TRUE (full match on long draft)",
+      { timeout: 5000 },
+      async () => {
+        // Given: intended = observed = "A".repeat(1500) (same long string).
+        //        normForCompare produces the same result for both → strict === → true.
+        // When:  composerTextExact("A".repeat(1500), "A".repeat(1500)) is called.
+        // Then:  returns TRUE. This is the fast-path happy-path condition for long drafts.
+        //        FAILS ON HEAD: composerTextExact does not exist (Step 4 pending).
+        try {
+          const mod = await import("../../src/linkedin/composerReadiness.js") as Record<string, unknown>;
+          const exactFn = mod["composerTextExact"] as
+            | ((intended: string, observed: string) => boolean)
+            | undefined;
+          if (typeof exactFn !== "function") {
+            assert.fail(
+              "TODO P10: T-Exact.4 — composerTextExact not yet exported from composerReadiness.ts " +
+              "(Step 4 pending). After Step 4: composerTextExact('A'.repeat(1500), 'A'.repeat(1500)) must return true.",
+            );
+          }
+          const LONG = "A".repeat(1500);
+          const result = exactFn(LONG, LONG);
+          assert.equal(result, true,
+            "T-Exact.4: composerTextExact('A'.repeat(1500), 'A'.repeat(1500)) must return true " +
+            "(full match on long draft)");
+        } catch (err) {
+          if (err instanceof assert.AssertionError) throw err;
+          assert.fail(`T-Exact.4: dynamic import failed (Step 4 pending). ${String(err)}`);
+        }
+      },
+    );
+
+    // T-Exact.5 — shared normalization regression: composerTextMatches semantics unchanged after normForCompare refactor
+    it(
+      "T-Exact.5: composerTextMatches still passes the existing T-Helper.7 matrix cases after the normForCompare refactor (regression guard for the shared-normalizer restructure)",
+      { timeout: 5000 },
+      async () => {
+        // Given: the normForCompare refactor (plan §3a-bis §6d) extracts the normalization from
+        //        composerTextMatches into a private helper shared with composerTextExact. This
+        //        restructure MUST NOT change composerTextMatches semantics (CLAUDE.md §1 Surgical Changes:
+        //        "touch only what F-1 demands; do NOT silently tighten the established post-insert
+        //        readback semantics"). This test re-asserts the T-Helper.7 matrix on the statically-
+        //        imported composerTextMatches (imported at file top) to confirm byte-identical behavior.
+        //        If composerTextMatches semantics changed, these assertions would fail.
+        // When:  each composerTextMatches call from T-Helper.7 is re-run.
+        // Then:  all assertions pass (byte-identical to T-Helper.7 results on HEAD).
+        //        NOTE: this test is already-asserting (composerTextMatches is statically imported and
+        //        passes on HEAD). It catches regressions introduced by the normForCompare refactor at Step 4.
+        const LONG_2000_CHAR = "a".repeat(2000);
+
+        // Missing space is still a mismatch
+        assert.equal(composerTextMatches("ab", "a b"), false,
+          "T-Exact.5 regression: composerTextMatches('ab', 'a b') must still be false after refactor");
+        // Run of spaces still collapses
+        assert.equal(composerTextMatches("a b", "a  b"), true,
+          "T-Exact.5 regression: composerTextMatches('a b', 'a  b') must still be true");
+        // Internal newlines still preserved
+        assert.equal(composerTextMatches("hello\nworld", "hello\nworld"), true,
+          "T-Exact.5 regression: composerTextMatches('hello\\nworld', 'hello\\nworld') must still be true");
+        // Newline vs space still a mismatch
+        assert.equal(composerTextMatches("hello\nworld", "hello world"), false,
+          "T-Exact.5 regression: composerTextMatches('hello\\nworld', 'hello world') must still be false");
+        // Trailing newline still stripped
+        assert.equal(composerTextMatches("hello", "hello\n"), true,
+          "T-Exact.5 regression: composerTextMatches('hello', 'hello\\n') must still be true");
+        // Leading/trailing whitespace still trimmed
+        assert.equal(composerTextMatches("  hello  ", "hello"), true,
+          "T-Exact.5 regression: composerTextMatches('  hello  ', 'hello') must still be true");
+        // >1000-char prefix rule still intact (the tolerance branch MUST NOT have been removed)
+        assert.equal(
+          composerTextMatches(LONG_2000_CHAR, LONG_2000_CHAR.slice(0, 200) + "rest-differs"),
+          true,
+          "T-Exact.5 regression: composerTextMatches >1000-char prefix rule must still hold after refactor",
+        );
+      },
+    );
+
+  },
+);

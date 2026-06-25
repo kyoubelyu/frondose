@@ -111,16 +111,21 @@ export async function focusFeedComposerEditorLive(client: CdpClient): Promise<bo
   }
 }
 
+const normForCompare = (value: string): string =>
+  value
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n+$/, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+
+export function composerTextExact(intended: string, observed: string): boolean {
+  return normForCompare(intended) === normForCompare(observed);
+}
+
 export function composerTextMatches(intended: string, observed: string): boolean {
-  const norm = (value: string): string =>
-    value
-      .normalize("NFC")
-      .replace(/\r\n?/g, "\n")
-      .replace(/\n+$/, "")
-      .replace(/[ \t]+/g, " ")
-      .trim();
-  const normalizedIntended = norm(intended);
-  const normalizedObserved = norm(observed);
+  const normalizedIntended = normForCompare(intended);
+  const normalizedObserved = normForCompare(observed);
   if (normalizedIntended === normalizedObserved) return true;
   if (normalizedIntended.length > 1000) return normalizedObserved.startsWith(normalizedIntended.slice(0, 200));
   return false;
@@ -566,7 +571,7 @@ export async function getFeedComposerPostButtonCenterLive(client: CdpClient): Pr
 
 export const FEED_START_A_POST_CENTER_JS = `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const START_RE = /^Start a post$/i;
+  const START_RE = /^(start|create)\\s+a\\s+post\\b/i;
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
