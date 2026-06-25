@@ -3,6 +3,7 @@ import type { CdpClient } from "../../../cdp/client.js";
 import {
   clearFeedComposerEditorLive,
   closeFeedComposerLive,
+  composerTextExact,
   composerTextMatches,
   FEED_COMPOSER_LIVE_IN_DOM_JS,
   FEED_START_A_POST_CENTER_JS,
@@ -87,57 +88,63 @@ export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<Pu
     }
 
     let probe = await probeFeedComposerLive(deps.client);
-    if (probe.present) {
-      let closed = false;
-      for (let attempt = 0; attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS; attempt++) {
-        closed = await closeFeedComposerLive(deps.client);
-        if (closed) break;
-        if (attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS - 1) await sleep(READBACK_RETRY_MS);
-      }
-      if (!closed) {
-        return finishPreDispatchFailure(deps, t0, "composer_close_failed");
-      }
-    }
-
-    let openClickEverSucceeded = false;
-    let probeEverPresent = false;
-    for (let round = 0; round < COMPOSER_OPEN_RETRY_ROUNDS; round++) {
-      const opened = await triggerStartAPostLive(deps.client);
-      if (opened) {
-        openClickEverSucceeded = true;
-        const after = await probeFeedComposerLive(deps.client);
-        if (after.present) {
-          probe = after;
-          probeEverPresent = true;
-          break;
+    const composerAlreadyValid = probe.present && composerTextExact(draft.text, probe.editorText);
+    if (!composerAlreadyValid) {
+      if (probe.present) {
+        let closed = false;
+        for (let attempt = 0; attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS; attempt++) {
+          closed = await closeFeedComposerLive(deps.client);
+          if (closed) break;
+          if (attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS - 1) await sleep(READBACK_RETRY_MS);
+        }
+        if (!closed) {
+          return finishPreDispatchFailure(deps, t0, "composer_close_failed");
         }
       }
-      if (round < COMPOSER_OPEN_RETRY_ROUNDS - 1) await sleep(READBACK_RETRY_MS);
-    }
-    if (!probeEverPresent) {
-      return finishPreDispatchFailure(
-        deps,
-        t0,
-        openClickEverSucceeded ? "composer_absent_after_open" : "composer_open_click_failed",
-      );
+
+      let openClickEverSucceeded = false;
+      let probeEverPresent = false;
+      for (let round = 0; round < COMPOSER_OPEN_RETRY_ROUNDS; round++) {
+        const opened = await triggerStartAPostLive(deps.client);
+        if (opened) {
+          openClickEverSucceeded = true;
+          const after = await probeFeedComposerLive(deps.client);
+          if (after.present) {
+            probe = after;
+            probeEverPresent = true;
+            break;
+          }
+        }
+        if (round < COMPOSER_OPEN_RETRY_ROUNDS - 1) await sleep(READBACK_RETRY_MS);
+      }
+      if (!probeEverPresent) {
+        return finishPreDispatchFailure(
+          deps,
+          t0,
+          openClickEverSucceeded ? "composer_absent_after_open" : "composer_open_click_failed",
+        );
+      }
     }
 
     const focused = await focusFeedComposerEditorLive(deps.client);
     if (!focused) return finishPreDispatchFailure(deps, t0, "focus_failed");
 
-    if (probe.editorText.trim() !== "") {
-      const cleared = await clearFeedComposerEditorLive(deps.client);
-      if (!cleared) return finishPreDispatchFailure(deps, t0, "clear_failed");
+    if (!composerAlreadyValid) {
+      if (probe.editorText.trim() !== "") {
+        const cleared = await clearFeedComposerEditorLive(deps.client);
+        if (!cleared) return finishPreDispatchFailure(deps, t0, "clear_failed");
+      }
+
+      await insertTextHumanLike(deps.client, draft.text);
     }
 
-    await insertTextHumanLike(deps.client, draft.text);
-
+    const compare = composerAlreadyValid ? composerTextExact : composerTextMatches;
     let after = await probeFeedComposerLive(deps.client);
-    let matched = after.present && composerTextMatches(draft.text, after.editorText);
+    let matched = after.present && compare(draft.text, after.editorText);
     if (!matched) {
       await sleep(READBACK_RETRY_MS);
       after = await probeFeedComposerLive(deps.client);
-      matched = after.present && composerTextMatches(draft.text, after.editorText);
+      matched = after.present && compare(draft.text, after.editorText);
     }
     if (!matched) return finishPreDispatchFailure(deps, t0, "readback_mismatch");
 
@@ -162,7 +169,7 @@ export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<Pu
     }
     if (!gone) return finishPostDispatchAmbiguous(deps, t0, "composer_still_open");
 
-    return finishSuccess(deps, t0);
+    return finishSuccess(deps, t0, composerAlreadyValid);
   } catch (e) {
     if (dispatchAttempted) {
       return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", `post-dispatch-throw: ${errorMessage(e)}`);
@@ -239,7 +246,7 @@ function safeParseJsonOrNull(value: string): unknown {
   }
 }
 
-function finishSuccess(deps: PublishPostDeps, t0: number): PublishResult {
+function finishSuccess(deps: PublishPostDeps, t0: number, fastPath = false): PublishResult {
   let draftMarkedSent = false;
   let accountingError: string | undefined;
 
@@ -255,7 +262,7 @@ function finishSuccess(deps: PublishPostDeps, t0: number): PublishResult {
       ts: new Date().toISOString(),
       toolCallId: `runtime_${deps.draftId}_${t0}`,
       toolName: TOOL_NAME,
-      input: auditInput(deps),
+      input: { ...auditInput(deps), fastPath },
       output: {
         published: true,
         fallbackAllowed: false,
