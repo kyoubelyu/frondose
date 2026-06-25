@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "frondose"
-version = "0.5.0-alpha.68"
+version = "0.5.0-alpha.69"
 dependencies = [
  "bytes",
  "dirs",
