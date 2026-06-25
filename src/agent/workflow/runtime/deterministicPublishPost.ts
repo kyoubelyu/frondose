@@ -5,6 +5,7 @@ import {
   closeFeedComposerLive,
   composerTextMatches,
   FEED_COMPOSER_LIVE_IN_DOM_JS,
+  FEED_START_A_POST_CENTER_JS,
   focusFeedComposerEditorLive,
   getFeedComposerPostButtonCenterLive,
   isFeedComposerPostButtonEnabled,
@@ -21,6 +22,8 @@ import { emitCommitWarning } from "./commitWarning.js";
 
 const SOURCE = "approval_resume";
 const TOOL_NAME = "post_publish_runtime";
+const COMPOSER_CLOSE_RETRY_ATTEMPTS = 3;
+const COMPOSER_OPEN_RETRY_ROUNDS = 4;
 
 export interface PublishPostDeps {
   session: LinkedinSession;
@@ -39,6 +42,10 @@ export type PublishFailReason =
   | "approval_required"
   | "hardware_input_not_supported"
   | "composer_unavailable"
+  | "composer_close_failed"
+  | "composer_open_click_failed"
+  | "composer_absent_after_open"
+  | "surface_not_composer_capable"
   | "focus_failed"
   | "clear_failed"
   | "readback_mismatch"
@@ -74,16 +81,46 @@ export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<Pu
     if (!draft) return finishPreDispatchFailure(deps, t0, "draft_missing");
     if (draft.status === "sent") return finishPreDispatchFailure(deps, t0, "draft_already_sent");
 
-    let probe = await probeFeedComposerLive(deps.client);
-    if (probe.present) {
-      const closed = await closeFeedComposerLive(deps.client);
-      if (!closed) return finishPreDispatchFailure(deps, t0, "composer_unavailable");
+    const surfaceCapable = await surfaceLooksComposerCapable(deps.client);
+    if (!surfaceCapable) {
+      return finishPreDispatchFailure(deps, t0, "surface_not_composer_capable");
     }
 
-    const opened = await triggerStartAPostLive(deps.client);
-    if (!opened) return finishPreDispatchFailure(deps, t0, "composer_unavailable");
-    probe = await probeFeedComposerLive(deps.client);
-    if (!probe.present) return finishPreDispatchFailure(deps, t0, "composer_unavailable");
+    let probe = await probeFeedComposerLive(deps.client);
+    if (probe.present) {
+      let closed = false;
+      for (let attempt = 0; attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS; attempt++) {
+        closed = await closeFeedComposerLive(deps.client);
+        if (closed) break;
+        if (attempt < COMPOSER_CLOSE_RETRY_ATTEMPTS - 1) await sleep(READBACK_RETRY_MS);
+      }
+      if (!closed) {
+        return finishPreDispatchFailure(deps, t0, "composer_close_failed");
+      }
+    }
+
+    let openClickEverSucceeded = false;
+    let probeEverPresent = false;
+    for (let round = 0; round < COMPOSER_OPEN_RETRY_ROUNDS; round++) {
+      const opened = await triggerStartAPostLive(deps.client);
+      if (opened) {
+        openClickEverSucceeded = true;
+        const after = await probeFeedComposerLive(deps.client);
+        if (after.present) {
+          probe = after;
+          probeEverPresent = true;
+          break;
+        }
+      }
+      if (round < COMPOSER_OPEN_RETRY_ROUNDS - 1) await sleep(READBACK_RETRY_MS);
+    }
+    if (!probeEverPresent) {
+      return finishPreDispatchFailure(
+        deps,
+        t0,
+        openClickEverSucceeded ? "composer_absent_after_open" : "composer_open_click_failed",
+      );
+    }
 
     const focused = await focusFeedComposerEditorLive(deps.client);
     if (!focused) return finishPreDispatchFailure(deps, t0, "focus_failed");
@@ -174,6 +211,32 @@ async function probeFeedComposerLive(client: CdpClient): Promise<{ present: bool
   return parsed.present === true
     ? { present: true, editorText: typeof parsed.editorText === "string" ? parsed.editorText : "" }
     : { present: false, editorText: "" };
+}
+
+async function surfaceLooksComposerCapable(client: CdpClient): Promise<boolean> {
+  try {
+    const raw = await client.evaluate<unknown>(FEED_START_A_POST_CENTER_JS);
+    if (raw !== null) {
+      const parsed = typeof raw === "string" ? safeParseJsonOrNull(raw) : raw;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return true;
+    }
+  } catch {
+    // fall through to the existing composer probe
+  }
+  try {
+    const probe = await probeFeedComposerLive(client);
+    return probe.present;
+  } catch {
+    return false;
+  }
+}
+
+function safeParseJsonOrNull(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 function finishSuccess(deps: PublishPostDeps, t0: number): PublishResult {
