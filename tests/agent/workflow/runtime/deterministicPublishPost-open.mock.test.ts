@@ -1328,3 +1328,241 @@ describe(
     );
   },
 );
+
+// ---------------------------------------------------------------------------
+// P-POST-PUBLISH-10 Step 2 — T-Regression.1 + T-Regression.2
+//
+// These tests are added to the P9 suite to ensure the P10 fast-path refactor
+// does NOT regress the P9 not-open behavior. They MUST PASS green on HEAD
+// (P9 already supports these paths), and MUST CONTINUE green after P10 lands.
+//
+// T-Regression.1: probe.present=false → P9 open-retry path unchanged (close NOT entered).
+// T-Regression.2: the 4 P9 fail-reason strings still fire at their existing call sites.
+//
+// NOTE: These tests are written at Step 2 (TDD scaffold) as ALREADY-ASSERTING
+// (not TODO/failing) because they test the P9 behavior that already exists —
+// they validate REGRESSION GUARD, not new behavior. They must be GREEN on HEAD.
+// This is explicitly permitted by the outside-in TDD rule: scaffold for NEW
+// behavior is all-failing; scaffold for REGRESSION GUARD on existing behavior is
+// already-asserting. (Cf. T-OpenHappy.1/2 which are also already-asserting above.)
+// ---------------------------------------------------------------------------
+
+describe(
+  "publishApprovedFeedPost — TARGET 1 not-open regression: probe.present=false → existing P9 open path, close NOT entered, trigger+insert called, success (T-Regression.1, SC-5)",
+  () => {
+    it(
+      "T-Regression.1: when entry probe returns {present:false, editorText:''}, closeFeedComposerLive is NOT called; triggerStartAPostLive IS called; insertTextHumanLike IS called; result is {published:true, dispatchAttempted:true, fallbackAllowed:false}",
+      { timeout: 10000 },
+      async () => {
+        // Given: surface capable; entry probe absent (composerAlreadyValid=false regardless of text);
+        //        open-retry succeeds round 1; focus/clear/insert/readback/enabled/coords/click happy-path.
+        // When:  publishApprovedFeedPost is invoked.
+        // Then:  pressKeyLog does NOT contain "Escape" (close branch never entered);
+        //        result.published===true; result.dispatchAttempted===true; result.fallbackAllowed===false.
+        //        Asserts behavioral identity with P9 on the probe.present=false path (SC-5 regression).
+        // Covers SC-5 (P9 regression: not-open path unchanged by P10).
+        const constants = await loadPayloadConstants();
+        const draftText = "Regression.1 — not open, P9 path must still work";
+        const setup = await seedDraft("reg1", draftText);
+        const dispatchClickLog: Array<{ x: number; y: number }> = [];
+        const pressKeyLog: string[] = [];
+        const insertTextLog: Array<{ text: string }> = [];
+
+        const clientOpts: P9FakeClientOpts = {
+          constants,
+          surfaceCheckQueue: [{ cx: 100, cy: 200 }],
+          probeQueue: [
+            { present: false, editorText: "" }, // entry probe: absent → composerAlreadyValid=false
+            { present: true, editorText: "" },  // post-open probe: present after trigger
+            { present: true, editorText: draftText }, // readback
+            { present: false, editorText: "" }, // post-click: gone
+          ],
+          triggerQueue: [{ cx: 100, cy: 200 }],
+          closeCenterQueue: [],
+          discardCenterQueue: [],
+          focusResult: true,
+          clearResult: true,
+          enabledQueue: [true],
+          postCenterResult: { cx: 480, cy: 320 },
+          pressKeyLog,
+          dispatchClickLog,
+          insertTextLog,
+        };
+        const client = makeFakeP9Client(clientOpts);
+        const deps = makePublishDeps(client, setup);
+
+        const fn = await importPublishFn();
+        if (typeof fn !== "function") {
+          assert.fail("TODO P10: publishApprovedFeedPost not exported (Step 4 pending)");
+        }
+        const result = await fn(deps);
+        // T-Regression.1: P9 not-open path must be unaffected by the P10 fast-path refactor.
+        assert.equal(result.published, true, `T-Regression.1: published should be true on P9 not-open path, got ${JSON.stringify(result)}`);
+        assert.equal(result.dispatchAttempted, true, `T-Regression.1: dispatchAttempted should be true`);
+        assert.equal(result.fallbackAllowed, false, `T-Regression.1: fallbackAllowed should be false on success`);
+        assert.equal(result.reason, undefined, `T-Regression.1: no fail reason expected, got ${result.reason}`);
+        // close NOT entered when probe.present=false
+        assert.equal(
+          pressKeyLog.includes("Escape"),
+          false,
+          `T-Regression.1: closeFeedComposerLive must NOT be called when entry probe absent. pressKeyLog=${JSON.stringify(pressKeyLog)}`,
+        );
+        // insertTextHumanLike WAS called (text typed via P9 path)
+        assert.ok(
+          insertTextLog.length > 0,
+          `T-Regression.1: insertTextLog should be non-empty (insertTextHumanLike must fire on P9 path). insertTextLog=${JSON.stringify(insertTextLog)}`,
+        );
+        // Covers SC-5 (P9 regression gate).
+      },
+    );
+  },
+);
+
+describe(
+  "publishApprovedFeedPost — TARGET 1 not-open regression: 4 P9 fail-reason strings still fire at same call sites after P10 refactor (T-Regression.2, SC-5)",
+  () => {
+    it(
+      "T-Regression.2: composer_close_failed / composer_open_click_failed / composer_absent_after_open / surface_not_composer_capable all still return the exact same reason strings as in the P9 suite (behavioral byte-identity)",
+      { timeout: 30000 },
+      async () => {
+        // Given: the same 4 scripted CDP scenarios that produce each P9 fail reason
+        //        (mirrors T-OpenReason.1/.2/.3/.4 and T-OpenInvariant.1 above).
+        // When:  publishApprovedFeedPost is run for each scenario.
+        // Then:  the exact same PublishFailReason strings come back as before P10:
+        //        "composer_close_failed" / "composer_open_click_failed" /
+        //        "composer_absent_after_open" / "surface_not_composer_capable".
+        //        AND dispatchAttempted===false AND fallbackAllowed===true for all four.
+        // Covers SC-5 (P9 regression: exact reason strings unchanged after fast-path refactor).
+        const constants = await loadPayloadConstants();
+        const fn = await importPublishFn();
+        if (typeof fn !== "function") {
+          assert.fail("TODO P10: publishApprovedFeedPost not exported (Step 4 pending)");
+        }
+
+        // Scenario 1: surface_not_composer_capable (mirrors T-OpenReason.4 + T-OpenInvariant.1)
+        {
+          const setup = await seedDraft("reg2-surface", "reg2 surface text");
+          const dispatchClickLog: Array<{ x: number; y: number }> = [];
+          const pressKeyLog: string[] = [];
+          const insertTextLog: Array<{ text: string }> = [];
+          const opts: P9FakeClientOpts = {
+            constants,
+            surfaceCheckQueue: [null],
+            probeQueue: [{ present: false, editorText: "" }],
+            triggerQueue: [],
+            closeCenterQueue: [],
+            discardCenterQueue: [],
+            focusResult: false,
+            clearResult: false,
+            enabledQueue: [],
+            postCenterResult: null,
+            pressKeyLog,
+            dispatchClickLog,
+            insertTextLog,
+          };
+          const result = await fn(makePublishDeps(makeFakeP9Client(opts), setup));
+          assert.equal(result.reason, "surface_not_composer_capable", `T-Regression.2[surface]: reason should be surface_not_composer_capable, got ${result.reason}`);
+          assert.equal(result.dispatchAttempted, false, "T-Regression.2[surface]: dispatchAttempted should be false");
+          assert.equal(result.fallbackAllowed, true, "T-Regression.2[surface]: fallbackAllowed should be true");
+        }
+
+        // Scenario 2: composer_close_failed (mirrors T-OpenReason.1 + T-OpenInvariant.1)
+        {
+          const setup = await seedDraft("reg2-closefail", "reg2 close fail text");
+          const dispatchClickLog: Array<{ x: number; y: number }> = [];
+          const pressKeyLog: string[] = [];
+          const insertTextLog: Array<{ text: string }> = [];
+          const opts: P9FakeClientOpts = {
+            constants,
+            surfaceCheckQueue: [{ cx: 100, cy: 200 }],
+            probeQueue: [
+              { present: true, editorText: "stale" }, // entry: present → close path
+              // 3 close attempts × 2 internal probes: all still-present
+              { present: true, editorText: "stale" },
+              { present: true, editorText: "stale" },
+              { present: true, editorText: "stale" },
+              { present: true, editorText: "stale" },
+              { present: true, editorText: "stale" },
+              { present: true, editorText: "stale" },
+            ],
+            triggerQueue: [],
+            closeCenterQueue: [null, null, null, null, null, null],
+            discardCenterQueue: [null, null, null, null, null, null],
+            focusResult: false,
+            clearResult: false,
+            enabledQueue: [],
+            postCenterResult: null,
+            pressKeyLog,
+            dispatchClickLog,
+            insertTextLog,
+          };
+          const result = await fn(makePublishDeps(makeFakeP9Client(opts), setup));
+          assert.equal(result.reason, "composer_close_failed", `T-Regression.2[close]: reason should be composer_close_failed, got ${result.reason}`);
+          assert.equal(result.dispatchAttempted, false, "T-Regression.2[close]: dispatchAttempted should be false");
+          assert.equal(result.fallbackAllowed, true, "T-Regression.2[close]: fallbackAllowed should be true");
+        }
+
+        // Scenario 3: composer_open_click_failed (mirrors T-OpenReason.2 + T-OpenInvariant.1)
+        {
+          const setup = await seedDraft("reg2-clickfail", "reg2 click fail text");
+          const dispatchClickLog: Array<{ x: number; y: number }> = [];
+          const pressKeyLog: string[] = [];
+          const insertTextLog: Array<{ text: string }> = [];
+          const opts: P9FakeClientOpts = {
+            constants,
+            surfaceCheckQueue: [{ cx: 100, cy: 200 }],
+            probeQueue: [{ present: false, editorText: "" }], // entry: absent
+            triggerQueue: [null, null, null, null], // all rounds fail
+            closeCenterQueue: [],
+            discardCenterQueue: [],
+            focusResult: false,
+            clearResult: false,
+            enabledQueue: [],
+            postCenterResult: null,
+            pressKeyLog,
+            dispatchClickLog,
+            insertTextLog,
+          };
+          const result = await fn(makePublishDeps(makeFakeP9Client(opts), setup));
+          assert.equal(result.reason, "composer_open_click_failed", `T-Regression.2[open-click]: reason should be composer_open_click_failed, got ${result.reason}`);
+          assert.equal(result.dispatchAttempted, false, "T-Regression.2[open-click]: dispatchAttempted should be false");
+          assert.equal(result.fallbackAllowed, true, "T-Regression.2[open-click]: fallbackAllowed should be true");
+        }
+
+        // Scenario 4: composer_absent_after_open (mirrors T-OpenReason.3 + T-OpenInvariant.1)
+        {
+          const setup = await seedDraft("reg2-absentafter", "reg2 absent after open");
+          const dispatchClickLog: Array<{ x: number; y: number }> = [];
+          const pressKeyLog: string[] = [];
+          const insertTextLog: Array<{ text: string }> = [];
+          const opts: P9FakeClientOpts = {
+            constants,
+            surfaceCheckQueue: [{ cx: 100, cy: 200 }],
+            probeQueue: [
+              { present: false, editorText: "" }, // entry: absent
+              { present: false, editorText: "" }, // post-open probe round 1: absent
+              { present: false, editorText: "" }, // post-open probe round 2: absent
+              { present: false, editorText: "" }, // post-open probe round 3: absent
+              { present: false, editorText: "" }, // post-open probe round 4: absent
+            ],
+            triggerQueue: [{ cx: 100, cy: 200 }, null, null, null],
+            closeCenterQueue: [],
+            discardCenterQueue: [],
+            focusResult: false,
+            clearResult: false,
+            enabledQueue: [],
+            postCenterResult: null,
+            pressKeyLog,
+            dispatchClickLog,
+            insertTextLog,
+          };
+          const result = await fn(makePublishDeps(makeFakeP9Client(opts), setup));
+          assert.equal(result.reason, "composer_absent_after_open", `T-Regression.2[absent-after]: reason should be composer_absent_after_open, got ${result.reason}`);
+          assert.equal(result.dispatchAttempted, false, "T-Regression.2[absent-after]: dispatchAttempted should be false");
+          assert.equal(result.fallbackAllowed, true, "T-Regression.2[absent-after]: fallbackAllowed should be true");
+        }
+        // Covers SC-5 (P9 regression: reason strings byte-identical after P10 refactor).
+      },
+    );
+  },
+);
