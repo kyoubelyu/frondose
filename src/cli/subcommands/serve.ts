@@ -33,6 +33,7 @@ import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { clearWatchdogKills, DATA_DIR_NAME, getHomeBase, readWatchdogKillTimestamps } from "../../persistence/paths.js";
+import { findPendingPostDraftId } from "../../persistence/sales/drafts.js";
 import {
   type AutoRunRow,
   countOutboundSince,
@@ -52,11 +53,11 @@ import { PassiveRateLimiter, passiveRateLimiterOptsFromEnv } from "./passiveRate
 import type { ServeDeps, ServeEmitter, ServeState, SseFrame } from "./serve/context.js";
 import { createCronDriver } from "./serve/cron.js";
 import { createOverlayDispatcher } from "./serve/dispatch.js";
-import { reapKillCappedRun, reapOrphanIfIdle } from "./serve/turn/reaper.js";
 import { removeFile } from "./serve/http.js";
 import { createPassiveHandlers } from "./serve/passive.js";
 import { createRequestHandler, ensureOverlaySubscription } from "./serve/routes.js";
 import { makeTakeoverVisualDriver } from "./serve/takeover.js";
+import { reapKillCappedRun, reapOrphanIfIdle } from "./serve/turn/reaper.js";
 import { createTurnRunner } from "./serve/turn.js";
 import { pushWorkflowToOverlay } from "./serve/workflowOverlay.js";
 
@@ -224,6 +225,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       pushWorkflowToOverlay(state, session, workflow, frame);
     },
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
+    recoverPostDraftId: () => findPendingPostDraftId(getSalesDb(salesDbPath)),
   });
   // P-AUTO-1+2 (B-1+B-2 fix): mode-aware outbound authorization, fail-closed.
   session.canClickOutbound = (_label, _surface) => {

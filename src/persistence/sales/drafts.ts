@@ -60,3 +60,15 @@ export function listDraftsByLead(db: DB, leadId: string): DraftRow[] {
 export function markDraftSent(db: DB, id: string): void {
   db.prepare("UPDATE message_drafts SET status = 'sent' WHERE id = ?").run(id);
 }
+
+export type PostDraftRecovery = { id: string } | { ambiguous: true } | null;
+
+const PENDING_POST_DRAFT_SQL =
+  "SELECT id FROM message_drafts WHERE kind = 'post' AND status = 'draft' AND lead_id IS NULL ORDER BY created_at DESC LIMIT 2";
+
+export function findPendingPostDraftId(db: DB): PostDraftRecovery {
+  const rows = db.prepare(PENDING_POST_DRAFT_SQL).all() as Array<{ id: string }>;
+  if (rows.length >= 2) return { ambiguous: true };
+  const row = rows[0];
+  return row ? { id: row.id } : null;
+}
