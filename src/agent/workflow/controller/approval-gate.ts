@@ -1,4 +1,5 @@
 import type { WorkflowControllerDeps } from "../controller.js";
+import { emitCommitWarning } from "../runtime/commitWarning.js";
 import type { Workflow, WorkflowState } from "../types.js";
 import type { WorkflowReconcileCtx } from "./reconcile.js";
 
@@ -91,11 +92,14 @@ export function approve(
     `(3) ALWAYS \`type\` the approved post body into \`composerInput\` (label "Text editor for creating content") again — re-type the EXACT saved draft text verbatim, do NOT paraphrase, do NOT rewrite, do NOT shorten; the operator approved that exact text. Do this regardless of whether the composer appears to still contain text from your earlier type. (4) Confirm via the \`type\` envelope's read-back (\`composerTextMatches:true\`) that the body landed; if it did not, repeat steps 2-3 once. ` +
     `(5) \`click\` the composer's "Post" button (label exactly "Post", normally \`@pc2\`) BY ITS \`ref\` directly (not by label, to avoid ambiguous-target). The Post button must be enabled (not aria-disabled) before you click; the successful re-type in step 3 is what enables it. Immediately after the click, call \`mark_message_sent(draftId)\` to close the post draft. Do NOT update any lead stage - posts are self-anchored and have no leadId.`;
   const outboundExtra = isMessageStep ? messageExtra : isPostStep ? postExtra : isOutboundStep ? connectExtra : "";
+  const recovered = isPostStep && !step.draftId ? deps.recoverPostDraftId?.() : null;
+  if (recovered && "ambiguous" in recovered)
+    emitCommitWarning(deps, { workflowId: wf.id, stepId: step.id, label: "PostDraftAmbiguous", severity: "low" });
   return {
     status: 200,
     response: { ok: true },
     isPostPublish: isPostStep,
-    draftId: isPostStep ? step.draftId : undefined,
+    draftId: isPostStep ? (step.draftId ?? (recovered && "id" in recovered ? recovered.id : undefined)) : undefined,
     stepId: step.id,
     resumePrompt:
       `WORKFLOW RESUME (not a new task). ` +
