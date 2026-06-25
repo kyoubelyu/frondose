@@ -1,3 +1,4 @@
+import type { PostDraftRecovery } from "../../persistence/sales/drafts.js";
 import { hasApprovedOutboundStep as hasApprovedOutboundStepImpl } from "./controller/approval-gate.js";
 import type { WorkflowEndpointResult } from "./controller/endpoints.js";
 import { handleEndpoint as handleEndpointImpl } from "./controller/endpoints.js";
@@ -9,6 +10,7 @@ import type { WorkflowAuditEntry, WorkflowSseFrame, WorkflowState } from "./type
 export interface WorkflowControllerDeps {
   emitFrame: (frame: WorkflowSseFrame) => void;
   writeWorkflowAudit: (event: WorkflowAuditEntry["event"]) => void;
+  recoverPostDraftId?: () => PostDraftRecovery;
 }
 
 export interface WorkflowController {
