@@ -449,25 +449,35 @@ describe("publishApprovedFeedPost — happy path: returns {published:true,fallba
 
 describe("publishApprovedFeedPost — composer absent: triggerStartAPostLive fails → {published:false, fallbackAllowed:true, dispatchAttempted:false} (G-P7.sequence)", () => {
   it(
-    "T-Seq.ComposerAbsentFailure: when first probe returns present:false and triggerStartAPostLive returns false, returns {published:false, reason:'composer_unavailable', fallbackAllowed:true, dispatchAttempted:false}",
+    "T-Seq.ComposerAbsentFailure: when surface check passes but triggerStartAPostLive returns false all open-retry rounds, returns {published:false, reason:'composer_open_click_failed', fallbackAllowed:true, dispatchAttempted:false}",
     { timeout: 10000 },
     async () => {
-      // Given: first probe returns present:false; triggerStartAPostLive returns false.
+      // Given: surface-check TRIGGER_JS returns raw true (bool) → secondary probe returns present:true → surface capable;
+      //        entry probe returns present:false (composer absent, no close needed);
+      //        triggerStartAPostLive returns false all COMPOSER_OPEN_RETRY_ROUNDS rounds
+      //        (TRIGGER_JS returns raw false; parseCenterPayload(false)→null → returns false).
       // When:  publishApprovedFeedPost runs with a seeded draft row.
-      // Then:  returns {published:false, reason:'composer_unavailable', fallbackAllowed:true, dispatchAttempted:false};
-      //        triggerStartAPostLive called exactly once; no mouse event fired (PRE-dispatch).
+      // Then:  returns {published:false, reason:'composer_open_click_failed', fallbackAllowed:true, dispatchAttempted:false};
+      //        no mouse event fired (PRE-dispatch).
+      //
+      // P9 contract update (intended change): old reason was 'composer_unavailable'; P9 replaces with
+      // finer reason 'composer_open_click_failed' (open-click exhaustion path). Intent is preserved:
+      // "composer cannot be opened → pre-dispatch failure with fallback allowed".
       const constants = await loadPayloadConstants();
       const setup = await seedDraft("absent-fail", "Composer absent fail");
       const mouseLog: Array<{ type: string; x?: number; y?: number }> = [];
       const insertLog: Array<{ text: string }> = [];
       const cdpOpts: FakeCdpEvalOpts = {
         constants,
-        probeResults: [{ present: false, editorText: "" }],
+        probeResults: [
+          { present: true,  editorText: "" }, // [0] surface-check secondary probe: present → capable
+          { present: false, editorText: "" }, // [1] entry probe: absent (no close)
+        ],
         focusResult: false,
         clearResult: false,
         enabledResults: [],
         postCenterResult: null,
-        triggerResult: false,
+        triggerResult: false,                 // all open rounds: TRIGGER_JS → false → parseCenterPayload → null → false
         throwOnMousePress: false,
         mouseEventLog: mouseLog,
         insertTextLog: insertLog,
@@ -485,9 +495,9 @@ describe("publishApprovedFeedPost — composer absent: triggerStartAPostLive fai
           assert.fail("TODO P7: publishApprovedFeedPost not yet exported (Step 4 pending).");
         }
         const result = await fn(deps);
-        // T-Seq.ComposerAbsentFailure assertions
+        // T-Seq.ComposerAbsentFailure assertions (updated for P9: open-retry-exhaustion case)
         assert.equal(result.published, false, `T-Seq.ComposerAbsentFailure: result.published should be false`);
-        assert.equal(result.reason, "composer_unavailable", `T-Seq.ComposerAbsentFailure: reason should be 'composer_unavailable', got '${result.reason}'`);
+        assert.equal(result.reason, "composer_open_click_failed", `T-Seq.ComposerAbsentFailure: reason should be 'composer_open_click_failed' (P9 finer reason), got '${result.reason}'`);
         assert.equal(result.fallbackAllowed, true, `T-Seq.ComposerAbsentFailure: fallbackAllowed should be true (pre-dispatch)`);
         assert.equal(result.dispatchAttempted, false, `T-Seq.ComposerAbsentFailure: dispatchAttempted should be false`);
         assert.equal(mouseLog.length, 0, `T-Seq.ComposerAbsentFailure: no mouse events should fire for a pre-dispatch failure, got ${mouseLog.length}`);
@@ -508,12 +518,19 @@ describe("publishApprovedFeedPost — composer reopen success: absent→trigger�
     "T-Seq.ComposerReopenSuccess: when composer is initially absent, triggerStartAPostLive returns true, second probe present:true, routine proceeds through focus/type/click and returns {published:true, fallbackAllowed:false, dispatchAttempted:true}",
     { timeout: 10000 },
     async () => {
-      // Given: first probe returns {present:false}; triggerStartAPostLive returns true;
-      //        second probe returns {present:true, editorText:""}; rest of sequence is happy-path.
+      // Given: surface-check TRIGGER_JS returns raw true (bool) → falls to secondary probe (present:true → capable);
+      //        entry probe returns {present:false}; triggerStartAPostLive returns true (raw bool shortcut);
+      //        post-open probe present:true; rest of sequence is happy-path.
       // When:  publishApprovedFeedPost runs with a seeded draft row.
-      // Then:  triggerStartAPostLive was invoked exactly once before focus;
-      //        focus/type/readback/enabled/coords/click/verify all run in order;
-      //        returns {published:true, fallbackAllowed:false, dispatchAttempted:true}.
+      // Then:  returns {published:true, fallbackAllowed:false, dispatchAttempted:true}.
+      //
+      // P9 contract update (intended change): FEED_START_A_POST_CENTER_JS now returns
+      // JSON.stringify({cx,cy}) when capable, JSON.stringify(null) when not.
+      // This mock uses triggerResult:true which returns the raw boolean true; composerReadiness.ts:629
+      // handles `if (raw === true) return true` for back-compat.
+      // surfaceLooksComposerCapable sees raw===true (non-null, non-object) → falls to secondary
+      // probeFeedComposerLive. probeResults[0] ({present:true}) makes surface check return capable.
+      // All subsequent flow is unchanged.
       const constants = await loadPayloadConstants();
       const draftText = "Reopen success!";
       const setup = await seedDraft("reopen-success", draftText);
@@ -522,16 +539,17 @@ describe("publishApprovedFeedPost — composer reopen success: absent→trigger�
       const cdpOpts: FakeCdpEvalOpts = {
         constants,
         probeResults: [
-          { present: false, editorText: "" },        // initial probe: absent
-          { present: true,  editorText: "" },        // post-trigger re-probe: present
-          { present: true,  editorText: draftText }, // readback
-          { present: false, editorText: "" },        // post-click: gone
+          { present: true,  editorText: "" },        // [0] surface-check secondary probe: present → capable
+          { present: false, editorText: "" },        // [1] entry probe: absent (no close)
+          { present: true,  editorText: "" },        // [2] post-trigger re-probe: present
+          { present: true,  editorText: draftText }, // [3] readback
+          { present: false, editorText: "" },        // [4] post-click: gone
         ],
         focusResult: true,
         clearResult: true,
         enabledResults: [true],
         postCenterResult: { cx: 480, cy: 320 },
-        triggerResult: true,                          // trigger succeeds
+        triggerResult: true,                          // trigger succeeds (raw bool shortcut)
         throwOnMousePress: false,
         mouseEventLog: mouseLog,
         insertTextLog: insertLog,
@@ -549,7 +567,7 @@ describe("publishApprovedFeedPost — composer reopen success: absent→trigger�
           assert.fail("TODO P7: publishApprovedFeedPost not yet exported (Step 4 pending).");
         }
         const result = await fn(deps);
-        // T-Seq.ComposerReopenSuccess assertions
+        // T-Seq.ComposerReopenSuccess assertions (intent preserved: absent→trigger→reopen→publish)
         assert.equal(result.published, true, `T-Seq.ComposerReopenSuccess: result.published should be true`);
         assert.equal(result.fallbackAllowed, false, `T-Seq.ComposerReopenSuccess: fallbackAllowed should be false`);
         assert.equal(result.dispatchAttempted, true, `T-Seq.ComposerReopenSuccess: dispatchAttempted should be true`);
@@ -637,38 +655,49 @@ describe("publishApprovedFeedPost — Step-5a close+reopen: initial probe presen
 // T-Seq.ReopenAfterCloseFails (Step-5a — close failure path)
 // ---------------------------------------------------------------------------
 
-describe("publishApprovedFeedPost — Step-5a close failure: closeFeedComposerLive returns false → {published:false, reason:'composer_unavailable'} (G-P7.sequence)", () => {
+describe("publishApprovedFeedPost — Step-5a close failure: closeFeedComposerLive exhausts all retry attempts → {published:false, reason:'composer_close_failed'} (G-P7.sequence)", () => {
   it(
-    "T-Seq.ReopenAfterCloseFails: when initial probe is present and closeFeedComposerLive fails (internal probe still present after Escape), returns {published:false, reason:'composer_unavailable', fallbackAllowed:true, dispatchAttempted:false}",
+    "T-Seq.ReopenAfterCloseFails: when initial probe is present and closeFeedComposerLive exhausts all COMPOSER_CLOSE_RETRY_ATTEMPTS (internal probe still-present every attempt), returns {published:false, reason:'composer_close_failed', fallbackAllowed:true, dispatchAttempted:false}",
     { timeout: 10000 },
     async () => {
-      // Given: initial probe returns present:true; closeFeedComposerLive internal probe
-      //        returns still-present (close failed — Escape+close button didn't work);
-      //        closeFeedComposerLive returns false → composer_unavailable (fallback allowed).
+      // Given: surface-check TRIGGER_JS returns raw true → secondary probe present:true → surface capable;
+      //        entry probe present:true (stale composer) → triggers close-retry path;
+      //        closeFeedComposerLive called COMPOSER_CLOSE_RETRY_ATTEMPTS (3) times,
+      //        each attempt: internal probe 1 → still-present; CLOSE_CENTER_JS → null; internal probe 2 → still-present → returns false;
+      //        all 3 attempts exhausted → composer_close_failed.
       // When:  publishApprovedFeedPost runs with a seeded draft row.
-      // Then:  returns {published:false, reason:'composer_unavailable',
+      // Then:  returns {published:false, reason:'composer_close_failed',
       //        fallbackAllowed:true, dispatchAttempted:false};
       //        no mouse event fired (PRE-dispatch).
       //
-      // Implementation note: closeFeedComposerLive returns false when:
-      //   (a) first internal isFeedComposerLiveInDOM probe returns still-present AND
-      //   (b) FEED_COMPOSER_CLOSE_CENTER_JS returns null (no close button found) AND
-      //   (c) second isFeedComposerLiveInDOM probe returns still-present.
-      // We model this with 3 probe results: present (initial) + present (close probe 1)
-      // + present (close probe 2).
+      // P9 contract update (intended change): old reason was 'composer_unavailable'; P9 replaces with
+      // finer reason 'composer_close_failed' (close-retry exhaustion path). Intent is preserved:
+      // "stale composer cannot be closed → pre-dispatch failure with fallback allowed".
+      // The mock requires 8 probe entries: [0] surface check + [1] entry probe +
+      // 3 attempts × 2 internal probes = 6 → [2..7] all present.
       const constants = await loadPayloadConstants();
       const setup = await seedDraft("close-fails", "Close fails test");
       const mouseLog: Array<{ type: string; x?: number; y?: number }> = [];
       const insertLog: Array<{ text: string }> = [];
       const cdpOpts: FakeCdpEvalOpts = {
         constants,
-        // [0] initial probe: present (triggers close path)
-        // [1] close internal probe 1 (post-Escape): still present → tries CLOSE_CENTER_JS (returns null)
-        // [2] close internal probe 2 (final): still present → closeFeedComposerLive returns false
+        // [0] surface-check secondary probe: present → surface capable
+        // [1] entry probe: present (stale composer) → triggers close-retry
+        // [2] close attempt 1, internal probe 1: still present
+        // [3] close attempt 1, internal probe 2: still present → closeFeedComposerLive returns false
+        // [4] close attempt 2, internal probe 1: still present
+        // [5] close attempt 2, internal probe 2: still present → false
+        // [6] close attempt 3, internal probe 1: still present
+        // [7] close attempt 3, internal probe 2: still present → false → close-retry exhausted
         probeResults: [
-          { present: true, editorText: "stuck" },   // [0] initial probe
-          { present: true, editorText: "stuck" },   // [1] close probe 1: still open
-          { present: true, editorText: "stuck" },   // [2] close probe 2: still open → close fails
+          { present: true, editorText: "" },      // [0] surface check secondary probe
+          { present: true, editorText: "stuck" }, // [1] entry probe: present → close path
+          { present: true, editorText: "stuck" }, // [2] close attempt 1, probe 1
+          { present: true, editorText: "stuck" }, // [3] close attempt 1, probe 2 → false
+          { present: true, editorText: "stuck" }, // [4] close attempt 2, probe 1
+          { present: true, editorText: "stuck" }, // [5] close attempt 2, probe 2 → false
+          { present: true, editorText: "stuck" }, // [6] close attempt 3, probe 1
+          { present: true, editorText: "stuck" }, // [7] close attempt 3, probe 2 → false → exhausted
         ],
         focusResult: false,
         clearResult: false,
@@ -692,9 +721,9 @@ describe("publishApprovedFeedPost — Step-5a close failure: closeFeedComposerLi
           assert.fail("TODO P7: publishApprovedFeedPost not yet exported (Step 4 pending).");
         }
         const result = await fn(deps);
-        // T-Seq.ReopenAfterCloseFails assertions
+        // T-Seq.ReopenAfterCloseFails assertions (updated for P9: close-retry-exhaustion case)
         assert.equal(result.published, false, `T-Seq.ReopenAfterCloseFails: published should be false`);
-        assert.equal(result.reason, "composer_unavailable", `T-Seq.ReopenAfterCloseFails: reason should be 'composer_unavailable', got '${result.reason}'`);
+        assert.equal(result.reason, "composer_close_failed", `T-Seq.ReopenAfterCloseFails: reason should be 'composer_close_failed' (P9 finer reason), got '${result.reason}'`);
         assert.equal(result.fallbackAllowed, true, `T-Seq.ReopenAfterCloseFails: fallbackAllowed should be true (pre-dispatch)`);
         assert.equal(result.dispatchAttempted, false, `T-Seq.ReopenAfterCloseFails: dispatchAttempted should be false`);
         assert.equal(mouseLog.length, 0, `T-Seq.ReopenAfterCloseFails: no mouse events (pre-dispatch failure), got ${mouseLog.length}`);
