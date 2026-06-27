@@ -367,6 +367,20 @@ export class CdpClient {
     return this.evaluate<string>("window.location.href");
   }
 
+  /** Read an element's visible text via document.querySelector. */
+  async getElementText(selector: string): Promise<string | null> {
+    return this.evaluate<string | null>(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? (el.innerText || el.textContent || null) : null; })()`,
+    );
+  }
+
+  /** Read an input-like element's value via document.querySelector. */
+  async getInputValue(selector: string): Promise<string | null> {
+    return this.evaluate<string | null>(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return (el != null && "value" in el) ? String(el.value) : null; })()`,
+    );
+  }
+
   /** Run document-rooted querySelectorAll; return matching nodeIds. */
   async querySelectorAll(selector: string): Promise<number[]> {
     const doc = await this.race(this.client.DOM.getDocument({ depth: 0 }), "DOM.getDocument");
