@@ -38,6 +38,17 @@ export function resolvePaceBand(): { minMs: number; maxMs: number; disabled: boo
   return { minMs: Math.min(min, max), maxMs: Math.max(min, max), disabled: false };
 }
 
+const DEFAULT_SERIAL_BASE_DELAY_MS = 110;
+const SERIAL_JITTER_WINDOW_MS = 55;
+
+function jitterSerialAmount(): number {
+  return Math.floor(Math.random() * SERIAL_JITTER_WINDOW_MS);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Apply a jittered delay between LinkedIn/browser interactions (audit-only output).
  * Default band ~0.8–2.5 s; tunable via FRONDOSE_PACE_MIN_MS / FRONDOSE_PACE_MAX_MS; either
@@ -49,6 +60,18 @@ export async function applyPacing(): Promise<PacingResult> {
   if (disabled) return { waitedMs: 0, jitterMs: 0, serial: true };
   const jitterMs = Math.floor(Math.random() * (maxMs - minMs + 1));
   const total = minMs + jitterMs;
-  await new Promise<void>((r) => setTimeout(r, total));
+  await sleep(total);
   return { waitedMs: total, jitterMs, serial: true };
+}
+
+export async function applySerialPacing(baseDelayMs = DEFAULT_SERIAL_BASE_DELAY_MS): Promise<PacingResult> {
+  const jitterMs = jitterSerialAmount();
+  const waitedMs = baseDelayMs + jitterMs;
+  await sleep(waitedMs);
+  return { waitedMs, jitterMs, serial: true };
+}
+
+export async function applyTypingPacing(text: string): Promise<PacingResult> {
+  const extraDelay = Math.min(Math.max(text.length * 8, 20), 220);
+  return applySerialPacing(DEFAULT_SERIAL_BASE_DELAY_MS + extraDelay);
 }
