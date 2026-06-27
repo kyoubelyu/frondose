@@ -602,6 +602,7 @@ type PublishResult = {
   // P14 additive field: number of isFeedComposerPostButtonEnabled calls before loop exit.
   // Present on both success path and post_button_not_enabled exhaustion path.
   enableGateAttempts?: number;
+  composerGoneAttempts?: number;
 };
 
 async function importPublishFn(): Promise<
@@ -647,6 +648,10 @@ function diagRows(auditRowLog: CapturedAuditRow[]): CapturedAuditRow[] {
   return auditRowLog.filter((r) => r.toolName === "post_publish_runtime_diag");
 }
 
+function runtimeRows(auditRowLog: CapturedAuditRow[]): CapturedAuditRow[] {
+  return auditRowLog.filter((r) => r.toolName === "post_publish_runtime");
+}
+
 // ---------------------------------------------------------------------------
 // P13 Harness extensions
 // ---------------------------------------------------------------------------
@@ -663,6 +668,8 @@ const OPEN_IN_ROUND_PROBE_ATTEMPTS = 3;
 // ENABLE_GATE_ATTEMPTS (must match deterministicPublishPost.ts §6.4a after Step 4).
 // P13 value: 2 (inline, not a constant). P14 value: 6.
 const ENABLE_GATE_ATTEMPTS = 6;
+const COMPOSER_GONE_ATTEMPTS = 6;
+const P15_HAPPY_PATH_PRE_DISPATCH_PROBES = 5;
 
 // READBACK_RETRY_MS_VALUE: value of READBACK_RETRY_MS from composerReadiness.ts.
 // Used to compute expected sleep durations for T-EnableGate.2 assertions.
@@ -744,6 +751,16 @@ function makeP13ProbeQueue(
   q.push({ present: true, editorText: draftText }); // readback match
   // Post-click: composer gone
   q.push({ present: false, editorText: "" });
+  return q;
+}
+
+function makeP15ProbeQueue(
+  draftText: string,
+  postDispatchProbes: Array<{ present: boolean; editorText: string }>,
+): Array<{ present: boolean; editorText: string }> {
+  const q = makeP13ProbeQueue(1, draftText);
+  q.pop();
+  q.push(...postDispatchProbes);
   return q;
 }
 
@@ -4118,6 +4135,314 @@ describe("§5.1 T-EnableGate (P14) — 6-attempt enable-gate with progressive ba
         postOpenRow?.output.lastProbeOutcome,
         "present",
         `T-EnableGate.3: postOpen row lastProbeOutcome must be "present" (composer probe-present at open time); got "${postOpenRow?.output.lastProbeOutcome}"`,
+      );
+    },
+  );
+});
+
+// ===========================================================================
+// P15 NEW §6 T-ComposerGone — post-dispatch composer-gone harden
+// ===========================================================================
+
+describe("§6 T-ComposerGone (P15) — post-dispatch composer-gone harden", () => {
+  describe("T-ComposerGone.1: composer disappears on probe N (parameterized N∈{1,2,3,4,5,6})", () => {
+    for (const n of [1, 2, 3, 4, 5, 6] as const) {
+      it(
+        `T-ComposerGone.1 (N=${n}): post-dispatch probes stop at ${n}; published=true; result.composerGoneAttempts===${n}`,
+        { timeout: 15000 },
+        async () => {
+          // Given: the first N-1 post-dispatch composer probes are present, then probe N is absent.
+          // When: publishApprovedFeedPost clicks Post and runs the composer-gone loop.
+          // Then: the runtime succeeds after exactly N post-dispatch probes and reports composerGoneAttempts=N.
+          const constants = await loadPayloadConstants();
+          const draftText = `T-ComposerGone.1 N=${n}`;
+          const setup = await seedDraft(`tcg1-n${n}`, draftText);
+          const spies = makeP12Spies();
+          const auditRowLog: CapturedAuditRow[] = [];
+          const postDispatchProbes = [
+            ...Array<{ present: boolean; editorText: string }>(n - 1).fill({ present: true, editorText: draftText }),
+            { present: false, editorText: "" },
+          ];
+
+          const clientOpts: P13FakeClientOpts = {
+            constants,
+            axTreeQueue: [
+              { nodes: [AX_START_A_POST] },
+              { nodes: [AX_POST_BUTTON] },
+            ],
+            postSynthItems: [],
+            probeQueue: makeP15ProbeQueue(draftText, postDispatchProbes),
+            focusResult: true,
+            clearResult: false,
+            enabledQueue: [true],
+            closeCenterQueue: [],
+            discardCenterQueue: [],
+            navigateShouldThrow: false,
+            diagnosticResult: DIAG_ABSENT,
+            closeSucceeds: true,
+            ...spies,
+          };
+          const client = makeP13FakeClient(clientOpts);
+          const deps = makePublishDeps(client, setup, auditRowLog);
+
+          const fn = await importPublishFn();
+          if (typeof fn !== "function") {
+            assert.fail(`T-ComposerGone.1 (N=${n}): publishApprovedFeedPost not exported`);
+          }
+          const result = await fn(deps);
+
+          assert.equal(result.published, true, `T-ComposerGone.1 (N=${n}): expected published=true; reason=${result.reason}`);
+          assert.equal(result.dispatchAttempted, true, `T-ComposerGone.1 (N=${n}): dispatchAttempted must be true`);
+          assert.equal(result.fallbackAllowed, false, `T-ComposerGone.1 (N=${n}): fallbackAllowed must be false on success`);
+          assert.equal(
+            spies.probeCallCount.n - P15_HAPPY_PATH_PRE_DISPATCH_PROBES,
+            n,
+            `T-ComposerGone.1 (N=${n}): expected exactly ${n} post-dispatch probe(s); total probe calls=${spies.probeCallCount.n}`,
+          );
+          assert.equal(
+            result.composerGoneAttempts,
+            n,
+            `T-ComposerGone.1 (N=${n}): result.composerGoneAttempts must be ${n}; got ${result.composerGoneAttempts}`,
+          );
+        },
+      );
+    }
+  });
+
+  it(
+    "T-ComposerGone.2: composer remains present on all 6 probes -> composer_still_open; fallbackAllowed=false; no extra clickAt",
+    { timeout: 15000 },
+    async () => {
+      // Given: every post-dispatch composer-gone probe still sees the composer present.
+      // When: publishApprovedFeedPost exhausts the composer-gone loop.
+      // Then: it returns composer_still_open, marks dispatchAttempted, and the loop adds zero clickAt calls.
+      const constants = await loadPayloadConstants();
+      const draftText = "T-ComposerGone.2 all post-dispatch probes present";
+      const setup = await seedDraft("tcg2-still-open", draftText);
+      const spies = makeP12Spies();
+      const auditRowLog: CapturedAuditRow[] = [];
+
+      const clientOpts: P13FakeClientOpts = {
+        constants,
+        axTreeQueue: [
+          { nodes: [AX_START_A_POST] },
+          { nodes: [AX_POST_BUTTON] },
+        ],
+        postSynthItems: [],
+        probeQueue: makeP15ProbeQueue(
+          draftText,
+          Array<{ present: boolean; editorText: string }>(COMPOSER_GONE_ATTEMPTS).fill({
+            present: true,
+            editorText: draftText,
+          }),
+        ),
+        focusResult: true,
+        clearResult: false,
+        enabledQueue: [true],
+        closeCenterQueue: [],
+        discardCenterQueue: [],
+        navigateShouldThrow: false,
+        diagnosticResult: DIAG_ABSENT,
+        closeSucceeds: true,
+        ...spies,
+      };
+      const client = makeP13FakeClient(clientOpts);
+      const deps = makePublishDeps(client, setup, auditRowLog);
+
+      const fn = await importPublishFn();
+      if (typeof fn !== "function") {
+        assert.fail("T-ComposerGone.2: publishApprovedFeedPost not exported");
+      }
+      const result = await fn(deps);
+
+      assert.equal(result.published, false, "T-ComposerGone.2: published must be false when composer stays open");
+      assert.equal(result.reason, "composer_still_open", `T-ComposerGone.2: reason must be composer_still_open; got ${result.reason}`);
+      assert.equal(result.dispatchAttempted, true, "T-ComposerGone.2: dispatchAttempted must be true after Post click");
+      assert.equal(result.fallbackAllowed, false, "T-ComposerGone.2: fallbackAllowed must stay false on post-dispatch ambiguity");
+      assert.equal(
+        result.composerGoneAttempts,
+        COMPOSER_GONE_ATTEMPTS,
+        `T-ComposerGone.2: result.composerGoneAttempts must be ${COMPOSER_GONE_ATTEMPTS}; got ${result.composerGoneAttempts}`,
+      );
+      assert.equal(
+        spies.probeCallCount.n - P15_HAPPY_PATH_PRE_DISPATCH_PROBES,
+        COMPOSER_GONE_ATTEMPTS,
+        `T-ComposerGone.2: expected exactly ${COMPOSER_GONE_ATTEMPTS} post-dispatch probes; total probe calls=${spies.probeCallCount.n}`,
+      );
+      assert.equal(
+        spies.clickAtLog.length,
+        2,
+        `T-ComposerGone.2: clickAtLog must contain only open-stage + one Post click; got ${JSON.stringify(spies.clickAtLog)}`,
+      );
+    },
+  );
+
+  it(
+    "T-ComposerGone.3: composer-gone loop uses five between-probe backoff sleeps [120,240,480,960,1920] and source-grep pins READBACK_RETRY_MS*(1<<i)",
+    { timeout: 15000 },
+    async () => {
+      // Given: all 6 post-dispatch probes remain present so the loop takes every between-probe sleep.
+      // When: setTimeout is phase-gated to sleeps after post-dispatch probes.
+      // Then: the sleep sequence doubles exactly and the source region contains READBACK_RETRY_MS * (1 << i).
+      const constants = await loadPayloadConstants();
+      const draftText = "T-ComposerGone.3 backoff";
+      const setup = await seedDraft("tcg3-backoff", draftText);
+      const spies = makeP12Spies();
+      const sleepLog: number[] = [];
+      const auditRowLog: CapturedAuditRow[] = [];
+
+      const clientOpts: P13FakeClientOpts = {
+        constants,
+        axTreeQueue: [
+          { nodes: [AX_START_A_POST] },
+          { nodes: [AX_POST_BUTTON] },
+        ],
+        postSynthItems: [],
+        probeQueue: makeP15ProbeQueue(
+          draftText,
+          Array<{ present: boolean; editorText: string }>(COMPOSER_GONE_ATTEMPTS).fill({
+            present: true,
+            editorText: draftText,
+          }),
+        ),
+        focusResult: true,
+        clearResult: false,
+        enabledQueue: [true],
+        closeCenterQueue: [],
+        discardCenterQueue: [],
+        navigateShouldThrow: false,
+        diagnosticResult: DIAG_ABSENT,
+        closeSucceeds: true,
+        ...spies,
+      };
+      const client = makeP13FakeClient(clientOpts);
+      const deps = makePublishDeps(client, setup, auditRowLog);
+
+      const fn = await importPublishFn();
+      if (typeof fn !== "function") {
+        assert.fail("T-ComposerGone.3: publishApprovedFeedPost not exported");
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: spy override for setTimeout in test
+      const origTimeout = (globalThis as any).setTimeout;
+      // biome-ignore lint/suspicious/noExplicitAny: spy override for setTimeout in test
+      (globalThis as any).setTimeout = (cb: (...args: unknown[]) => void, ms?: number, ...rest: unknown[]) => {
+        if (spies.probeCallCount.n > P15_HAPPY_PATH_PRE_DISPATCH_PROBES && ms !== 45_000) {
+          sleepLog.push(ms ?? 0);
+        }
+        // biome-ignore lint/suspicious/noExplicitAny: forward to original setTimeout at 0ms delay
+        return origTimeout(cb as any, 0, ...rest);
+      };
+      try {
+        await fn(deps);
+      } finally {
+        // biome-ignore lint/suspicious/noExplicitAny: restore original setTimeout
+        (globalThis as any).setTimeout = origTimeout;
+      }
+
+      const lines = PUBLISH_SRC.split("\n");
+      const postClickLineIdx = lines.findIndex((l) => /await deps\.client\.clickAt\(postEntry\.ref\)/.test(l));
+      const terminalLineIdx = lines.findIndex((l, i) =>
+        i > postClickLineIdx && /return finish(PostDispatchAmbiguous|Success)\s*\(/.test(l),
+      );
+      assert.ok(postClickLineIdx >= 0, "T-ComposerGone.3 source-grep: Post clickAt line not found");
+      assert.ok(
+        terminalLineIdx > postClickLineIdx,
+        `T-ComposerGone.3 source-grep: terminal return must follow Post clickAt; click line=${postClickLineIdx}, terminal line=${terminalLineIdx}`,
+      );
+      const postDispatchRegion = lines.slice(postClickLineIdx + 1, terminalLineIdx).join("\n");
+      assert.ok(
+        /READBACK_RETRY_MS\s*\*\s*\(?\s*1\s*<</.test(postDispatchRegion),
+        `T-ComposerGone.3 source-grep: expected READBACK_RETRY_MS * (1 << i) between Post clickAt and terminal return`,
+      );
+
+      const expectedSleepLog = [
+        READBACK_RETRY_MS_VALUE * (1 << 0),
+        READBACK_RETRY_MS_VALUE * (1 << 1),
+        READBACK_RETRY_MS_VALUE * (1 << 2),
+        READBACK_RETRY_MS_VALUE * (1 << 3),
+        READBACK_RETRY_MS_VALUE * (1 << 4),
+      ];
+      assert.deepStrictEqual(
+        sleepLog,
+        expectedSleepLog,
+        `T-ComposerGone.3: sleepLog must be ${JSON.stringify(expectedSleepLog)}; got ${JSON.stringify(sleepLog)}`,
+      );
+    },
+  );
+
+  it(
+    "T-Obs-Ambiguous: composer_still_open result and audit output carry enableGateAttempts and composerGoneAttempts",
+    { timeout: 15000 },
+    async () => {
+      // Given: enable-gate succeeds after retries, then all post-dispatch probes still see the composer.
+      // When: publishApprovedFeedPost returns the ambiguous composer_still_open result.
+      // Then: both forensic counters are present on the returned result and the terminal audit row output.
+      const constants = await loadPayloadConstants();
+      const draftText = "T-Obs-Ambiguous counters";
+      const setup = await seedDraft("tobs-ambiguous", draftText);
+      const spies = makeP12Spies();
+      const auditRowLog: CapturedAuditRow[] = [];
+      const expectedEnableGateAttempts = 3;
+
+      const clientOpts: P13FakeClientOpts = {
+        constants,
+        axTreeQueue: [
+          { nodes: [AX_START_A_POST] },
+          { nodes: [AX_POST_BUTTON] },
+        ],
+        postSynthItems: [],
+        probeQueue: makeP15ProbeQueue(
+          draftText,
+          Array<{ present: boolean; editorText: string }>(COMPOSER_GONE_ATTEMPTS).fill({
+            present: true,
+            editorText: draftText,
+          }),
+        ),
+        focusResult: true,
+        clearResult: false,
+        enabledQueue: [false, false, true],
+        closeCenterQueue: [],
+        discardCenterQueue: [],
+        navigateShouldThrow: false,
+        diagnosticResult: DIAG_ABSENT,
+        closeSucceeds: true,
+        ...spies,
+      };
+      const client = makeP13FakeClient(clientOpts);
+      const deps = makePublishDeps(client, setup, auditRowLog);
+
+      const fn = await importPublishFn();
+      if (typeof fn !== "function") {
+        assert.fail("T-Obs-Ambiguous: publishApprovedFeedPost not exported");
+      }
+      const result = await fn(deps);
+      const rows = runtimeRows(auditRowLog);
+      const terminalRow = rows[rows.length - 1];
+
+      assert.equal(result.published, false, "T-Obs-Ambiguous: expected composer_still_open to publish=false");
+      assert.equal(result.reason, "composer_still_open", `T-Obs-Ambiguous: expected reason composer_still_open; got ${result.reason}`);
+      assert.equal(result.dispatchAttempted, true, "T-Obs-Ambiguous: dispatchAttempted must be true");
+      assert.equal(result.fallbackAllowed, false, "T-Obs-Ambiguous: fallbackAllowed must be false");
+      assert.equal(
+        result.enableGateAttempts,
+        expectedEnableGateAttempts,
+        `T-Obs-Ambiguous: result.enableGateAttempts must be ${expectedEnableGateAttempts}; got ${result.enableGateAttempts}`,
+      );
+      assert.equal(
+        result.composerGoneAttempts,
+        COMPOSER_GONE_ATTEMPTS,
+        `T-Obs-Ambiguous: result.composerGoneAttempts must be ${COMPOSER_GONE_ATTEMPTS}; got ${result.composerGoneAttempts}`,
+      );
+      assert.ok(terminalRow !== undefined, "T-Obs-Ambiguous: terminal post_publish_runtime audit row must exist");
+      assert.equal(
+        terminalRow?.output.enableGateAttempts,
+        expectedEnableGateAttempts,
+        `T-Obs-Ambiguous: audit output.enableGateAttempts must be ${expectedEnableGateAttempts}; got ${terminalRow?.output.enableGateAttempts}`,
+      );
+      assert.equal(
+        terminalRow?.output.composerGoneAttempts,
+        COMPOSER_GONE_ATTEMPTS,
+        `T-Obs-Ambiguous: audit output.composerGoneAttempts must be ${COMPOSER_GONE_ATTEMPTS}; got ${terminalRow?.output.composerGoneAttempts}`,
       );
     },
   );

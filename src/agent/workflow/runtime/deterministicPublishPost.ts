@@ -26,6 +26,7 @@ const COMPOSER_CLOSE_RETRY_ATTEMPTS = 3;
 const COMPOSER_OPEN_RETRY_ROUNDS = 4;
 const OPEN_IN_ROUND_PROBE_ATTEMPTS = 3;
 const ENABLE_GATE_ATTEMPTS = 6;
+const COMPOSER_GONE_ATTEMPTS = 6;
 const SURFACE_DIAGNOSTIC_JS = `(() => {
   const startBtn = (() => {
     const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
@@ -127,6 +128,7 @@ export interface PublishResult {
   fallbackAllowed: boolean;
   dispatchAttempted: boolean;
   enableGateAttempts?: number;
+  composerGoneAttempts?: number;
   draftMarkedSent?: boolean;
   accountingError?: string;
 }
@@ -299,6 +301,8 @@ async function hardenedOpenStartAPost(deps: PublishPostDeps): Promise<OpenResult
 export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<PublishResult> {
   const t0 = Date.now();
   let dispatchAttempted = false;
+  let enableGateAttempts = 0;
+  let composerGoneAttempts = 0;
 
   if (deps.session.resolvedMode?.() === "auto") {
     return finishPreDispatchFailure(deps, t0, "approval_required", { policy: "auto_post_not_authorized" });
@@ -374,7 +378,7 @@ export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<Pu
     if (!matched) return finishPreDispatchFailure(deps, t0, "readback_mismatch");
 
     let enabled = false;
-    let enableGateAttempts = 0;
+    enableGateAttempts = 0;
     for (let i = 0; i < ENABLE_GATE_ATTEMPTS; i++) {
       enableGateAttempts = i + 1;
       enabled = await isFeedComposerPostButtonEnabled(deps.client);
@@ -413,18 +417,29 @@ export async function publishApprovedFeedPost(deps: PublishPostDeps): Promise<Pu
     dispatchAttempted = true;
     await deps.client.clickAt(postEntry.ref);
 
-    await sleep(READBACK_RETRY_MS);
-    let gone = !(await probeFeedComposerLive(deps.client)).present;
-    if (!gone) {
-      await sleep(READBACK_RETRY_MS);
+    let gone = false;
+    for (let i = 0; i < COMPOSER_GONE_ATTEMPTS; i++) {
+      composerGoneAttempts = i + 1;
       gone = !(await probeFeedComposerLive(deps.client)).present;
+      if (gone) break;
+      if (i < COMPOSER_GONE_ATTEMPTS - 1) {
+        await sleep(READBACK_RETRY_MS * (1 << i));
+      }
     }
-    if (!gone) return finishPostDispatchAmbiguous(deps, t0, "composer_still_open");
+    if (!gone) {
+      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", undefined, {
+        enableGateAttempts,
+        composerGoneAttempts,
+      });
+    }
 
-    return finishSuccess(deps, t0, false, { enableGateAttempts });
+    return finishSuccess(deps, t0, false, { enableGateAttempts, composerGoneAttempts });
   } catch (e) {
     if (dispatchAttempted) {
-      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", `post-dispatch-throw: ${errorMessage(e)}`);
+      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", `post-dispatch-throw: ${errorMessage(e)}`, {
+        enableGateAttempts,
+        composerGoneAttempts,
+      });
     }
     return finishPreDispatchFailure(deps, t0, "internal_error", { detail: errorMessage(e) });
   }
@@ -481,6 +496,7 @@ function finishSuccess(
   let draftMarkedSent = false;
   let accountingError: string | undefined;
   const enableGateAttempts = extra?.enableGateAttempts;
+  const composerGoneAttempts = extra?.composerGoneAttempts;
 
   try {
     markDraftSent(deps);
@@ -533,6 +549,9 @@ function finishSuccess(
   if (typeof enableGateAttempts === "number") {
     result.enableGateAttempts = enableGateAttempts;
   }
+  if (typeof composerGoneAttempts === "number") {
+    result.composerGoneAttempts = composerGoneAttempts;
+  }
   return result;
 }
 
@@ -582,9 +601,12 @@ function finishPostDispatchAmbiguous(
   t0: number,
   reason: PublishFailReason,
   detail?: string,
+  extra?: Record<string, unknown>,
 ): PublishResult {
   let draftMarkedSent = false;
   let accountingError = detail;
+  const enableGateAttempts = extra?.enableGateAttempts;
+  const composerGoneAttempts = extra?.composerGoneAttempts;
 
   try {
     markDraftSent(deps);
@@ -607,6 +629,7 @@ function finishPostDispatchAmbiguous(
         durationMs: Date.now() - t0,
         draftMarkedSent,
         accountingError,
+        ...(extra ?? {}),
       },
       error: null,
       stepFinishReason: "tool-calls",
@@ -628,7 +651,7 @@ function finishPostDispatchAmbiguous(
     accountingError = appendAccountingError(accountingError, `emitCommitWarning: ${errorMessage(e)}`);
   }
 
-  return {
+  const result: PublishResult = {
     published: false,
     reason,
     fallbackAllowed: false,
@@ -636,6 +659,13 @@ function finishPostDispatchAmbiguous(
     draftMarkedSent,
     accountingError,
   };
+  if (typeof enableGateAttempts === "number") {
+    result.enableGateAttempts = enableGateAttempts;
+  }
+  if (typeof composerGoneAttempts === "number") {
+    result.composerGoneAttempts = composerGoneAttempts;
+  }
+  return result;
 }
 
 function markDraftSent(deps: PublishPostDeps): void {
