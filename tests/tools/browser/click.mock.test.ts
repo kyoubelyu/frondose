@@ -12,7 +12,8 @@ import assert from "node:assert/strict";
 import { describe, it, test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
 import type { CurrentSurfaceContext, SnapshotEntry } from "../../../src/linkedin/types.js";
-import { makeClickTool, resolveByLabelWithRetry } from "../../../src/tools/browser/click.js";
+import { makeClickTool } from "../../../src/tools/browser/click.js";
+import { resolveByLabelWithRetry } from "../../../src/linkedin/labelResolver.js";
 
 // P-Y5 D-RUN-2: keep the mock suite fast — disable inter-tool pacing for this file.
 process.env.FRONDOSE_PACE_MIN_MS = "0";

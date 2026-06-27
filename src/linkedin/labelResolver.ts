@@ -1,5 +1,5 @@
 import { CLICKABLE_ROLES, INPUT_ROLES } from "./inspectSummary.js";
-import type { SnapshotEntry } from "./types.js";
+import type { CurrentSurfaceContext, SnapshotEntry } from "./types.js";
 
 export interface LabelResolveOpts {
   kind: "click" | "type";
@@ -61,4 +61,82 @@ export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: La
   const only = matches[0];
   if (!only) throw new Error("unreachable: matches.length === 1");
   return only;
+}
+
+function makeAbortError(): Error {
+  const err = new Error("click aborted");
+  err.name = "AbortError";
+  return err;
+}
+
+function throwIfAborted(abortSignal?: AbortSignal): void {
+  if (abortSignal?.aborted) throw makeAbortError();
+}
+
+async function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  throwIfAborted(abortSignal);
+  if (!abortSignal) {
+    await new Promise((r) => setTimeout(r, ms));
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      abortSignal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(makeAbortError());
+    };
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** [P-75 D-11 round 3] When click is called by `label` (not `ref`), the current ctx may be stale
+ *  by 500–1500ms vs the live DOM — Chrome's AX tree lags after DOM mutations, especially
+ *  disabled→enabled state changes LinkedIn does in React after type/click. The mai-linkedin
+ *  original worked because each command re-resolved the target against a fresh AX snapshot;
+ *  this port restores that property so the agent can do plain inspect → type → click(Send)
+ *  without a dedicated `linkedin_connect` primitive (which was brittle to UI variance). Retries
+ *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
+export async function resolveByLabelWithRetry(
+  session: { getLastContext: () => CurrentSurfaceContext | undefined },
+  label: string,
+  scope: string | undefined,
+  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
+  opts: { timeoutMs?: number; stepMs?: number; abortSignal?: AbortSignal } = {},
+): Promise<SnapshotEntry> {
+  throwIfAborted(opts.abortSignal);
+  const ctx0 = session.getLastContext();
+  if (ctx0) {
+    try {
+      return resolveByLabel(ctx0.entries, label, { kind: "click", scope, activeLayer: ctx0.activeLayer });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+    }
+  }
+  const deadline = Date.now() + (opts.timeoutMs ?? 3000);
+  const stepMs = opts.stepMs ?? 300;
+  let lastErr: unknown = new Error(`click: no label '${label}' visible`);
+  while (Date.now() < deadline) {
+    await sleepWithAbort(stepMs, opts.abortSignal);
+    throwIfAborted(opts.abortSignal);
+    let fresh: { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" };
+    try {
+      fresh = await capture();
+    } catch (e) {
+      // Transient CDP/AX failure mid-retry — keep trying. The deadline acts as the backstop.
+      lastErr = e;
+      continue;
+    }
+    try {
+      return resolveByLabel(fresh.entries, label, { kind: "click", scope, activeLayer: fresh.activeLayer });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr;
 }
