@@ -9,9 +9,9 @@ import {
   fail,
   failFromError,
   ok,
-  resolveByLabel,
   withHint,
 } from "../../linkedin/index.js";
+import { resolveByLabelWithRetry } from "../../linkedin/labelResolver.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/auto-run.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
@@ -48,55 +48,6 @@ async function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<vo
     };
     abortSignal.addEventListener("abort", onAbort, { once: true });
   });
-}
-
-/** [P-75 D-11 round 3] When click is called by `label` (not `ref`), the current ctx may be stale
- *  by 500–1500ms vs the live DOM — Chrome's AX tree lags after DOM mutations, especially
- *  disabled→enabled state changes LinkedIn does in React after type/click. The mai-linkedin
- *  original worked because each command re-resolved the target against a fresh AX snapshot;
- *  this port restores that property so the agent can do plain inspect → type → click(Send)
- *  without a dedicated `linkedin_connect` primitive (which was brittle to UI variance). Retries
- *  recapture the surface up to ~3s before surrendering. No-op for ref-based clicks. */
-export async function resolveByLabelWithRetry(
-  session: { getLastContext: () => { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" } | undefined },
-	  label: string,
-	  scope: string | undefined,
-	  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
-	  opts: { timeoutMs?: number; stepMs?: number; abortSignal?: AbortSignal } = {},
-): Promise<SnapshotEntry> {
-  throwIfAborted(opts.abortSignal);
-  const ctx0 = session.getLastContext();
-  if (ctx0) {
-    try {
-      return resolveByLabel(ctx0.entries, label, { kind: "click", scope, activeLayer: ctx0.activeLayer });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
-    }
-  }
-  const deadline = Date.now() + (opts.timeoutMs ?? 3000);
-  const stepMs = opts.stepMs ?? 300;
-  let lastErr: unknown = new Error(`click: no label '${label}' visible`);
-  while (Date.now() < deadline) {
-    await sleepWithAbort(stepMs, opts.abortSignal);
-    throwIfAborted(opts.abortSignal);
-    let fresh: { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" };
-    try {
-      fresh = await capture();
-    } catch (e) {
-      // Transient CDP/AX failure mid-retry — keep trying. The deadline acts as the backstop.
-      lastErr = e;
-      continue;
-    }
-    try {
-      return resolveByLabel(fresh.entries, label, { kind: "click", scope, activeLayer: fresh.activeLayer });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
-      lastErr = e;
-    }
-  }
-  throw lastErr;
 }
 
 function sameRoleName(entry: SnapshotEntry, expected: { role: string; name?: string }): boolean {
