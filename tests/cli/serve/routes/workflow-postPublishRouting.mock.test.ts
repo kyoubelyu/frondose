@@ -34,20 +34,15 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { describe, it } from "node:test";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
-const WORKFLOW_ROUTE_SRC = readFileSync(
-  resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"),
-  "utf-8",
-);
+const WORKFLOW_ROUTE_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"), "utf-8");
 
 // ---------------------------------------------------------------------------
 // Fake HTTP request/response helpers
@@ -64,10 +59,17 @@ function makeFakeReq(body: unknown): IncomingMessage {
 function makeFakeRes(): { res: ServerResponse; statusCode: number; body: string } {
   const state = { statusCode: 0, body: "" };
   const res = {
-    writeHead: (code: number) => { state.statusCode = code; },
+    writeHead: (code: number) => {
+      state.statusCode = code;
+    },
     setHeader: () => {},
-    write: (chunk: string | Buffer) => { state.body += chunk.toString(); return true; },
-    end: (chunk?: string | Buffer) => { if (chunk) state.body += chunk.toString(); },
+    write: (chunk: string | Buffer) => {
+      state.body += chunk.toString();
+      return true;
+    },
+    end: (chunk?: string | Buffer) => {
+      if (chunk) state.body += chunk.toString();
+    },
     headersSent: false,
   } as unknown as ServerResponse;
   return { res, ...state };
@@ -119,13 +121,17 @@ describe("handlePostWorkflow — on approve for post step: calls publishApproved
       //        Source-structural: workflow.ts source contains the P7 hook pattern.
 
       // T-Route.PostBranches: structural checks
-      assert.ok(WORKFLOW_ROUTE_SRC.includes("isPostPublish"), "T-Route.PostBranches: workflow.ts must contain 'isPostPublish'");
-      assert.ok(WORKFLOW_ROUTE_SRC.includes("publishApprovedFeedPost"), "T-Route.PostBranches: workflow.ts must contain 'publishApprovedFeedPost'");
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("isPostPublish"),
+        "T-Route.PostBranches: workflow.ts must contain 'isPostPublish'",
+      );
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("publishApprovedFeedPost"),
+        "T-Route.PostBranches: workflow.ts must contain 'publishApprovedFeedPost'",
+      );
 
       // Behavioral: drive handlePostWorkflow with published:true → no resumeWorkflowTurn
-      const { handlePostWorkflow } = await import(
-        "../../../../src/cli/subcommands/serve/routes/workflow.js"
-      );
+      const { handlePostWorkflow } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
       let resumeCallCount = 0;
       let publishCallCount = 0;
       const scratchDir = join(tmpdir(), "frondose-p7-route-postbranch", `${Date.now()}`);
@@ -151,19 +157,29 @@ describe("handlePostWorkflow — on approve for post step: calls publishApproved
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
       };
-      const fakeTurn = { resumeWorkflowTurn: async () => { resumeCallCount++; } };
+      const fakeTurn = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount++;
+        },
+      };
       const req = makeFakeReq({ stepId: "step-post-route" });
       const { res } = makeFakeRes();
       await handlePostWorkflow(
         { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
         fakeDeps as never,
         fakeTurn as never,
-        req, res, "/workflow/approve",
+        req,
+        res,
+        "/workflow/approve",
       );
       // Give the async void block time to run
       await new Promise((r) => setTimeout(r, 200));
       assert.equal(publishCallCount, 1, "T-Route.PostBranches: publishApprovedFeedPost must be called once");
-      assert.equal(resumeCallCount, 0, "T-Route.PostBranches: turn.resumeWorkflowTurn must NOT be called when published:true");
+      assert.equal(
+        resumeCallCount,
+        0,
+        "T-Route.PostBranches: turn.resumeWorkflowTurn must NOT be called when published:true",
+      );
     },
   );
 });
@@ -215,18 +231,32 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
           return { published: false, reason: "composer_unavailable", fallbackAllowed: true, dispatchAttempted: false };
         },
       };
-      const fakeTurn2 = { resumeWorkflowTurn: async () => { resumeCallCount2++; } };
+      const fakeTurn2 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount2++;
+        },
+      };
       const req2 = makeFakeReq({ stepId: "step-fallback" });
       const { res: res2 } = makeFakeRes();
       await handlePostWorkflow2(
         { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
         fakeDeps2 as never,
         fakeTurn2 as never,
-        req2, res2, "/workflow/approve",
+        req2,
+        res2,
+        "/workflow/approve",
       );
       await new Promise((r) => setTimeout(r, 200));
-      assert.equal(publishCallCount2, 1, "T-Route.FallbackOnPreDispatchFailure: publishApprovedFeedPost must be called once");
-      assert.equal(resumeCallCount2, 1, "T-Route.FallbackOnPreDispatchFailure: turn.resumeWorkflowTurn must be called once when fallbackAllowed:true and dispatchAttempted:false");
+      assert.equal(
+        publishCallCount2,
+        1,
+        "T-Route.FallbackOnPreDispatchFailure: publishApprovedFeedPost must be called once",
+      );
+      assert.equal(
+        resumeCallCount2,
+        1,
+        "T-Route.FallbackOnPreDispatchFailure: turn.resumeWorkflowTurn must be called once when fallbackAllowed:true and dispatchAttempted:false",
+      );
     },
   );
 });
@@ -277,18 +307,32 @@ describe("handlePostWorkflow — on approve for post step: NO fallback when publ
           return { published: false, reason: "composer_still_open", fallbackAllowed: false, dispatchAttempted: true };
         },
       };
-      const fakeTurn3 = { resumeWorkflowTurn: async () => { resumeCallCount3++; } };
+      const fakeTurn3 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount3++;
+        },
+      };
       const req3 = makeFakeReq({ stepId: "step-ambig" });
       const { res: res3 } = makeFakeRes();
       await handlePostWorkflow3(
         { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
         fakeDeps3 as never,
         fakeTurn3 as never,
-        req3, res3, "/workflow/approve",
+        req3,
+        res3,
+        "/workflow/approve",
       );
       await new Promise((r) => setTimeout(r, 200));
-      assert.equal(publishCallCount3, 1, "T-Route.NoFallbackOnPostDispatchAmbiguity: publishApprovedFeedPost must be called once");
-      assert.equal(resumeCallCount3, 0, "T-Route.NoFallbackOnPostDispatchAmbiguity: turn.resumeWorkflowTurn must NOT be called when dispatchAttempted:true (B-1)");
+      assert.equal(
+        publishCallCount3,
+        1,
+        "T-Route.NoFallbackOnPostDispatchAmbiguity: publishApprovedFeedPost must be called once",
+      );
+      assert.equal(
+        resumeCallCount3,
+        0,
+        "T-Route.NoFallbackOnPostDispatchAmbiguity: turn.resumeWorkflowTurn must NOT be called when dispatchAttempted:true (B-1)",
+      );
     },
   );
 });
@@ -340,18 +384,32 @@ describe("handlePostWorkflow — on approve for post step in Auto mode: NO fallb
           return { published: false, reason: "approval_required", fallbackAllowed: false, dispatchAttempted: false };
         },
       };
-      const fakeTurn4 = { resumeWorkflowTurn: async () => { resumeCallCount4++; } };
+      const fakeTurn4 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount4++;
+        },
+      };
       const req4 = makeFakeReq({ stepId: "step-auto" });
       const { res: res4 } = makeFakeRes();
       await handlePostWorkflow4(
         { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
         fakeDeps4 as never,
         fakeTurn4 as never,
-        req4, res4, "/workflow/approve",
+        req4,
+        res4,
+        "/workflow/approve",
       );
       await new Promise((r) => setTimeout(r, 200));
-      assert.equal(publishCallCount4, 1, "T-Route.NoFallbackOnAutoMode: publishApprovedFeedPost must be called once (it runs and returns approval_required)");
-      assert.equal(resumeCallCount4, 0, "T-Route.NoFallbackOnAutoMode: turn.resumeWorkflowTurn must NOT be called when fallbackAllowed:false and dispatchAttempted:false");
+      assert.equal(
+        publishCallCount4,
+        1,
+        "T-Route.NoFallbackOnAutoMode: publishApprovedFeedPost must be called once (it runs and returns approval_required)",
+      );
+      assert.equal(
+        resumeCallCount4,
+        0,
+        "T-Route.NoFallbackOnAutoMode: turn.resumeWorkflowTurn must NOT be called when fallbackAllowed:false and dispatchAttempted:false",
+      );
     },
   );
 });
@@ -399,18 +457,32 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
           throw new Error("Fake publish throw (T-Route.FallbackOnThrow)");
         },
       };
-      const fakeTurn5 = { resumeWorkflowTurn: async () => { resumeCallCount5++; } };
+      const fakeTurn5 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount5++;
+        },
+      };
       const req5 = makeFakeReq({ stepId: "step-throw" });
       const { res: res5 } = makeFakeRes();
       await handlePostWorkflow5(
         { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
         fakeDeps5 as never,
         fakeTurn5 as never,
-        req5, res5, "/workflow/approve",
+        req5,
+        res5,
+        "/workflow/approve",
       );
       await new Promise((r) => setTimeout(r, 200));
-      assert.equal(publishCallCount5, 1, "T-Route.FallbackOnThrow: publishApprovedFeedPost must be called once (before it throws)");
-      assert.equal(resumeCallCount5, 1, "T-Route.FallbackOnThrow: turn.resumeWorkflowTurn must be called once after throw (catch → fallback)");
+      assert.equal(
+        publishCallCount5,
+        1,
+        "T-Route.FallbackOnThrow: publishApprovedFeedPost must be called once (before it throws)",
+      );
+      assert.equal(
+        resumeCallCount5,
+        1,
+        "T-Route.FallbackOnThrow: turn.resumeWorkflowTurn must be called once after throw (catch → fallback)",
+      );
     },
   );
 });
@@ -466,7 +538,11 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
       };
-      const fakeTurn6 = { resumeWorkflowTurn: async () => { resumeCallCount6++; } };
+      const fakeTurn6 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount6++;
+        },
+      };
       const prevKillSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
       process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
       try {
@@ -476,7 +552,9 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
           fakeDeps6 as never,
           fakeTurn6 as never,
-          req6, res6, "/workflow/approve",
+          req6,
+          res6,
+          "/workflow/approve",
         );
         await new Promise((r) => setTimeout(r, 200));
       } finally {
@@ -486,8 +564,16 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
           process.env.MAI_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
         }
       }
-      assert.equal(publishCallCount6, 0, "T-Route.KillSwitch: publishApprovedFeedPost must NOT be called when kill-switch=skip");
-      assert.equal(resumeCallCount6, 1, "T-Route.KillSwitch: turn.resumeWorkflowTurn must be called once (P6 LLM path) when kill-switch=skip");
+      assert.equal(
+        publishCallCount6,
+        0,
+        "T-Route.KillSwitch: publishApprovedFeedPost must NOT be called when kill-switch=skip",
+      );
+      assert.equal(
+        resumeCallCount6,
+        1,
+        "T-Route.KillSwitch: turn.resumeWorkflowTurn must be called once (P6 LLM path) when kill-switch=skip",
+      );
     },
   );
 });
@@ -507,9 +593,7 @@ describe("handlePostWorkflow — NON-POST approve: behavior is byte-identical to
       // Then:  turn.resumeWorkflowTurn IS called exactly once (the existing pre-P7 behavior).
       //        publishApprovedFeedPost is NOT called (regression pin against leakage into connect).
       try {
-        const { handlePostWorkflow } = await import(
-          "../../../../src/cli/subcommands/serve/routes/workflow.js"
-        );
+        const { handlePostWorkflow } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
 
         let resumeCallCount = 0;
         let publishCallCount = 0;
@@ -540,23 +624,45 @@ describe("handlePostWorkflow — NON-POST approve: behavior is byte-identical to
           },
         };
         const fakeTurn = {
-          resumeWorkflowTurn: async (_prompt: string) => { resumeCallCount++; },
+          resumeWorkflowTurn: async (_prompt: string) => {
+            resumeCallCount++;
+          },
         };
         // If P7 is implemented, it would check publishApprovedFeedPost — fake it as not called
-        const fakePublish = async () => { publishCallCount++; return { published: true }; };
+        const fakePublish = async () => {
+          publishCallCount++;
+          return { published: true };
+        };
         void fakePublish;
 
         const req = makeFakeReq({ stepId: "step-connect" });
         const { res } = makeFakeRes();
 
-        await handlePostWorkflow(fakeState as never, fakeDeps as never, fakeTurn as never, req, res, "/workflow/approve");
+        await handlePostWorkflow(
+          fakeState as never,
+          fakeDeps as never,
+          fakeTurn as never,
+          req,
+          res,
+          "/workflow/approve",
+        );
 
         // T-Route.NonPostUnchanged: connect step → LLM resume, no publish call
-        assert.equal(resumeCallCount, 1, "T-Route.NonPostUnchanged: turn.resumeWorkflowTurn must be called once for connect step");
-        assert.equal(publishCallCount, 0, "T-Route.NonPostUnchanged: publishApprovedFeedPost must NOT be called for a connect step");
+        assert.equal(
+          resumeCallCount,
+          1,
+          "T-Route.NonPostUnchanged: turn.resumeWorkflowTurn must be called once for connect step",
+        );
+        assert.equal(
+          publishCallCount,
+          0,
+          "T-Route.NonPostUnchanged: publishApprovedFeedPost must NOT be called for a connect step",
+        );
       } catch (err) {
         if (err instanceof assert.AssertionError) throw err;
-        assert.fail("T-Route.NonPostUnchanged: handlePostWorkflow import failed or pre-P7 behavior broken. " + String(err));
+        assert.fail(
+          "T-Route.NonPostUnchanged: handlePostWorkflow import failed or pre-P7 behavior broken. " + String(err),
+        );
       }
     },
   );
@@ -576,11 +682,15 @@ describe("handlePostWorkflow — NON-approve endpoints: publishApprovedFeedPost 
       // Then:  publishApprovedFeedPost is never invoked for these URLs.
       //        Structural: the P7 hook in workflow.ts is gated by url === '/workflow/approve'.
 
-      const hasApproveGate = WORKFLOW_ROUTE_SRC.includes("/workflow/approve") &&
+      const hasApproveGate =
+        WORKFLOW_ROUTE_SRC.includes("/workflow/approve") &&
         (WORKFLOW_ROUTE_SRC.includes("isPostPublish") || WORKFLOW_ROUTE_SRC.includes("publishApproved"));
 
       // T-Route.NonApproveUnchanged: structural — P7 hook is gated by url === '/workflow/approve'
-      assert.ok(hasApproveGate, "T-Route.NonApproveUnchanged: workflow.ts must gate the P7 hook with url==='/workflow/approve' + isPostPublish check");
+      assert.ok(
+        hasApproveGate,
+        "T-Route.NonApproveUnchanged: workflow.ts must gate the P7 hook with url==='/workflow/approve' + isPostPublish check",
+      );
       // The structural check is sufficient: the hook at workflow.ts:84 is inside
       //   `if (!killSwitch && url === "/workflow/approve" && r.isPostPublish === true && draftId && stepId)`
       // so /workflow/decline / /workflow/handoff / /workflow/cancel can never reach publishApprovedFeedPost.
@@ -616,7 +726,7 @@ describe("handlePostWorkflow — cron turn: publishApprovedFeedPost is NEVER cal
       // the hook cannot fire without all four conditions. Structural assertion:
       assert.ok(
         WORKFLOW_ROUTE_SRC.includes('url === "/workflow/approve"') ||
-        WORKFLOW_ROUTE_SRC.includes("url === \"/workflow/approve\""),
+          WORKFLOW_ROUTE_SRC.includes('url === "/workflow/approve"'),
         "T-Route.CronTurnUnaffected: workflow.ts hook must be gated by url==='/workflow/approve'",
       );
       assert.ok(
@@ -663,12 +773,8 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
       //        (b) turn.resumeWorkflowTurn IS called exactly once (LLM fallback).
       //        The recoverPostDraftId thunk MAY be called — its call count is NOT asserted.
       //        Covers SC-4: Option (b) — kill-switch's load-bearing job is "no publish".
-      const { handlePostWorkflow: hwpKs2 } = await import(
-        "../../../../src/cli/subcommands/serve/routes/workflow.js"
-      );
-      const { createWorkflowController } = await import(
-        "../../../../src/agent/workflow/controller.js"
-      );
+      const { handlePostWorkflow: hwpKs2 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+      const { createWorkflowController } = await import("../../../../src/agent/workflow/controller.js");
 
       let resumeCallCountKs2 = 0;
       let publishCallCountKs2 = 0;
@@ -700,7 +806,7 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
         steps: [
           {
             id: STEP_ID_KS2,
-            title: "Publish post",   // matches isPostStep heuristic
+            title: "Publish post", // matches isPostStep heuristic
             state: "in_progress",
             requiresApproval: true,
             // step.draftId intentionally absent — PPUB7B re-title scenario
@@ -729,7 +835,9 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
       };
 
       const fakeTurnKs2 = {
-        resumeWorkflowTurn: async () => { resumeCallCountKs2++; },
+        resumeWorkflowTurn: async () => {
+          resumeCallCountKs2++;
+        },
       };
 
       const prevKillSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
@@ -741,7 +849,9 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
           fakeDepsKs2 as never,
           fakeTurnKs2 as never,
-          reqKs2, resKs2, "/workflow/approve",
+          reqKs2,
+          resKs2,
+          "/workflow/approve",
         );
         await new Promise((r) => setTimeout(r, 200));
       } finally {
@@ -756,12 +866,514 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
       assert.equal(
         publishCallCountKs2,
         0,
-        "T-Recover.6: publishApprovedFeedPost must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)"
+        "T-Recover.6: publishApprovedFeedPost must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)",
       );
       assert.equal(
         resumeCallCountKs2,
         1,
-        "T-Recover.6: turn.resumeWorkflowTurn must be called exactly once (LLM fallback) when kill-switch=skip"
+        "T-Recover.6: turn.resumeWorkflowTurn must be called exactly once (LLM fallback) when kill-switch=skip",
+      );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T-Hook.1–5: Runtime hook — FRONDOSE_PUBLISH_VIA_ACTION selector
+// (native-port-S2 Step 3a scaffold — REQUIRED per critic CONCERN-MR-1)
+//
+// Dual-spy pattern: inject BOTH deps.publishApprovedFeedPost (shadow spy) AND
+// deps.publishApprovedFeedPostViaAction (action spy — new optional field in
+// WorkflowRoutesDeps, to be added at Step 4). Assert which one fires.
+//
+// All 5 tests are RED on HEAD because:
+//   (1) The structural assertion `WORKFLOW_ROUTE_SRC.includes('FRONDOSE_PUBLISH_VIA_ACTION')`
+//       fails — the env var selector is not yet in workflow.ts source.
+//   (2) After Step 4 adds the selector, the structural assertion passes but
+//       assert.fail("TODO") keeps each test RED until Step 5 fills behavioral assertions.
+//
+// The new injection field (deps.publishApprovedFeedPostViaAction) is cast via
+// `as unknown as {}` (or `as never`) at the call site so tsc exits 0 even
+// before the WorkflowRoutesDeps type is updated at Step 4.
+//
+// Runner:
+//   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
+//     tests/cli/serve/routes/workflow-postPublishRouting.mock.test.ts
+// ---------------------------------------------------------------------------
+
+describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION unset → shadow spy fires, action spy NOT called (T-Hook.1)", () => {
+  it(
+    "T-Hook.1: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is UNSET, " +
+      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then the shadow spy (deps.publishApprovedFeedPost) is called exactly once " +
+      "AND the action spy (deps.publishApprovedFeedPostViaAction) is NEVER called",
+    { timeout: 5000 },
+    async () => {
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION env var is NOT set (default OFF — shadow path).
+      // When: POST /workflow/approve with isPostPublish:true arrives.
+      // Then: shadow spy fires×1; action spy fires×0 (only literal "on" opts in).
+
+      // Structural assertion
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Hook.1: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+      );
+
+      const { handlePostWorkflow: hpwHook1 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+      let shadowCallCount1 = 0;
+      let actionCallCount1 = 0;
+      const scratchDir1 = join(tmpdir(), `frondose-hook1-${Date.now()}`);
+      mkdirSync(scratchDir1, { recursive: true });
+      const fakeWorkflowH1 = makeFakeWorkflowController({
+        resumePrompt: "HOOK1 RESUME",
+        isPostPublish: true,
+        draftId: "d-hook1",
+        stepId: "step-hook1",
+      });
+      const fakeDepsH1 = {
+        workflow: fakeWorkflowH1,
+        salesDbPath: join(scratchDir1, "sales.db"),
+        auditPath: join(scratchDir1, "audit.jsonl"),
+        emitFrame: () => {},
+        session: {
+          inputMode: "cdp" as const,
+          getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+          resolvedMode: () => "manual" as const,
+        },
+        publishApprovedFeedPost: async () => {
+          shadowCallCount1++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+        publishApprovedFeedPostViaAction: async () => {
+          actionCallCount1++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+      };
+      const fakeTurnH1 = { resumeWorkflowTurn: async () => {} };
+      const reqH1 = makeFakeReq({ stepId: "step-hook1" });
+      const { res: resH1 } = makeFakeRes();
+
+      // Ensure env var is unset
+      const origEnvH1 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      try {
+        await hpwHook1(
+          { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+          fakeDepsH1 as never,
+          fakeTurnH1 as never,
+          reqH1,
+          resH1,
+          "/workflow/approve",
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      } finally {
+        if (origEnvH1 === undefined) {
+          delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+        } else {
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvH1;
+        }
+      }
+
+      assert.equal(
+        shadowCallCount1,
+        1,
+        "T-Hook.1: shadow spy (publishApprovedFeedPost) must fire exactly once when FRONDOSE_PUBLISH_VIA_ACTION is unset",
+      );
+      assert.equal(
+        actionCallCount1,
+        0,
+        "T-Hook.1: action spy (publishApprovedFeedPostViaAction) must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION is unset",
+      );
+    },
+  );
+});
+
+describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION==='on' → action spy fires, shadow spy NOT called (T-Hook.2)", () => {
+  it(
+    "T-Hook.2: given process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on', " +
+      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then the action spy (deps.publishApprovedFeedPostViaAction) is called exactly once " +
+      "AND the shadow spy (deps.publishApprovedFeedPost) is NEVER called",
+    { timeout: 5000 },
+    async () => {
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION is set to the exact literal "on".
+      // When: POST /workflow/approve with isPostPublish:true arrives.
+      // Then: action spy fires×1; shadow spy fires×0 (the exact literal "on" is the selector).
+
+      // Structural assertion
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Hook.2: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+      );
+
+      const { handlePostWorkflow: hpwHook2 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+      let shadowCallCount2 = 0;
+      let actionCallCount2 = 0;
+      const scratchDir2 = join(tmpdir(), `frondose-hook2-${Date.now()}`);
+      mkdirSync(scratchDir2, { recursive: true });
+      const fakeWorkflowH2 = makeFakeWorkflowController({
+        resumePrompt: "HOOK2 RESUME",
+        isPostPublish: true,
+        draftId: "d-hook2",
+        stepId: "step-hook2",
+      });
+      const fakeDepsH2 = {
+        workflow: fakeWorkflowH2,
+        salesDbPath: join(scratchDir2, "sales.db"),
+        auditPath: join(scratchDir2, "audit.jsonl"),
+        emitFrame: () => {},
+        session: {
+          inputMode: "cdp" as const,
+          getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+          resolvedMode: () => "manual" as const,
+        },
+        publishApprovedFeedPost: async () => {
+          shadowCallCount2++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+        publishApprovedFeedPostViaAction: async () => {
+          actionCallCount2++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+      };
+      const fakeTurnH2 = { resumeWorkflowTurn: async () => {} };
+      const reqH2 = makeFakeReq({ stepId: "step-hook2" });
+      const { res: resH2 } = makeFakeRes();
+
+      const origEnvH2 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      process.env.FRONDOSE_PUBLISH_VIA_ACTION = "on";
+      try {
+        await hpwHook2(
+          { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+          fakeDepsH2 as never,
+          fakeTurnH2 as never,
+          reqH2,
+          resH2,
+          "/workflow/approve",
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      } finally {
+        if (origEnvH2 === undefined) {
+          delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+        } else {
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvH2;
+        }
+      }
+
+      assert.equal(
+        actionCallCount2,
+        1,
+        "T-Hook.2: action spy (publishApprovedFeedPostViaAction) must fire exactly once when FRONDOSE_PUBLISH_VIA_ACTION='on'",
+      );
+      assert.equal(
+        shadowCallCount2,
+        0,
+        "T-Hook.2: shadow spy (publishApprovedFeedPost) must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION='on'",
+      );
+    },
+  );
+});
+
+describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION set to non-'on' value → shadow spy fires (T-Hook.3)", () => {
+  it(
+    "T-Hook.3: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is set to a value OTHER than literal 'on' " +
+      "('off', '', 'ON', '1', 'true'), " +
+      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then the shadow spy fires AND the action spy does NOT " +
+      "(only the exact literal 'on' opts in — string-equality, no truthy coercion)",
+    { timeout: 5000 },
+    async () => {
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION is set to "off" / "" / "ON" / "1" / "true" (NOT "on").
+      // When: POST /workflow/approve with isPostPublish:true arrives.
+      // Then: shadow spy fires×1; action spy fires×0.
+      // This pins the non-truthy-coercion contract: only process.env.FRONDOSE_PUBLISH_VIA_ACTION === "on".
+
+      // Structural assertions
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Hook.3: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+      );
+      // Structural: the comparison must be strict equality with "on" (not a truthy check)
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes('"on"') || WORKFLOW_ROUTE_SRC.includes("'on'"),
+        "T-Hook.3: workflow.ts must compare FRONDOSE_PUBLISH_VIA_ACTION to the literal string 'on'",
+      );
+
+      const { handlePostWorkflow: hpwHook3 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+
+      // Test each non-"on" value — all must route to shadow
+      const nonOnValues = ["off", "", "ON", "1", "true"];
+      for (const nonOnVal of nonOnValues) {
+        let shadowCount = 0;
+        let actionCount = 0;
+        const scratchDir3 = join(tmpdir(), `frondose-hook3-${nonOnVal}-${Date.now()}`);
+        mkdirSync(scratchDir3, { recursive: true });
+        const fakeWorkflowH3 = makeFakeWorkflowController({
+          resumePrompt: `HOOK3 RESUME ${nonOnVal}`,
+          isPostPublish: true,
+          draftId: `d-hook3-${nonOnVal}`,
+          stepId: `step-hook3-${nonOnVal}`,
+        });
+        const fakeDepsH3 = {
+          workflow: fakeWorkflowH3,
+          salesDbPath: join(scratchDir3, "sales.db"),
+          auditPath: join(scratchDir3, "audit.jsonl"),
+          emitFrame: () => {},
+          session: {
+            inputMode: "cdp" as const,
+            getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+            resolvedMode: () => "manual" as const,
+          },
+          publishApprovedFeedPost: async () => {
+            shadowCount++;
+            return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+          },
+          publishApprovedFeedPostViaAction: async () => {
+            actionCount++;
+            return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+          },
+        };
+        const fakeTurnH3 = { resumeWorkflowTurn: async () => {} };
+        const reqH3 = makeFakeReq({ stepId: `step-hook3-${nonOnVal}` });
+        const { res: resH3 } = makeFakeRes();
+
+        const origEnvH3 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+        process.env.FRONDOSE_PUBLISH_VIA_ACTION = nonOnVal;
+        try {
+          await hpwHook3(
+            { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+            fakeDepsH3 as never,
+            fakeTurnH3 as never,
+            reqH3,
+            resH3,
+            "/workflow/approve",
+          );
+          await new Promise((r) => setTimeout(r, 200));
+        } finally {
+          if (origEnvH3 === undefined) {
+            delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+          } else {
+            process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvH3;
+          }
+        }
+
+        assert.equal(
+          shadowCount,
+          1,
+          `T-Hook.3: shadow spy must fire when FRONDOSE_PUBLISH_VIA_ACTION='${nonOnVal}' (non-"on" truthy coercion rejected)`,
+        );
+        assert.equal(
+          actionCount,
+          0,
+          `T-Hook.3: action spy must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION='${nonOnVal}'`,
+        );
+      }
+    },
+  );
+});
+
+describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_POST_PUBLISH=skip + FRONDOSE_PUBLISH_VIA_ACTION=on → NEITHER spy fires (T-Hook.4)", () => {
+  it(
+    "T-Hook.4 (kill-switch cross-product, action-path branch): " +
+      "given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' AND process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on', " +
+      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then NEITHER the shadow spy NOR the action spy fires (kill-switch gates BOTH paths) " +
+      "AND turn.resumeWorkflowTurn is invoked instead",
+    { timeout: 5000 },
+    async () => {
+      // Given: kill-switch (MAI_DETERMINISTIC_POST_PUBLISH=skip) active + action path requested.
+      // When: POST /workflow/approve with isPostPublish:true arrives.
+      // Then: shadow spy fires×0; action spy fires×0; resumeWorkflowTurn fires×1.
+      // The kill-switch guard sits outside the publish selector — it gates BOTH paths
+      // (verified plan §6.3 + CONCERN-MR-1 cross-product requirement).
+
+      // Structural assertion
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Hook.4: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+      );
+
+      const { handlePostWorkflow: hpwHook4 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+      let shadowCallCount4 = 0;
+      let actionCallCount4 = 0;
+      let resumeCallCount4 = 0;
+      const scratchDir4 = join(tmpdir(), `frondose-hook4-${Date.now()}`);
+      mkdirSync(scratchDir4, { recursive: true });
+      const fakeWorkflowH4 = makeFakeWorkflowController({
+        resumePrompt: "HOOK4 RESUME",
+        isPostPublish: true,
+        draftId: "d-hook4",
+        stepId: "step-hook4",
+      });
+      const fakeDepsH4 = {
+        workflow: fakeWorkflowH4,
+        salesDbPath: join(scratchDir4, "sales.db"),
+        auditPath: join(scratchDir4, "audit.jsonl"),
+        emitFrame: () => {},
+        session: {
+          inputMode: "cdp" as const,
+          getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+          resolvedMode: () => "manual" as const,
+        },
+        publishApprovedFeedPost: async () => {
+          shadowCallCount4++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+        publishApprovedFeedPostViaAction: async () => {
+          actionCallCount4++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+      };
+      const fakeTurnH4 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount4++;
+        },
+      };
+      const reqH4 = makeFakeReq({ stepId: "step-hook4" });
+      const { res: resH4 } = makeFakeRes();
+
+      const origKillSwitch4 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origActionEnv4 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      process.env.FRONDOSE_PUBLISH_VIA_ACTION = "on";
+      try {
+        await hpwHook4(
+          { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+          fakeDepsH4 as never,
+          fakeTurnH4 as never,
+          reqH4,
+          resH4,
+          "/workflow/approve",
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      } finally {
+        if (origKillSwitch4 === undefined) {
+          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+        } else {
+          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKillSwitch4;
+        }
+        if (origActionEnv4 === undefined) {
+          delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+        } else {
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origActionEnv4;
+        }
+      }
+
+      assert.equal(
+        shadowCallCount4,
+        0,
+        "T-Hook.4: shadow spy must NOT fire when kill-switch=skip (even with action path)",
+      );
+      assert.equal(actionCallCount4, 0, "T-Hook.4: action spy must NOT fire when kill-switch=skip");
+      assert.equal(
+        resumeCallCount4,
+        1,
+        "T-Hook.4: resumeWorkflowTurn must fire×1 (kill-switch falls through to LLM resume)",
+      );
+    },
+  );
+});
+
+describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_POST_PUBLISH=skip + FRONDOSE_PUBLISH_VIA_ACTION unset → NEITHER spy fires (T-Hook.5)", () => {
+  it(
+    "T-Hook.5 (kill-switch cross-product, shadow-path branch — regression guard): " +
+      "given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' AND FRONDOSE_PUBLISH_VIA_ACTION UNSET, " +
+      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then NEITHER spy fires AND turn.resumeWorkflowTurn is invoked " +
+      "(unchanged pre-Slice-2 kill-switch behavior — regression guard that the new selector did not break it)",
+    { timeout: 5000 },
+    async () => {
+      // Given: kill-switch active; FRONDOSE_PUBLISH_VIA_ACTION not set (shadow path would be default).
+      // When: POST /workflow/approve with isPostPublish:true arrives.
+      // Then: shadow spy fires×0; action spy fires×0; resumeWorkflowTurn fires×1.
+      // This is a regression guard: the pre-Slice-2 kill-switch behavior (T-Route.KillSwitch)
+      // must be preserved even after the new selector branch is added.
+
+      // Structural assertion
+      assert.ok(
+        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Hook.5: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+      );
+
+      const { handlePostWorkflow: hpwHook5 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
+      let shadowCallCount5 = 0;
+      let actionCallCount5 = 0;
+      let resumeCallCount5 = 0;
+      const scratchDir5 = join(tmpdir(), `frondose-hook5-${Date.now()}`);
+      mkdirSync(scratchDir5, { recursive: true });
+      const fakeWorkflowH5 = makeFakeWorkflowController({
+        resumePrompt: "HOOK5 RESUME",
+        isPostPublish: true,
+        draftId: "d-hook5",
+        stepId: "step-hook5",
+      });
+      const fakeDepsH5 = {
+        workflow: fakeWorkflowH5,
+        salesDbPath: join(scratchDir5, "sales.db"),
+        auditPath: join(scratchDir5, "audit.jsonl"),
+        emitFrame: () => {},
+        session: {
+          inputMode: "cdp" as const,
+          getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
+          resolvedMode: () => "manual" as const,
+        },
+        publishApprovedFeedPost: async () => {
+          shadowCallCount5++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+        publishApprovedFeedPostViaAction: async () => {
+          actionCallCount5++;
+          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
+        },
+      };
+      const fakeTurnH5 = {
+        resumeWorkflowTurn: async () => {
+          resumeCallCount5++;
+        },
+      };
+      const reqH5 = makeFakeReq({ stepId: "step-hook5" });
+      const { res: resH5 } = makeFakeRes();
+
+      const origKillSwitch5 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origActionEnv5 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      try {
+        await hpwHook5(
+          { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
+          fakeDepsH5 as never,
+          fakeTurnH5 as never,
+          reqH5,
+          resH5,
+          "/workflow/approve",
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      } finally {
+        if (origKillSwitch5 === undefined) {
+          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+        } else {
+          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKillSwitch5;
+        }
+        if (origActionEnv5 === undefined) {
+          delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+        } else {
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origActionEnv5;
+        }
+      }
+
+      assert.equal(
+        shadowCallCount5,
+        0,
+        "T-Hook.5: shadow spy must NOT fire when kill-switch=skip (regression guard — unchanged kill-switch behavior)",
+      );
+      assert.equal(
+        actionCallCount5,
+        0,
+        "T-Hook.5: action spy must NOT fire when kill-switch=skip and FRONDOSE_PUBLISH_VIA_ACTION unset",
+      );
+      assert.equal(
+        resumeCallCount5,
+        1,
+        "T-Hook.5: resumeWorkflowTurn must fire×1 (kill-switch falls through to LLM resume)",
       );
     },
   );
