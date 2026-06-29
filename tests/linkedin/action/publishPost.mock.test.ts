@@ -63,7 +63,7 @@ type PublishFn = (deps: Record<string, unknown>) => Promise<PublishResult>;
 async function loadPublish(): Promise<{ publishApprovedFeedPostViaAction: PublishFn }> {
   const mod = (await import(PUBLISH_SPEC)) as Record<string, unknown>;
   return {
-    publishApprovedFeedPostViaAction: mod["publishApprovedFeedPostViaAction"] as PublishFn,
+    publishApprovedFeedPostViaAction: mod.publishApprovedFeedPostViaAction as PublishFn,
   };
 }
 
@@ -302,6 +302,12 @@ function makeHappyEvalResponses(draftText: string): Map<string, unknown> {
     ["execCommand", true],
     // COMPOSER_EDITOR_JS discriminator key: "editorText"
     ["editorText", JSON.stringify({ present: true, editorText: draftText })],
+    // COMPOSER_POST_BUTTON_ENABLED_JS discriminator key: "aria-disabled"
+    // Returns true = button enabled (passes gate on first attempt; happy-path).
+    ["aria-disabled", true],
+    // COMPOSER_PRESENT_JS discriminator key: "JSON.stringify({pres"
+    // Returns {present:false} = composer gone on first probe (happy-path).
+    ["JSON.stringify({pres", JSON.stringify({ present: false })],
   ]);
 }
 
@@ -699,6 +705,15 @@ describe("publishApprovedFeedPostViaAction — scope-ready retry budget (T-Resol
       const pageCtx = makePageContext();
       const modalCtx = makeModalContext();
 
+      // NEW FLOW (harden): openComposerHardened replaces the old "open click + discarded re-capture".
+      // captureQueue consumption with the hardened open loop:
+      //   [0] page → openComposerHardened initial (page → enter retry loop)
+      //   [1] page → resolveScopedTarget "Start a post" round 0 (scope=undefined → 1 capture → click fires)
+      //   [2] modal → round-0 in-round probe 0 → modal+composerInput → opened! (openedOnRound=1)
+      //   [3] page → composerInput resolve attempt 0 → scope unavailable → sleep(400ms) [scopeReadyRetryMs]
+      //   [4] page → composerInput resolve attempt 1 → scope unavailable → sleep(400ms)
+      //   [5] modal → composerInput resolve attempt 2 → scope available → SUCCESS
+      //   [6] modal → Post button resolve → SUCCESS (stays at [6])
       const deps = makePublishDeps({
         client,
         salesDbPath: join(scratchDir, "sales.db"),
@@ -706,13 +721,13 @@ describe("publishApprovedFeedPostViaAction — scope-ready retry budget (T-Resol
         draftId,
         auditRowLog,
         captureQueue: [
-          pageCtx, // [0] initial → page → open-composer click fires
-          pageCtx, // [1] post-click re-capture (discarded)
-          pageCtx, // [2] composerInput attempt 0 → fail
-          pageCtx, // [3] composerInput attempt 1 → fail (sleep 250ms)
-          modalCtx, // [4] composerInput attempt 2 → SUCCESS
-          modalCtx, // [5] Post button attempt 0 → SUCCESS
-          modalCtx, // extra buffer
+          pageCtx, // [0] openComposerHardened initial → page → enter loop
+          pageCtx, // [1] round-0 resolveScopedTarget "Start a post" → click fires
+          modalCtx, // [2] round-0 probe 0 → modal → opened! (openedOnRound=1)
+          pageCtx, // [3] composerInput attempt 0 → fail (sleep 400ms)
+          pageCtx, // [4] composerInput attempt 1 → fail (sleep 400ms)
+          modalCtx, // [5] composerInput attempt 2 → SUCCESS
+          modalCtx, // [6] Post button attempt 0 → SUCCESS (stays here)
         ],
       });
 
@@ -727,12 +742,14 @@ describe("publishApprovedFeedPostViaAction — scope-ready retry budget (T-Resol
       assert.equal(result.published, true, "T-Resolve.1: must publish successfully despite initial retries");
       assert.equal(result.dispatchAttempted, true, "T-Resolve.1: dispatchAttempted must be true");
 
-      // Exactly 2 scope-ready retry sleeps of 250ms each
-      const scopeRetrySleePs = sleepLog.filter((ms) => ms === 250);
+      // Exactly 2 scope-ready retry sleeps of 400ms each (new budget: scopeReadyRetryMs=400).
+      // The default SCOPE_READY_RETRY_MS=250 has been replaced by 400ms at the composerInput
+      // resolve call site in publishPost.ts (scopeReadyRetryMs: 400).
+      const scopeRetrySleePs = sleepLog.filter((ms) => ms === 400);
       assert.equal(
         scopeRetrySleePs.length,
         2,
-        `T-Resolve.1: exactly 2 scope-ready retry sleeps of 250ms (SCOPE_READY_RETRY_MS=250), got ${scopeRetrySleePs.length} in [${sleepLog.join(",")}]`,
+        `T-Resolve.1: exactly 2 scope-ready retry sleeps of 400ms (scopeReadyRetryMs=400), got ${scopeRetrySleePs.length} in [${sleepLog.join(",")}]`,
       );
     },
   );

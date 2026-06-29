@@ -14,12 +14,15 @@ import { captureCurrentSurfaceContext } from "../logic/surface/currentSurface.js
 import { applyTypingPacing } from "../pacing.js";
 import type { LinkedinSession } from "../types.js";
 import {
+  confirmComposerGone,
   ensureInputReady,
   ensureLinkedInDestination,
   ensureTargetReady,
   FillFailedError,
   fillComposerSurface,
+  openComposerHardened,
   verifyTypedTextOnSameTarget,
+  waitForPostButtonEnabled,
 } from "./readiness.js";
 
 const SOURCE = "approval_resume";
@@ -46,7 +49,9 @@ export type PublishPostActionFailReason =
   | "input_layer_mismatch"
   | "post_resolve_failed"
   | "post_layer_mismatch"
-  | "fill_failed";
+  | "fill_failed"
+  | "composer_absent_after_open"
+  | "post_button_not_enabled";
 
 export interface PublishPostActionResult {
   published: boolean;
@@ -56,11 +61,16 @@ export interface PublishPostActionResult {
   draftMarkedSent?: boolean;
   accountingError?: string;
   advice?: OutwardActionAdvice[];
+  openRound?: number;
+  enableGateAttempts?: number;
+  composerGoneAttempts?: number;
 }
 
 export async function publishApprovedFeedPostViaAction(deps: PublishPostActionDeps): Promise<PublishPostActionResult> {
   const t0 = Date.now();
   let dispatchAttempted = false;
+  let enableGateAttempts: number | undefined;
+  let composerGoneAttempts: number | undefined;
   if (deps.session.resolvedMode?.() === "auto") {
     return finishPreDispatch(deps, t0, "approval_required", { policy: "auto_post_not_authorized" });
   }
@@ -75,25 +85,24 @@ export async function publishApprovedFeedPostViaAction(deps: PublishPostActionDe
     } catch (e) {
       return finishPreDispatch(deps, t0, "auth_interrupted", { detail: errorMessage(e) });
     }
-    const context = await capture(deps.client);
-    if (context.activeLayer !== "modal") {
-      try {
-        const openTarget = await resolveScopedTarget(
-          { kind: "button", label: "Start a post" },
-          { context, captureCurrentSurfaceContext: () => capture(deps.client) },
-        );
-        await deps.client.clickAt(openTarget.target.selector);
-      } catch (e) {
-        return finishPreDispatch(deps, t0, "composer_open_click_failed", { detail: errorMessage(e) });
-      }
-      await capture(deps.client);
+    const opened = await openComposerHardened({ client: deps.client, capture: () => capture(deps.client) });
+    if (!opened.opened) {
+      return finishPreDispatch(
+        deps,
+        t0,
+        opened.everClicked ? "composer_absent_after_open" : "composer_open_click_failed",
+        { openRound: -1 },
+      );
     }
-    // CRITIC BLOCKER-1 fix: omit context so captureScopedContext's 5x250ms retry runs.
     let inputResolved: ResolveScopedTargetResult;
     try {
       inputResolved = await resolveScopedTarget(
         { kind: "input", scope: "composerInput" },
-        { captureCurrentSurfaceContext: () => capture(deps.client) },
+        {
+          captureCurrentSurfaceContext: () => capture(deps.client),
+          scopeReadyAttempts: 8,
+          scopeReadyRetryMs: 400,
+        },
       );
     } catch (e) {
       const reason =
@@ -116,12 +125,22 @@ export async function publishApprovedFeedPostViaAction(deps: PublishPostActionDe
     }
     const verified = await verifyTypedTextOnSameTarget(deps.client, DEFAULT_COMPOSER_LABEL_PATTERN, draft.text);
     if (!verified) return finishPreDispatch(deps, t0, "readback_mismatch");
-    // CRITIC BLOCKER-1 fix: omit context so captureScopedContext's 5x250ms retry runs.
+    const enableGate = await waitForPostButtonEnabled(deps.client);
+    enableGateAttempts = enableGate.attempts;
+    if (!enableGate.enabled) {
+      return finishPreDispatch(deps, t0, "post_button_not_enabled", {
+        enableGateAttempts: enableGate.attempts,
+      });
+    }
     let postResolved: ResolveScopedTargetResult;
     try {
       postResolved = await resolveScopedTarget(
         { kind: "button", label: "Post", scope: "composerModal" },
-        { captureCurrentSurfaceContext: () => capture(deps.client) },
+        {
+          captureCurrentSurfaceContext: () => capture(deps.client),
+          scopeReadyAttempts: 8,
+          scopeReadyRetryMs: 400,
+        },
       );
     } catch (e) {
       return finishPreDispatch(deps, t0, "post_resolve_failed", { detail: errorMessage(e) });
@@ -133,24 +152,42 @@ export async function publishApprovedFeedPostViaAction(deps: PublishPostActionDe
     }
     dispatchAttempted = true;
     await deps.client.clickAt(postResolved.target.selector);
+    const goneCheck = await confirmComposerGone(deps.client);
+    composerGoneAttempts = goneCheck.attempts;
+    if (!goneCheck.gone) {
+      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", undefined, {
+        enableGateAttempts: enableGate.attempts,
+        composerGoneAttempts: goneCheck.attempts,
+      });
+    }
     const advice = buildOutwardActionAdvice("post", postResolved.context, {
       phase: "commit",
       rememberInteraction: "post",
       useIdentityAnchor: true,
     });
-    return finishSuccess(deps, t0, advice);
+    return finishSuccess(deps, t0, advice, {
+      openRound: opened.openedOnRound,
+      enableGateAttempts: enableGate.attempts,
+      composerGoneAttempts: goneCheck.attempts,
+    });
   } catch (e) {
     if (dispatchAttempted) {
-      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", `post-dispatch-throw: ${errorMessage(e)}`);
+      return finishPostDispatchAmbiguous(deps, t0, "composer_still_open", `post-dispatch-throw: ${errorMessage(e)}`, {
+        ...(enableGateAttempts !== undefined ? { enableGateAttempts } : {}),
+        ...(composerGoneAttempts !== undefined ? { composerGoneAttempts } : {}),
+      });
     }
     return finishPreDispatch(deps, t0, "internal_error", { detail: errorMessage(e) });
   }
 }
 
+type PublishPostActionExtra = Record<string, unknown>;
+
 function finishSuccess(
   deps: PublishPostActionDeps,
   t0: number,
   advice: OutwardActionAdvice[],
+  extra?: PublishPostActionExtra,
 ): PublishPostActionResult {
   const result: PublishPostActionResult = {
     published: true,
@@ -159,6 +196,7 @@ function finishSuccess(
     draftMarkedSent: false,
     advice,
   };
+  applyResultExtra(result, extra);
   try {
     markDraftSent(deps);
     result.draftMarkedSent = true;
@@ -188,7 +226,7 @@ function finishPreDispatch(
   deps: PublishPostActionDeps,
   t0: number,
   reason: PublishPostActionFailReason,
-  inputExtra?: Record<string, unknown>,
+  inputExtra?: PublishPostActionExtra,
 ): PublishPostActionResult {
   const result: PublishPostActionResult = {
     published: false,
@@ -196,6 +234,7 @@ function finishPreDispatch(
     fallbackAllowed: reason !== "approval_required" && reason !== "draft_already_sent",
     dispatchAttempted: false,
   };
+  applyResultExtra(result, inputExtra);
   try {
     writeRuntimeAudit(deps, t0, { ...result, durationMs: Date.now() - t0 }, inputExtra);
   } catch (e) {
@@ -209,6 +248,7 @@ function finishPostDispatchAmbiguous(
   t0: number,
   reason: ShadowPublishFailReason,
   detail?: string,
+  extra?: PublishPostActionExtra,
 ): PublishPostActionResult {
   const result: PublishPostActionResult = {
     published: false,
@@ -218,6 +258,7 @@ function finishPostDispatchAmbiguous(
     draftMarkedSent: false,
     accountingError: detail,
   };
+  applyResultExtra(result, extra);
   try {
     markDraftSent(deps);
     result.draftMarkedSent = true;
@@ -242,6 +283,12 @@ function finishPostDispatchAmbiguous(
     result.accountingError = appendAccountingError(result.accountingError, `emitCommitWarning: ${errorMessage(e)}`);
   }
   return result;
+}
+
+function applyResultExtra(result: PublishPostActionResult, extra: PublishPostActionExtra | undefined): void {
+  if (extra) {
+    Object.assign(result, extra);
+  }
 }
 
 function markDraftSent(deps: PublishPostActionDeps): void {
