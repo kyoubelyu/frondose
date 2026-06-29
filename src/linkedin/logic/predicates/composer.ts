@@ -1,8 +1,7 @@
 import type { SnapshotEntry } from "../../types.js";
 import { isInputEntry } from "./_shared.js";
 
-export const DEFAULT_COMPOSER_LABEL_PATTERN =
-  /creating content|what do you want to talk about|Text editor for creating content/i;
+export const DEFAULT_COMPOSER_LABEL_PATTERN = /creating content|what do you want to talk about|Text editor for creating content/i;
 
 type ComposerLabelPattern = RegExp | string;
 
@@ -223,9 +222,7 @@ export function isComposerEmojiEntry(entry: SnapshotEntry): boolean {
     return true;
   }
 
-  return (
-    entry.role === "button" && Array.from(entry.name).some((char) => char.charCodeAt(0) > 127) && entry.name.length <= 4
-  );
+  return entry.role === "button" && /[^\x00-\x7F]/.test(entry.name) && entry.name.length <= 4;
 }
 
 export function isComposerAudienceModalEntry(entry: SnapshotEntry): boolean {

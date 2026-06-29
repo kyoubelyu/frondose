@@ -1,9 +1,8 @@
 /**
- * Phase native-port-S2-HARDEN — Step 2 (validator, Sonnet) — test scaffolds
+ * Phase native-port-S2-HARDEN — Step 5 (validator, Sonnet) — filled assertions
  *
- * Assertion bodies are all TODO; every test intentionally fails with
- * assert.fail("TODO: Step-5 assertion"). Assertion bodies will be filled and
- * edge cases added by the validator at Step 5.
+ * The Step-2 scaffold has been filled with structural assertions for the two
+ * composer predicate factories added during hardening.
  *
  * Covers §5 T-Predicate family:
  *   T-Predicate.1 — COMPOSER_POST_BUTTON_ENABLED_JS() JS-string shape
@@ -26,10 +25,9 @@ import { describe, it } from "node:test";
 // ---------------------------------------------------------------------------
 // Dynamic loader for the composer predicates module.
 //
-// COMPOSER_POST_BUTTON_ENABLED_JS and COMPOSER_PRESENT_JS do not exist in
-// production until Step 4; accessing them via dynamic import returns undefined
-// at Step 2, which is safe because all test bodies call assert.fail() before
-// reaching any function call.
+// COMPOSER_POST_BUTTON_ENABLED_JS and COMPOSER_PRESENT_JS are loaded dynamically
+// so the assertions exercise the emitted JS-string shape without pinning a
+// byte-for-byte snapshot.
 // ---------------------------------------------------------------------------
 
 const COMPOSER_SPEC = new URL("../../../src/linkedin/logic/predicates/composer.js", import.meta.url).href;
