@@ -1,6 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { PublishResult } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
-import { publishApprovedFeedPost } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
 import {
   type PublishPostActionResult,
   publishApprovedFeedPostViaAction,
@@ -86,12 +84,9 @@ export async function handlePostWorkflow(
     const draftId = r.draftId;
     const stepId = r.stepId;
     if (!killSwitch && url === "/workflow/approve" && r.isPostPublish === true && draftId && stepId) {
-      const useActionPath = process.env.FRONDOSE_PUBLISH_VIA_ACTION === "on";
-      const publish = useActionPath
-        ? (deps.publishApprovedFeedPostViaAction ?? publishApprovedFeedPostViaAction)
-        : (deps.publishApprovedFeedPost ?? publishApprovedFeedPost);
+      const publish = deps.publishApprovedFeedPostViaAction ?? publishApprovedFeedPostViaAction;
       void (async () => {
-        let result: PublishResult | PublishPostActionResult;
+        let result: PublishPostActionResult;
         try {
           const clientRes = await deps.session.getOrInitClient();
           if (!clientRes.ok) {
