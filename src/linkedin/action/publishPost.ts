@@ -1,7 +1,6 @@
 import type { Database as DB } from "better-sqlite3";
 import type { WorkflowControllerDeps } from "../../agent/workflow/controller.js";
 import { emitCommitWarning } from "../../agent/workflow/runtime/commitWarning.js";
-import type { PublishFailReason as ShadowPublishFailReason } from "../../agent/workflow/runtime/deterministicPublishPost.js";
 import type { CdpClient } from "../../cdp/client.js";
 import { type AuditEntry, writeAuditRow as appendAuditRow } from "../../persistence/audit.js";
 import { getDraft, markDraftSent as markDraftSentDefault } from "../../persistence/sales/drafts.js";
@@ -43,7 +42,22 @@ export interface PublishPostActionDeps {
 }
 
 export type PublishPostActionFailReason =
-  | ShadowPublishFailReason
+  | "approval_required"
+  | "hardware_input_not_supported"
+  | "composer_unavailable"
+  | "composer_close_failed"
+  | "composer_open_click_failed"
+  | "composer_absent_after_open"
+  | "surface_not_composer_capable"
+  | "focus_failed"
+  | "clear_failed"
+  | "readback_mismatch"
+  | "post_button_not_enabled"
+  | "post_coords_missing"
+  | "composer_still_open"
+  | "draft_missing"
+  | "draft_already_sent"
+  | "internal_error"
   | "auth_interrupted"
   | "input_resolve_failed"
   | "input_layer_mismatch"
@@ -246,7 +260,7 @@ function finishPreDispatch(
 function finishPostDispatchAmbiguous(
   deps: PublishPostActionDeps,
   t0: number,
-  reason: ShadowPublishFailReason,
+  reason: PublishPostActionFailReason,
   detail?: string,
   extra?: PublishPostActionExtra,
 ): PublishPostActionResult {
