@@ -126,8 +126,17 @@ describe("handlePostWorkflow — on approve for post step: calls publishApproved
         "T-Route.PostBranches: workflow.ts must contain 'isPostPublish'",
       );
       assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("publishApprovedFeedPost"),
-        "T-Route.PostBranches: workflow.ts must contain 'publishApprovedFeedPost'",
+        WORKFLOW_ROUTE_SRC.includes("publishApprovedFeedPostViaAction"),
+        "T-Route.PostBranches: workflow.ts must contain 'publishApprovedFeedPostViaAction'",
+      );
+      // absence pins — RED on HEAD until Step 4 removes the shadow import + flag
+      assert.ok(
+        !/\bpublishApprovedFeedPost\b(?!ViaAction)/.test(WORKFLOW_ROUTE_SRC),
+        "T-Route.PostBranches: workflow.ts must NOT contain bare 'publishApprovedFeedPost' (shadow import retired; only ViaAction variant survives)",
+      );
+      assert.ok(
+        !WORKFLOW_ROUTE_SRC.includes("deterministicPublishPost"),
+        "T-Route.PostBranches: workflow.ts must NOT contain 'deterministicPublishPost' (shadow module import retired)",
       );
 
       // Behavioral: drive handlePostWorkflow with published:true → no resumeWorkflowTurn
@@ -152,7 +161,7 @@ describe("handlePostWorkflow — on approve for post step: calls publishApproved
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount++;
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
@@ -174,7 +183,7 @@ describe("handlePostWorkflow — on approve for post step: calls publishApproved
       );
       // Give the async void block time to run
       await new Promise((r) => setTimeout(r, 200));
-      assert.equal(publishCallCount, 1, "T-Route.PostBranches: publishApprovedFeedPost must be called once");
+      assert.equal(publishCallCount, 1, "T-Route.PostBranches: publishApprovedFeedPostViaAction must be called once");
       assert.equal(
         resumeCallCount,
         0,
@@ -225,7 +234,7 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount2++;
           // pre-dispatch failure — safe to fall back
           return { published: false, reason: "composer_unavailable", fallbackAllowed: true, dispatchAttempted: false };
@@ -250,7 +259,7 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
       assert.equal(
         publishCallCount2,
         1,
-        "T-Route.FallbackOnPreDispatchFailure: publishApprovedFeedPost must be called once",
+        "T-Route.FallbackOnPreDispatchFailure: publishApprovedFeedPostViaAction must be called once",
       );
       assert.equal(
         resumeCallCount2,
@@ -301,7 +310,7 @@ describe("handlePostWorkflow — on approve for post step: NO fallback when publ
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount3++;
           // post-dispatch ambiguous — B-1: NEVER fall back
           return { published: false, reason: "composer_still_open", fallbackAllowed: false, dispatchAttempted: true };
@@ -326,7 +335,7 @@ describe("handlePostWorkflow — on approve for post step: NO fallback when publ
       assert.equal(
         publishCallCount3,
         1,
-        "T-Route.NoFallbackOnPostDispatchAmbiguity: publishApprovedFeedPost must be called once",
+        "T-Route.NoFallbackOnPostDispatchAmbiguity: publishApprovedFeedPostViaAction must be called once",
       );
       assert.equal(
         resumeCallCount3,
@@ -378,7 +387,7 @@ describe("handlePostWorkflow — on approve for post step in Auto mode: NO fallb
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "auto" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount4++;
           // Auto-mode fail-closed: approval_required, fallbackAllowed:false
           return { published: false, reason: "approval_required", fallbackAllowed: false, dispatchAttempted: false };
@@ -403,7 +412,7 @@ describe("handlePostWorkflow — on approve for post step in Auto mode: NO fallb
       assert.equal(
         publishCallCount4,
         1,
-        "T-Route.NoFallbackOnAutoMode: publishApprovedFeedPost must be called once (it runs and returns approval_required)",
+        "T-Route.NoFallbackOnAutoMode: publishApprovedFeedPostViaAction must be called once (it runs and returns approval_required)",
       );
       assert.equal(
         resumeCallCount4,
@@ -452,7 +461,7 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount5++;
           throw new Error("Fake publish throw (T-Route.FallbackOnThrow)");
         },
@@ -476,7 +485,7 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
       assert.equal(
         publishCallCount5,
         1,
-        "T-Route.FallbackOnThrow: publishApprovedFeedPost must be called once (before it throws)",
+        "T-Route.FallbackOnThrow: publishApprovedFeedPostViaAction must be called once (before it throws)",
       );
       assert.equal(
         resumeCallCount5,
@@ -533,7 +542,7 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCount6++;
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
@@ -567,7 +576,7 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
       assert.equal(
         publishCallCount6,
         0,
-        "T-Route.KillSwitch: publishApprovedFeedPost must NOT be called when kill-switch=skip",
+        "T-Route.KillSwitch: publishApprovedFeedPostViaAction must NOT be called when kill-switch=skip",
       );
       assert.equal(
         resumeCallCount6,
@@ -828,7 +837,7 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
+        publishApprovedFeedPostViaAction: async () => {
           publishCallCountKs2++;
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
@@ -866,7 +875,7 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
       assert.equal(
         publishCallCountKs2,
         0,
-        "T-Recover.6: publishApprovedFeedPost must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)",
+        "T-Recover.6: publishApprovedFeedPostViaAction must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)",
       );
       assert.equal(
         resumeCallCountKs2,
@@ -878,59 +887,53 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
 });
 
 // ---------------------------------------------------------------------------
-// T-Hook.1–5: Runtime hook — FRONDOSE_PUBLISH_VIA_ACTION selector
-// (native-port-S2 Step 3a scaffold — REQUIRED per critic CONCERN-MR-1)
+// T-Default.1/2: Flag-retired default (replaces T-Hook.1/2)
+// (native-port-S2-SHADOW-DELETE Step 2 scaffold)
 //
-// Dual-spy pattern: inject BOTH deps.publishApprovedFeedPost (shadow spy) AND
-// deps.publishApprovedFeedPostViaAction (action spy — new optional field in
-// WorkflowRoutesDeps, to be added at Step 4). Assert which one fires.
+// After the flag FRONDOSE_PUBLISH_VIA_ACTION is retired, the action path
+// (publishApprovedFeedPostViaAction) is the unconditional default.
 //
-// All 5 tests are RED on HEAD because:
-//   (1) The structural assertion `WORKFLOW_ROUTE_SRC.includes('FRONDOSE_PUBLISH_VIA_ACTION')`
-//       fails — the env var selector is not yet in workflow.ts source.
-//   (2) After Step 4 adds the selector, the structural assertion passes but
-//       assert.fail("TODO") keeps each test RED until Step 5 fills behavioral assertions.
+// T-Default.1: flag UNSET → action spy fires×1 (proves action is default)
+// T-Default.2: flag='on' set → action spy fires×1 (byte-identical to T-Default.1)
+//              + source-grep pin: WORKFLOW_ROUTE_SRC does NOT contain 'FRONDOSE_PUBLISH_VIA_ACTION'
 //
-// The new injection field (deps.publishApprovedFeedPostViaAction) is cast via
-// `as unknown as {}` (or `as never`) at the call site so tsc exits 0 even
-// before the WorkflowRoutesDeps type is updated at Step 4.
+// Both tests are RED on HEAD (before Step 4):
+//   T-Default.1: flag absent → route uses shadow path → action spy fires×0
+//   T-Default.2: source-grep assertion fails (flag still in source)
 //
 // Runner:
-//   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
+//   node --import tsx --test --test-force-exit \
 //     tests/cli/serve/routes/workflow-postPublishRouting.mock.test.ts
 // ---------------------------------------------------------------------------
 
-describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION unset → shadow spy fires, action spy NOT called (T-Hook.1)", () => {
+describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTION UNSET → action path is unconditional default (T-Default.1)", () => {
   it(
-    "T-Hook.1: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is UNSET, " +
-      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
-      "then the shadow spy (deps.publishApprovedFeedPost) is called exactly once " +
-      "AND the action spy (deps.publishApprovedFeedPostViaAction) is NEVER called",
+    "T-Default.1: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is UNSET " +
+      "and process.env.MAI_DETERMINISTIC_POST_PUBLISH is UNSET, " +
+      "when POST /workflow/approve with isPostPublish:true + draftId + stepId arrives, " +
+      "then deps.publishApprovedFeedPostViaAction is called exactly once " +
+      "(proves action path is the unconditional default after the flag retires)",
     { timeout: 5000 },
     async () => {
-      // Given: FRONDOSE_PUBLISH_VIA_ACTION env var is NOT set (default OFF — shadow path).
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION NOT set (flag retired — no default selection needed).
+      //        Only deps.publishApprovedFeedPostViaAction spy injected (no shadow seam in deps type).
       // When: POST /workflow/approve with isPostPublish:true arrives.
-      // Then: shadow spy fires×1; action spy fires×0 (only literal "on" opts in).
+      // Then: action spy fires×1.
+      // NOTE: RED on HEAD — unset flag routes to shadow (not action) → action spy fires×0.
 
-      // Structural assertion
-      assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
-        "T-Hook.1: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
-      );
-
-      const { handlePostWorkflow: hpwHook1 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
-      let shadowCallCount1 = 0;
+      const { handlePostWorkflow: hpwDefault1 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
       let actionCallCount1 = 0;
-      const scratchDir1 = join(tmpdir(), `frondose-hook1-${Date.now()}`);
+      const scratchDir1 = join(tmpdir(), `frondose-default1-${Date.now()}`);
       mkdirSync(scratchDir1, { recursive: true });
-      const fakeWorkflowH1 = makeFakeWorkflowController({
-        resumePrompt: "HOOK1 RESUME",
+      const fakeWorkflowD1 = makeFakeWorkflowController({
+        resumePrompt: "DEFAULT1 RESUME",
         isPostPublish: true,
-        draftId: "d-hook1",
-        stepId: "step-hook1",
+        draftId: "d-default1",
+        stepId: "step-default1",
       });
-      const fakeDepsH1 = {
-        workflow: fakeWorkflowH1,
+      // Intentionally NO publishApprovedFeedPost field — proves the deps type has no shadow seam.
+      const fakeDepsD1 = {
+        workflow: fakeWorkflowD1,
         salesDbPath: join(scratchDir1, "sales.db"),
         auditPath: join(scratchDir1, "audit.jsonl"),
         emitFrame: () => {},
@@ -939,85 +942,86 @@ describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION unset
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
-          shadowCallCount1++;
-          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
-        },
         publishApprovedFeedPostViaAction: async () => {
           actionCallCount1++;
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
       };
-      const fakeTurnH1 = { resumeWorkflowTurn: async () => {} };
-      const reqH1 = makeFakeReq({ stepId: "step-hook1" });
-      const { res: resH1 } = makeFakeRes();
+      const fakeTurnD1 = { resumeWorkflowTurn: async () => {} };
+      const reqD1 = makeFakeReq({ stepId: "step-default1" });
+      const { res: resD1 } = makeFakeRes();
 
-      // Ensure env var is unset
-      const origEnvH1 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      const origEnvD1 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      const origKsD1 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
       delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
       try {
-        await hpwHook1(
+        await hpwDefault1(
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
-          fakeDepsH1 as never,
-          fakeTurnH1 as never,
-          reqH1,
-          resH1,
+          fakeDepsD1 as never,
+          fakeTurnD1 as never,
+          reqD1,
+          resD1,
           "/workflow/approve",
         );
         await new Promise((r) => setTimeout(r, 200));
       } finally {
-        if (origEnvH1 === undefined) {
+        if (origEnvD1 === undefined) {
           delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
         } else {
-          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvH1;
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvD1;
+        }
+        if (origKsD1 === undefined) {
+          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+        } else {
+          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKsD1;
         }
       }
 
       assert.equal(
-        shadowCallCount1,
-        1,
-        "T-Hook.1: shadow spy (publishApprovedFeedPost) must fire exactly once when FRONDOSE_PUBLISH_VIA_ACTION is unset",
-      );
-      assert.equal(
         actionCallCount1,
-        0,
-        "T-Hook.1: action spy (publishApprovedFeedPostViaAction) must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION is unset",
+        1,
+        "T-Default.1: action spy (publishApprovedFeedPostViaAction) must fire×1 when FRONDOSE_PUBLISH_VIA_ACTION is unset (unconditional default after flag retirement)",
       );
     },
   );
 });
 
-describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION==='on' → action spy fires, shadow spy NOT called (T-Hook.2)", () => {
+describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTION='on' ignored → action path fires, flag absent from source (T-Default.2)", () => {
   it(
-    "T-Hook.2: given process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on', " +
-      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
-      "then the action spy (deps.publishApprovedFeedPostViaAction) is called exactly once " +
-      "AND the shadow spy (deps.publishApprovedFeedPost) is NEVER called",
+    "T-Default.2: given process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on' (legacy flag value), " +
+      "when POST /workflow/approve with isPostPublish:true + draftId + stepId arrives, " +
+      "then action spy fires×1 (byte-identical to T-Default.1) " +
+      "AND WORKFLOW_ROUTE_SRC does NOT contain the literal 'FRONDOSE_PUBLISH_VIA_ACTION' " +
+      "(proves the flag is fully retired — setting it has no effect)",
     { timeout: 5000 },
     async () => {
-      // Given: FRONDOSE_PUBLISH_VIA_ACTION is set to the exact literal "on".
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION set to 'on' (legacy value); only action spy injected.
       // When: POST /workflow/approve with isPostPublish:true arrives.
-      // Then: action spy fires×1; shadow spy fires×0 (the exact literal "on" is the selector).
+      // Then: action spy fires×1 (flag value ignored; action is unconditional default).
+      //       Source-grep regression pin: WORKFLOW_ROUTE_SRC does NOT contain 'FRONDOSE_PUBLISH_VIA_ACTION'.
+      // NOTE: RED on HEAD — two reasons:
+      //   (1) source contains 'FRONDOSE_PUBLISH_VIA_ACTION' (flag not yet retired)
+      //   (2) flag='on' routes to action path (so action fires×1 on HEAD — BUT the source-grep fails first).
 
-      // Structural assertion
+      // Source-grep regression pin (RED on HEAD — flag still in source)
       assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
-        "T-Hook.2: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
+        !WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
+        "T-Default.2: workflow.ts must NOT contain 'FRONDOSE_PUBLISH_VIA_ACTION' (flag fully retired)",
       );
 
-      const { handlePostWorkflow: hpwHook2 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
-      let shadowCallCount2 = 0;
+      const { handlePostWorkflow: hpwDefault2 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
       let actionCallCount2 = 0;
-      const scratchDir2 = join(tmpdir(), `frondose-hook2-${Date.now()}`);
+      const scratchDir2 = join(tmpdir(), `frondose-default2-${Date.now()}`);
       mkdirSync(scratchDir2, { recursive: true });
-      const fakeWorkflowH2 = makeFakeWorkflowController({
-        resumePrompt: "HOOK2 RESUME",
+      const fakeWorkflowD2 = makeFakeWorkflowController({
+        resumePrompt: "DEFAULT2 RESUME",
         isPostPublish: true,
-        draftId: "d-hook2",
-        stepId: "step-hook2",
+        draftId: "d-default2",
+        stepId: "step-default2",
       });
-      const fakeDepsH2 = {
-        workflow: fakeWorkflowH2,
+      const fakeDepsD2 = {
+        workflow: fakeWorkflowD2,
         salesDbPath: join(scratchDir2, "sales.db"),
         auditPath: join(scratchDir2, "audit.jsonl"),
         emitFrame: () => {},
@@ -1026,84 +1030,69 @@ describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION==='on
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
         },
-        publishApprovedFeedPost: async () => {
-          shadowCallCount2++;
-          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
-        },
         publishApprovedFeedPostViaAction: async () => {
           actionCallCount2++;
           return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
       };
-      const fakeTurnH2 = { resumeWorkflowTurn: async () => {} };
-      const reqH2 = makeFakeReq({ stepId: "step-hook2" });
-      const { res: resH2 } = makeFakeRes();
+      const fakeTurnD2 = { resumeWorkflowTurn: async () => {} };
+      const reqD2 = makeFakeReq({ stepId: "step-default2" });
+      const { res: resD2 } = makeFakeRes();
 
-      const origEnvH2 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      const origEnvD2 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
+      const origKsD2 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
       process.env.FRONDOSE_PUBLISH_VIA_ACTION = "on";
+      delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
       try {
-        await hpwHook2(
+        await hpwDefault2(
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
-          fakeDepsH2 as never,
-          fakeTurnH2 as never,
-          reqH2,
-          resH2,
+          fakeDepsD2 as never,
+          fakeTurnD2 as never,
+          reqD2,
+          resD2,
           "/workflow/approve",
         );
         await new Promise((r) => setTimeout(r, 200));
       } finally {
-        if (origEnvH2 === undefined) {
+        if (origEnvD2 === undefined) {
           delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
         } else {
-          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvH2;
+          process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvD2;
+        }
+        if (origKsD2 === undefined) {
+          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+        } else {
+          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKsD2;
         }
       }
 
       assert.equal(
         actionCallCount2,
         1,
-        "T-Hook.2: action spy (publishApprovedFeedPostViaAction) must fire exactly once when FRONDOSE_PUBLISH_VIA_ACTION='on'",
-      );
-      assert.equal(
-        shadowCallCount2,
-        0,
-        "T-Hook.2: shadow spy (publishApprovedFeedPost) must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION='on'",
+        "T-Default.2: action spy must fire×1 even when FRONDOSE_PUBLISH_VIA_ACTION='on' (flag retired — setting it has no effect)",
       );
     },
   );
 });
 
-describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION set to non-'on' value → shadow spy fires (T-Hook.3)", () => {
+describe("handlePostWorkflow — flag-retired: any FRONDOSE_PUBLISH_VIA_ACTION value uses action path unconditionally (T-Hook.3)", () => {
   it(
-    "T-Hook.3: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is set to a value OTHER than literal 'on' " +
+    "T-Hook.3: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is set to various non-'on' values " +
       "('off', '', 'ON', '1', 'true'), " +
-      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
-      "then the shadow spy fires AND the action spy does NOT " +
-      "(only the exact literal 'on' opts in — string-equality, no truthy coercion)",
+      "when POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then action spy fires×1 for EACH value (flag fully retired — any env value uses action path unconditionally)",
     { timeout: 5000 },
     async () => {
-      // Given: FRONDOSE_PUBLISH_VIA_ACTION is set to "off" / "" / "ON" / "1" / "true" (NOT "on").
+      // Given: FRONDOSE_PUBLISH_VIA_ACTION set to non-'on' values; only action spy injected (no shadow seam).
       // When: POST /workflow/approve with isPostPublish:true arrives.
-      // Then: shadow spy fires×1; action spy fires×0.
-      // This pins the non-truthy-coercion contract: only process.env.FRONDOSE_PUBLISH_VIA_ACTION === "on".
-
-      // Structural assertions
-      assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
-        "T-Hook.3: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
-      );
-      // Structural: the comparison must be strict equality with "on" (not a truthy check)
-      assert.ok(
-        WORKFLOW_ROUTE_SRC.includes('"on"') || WORKFLOW_ROUTE_SRC.includes("'on'"),
-        "T-Hook.3: workflow.ts must compare FRONDOSE_PUBLISH_VIA_ACTION to the literal string 'on'",
-      );
+      // Then: action spy fires×1; FRONDOSE_PUBLISH_VIA_ACTION has no effect (flag retired).
+      // NOTE: RED on HEAD — non-'on' value routes to shadow (action spy fires×0 on HEAD).
 
       const { handlePostWorkflow: hpwHook3 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
 
-      // Test each non-"on" value — all must route to shadow
+      // Test each non-"on" value — all must route to action after the flag is retired
       const nonOnValues = ["off", "", "ON", "1", "true"];
       for (const nonOnVal of nonOnValues) {
-        let shadowCount = 0;
         let actionCount = 0;
         const scratchDir3 = join(tmpdir(), `frondose-hook3-${nonOnVal}-${Date.now()}`);
         mkdirSync(scratchDir3, { recursive: true });
@@ -1113,6 +1102,7 @@ describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION set t
           draftId: `d-hook3-${nonOnVal}`,
           stepId: `step-hook3-${nonOnVal}`,
         });
+        // Only action spy injected — no shadow seam (shadow field retired from ServeDeps)
         const fakeDepsH3 = {
           workflow: fakeWorkflowH3,
           salesDbPath: join(scratchDir3, "sales.db"),
@@ -1122,10 +1112,6 @@ describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION set t
             inputMode: "cdp" as const,
             getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
             resolvedMode: () => "manual" as const,
-          },
-          publishApprovedFeedPost: async () => {
-            shadowCount++;
-            return { published: true, fallbackAllowed: false, dispatchAttempted: true };
           },
           publishApprovedFeedPostViaAction: async () => {
             actionCount++;
@@ -1157,43 +1143,30 @@ describe("handlePostWorkflow — runtime hook: FRONDOSE_PUBLISH_VIA_ACTION set t
         }
 
         assert.equal(
-          shadowCount,
-          1,
-          `T-Hook.3: shadow spy must fire when FRONDOSE_PUBLISH_VIA_ACTION='${nonOnVal}' (non-"on" truthy coercion rejected)`,
-        );
-        assert.equal(
           actionCount,
-          0,
-          `T-Hook.3: action spy must NOT fire when FRONDOSE_PUBLISH_VIA_ACTION='${nonOnVal}'`,
+          1,
+          `T-Hook.3: action spy must fire×1 when FRONDOSE_PUBLISH_VIA_ACTION='${nonOnVal}' (flag retired — action is unconditional default)`,
         );
       }
     },
   );
 });
 
-describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_POST_PUBLISH=skip + FRONDOSE_PUBLISH_VIA_ACTION=on → NEITHER spy fires (T-Hook.4)", () => {
+describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_PUBLISH=skip → action seam NOT called regardless of FRONDOSE_PUBLISH_VIA_ACTION value (T-Hook.4)", () => {
   it(
-    "T-Hook.4 (kill-switch cross-product, action-path branch): " +
-      "given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' AND process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on', " +
-      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
-      "then NEITHER the shadow spy NOR the action spy fires (kill-switch gates BOTH paths) " +
-      "AND turn.resumeWorkflowTurn is invoked instead",
+    "T-Hook.4: given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
+      "AND process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on' (legacy flag — now ignored), " +
+      "when POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then action spy NOT called AND turn.resumeWorkflowTurn fires×1 (kill-switch gates the publish path)",
     { timeout: 5000 },
     async () => {
-      // Given: kill-switch (MAI_DETERMINISTIC_POST_PUBLISH=skip) active + action path requested.
+      // Given: kill-switch (MAI_DETERMINISTIC_POST_PUBLISH=skip) active; only action spy injected.
       // When: POST /workflow/approve with isPostPublish:true arrives.
-      // Then: shadow spy fires×0; action spy fires×0; resumeWorkflowTurn fires×1.
-      // The kill-switch guard sits outside the publish selector — it gates BOTH paths
-      // (verified plan §6.3 + CONCERN-MR-1 cross-product requirement).
-
-      // Structural assertion
-      assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
-        "T-Hook.4: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
-      );
+      // Then: action spy fires×0; resumeWorkflowTurn fires×1.
+      // The kill-switch guard sits outside the publish selector — it prevents any publish.
+      // NOTE: GREEN on HEAD (kill-switch already works and shadow seam removal doesn't affect this).
 
       const { handlePostWorkflow: hpwHook4 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
-      let shadowCallCount4 = 0;
       let actionCallCount4 = 0;
       let resumeCallCount4 = 0;
       const scratchDir4 = join(tmpdir(), `frondose-hook4-${Date.now()}`);
@@ -1213,10 +1186,6 @@ describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_PO
           inputMode: "cdp" as const,
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
-        },
-        publishApprovedFeedPost: async () => {
-          shadowCallCount4++;
-          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
         publishApprovedFeedPostViaAction: async () => {
           actionCallCount4++;
@@ -1258,11 +1227,6 @@ describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_PO
         }
       }
 
-      assert.equal(
-        shadowCallCount4,
-        0,
-        "T-Hook.4: shadow spy must NOT fire when kill-switch=skip (even with action path)",
-      );
       assert.equal(actionCallCount4, 0, "T-Hook.4: action spy must NOT fire when kill-switch=skip");
       assert.equal(
         resumeCallCount4,
@@ -1273,29 +1237,22 @@ describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_PO
   );
 });
 
-describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_POST_PUBLISH=skip + FRONDOSE_PUBLISH_VIA_ACTION unset → NEITHER spy fires (T-Hook.5)", () => {
+describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_PUBLISH=skip + flag UNSET → action NOT called, LLM resume fires (T-Hook.5)", () => {
   it(
-    "T-Hook.5 (kill-switch cross-product, shadow-path branch — regression guard): " +
-      "given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' AND FRONDOSE_PUBLISH_VIA_ACTION UNSET, " +
-      "when an approval POST /workflow/approve with isPostPublish:true is dispatched, " +
-      "then NEITHER spy fires AND turn.resumeWorkflowTurn is invoked " +
-      "(unchanged pre-Slice-2 kill-switch behavior — regression guard that the new selector did not break it)",
+    "T-Hook.5: given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
+      "AND FRONDOSE_PUBLISH_VIA_ACTION UNSET (flag retired — default state), " +
+      "when POST /workflow/approve with isPostPublish:true is dispatched, " +
+      "then action spy NOT called AND turn.resumeWorkflowTurn fires×1 " +
+      "(regression guard: kill-switch behavior preserved after flag retirement)",
     { timeout: 5000 },
     async () => {
-      // Given: kill-switch active; FRONDOSE_PUBLISH_VIA_ACTION not set (shadow path would be default).
+      // Given: kill-switch active; FRONDOSE_PUBLISH_VIA_ACTION unset; only action spy injected.
       // When: POST /workflow/approve with isPostPublish:true arrives.
-      // Then: shadow spy fires×0; action spy fires×0; resumeWorkflowTurn fires×1.
-      // This is a regression guard: the pre-Slice-2 kill-switch behavior (T-Route.KillSwitch)
-      // must be preserved even after the new selector branch is added.
-
-      // Structural assertion
-      assert.ok(
-        WORKFLOW_ROUTE_SRC.includes("FRONDOSE_PUBLISH_VIA_ACTION"),
-        "T-Hook.5: workflow.ts must contain FRONDOSE_PUBLISH_VIA_ACTION selector",
-      );
+      // Then: action spy fires×0; resumeWorkflowTurn fires×1.
+      // This is a regression guard: the kill-switch behavior must survive flag retirement.
+      // NOTE: GREEN on HEAD (kill-switch already prevents publish; shadow seam removal doesn't affect this).
 
       const { handlePostWorkflow: hpwHook5 } = await import("../../../../src/cli/subcommands/serve/routes/workflow.js");
-      let shadowCallCount5 = 0;
       let actionCallCount5 = 0;
       let resumeCallCount5 = 0;
       const scratchDir5 = join(tmpdir(), `frondose-hook5-${Date.now()}`);
@@ -1315,10 +1272,6 @@ describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_PO
           inputMode: "cdp" as const,
           getOrInitClient: () => Promise.resolve({ ok: true, client: {} }),
           resolvedMode: () => "manual" as const,
-        },
-        publishApprovedFeedPost: async () => {
-          shadowCallCount5++;
-          return { published: true, fallbackAllowed: false, dispatchAttempted: true };
         },
         publishApprovedFeedPostViaAction: async () => {
           actionCallCount5++;
@@ -1361,14 +1314,9 @@ describe("handlePostWorkflow — kill-switch cross-product: MAI_DETERMINISTIC_PO
       }
 
       assert.equal(
-        shadowCallCount5,
-        0,
-        "T-Hook.5: shadow spy must NOT fire when kill-switch=skip (regression guard — unchanged kill-switch behavior)",
-      );
-      assert.equal(
         actionCallCount5,
         0,
-        "T-Hook.5: action spy must NOT fire when kill-switch=skip and FRONDOSE_PUBLISH_VIA_ACTION unset",
+        "T-Hook.5: action spy must NOT fire when kill-switch=skip (regression guard — kill-switch behavior preserved)",
       );
       assert.equal(
         resumeCallCount5,

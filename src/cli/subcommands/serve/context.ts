@@ -151,7 +151,6 @@ export interface ServeDeps {
   auditPath: string;
   expectedToken: Buffer;
   workflow: WorkflowController;
-  publishApprovedFeedPost?: typeof import("../../../agent/workflow/runtime/deterministicPublishPost.js").publishApprovedFeedPost;
   publishApprovedFeedPostViaAction?: typeof import("../../../linkedin/action/publishPost.js").publishApprovedFeedPostViaAction;
   emitFrame: (frame: SseFrame) => void;
   emitOverlayEvent: (event: OverlayEvent) => void;

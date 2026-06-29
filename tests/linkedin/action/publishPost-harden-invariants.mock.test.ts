@@ -161,34 +161,51 @@ describe("publishApprovedFeedPostViaAction — no-double-post invariant under ha
 
 describe("PublishPostActionFailReason — failure reason union covers new cases (T-FailReason)", () => {
   it(
-    "T-FailReason.1: source contract - PublishPostActionFailReason retains 'composer_absent_after_open' | " +
-      "'post_button_not_enabled' and ShadowPublishFailReason retains 'composer_still_open'",
+    "T-FailReason.1: source contract — PublishPostActionFailReason in publishPost.ts is self-contained: " +
+      "no ShadowPublishFailReason reference, no deterministicPublishPost import, " +
+      "and all 10 key shadow-origin literals are directly present in the union body",
     async () => {
-      // Given: publishPost.ts exports the action fail-reason union used by the harden action result.
+      // Given: publishPost.ts has inlined the shadow literals (Step 4 self-containment).
       // When: the source declarations are inspected at runtime.
-      // Then: both direct harden literals remain in the action union, and composer_still_open remains in the shadow union it includes.
+      // Then: (T-SelfContain.1) publishPost.ts has no deterministicPublishPost reference +
+      //       no ShadowPublishFailReason reference.
+      //       (T-SelfContain.2) the PublishPostActionFailReason union body directly includes
+      //       all 10 key literals from the shadow union.
+      // NOTE: RED on HEAD — publishPost.ts still imports ShadowPublishFailReason from the shadow.
       const publishSrc = readFileSync(join(ROOT, "src/linkedin/action/publishPost.ts"), "utf-8");
-      const shadowSrc = readFileSync(join(ROOT, "src/agent/workflow/runtime/deterministicPublishPost.ts"), "utf-8");
-      const actionUnion = publishSrc.match(/export type PublishPostActionFailReason =([\s\S]*?);/);
-      assert.ok(actionUnion, "T-FailReason.1: PublishPostActionFailReason union is declared");
-      const actionUnionBody = actionUnion[1] ?? "";
-      for (const reason of ["composer_absent_after_open", "post_button_not_enabled"]) {
-        assert.ok(
-          actionUnionBody.includes(`"${reason}"`),
-          `T-FailReason.1: PublishPostActionFailReason includes ${reason}`,
-        );
-      }
+
+      // T-SelfContain.1: no shadow import or type alias
       assert.ok(
-        actionUnionBody.includes("ShadowPublishFailReason"),
-        "T-FailReason.1: PublishPostActionFailReason includes ShadowPublishFailReason",
+        !publishSrc.includes("deterministicPublishPost"),
+        "T-FailReason.1 (T-SelfContain.1): publishPost.ts must NOT reference deterministicPublishPost",
+      );
+      assert.ok(
+        !publishSrc.includes("ShadowPublishFailReason"),
+        "T-FailReason.1 (T-SelfContain.1): publishPost.ts must NOT contain ShadowPublishFailReason",
       );
 
-      const shadowUnion = shadowSrc.match(/export type PublishFailReason =([\s\S]*?);/);
-      assert.ok(shadowUnion, "T-FailReason.1: PublishFailReason shadow union is declared");
-      assert.ok(
-        (shadowUnion[1] ?? "").includes('"composer_still_open"'),
-        "T-FailReason.1: ShadowPublishFailReason includes composer_still_open",
-      );
+      // T-SelfContain.2: union body directly includes the 10 key shadow-origin literals
+      const actionUnion = publishSrc.match(/export type PublishPostActionFailReason =([\s\S]*?);/);
+      assert.ok(actionUnion, "T-FailReason.1 (T-SelfContain.2): PublishPostActionFailReason union is declared");
+      const actionUnionBody = actionUnion![1] ?? "";
+      const shadowOriginLiterals = [
+        "approval_required",
+        "hardware_input_not_supported",
+        "composer_unavailable",
+        "composer_still_open",
+        "draft_missing",
+        "draft_already_sent",
+        "internal_error",
+        "readback_mismatch",
+        "composer_absent_after_open",
+        "post_button_not_enabled",
+      ];
+      for (const reason of shadowOriginLiterals) {
+        assert.ok(
+          actionUnionBody.includes(`"${reason}"`),
+          `T-FailReason.1 (T-SelfContain.2): PublishPostActionFailReason union body must directly include "${reason}"`,
+        );
+      }
     },
   );
 
