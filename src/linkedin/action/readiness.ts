@@ -10,9 +10,13 @@ import {
   COMPOSER_CLEAR_JS,
   COMPOSER_EDITOR_JS,
   COMPOSER_FOCUS_JS,
+  COMPOSER_POST_BUTTON_ENABLED_JS,
+  COMPOSER_PRESENT_JS,
   DEFAULT_COMPOSER_LABEL_PATTERN,
 } from "../logic/predicates/composer.js";
+import { scopeIsAvailable } from "../logic/scopeResolver/normalize.js";
 import { CommandNotFoundError, type ResolvedTarget } from "../logic/scopeResolver/shared.js";
+import { resolveScopedTarget } from "../logic/scopeResolver/targetResolution.js";
 import type { CurrentSurfaceContext } from "../logic/surface/currentSurfaceTypes.js";
 import { normalizeForComparison, textsMatch } from "../logic/verification.js";
 
@@ -20,6 +24,11 @@ const SETTLE_AFTER_NAV_MS = 300;
 const INPUT_READY_SETTLE_MS = 90;
 const TARGET_READY_SETTLE_MS = 90;
 const READBACK_RETRY_MS = 120;
+export const COMPOSER_OPEN_RETRY_ROUNDS = 4;
+export const OPEN_IN_ROUND_PROBE_ATTEMPTS = 3;
+export const ENABLE_GATE_ATTEMPTS = 6;
+export const COMPOSER_GONE_ATTEMPTS = 6;
+export const OPEN_PROBE_BASE_MS = 120;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -28,6 +37,13 @@ export type LinkedInDestination = keyof typeof LINKEDIN_FIXED_DESTINATIONS;
 export interface EnsureLinkedInDestinationResult {
   url: string;
   reusedSession: boolean;
+}
+
+export interface OpenComposerResult {
+  opened: boolean;
+  openedOnRound: number;
+  everClicked: boolean;
+  contextAtOpen?: CurrentSurfaceContext;
 }
 
 export async function ensureLinkedInDestination(
@@ -122,6 +138,91 @@ export async function verifyTypedTextOnSameTarget(
   if (textsMatch(intended, await probe())) return true;
   await sleep(READBACK_RETRY_MS);
   return textsMatch(intended, await probe());
+}
+
+export async function openComposerHardened(deps: {
+  client: CdpClient;
+  capture: () => Promise<CurrentSurfaceContext>;
+}): Promise<OpenComposerResult> {
+  const initial = await deps.capture();
+  if (initial.activeLayer === "modal" && scopeIsAvailable(initial, "composerInput")) {
+    return { opened: true, openedOnRound: 0, everClicked: false, contextAtOpen: initial };
+  }
+
+  let everClicked = false;
+  for (let round = 0; round < COMPOSER_OPEN_RETRY_ROUNDS; round += 1) {
+    let clickedThisRound = false;
+    try {
+      const opened = await resolveScopedTarget(
+        { kind: "button", label: "Start a post" },
+        { captureCurrentSurfaceContext: deps.capture },
+      );
+      await deps.client.clickAt(opened.target.selector);
+      clickedThisRound = true;
+      everClicked = true;
+    } catch {
+      clickedThisRound = false;
+    }
+
+    if (clickedThisRound) {
+      for (let attempt = 0; attempt < OPEN_IN_ROUND_PROBE_ATTEMPTS; attempt += 1) {
+        await sleep(OPEN_PROBE_BASE_MS * (attempt + 1));
+        const probe = await deps.capture();
+        if (probe.activeLayer === "modal" && scopeIsAvailable(probe, "composerInput")) {
+          return {
+            opened: true,
+            openedOnRound: round + 1,
+            everClicked: true,
+            contextAtOpen: probe,
+          };
+        }
+      }
+    }
+
+    if (round < COMPOSER_OPEN_RETRY_ROUNDS - 1) {
+      await sleep(OPEN_PROBE_BASE_MS * (1 << round));
+    }
+  }
+
+  return { opened: false, openedOnRound: -1, everClicked };
+}
+
+export async function waitForPostButtonEnabled(client: CdpClient): Promise<{ enabled: boolean; attempts: number }> {
+  let attempts = 0;
+  for (let i = 0; i < ENABLE_GATE_ATTEMPTS; i += 1) {
+    attempts = i + 1;
+    let enabled = false;
+    try {
+      enabled = (await client.evaluate<boolean>(COMPOSER_POST_BUTTON_ENABLED_JS())) === true;
+    } catch {
+      enabled = false;
+    }
+    if (enabled) return { enabled: true, attempts };
+    if (i < ENABLE_GATE_ATTEMPTS - 1) {
+      await sleep(OPEN_PROBE_BASE_MS * (1 << i));
+    }
+  }
+  return { enabled: false, attempts };
+}
+
+export async function confirmComposerGone(client: CdpClient): Promise<{ gone: boolean; attempts: number }> {
+  let attempts = 0;
+  for (let i = 0; i < COMPOSER_GONE_ATTEMPTS; i += 1) {
+    attempts = i + 1;
+    let present = true;
+    try {
+      const raw = await client.evaluate<string>(COMPOSER_PRESENT_JS());
+      const parsed = JSON.parse(raw) as { present?: boolean };
+      present = parsed.present === true;
+    } catch {
+      present = true;
+    }
+    if (!present) return { gone: true, attempts };
+    if (i < COMPOSER_GONE_ATTEMPTS - 1) {
+      await sleep(OPEN_PROBE_BASE_MS * (1 << i));
+    }
+  }
+  return { gone: false, attempts };
 }
 
 export async function ensureInputReady(context: CurrentSurfaceContext, _target: ResolvedTarget): Promise<void> {

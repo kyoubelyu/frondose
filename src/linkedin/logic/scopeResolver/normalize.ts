@@ -1,12 +1,6 @@
 import type { CommandCandidate } from "../../types.js";
-import {
-  findVisibleScopeByHandle,
-  resolveVisibleScopeKind,
-} from "../contracts/visibleScope.js";
-import {
-  isMinimalPublicScopeId,
-  type MinimalPublicScopeId,
-} from "../contracts/minimalPublicContract.js";
+import { isMinimalPublicScopeId, type MinimalPublicScopeId } from "../contracts/minimalPublicContract.js";
+import { findVisibleScopeByHandle, resolveVisibleScopeKind } from "../contracts/visibleScope.js";
 import type { CurrentSurfaceContext } from "../surface/currentSurfaceTypes.js";
 import {
   buildVisibleScopeSignature,
@@ -17,6 +11,11 @@ import {
 } from "./shared.js";
 
 export type CaptureCurrentSurfaceContext = () => Promise<CurrentSurfaceContext>;
+
+export interface ScopeReadyBudget {
+  attempts?: number;
+  retryMs?: number;
+}
 
 let configuredScopedContextCapture: CaptureCurrentSurfaceContext | undefined;
 
@@ -160,6 +159,7 @@ function sleep(ms: number): Promise<void> {
 export async function captureScopedContext(
   scope: string | undefined,
   captureCurrentSurfaceContext = configuredScopedContextCapture,
+  budget?: ScopeReadyBudget,
 ): Promise<CurrentSurfaceContext> {
   if (!captureCurrentSurfaceContext) {
     throw new CommandRuntimeError(
@@ -167,13 +167,15 @@ export async function captureScopedContext(
     );
   }
 
+  const attempts = budget?.attempts ?? SCOPE_READY_ATTEMPTS;
+  const retryMs = budget?.retryMs ?? SCOPE_READY_RETRY_MS;
   let context = await captureCurrentSurfaceContext();
   if (scopeIsAvailable(context, scope)) {
     return context;
   }
 
-  for (let attempt = 1; attempt < SCOPE_READY_ATTEMPTS; attempt += 1) {
-    await sleep(SCOPE_READY_RETRY_MS);
+  for (let attempt = 1; attempt < attempts; attempt += 1) {
+    await sleep(retryMs);
     context = await captureCurrentSurfaceContext();
     if (scopeIsAvailable(context, scope)) {
       return context;

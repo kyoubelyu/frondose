@@ -34,7 +34,7 @@ async function loadReadiness(): Promise<{
 }> {
   const mod = (await import(READINESS_SPEC)) as Record<string, unknown>;
   return {
-    ensureLinkedInDestination: mod["ensureLinkedInDestination"] as EnsureLinkedInDestinationFn,
+    ensureLinkedInDestination: mod.ensureLinkedInDestination as EnsureLinkedInDestinationFn,
   };
 }
 

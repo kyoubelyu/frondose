@@ -60,11 +60,11 @@ async function loadReadiness(): Promise<{
 }> {
   const mod = (await import(READINESS_SPEC)) as Record<string, unknown>;
   return {
-    fillComposerSurface: mod["fillComposerSurface"] as FillComposerSurfaceFn,
-    verifyTypedTextOnSameTarget: mod["verifyTypedTextOnSameTarget"] as VerifyTypedTextFn,
-    ensureInputReady: mod["ensureInputReady"] as EnsureInputReadyFn,
-    ensureTargetReady: mod["ensureTargetReady"] as EnsureTargetReadyFn,
-    FillFailedError: mod["FillFailedError"] as FillFailedErrorCtor,
+    fillComposerSurface: mod.fillComposerSurface as FillComposerSurfaceFn,
+    verifyTypedTextOnSameTarget: mod.verifyTypedTextOnSameTarget as VerifyTypedTextFn,
+    ensureInputReady: mod.ensureInputReady as EnsureInputReadyFn,
+    ensureTargetReady: mod.ensureTargetReady as EnsureTargetReadyFn,
+    FillFailedError: mod.FillFailedError as FillFailedErrorCtor,
   };
 }
 
