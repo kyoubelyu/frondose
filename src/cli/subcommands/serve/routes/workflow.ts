@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PublishResult } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
 import { publishApprovedFeedPost } from "../../../../agent/workflow/runtime/deterministicPublishPost.js";
+import {
+  type PublishPostActionResult,
+  publishApprovedFeedPostViaAction,
+} from "../../../../linkedin/action/publishPost.js";
 import { writeWorkflowAudit } from "../../../../persistence/audit.js";
 import { countAutoLedgerByAction, endAutoRun, getAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
@@ -82,9 +86,12 @@ export async function handlePostWorkflow(
     const draftId = r.draftId;
     const stepId = r.stepId;
     if (!killSwitch && url === "/workflow/approve" && r.isPostPublish === true && draftId && stepId) {
-      const publish = deps.publishApprovedFeedPost ?? publishApprovedFeedPost;
+      const useActionPath = process.env.FRONDOSE_PUBLISH_VIA_ACTION === "on";
+      const publish = useActionPath
+        ? (deps.publishApprovedFeedPostViaAction ?? publishApprovedFeedPostViaAction)
+        : (deps.publishApprovedFeedPost ?? publishApprovedFeedPost);
       void (async () => {
-        let result: PublishResult;
+        let result: PublishResult | PublishPostActionResult;
         try {
           const clientRes = await deps.session.getOrInitClient();
           if (!clientRes.ok) {
