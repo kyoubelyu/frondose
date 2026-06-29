@@ -1,11 +1,30 @@
+import { isMinimalPublicScopeId } from "../contracts/minimalPublicContract.js";
 import {
   classifyUploadVisibleScopeKind,
   findVisibleScopeInspectionByHandle,
   parseVisibleControlRef,
   resolveVisibleScopeKind,
 } from "../contracts/visibleScope.js";
-import { isMinimalPublicScopeId } from "../contracts/minimalPublicContract.js";
 import type { CurrentSurfaceContext, RuntimeVisibleScopeInspection } from "../surface/currentSurfaceTypes.js";
+import {
+  buildAmbiguityCandidates,
+  defaultInputCandidates,
+  entryMatchesKind,
+  entryMatchesScope,
+  matchesLabel,
+  resolveEntryPublicScope,
+} from "./entryMatching.js";
+import {
+  type CaptureCurrentSurfaceContext,
+  captureScopedContext,
+  ensureScopeAvailable,
+  isVisibleScopeHandle,
+  normalizeLabel,
+  normalizeRef,
+  normalizeScope,
+  throwOutsideFrozenPublicBoundary,
+  uploadCertificationCandidates,
+} from "./normalize.js";
 import {
   buildVisibleScopeSignature,
   CLICKABLE_ROLES,
@@ -15,37 +34,20 @@ import {
   INPUT_ROLES,
   isMediaAttachedHeaderScope,
   isVolatileVisibleScopeHandle,
+  type ResolveScopedTargetInput,
+  type ResolveScopedTargetResult,
   SEARCH_FILTER_LABELS,
   selectorExpressionForEntry,
   selectorExpressionForToken,
   UPLOAD_TRIGGER_PATTERNS,
-  type ResolveScopedTargetInput,
-  type ResolveScopedTargetResult,
 } from "./shared.js";
-import {
-  captureScopedContext,
-  ensureScopeAvailable,
-  isVisibleScopeHandle,
-  normalizeLabel,
-  normalizeRef,
-  normalizeScope,
-  throwOutsideFrozenPublicBoundary,
-  uploadCertificationCandidates,
-  type CaptureCurrentSurfaceContext,
-} from "./normalize.js";
 import { resolveCertifiedUploadPublicScope, resolveCertifiedUploadVisibleScope } from "./uploadCertification.js";
-import {
-  buildAmbiguityCandidates,
-  defaultInputCandidates,
-  entryMatchesKind,
-  entryMatchesScope,
-  matchesLabel,
-  resolveEntryPublicScope,
-} from "./entryMatching.js";
 
 export interface ResolveScopedTargetOptions {
   context?: CurrentSurfaceContext;
   captureCurrentSurfaceContext?: CaptureCurrentSurfaceContext;
+  scopeReadyAttempts?: number;
+  scopeReadyRetryMs?: number;
 }
 
 const AMBIGUOUS_SCOPE_LABEL_HINTS: ReadonlyMap<string, { label: string; reason: string }> = new Map([
@@ -426,7 +428,13 @@ async function resolveContext(
   }
 
   if (isResolveOptions(contextArg)) {
-    return contextArg.context ?? captureScopedContext(scope, contextArg.captureCurrentSurfaceContext);
+    return (
+      contextArg.context ??
+      captureScopedContext(scope, contextArg.captureCurrentSurfaceContext, {
+        attempts: contextArg.scopeReadyAttempts,
+        retryMs: contextArg.scopeReadyRetryMs,
+      })
+    );
   }
 
   return contextArg;
