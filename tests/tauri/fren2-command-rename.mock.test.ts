@@ -8,8 +8,8 @@
  * Behaviors covered:
  *   T-REN.1 — zero legacy `mai_*` Tauri command token remains in the four guarded surfaces
  *   T-REN.2 — full lockstep symmetry: every TS invoke("frondose_X") maps to a registered
- *              Rust handler; every Rust handler is in generate_handler!; 3 zero-TS-caller
- *              commands (frondose_health / frondose_chrome_ensure / frondose_workflow_cancel)
+ *              Rust handler; every Rust handler is in generate_handler!; 2 zero-TS-caller
+ *              commands (frondose_health / frondose_chrome_ensure; WLC gave workflow_cancel a TS caller)
  *              are allowed as handler-only entries
  *   T-REN.3 — exactly 15 frondose_* handlers defined, registered, and pinned in the
  *              P-APP-7 golden
@@ -95,12 +95,15 @@ const EXPECTED_FRONDOSE_COMMANDS: ReadonlySet<string> = new Set([
 
 /**
  * Commands that are registered Rust handlers with no TS invoke — allowed gap.
- * After rename these become frondose_health, frondose_chrome_ensure, frondose_workflow_cancel.
+ * After rename these become frondose_health, frondose_chrome_ensure.
+ * WLC (2026-07-02): frondose_workflow_cancel REMOVED from this set — the
+ * WORKFLOW-LIFECYCLE-COMPLETION Pause fix (app.ts abortTurn) now invokes it when
+ * there is no live turn (stops the whole auto-run), so it has a real TS caller and
+ * is verified by T-REN.2b's "every invoke maps to a Rust handler" instead.
  */
 const ZERO_TS_CALLER_COMMANDS: ReadonlySet<string> = new Set([
   "frondose_health",
   "frondose_chrome_ensure",
-  "frondose_workflow_cancel",
 ]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -292,10 +295,10 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     );
   });
 
-  it("T-REN.2c: given renamed surfaces, when the three zero-TS-caller commands are checked, then they are registered handlers with no matching TS invoke (allowed gap)", () => {
-    // Given: frondose_health / frondose_chrome_ensure / frondose_workflow_cancel are registered
+  it("T-REN.2c: given renamed surfaces, when the two zero-TS-caller commands are checked, then they are registered handlers with no matching TS invoke (allowed gap)", () => {
+    // Given: frondose_health / frondose_chrome_ensure are registered (workflow_cancel gained a TS caller — WLC)
     // When:  TS invoke sets for app.ts + settings.ts are extracted
-    // Then:  none of the three zero-caller names appear in the TS invoke set (correct absence)
+    // Then:  none of the two zero-caller names appear in the TS invoke set (correct absence)
     const appTsSrc = readFileSync(APP_TS, "utf-8");
     const settingsTsSrc = readFileSync(SETTINGS_TS, "utf-8");
     const tsInvokes = new Set([
