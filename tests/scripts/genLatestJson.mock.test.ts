@@ -301,3 +301,54 @@ describe("gen-latest-json.mjs — missing SIG_PATH → non-zero exit; OUT_PATH n
     }
   });
 });
+
+// ── T-Manifest.5 (P-UPDATE-INTRANET §6.C) ───────────────────────────────────
+
+describe("gen-latest-json.mjs — unified multi-platform manifest, auto pub_date (P-UPDATE-INTRANET T-Manifest.5)", () => {
+  it("T-Manifest.5: given both macOS and Windows sig+url pairs, platforms has exactly darwin-x86_64/darwin-aarch64/windows-x86_64, each signature===file contents, version===VERSION, pub_date is RFC3339", () => {
+    // Given: SIG_PATH+MANIFEST_URL AND WINDOWS_SIG_PATH+WINDOWS_MANIFEST_URL, PUB_DATE unset
+    // When:  node scripts/gen-latest-json.mjs runs (release.sh's unified-manifest step, plan §6.B step 3)
+    // Then:  platforms has exactly the 3 keys, each {url,signature} correct, version===VERSION, pub_date auto-RFC3339
+    // NOTE: gen-latest-json.mjs already supports the WINDOWS_ pair (verified :17-18/48-53) — this is an
+    // ALREADY-GREEN regression pin of the unified-manifest contract release.sh (Step 4, not yet built) depends on.
+    const { dir, cleanup } = makeTmp();
+    try {
+      const macSigPath = join(dir, "mac.sig");
+      const winSigPath = join(dir, "win.sig");
+      const outPath = join(dir, "latest.json");
+      writeFileSync(macSigPath, "MAC_SIGNATURE_BLOB", "utf-8");
+      writeFileSync(winSigPath, "WIN_SIGNATURE_BLOB", "utf-8");
+
+      execFileSync("node", [SCRIPT], {
+        env: {
+          ...process.env,
+          SIG_PATH: macSigPath,
+          MANIFEST_URL: "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz",
+          WINDOWS_SIG_PATH: winSigPath,
+          WINDOWS_MANIFEST_URL: "http://intranet-host.local:4875/downloads/Frondose-windows-x86_64-setup.exe",
+          VERSION: "0.5.0-alpha.76",
+          OUT_PATH: outPath,
+          // PUB_DATE deliberately unset — asserts the auto-RFC3339 path with both platforms present
+        },
+        encoding: "utf-8",
+      });
+
+      const manifest = JSON.parse(readFileSync(outPath, "utf-8")) as Record<string, unknown>;
+      const platforms = manifest.platforms as Record<string, { url: string; signature: string }>;
+      assert.deepEqual(Object.keys(platforms).sort(), ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]);
+      assert.equal(platforms["darwin-x86_64"]?.url, "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz");
+      assert.equal(platforms["darwin-x86_64"]?.signature, "MAC_SIGNATURE_BLOB");
+      assert.equal(platforms["darwin-aarch64"]?.url, "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz");
+      assert.equal(platforms["darwin-aarch64"]?.signature, "MAC_SIGNATURE_BLOB");
+      assert.equal(
+        platforms["windows-x86_64"]?.url,
+        "http://intranet-host.local:4875/downloads/Frondose-windows-x86_64-setup.exe",
+      );
+      assert.equal(platforms["windows-x86_64"]?.signature, "WIN_SIGNATURE_BLOB");
+      assert.equal(manifest.version, "0.5.0-alpha.76");
+      assert.match(String(manifest.pub_date), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    } finally {
+      cleanup();
+    }
+  });
+});

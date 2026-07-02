@@ -114,3 +114,106 @@ pub(crate) async fn run_update_check(app: AppHandle) {
         Err(e) => eprintln!("[frondose] update check failed: {}", e),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! P-UPDATE-INTRANET Step 2 (validator): scaffolds for T-Updater.1-4 — the
+    //! three-way default-URL precedence `read_update_server_url()` implements at
+    //! Step 4 (plan §6.A). Assertions target the SKETCH behavior (absent/null →
+    //! baked default; explicit "" → disabled; explicit url → override), so
+    //! T-Updater.1/.2 are RED against today's source (which still returns None
+    //! for absent/null) and T-Updater.3/.4 are already-green regression pins of
+    //! unchanged behavior. Asserted by literal string value (not the not-yet-
+    //! existing `DEFAULT_UPDATE_SERVER_URL` const name).
+    use super::*;
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    const EXPECTED_DEFAULT_URL: &str = "http://intranet-host.local:4875";
+
+    // Serializes HOME env-var mutation across these tests only — cargo test runs
+    // test fns in parallel threads by default and HOME is process-global. No new
+    // crate dep: a local Mutex is enough since no other test in this crate reads
+    // HOME (grep-verified at scaffold time).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII guard: points HOME at a fresh temp dir for the test's duration and
+    /// restores the previous HOME (or removes it) on drop, even on panic. Never
+    /// touches the real ~/.frondose.
+    struct TempHome {
+        dir: std::path::PathBuf,
+        original: Option<String>,
+    }
+
+    impl TempHome {
+        fn new(tag: &str) -> Self {
+            let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let dir = std::env::temp_dir().join(format!("frondose-updater-test-{}-{}", tag, nanos));
+            std::fs::create_dir_all(&dir).unwrap();
+            let original = std::env::var("HOME").ok();
+            std::env::set_var("HOME", &dir);
+            TempHome { dir, original }
+        }
+
+        /// Writes ~/.frondose/agent/config.json with the given raw JSON body.
+        fn write_config(&self, json: &str) {
+            let agent_dir = self.dir.join(".frondose/agent");
+            std::fs::create_dir_all(&agent_dir).unwrap();
+            std::fs::write(agent_dir.join("config.json"), json).unwrap();
+        }
+    }
+
+    impl Drop for TempHome {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    // T-Updater.1: given no ~/.frondose/agent/config.json on disk, when
+    // read_update_server_url() runs, then it returns Some(the baked intranet
+    // default) — covers the fresh-install auto-pull window (plan §6.A).
+    // RED against current source (returns None today for an absent config file).
+    #[test]
+    fn t_updater_1_absent_config_returns_baked_default() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _home = TempHome::new("absent");
+        assert_eq!(read_update_server_url(), Some(EXPECTED_DEFAULT_URL.to_string()));
+    }
+
+    // T-Updater.2: given config.json with "updateServerUrl": null, when read,
+    // then Some(default) — null is treated the same as absent (plan §6.A).
+    // RED against current source (null → None today).
+    #[test]
+    fn t_updater_2_null_config_value_returns_baked_default() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("null");
+        home.write_config(r#"{"schema_version":2,"updateServerUrl":null}"#);
+        assert_eq!(read_update_server_url(), Some(EXPECTED_DEFAULT_URL.to_string()));
+    }
+
+    // T-Updater.3: given config.json with "updateServerUrl": "", when read, then
+    // None — the explicit opt-out is PRESERVED by the sketch (plan §6.A).
+    // Already-green today (empty string already returns None) — regression pin.
+    #[test]
+    fn t_updater_3_explicit_empty_string_disables_update_check() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("empty");
+        home.write_config(r#"{"schema_version":2,"updateServerUrl":""}"#);
+        assert_eq!(read_update_server_url(), None);
+    }
+
+    // T-Updater.4: given config.json with an explicit override URL, when read,
+    // then Some(that URL) — operator override takes precedence over the default
+    // (plan §6.A). Already-green today (override already works) — regression pin.
+    #[test]
+    fn t_updater_4_explicit_override_url_wins() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("override");
+        home.write_config(r#"{"schema_version":2,"updateServerUrl":"http://other:9999"}"#);
+        assert_eq!(read_update_server_url(), Some("http://other:9999".to_string()));
+    }
+}
