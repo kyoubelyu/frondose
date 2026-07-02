@@ -53,6 +53,7 @@ type WorkflowView = {
 type SseFrame =
   | { type: "tool-call"; turnId: string; toolName: string }
   | { type: "text"; turnId: string; chunk: string }
+  | { type: "reasoning"; turnId: string; chunk: string }
   | { type: "step-done"; turnId: string; toolNames: string[] }
   | { type: "done"; turnId: string; finishReason: string; aborted?: boolean }
   | { type: "error"; turnId?: string; message: string; retryable?: boolean }
@@ -129,6 +130,11 @@ let workflowExpanded = false;
 // scroll-area autoscroll only fires when the user is already near the bottom
 // (within AUTOSCROLL_PX) so manual scrollback is not yanked.
 let activeAgentTextEl: ElementLike | null = null;
+// [P-THINK] The current turn's gray "thinking" sinks: the wrapper (.agent-thinking, incl. the
+// "thinking…" line) and the streamed-reasoning text node. Both null between turns; the whole
+// wrapper is removed from the DOM when the turn's output completes ("完成输出后消失").
+let activeAgentThinkingWrap: ElementLike | null = null;
+let activeAgentThinkingEl: ElementLike | null = null;
 const AUTOSCROLL_PX = 100;
 const scrollAreaEl = mustGet<ElementLike>("scroll-area");
 const conversationListEl = mustGet<ElementLike>("conversation-list");
@@ -195,12 +201,27 @@ function beginAgentBubble(): void {
   wrap.appendChild(avatar);
   const body = doc.createElement("div") as unknown as ElementLike;
   body.classList.add("msg-agent-body");
+  // [P-THINK] Gray thinking block ABOVE the answer: a "thinking…" line + the streamed reasoning.
+  // Starts hidden (revealed by the first reasoning chunk) and is removed on `done`/`error`.
+  const thinking = doc.createElement("div") as unknown as ElementLike;
+  thinking.classList.add("agent-thinking");
+  thinking.classList.add("hidden");
+  const thinkingLine = doc.createElement("div") as unknown as ElementLike;
+  thinkingLine.classList.add("thinking-line");
+  thinkingLine.textContent = t("status.thinking");
+  const thinkingText = doc.createElement("div") as unknown as ElementLike;
+  thinkingText.classList.add("thinking-text");
+  thinking.appendChild(thinkingLine);
+  thinking.appendChild(thinkingText);
+  body.appendChild(thinking);
   const text = doc.createElement("div") as unknown as ElementLike;
   text.classList.add("msg-agent-text");
   body.appendChild(text);
   wrap.appendChild(body);
   conversationListEl.appendChild(wrap);
   activeAgentTextEl = text;
+  activeAgentThinkingWrap = thinking;
+  activeAgentThinkingEl = thinkingText;
   scrollToBottomIfPinned();
 }
 
@@ -216,7 +237,26 @@ function appendAgentChunk(chunk: string): void {
   scrollToBottomIfPinned();
 }
 
+// [P-THINK] Append a reasoning delta to the gray thinking block, auto-opening the bubble if the
+// turn started without a `turn-started` frame (mirrors appendAgentChunk's Manual-REPL fallback).
+function appendReasoningChunk(chunk: string): void {
+  if (activeAgentThinkingEl === null) beginAgentBubble();
+  if (activeAgentThinkingEl === null || activeAgentThinkingWrap === null) return; // defensive — DOM missing
+  activeAgentThinkingWrap.classList.remove("hidden");
+  const prev = activeAgentThinkingEl.textContent ?? "";
+  activeAgentThinkingEl.textContent = `${prev}${chunk}`;
+  scrollToBottomIfPinned();
+}
+
 function endAgentBubble(): void {
+  // [P-THINK] "完成输出后消失": once the turn's output completes, hide the whole thinking block
+  // (gray reasoning + "thinking…" line) and clear its text, leaving only the final answer. Hidden
+  // (display:none) via the existing ClassListLike API — ElementLike exposes no remove()/removeChild,
+  // and display:none is visually equivalent to removal for this requirement.
+  if (activeAgentThinkingWrap !== null) activeAgentThinkingWrap.classList.add("hidden");
+  if (activeAgentThinkingEl !== null) activeAgentThinkingEl.textContent = "";
+  activeAgentThinkingWrap = null;
+  activeAgentThinkingEl = null;
   activeAgentTextEl = null;
 }
 
@@ -515,6 +555,13 @@ function handleEvent(payload: SseFrame): void {
       if (payload.turnId === currentTurnId) {
         // P-Y2-MA G1: stream into the ACTIVE agent bubble (not a global sink).
         appendAgentChunk(payload.chunk);
+      }
+      break;
+    case "reasoning":
+      // [P-THINK] Stream the model's live reasoning into the gray thinking block; it is removed
+      // by endAgentBubble() on `done`/`error` ("完成输出后消失").
+      if (payload.turnId === currentTurnId) {
+        appendReasoningChunk(payload.chunk);
       }
       break;
     case "turn-started":
