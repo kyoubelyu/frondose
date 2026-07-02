@@ -2,6 +2,11 @@ use serde_json::Value;
 use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
+/// P-UPDATE-INTRANET: baked-in intranet default so a fresh install auto-pulls
+/// from intranet-host with no per-app config. Explicit null or "" remains the
+/// operator opt-out.
+const DEFAULT_UPDATE_SERVER_URL: &str = "http://intranet-host.local:4875";
+
 /// CH-5: cross-platform home dir for the update-config reads. macOS/Unix use
 /// `$HOME`; Windows uses `%USERPROFILE%` (`$HOME` is empty there), matching the
 /// Node sidecar's `os.homedir()` so both sides resolve the same
@@ -16,27 +21,35 @@ fn config_home_dir() -> Option<String> {
     std::env::var("USERPROFILE").ok().filter(|p| !p.trim().is_empty())
 }
 
-/// P-58d.1: read the operator-set `updateServerUrl` directly from
-/// ~/.frondose/agent/config.json (independent of the sidecar; the updater runs
-/// around it). Falls back to ~/.mai/agent/config.json for the first-launch window
-/// where Tauri boots before the sidecar migrates the data dir. None when
-/// absent/null/empty → the updater is a clean no-op. Home via `config_home_dir()`
-/// (cross-platform); no new crate dep (serde_json is already present).
+/// P-58d.1 / P-UPDATE-INTRANET: read the operator-set `updateServerUrl`
+/// directly from ~/.frondose/agent/config.json (independent of the sidecar; the
+/// updater runs around it). Falls back to ~/.mai/agent/config.json for the
+/// first-launch window where Tauri boots before the sidecar migrates the data
+/// dir. Absent file/key, unparseable JSON, or non-string values use the baked
+/// intranet default; explicit null or "" disables the updater.
 pub(crate) fn read_update_server_url() -> Option<String> {
-    let home = config_home_dir()?;
+    let Some(home) = config_home_dir() else {
+        return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
+    };
     let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
-    let raw = std::fs::read_to_string(&new_path)
-        .or_else(|_| {
-            let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
-            std::fs::read_to_string(legacy)
-        })
-        .ok()?;
-    let v: Value = serde_json::from_str(&raw).ok()?;
-    let url = v.get("updateServerUrl")?.as_str()?.trim().to_string();
-    if url.is_empty() {
-        None
-    } else {
-        Some(url)
+    let raw = std::fs::read_to_string(&new_path).or_else(|_| {
+        let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
+        std::fs::read_to_string(legacy)
+    });
+    let Ok(raw) = raw else {
+        return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else {
+        return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
+    };
+    match v.get("updateServerUrl") {
+        None => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
+        Some(Value::Null) => None,
+        Some(x) => match x.as_str().map(|s| s.trim().to_string()) {
+            Some(s) if s.is_empty() => None,
+            Some(s) => Some(s),
+            None => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
+        },
     }
 }
 
@@ -121,12 +134,12 @@ mod tests {
     //! `docs/phase-update-intranet-critics.md` CONCERN-MR-1): scaffolds for
     //! T-Updater.1-4 + T-Updater.2b — the three-way default-URL precedence
     //! `read_update_server_url()` implements at Step 4 (plan §6.A, Option B).
-    //! Assertions target the SKETCH behavior (absent key/file → baked default;
-    //! explicit null OR "" → disabled/None; explicit url → override), so
-    //! T-Updater.1 is RED against today's source (which still returns None for
-    //! an absent config file) while T-Updater.2/.2b/.3/.4 are already-green
-    //! regression pins — the current source already returns `None` for an
-    //! explicit `null` (the first `?` on `v.get("updateServerUrl")?.as_str()`
+    //! Assertions target Option-B behavior (absent key/file → baked default;
+    //! explicit null OR "" → disabled/None; explicit url → override). Post-Step-4
+    //! all five pass: T-Updater.1 (absent → baked default) is the behavior this
+    //! phase ADDED; T-Updater.2/.2b/.3/.4 were already-green regression pins —
+    //! the source already returns `None` for an explicit `null` (the first `?`
+    //! on `v.get("updateServerUrl")?.as_str()`
     //! short-circuits for `Value::Null` exactly like a missing key), so Option
     //! B's null-disables contract needs NO Rust code change, only these
     //! flipped/added test names to stop the scaffold asserting the wrong
