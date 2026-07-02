@@ -1,5 +1,7 @@
 /**
  * Phase P-ZH-2 Step 2 — T-Classify.1..7 + T-Name.1 (scaffold).
+ * Phase P-ZH-2 Step 3a — T-Classify.3 extended with a '关注者' negative (Critic CONCERN fix,
+ * plan §5.1a/§12.4: the `关注(?!者)` negative-lookahead must exclude the follower-count label).
  *
  * Source-under-test (DOES NOT EXIST YET — Step 4 creates it):
  *   src/linkedin/logic/actionClassifier.ts
@@ -98,17 +100,24 @@ describe("T-Classify — classifyActionName (src/linkedin/logic/actionClassifier
   });
 
   // ─── T-Classify.3 ─────────────────────────────────────────────────────────
-  it("T-Classify.3: follow — 'Follow'/'Follow Chris Davis'/'关注Chris Davis'/'关注张三'/bare '关注' → 'follow'; 'Following' → NOT follow (regression pin for the /关注$/ end-anchor bug)", () => {
-    // Given: EN + name-interpolated ZH follow labels + the bare-ZH-verb form + one EN false positive.
+  it("T-Classify.3: follow — 'Follow'/'Follow Chris Davis'/'关注Chris Davis'/'关注张三'/bare '关注' → 'follow'; 'Following' → NOT follow (regression pin for the /关注$/ end-anchor bug); '关注者' → NOT follow (Critic CONCERN negative-lookahead, §5.1a)", () => {
+    // Given: EN + name-interpolated ZH follow labels + the bare-ZH-verb form + two false positives
+    //   (the EN "Following" state label and the ZH follower-count nav label "关注者").
     // When:  classifyActionName(name) runs for each.
     // Then:  every positive returns "follow" (start-anchored, so a trailing name still matches);
-    //        "Following" does not.
+    //        "Following" does not; "关注者" does not (the `关注(?!者)` negative lookahead excludes
+    //        the follower-count label while still matching every name-interpolated form).
     requireClassifier("T-Classify.3");
     const positives = ["Follow", "Follow Chris Davis", "关注Chris Davis", "关注张三", "关注"];
     for (const name of positives) {
       assert.equal(classifyActionName(name), "follow", `classifyActionName("${name}") must return "follow"`);
     }
     assert.notEqual(classifyActionName("Following"), "follow", 'classifyActionName("Following") must NOT return "follow"');
+    assert.notEqual(
+      classifyActionName("关注者"),
+      "follow",
+      'classifyActionName("关注者") must NOT return "follow" (follower-count nav label, excluded by the 关注(?!者) negative lookahead)',
+    );
   });
 
   // ─── T-Classify.4 ─────────────────────────────────────────────────────────
