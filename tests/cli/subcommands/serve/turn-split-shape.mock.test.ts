@@ -262,14 +262,14 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     assert.ok(loc <= 150, `turn.ts must be ≤ 150 LoC; got ${loc}`);
   });
 
-  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 360 LoC (relaxed from ≤300 per §4.2.1; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, and P-AUTO-L3FIX-2 silent-hang closeout, G-P72s7.2)", () => {
+  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 370 LoC (relaxed from ≤300 per §4.2.1; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, and P-THINK onReasoning emit, G-P72s7.2)", () => {
     // Given: post-split turn/runOne.ts.
     // When:  LoC counted via split("\n").length (= wc -l + 1).
-    // Then:  ≤ 360 — P-AUTO-L3FIX-2 added silent-hang auto-run closeout while leaving the reaper body split out.
+    // Then:  ≤ 370 — P-THINK added the `onReasoning` handler (emits the `reasoning` SSE frame, mirrors onText).
     const loc = locOf(RUN_ONE_TS);
     assert.ok(
-      loc <= 360,
-      `turn/runOne.ts must be ≤ 360 LoC (§4.2.1 relaxed cap + P-AUTO-L3FIX-2 silent-hang closeout); got ${loc}`,
+      loc <= 370,
+      `turn/runOne.ts must be ≤ 370 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit); got ${loc}`,
     );
   });
 
