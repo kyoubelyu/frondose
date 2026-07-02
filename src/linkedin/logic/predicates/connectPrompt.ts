@@ -4,10 +4,14 @@
 // one of the "Add a note" / "Send without a note" / "Send invitation" buttons. Kept in the
 // predicates layer (not inlined in readiness.ts) to match the composer pattern.
 
+import { CONNECT_ADD_NOTE_RE, CONNECT_SEND_RE } from "../actionClassifier.js";
+
+const CONNECT_PROMPT_CONTROL_RE_SOURCE = `(?:${CONNECT_ADD_NOTE_RE.source})|(?:${CONNECT_SEND_RE.source})`;
+
 export function CONNECT_PROMPT_PRESENT_JS(): string {
   return `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const CONTROL_RE = /^(add a note|send without a note|send invitation)$/i;
+  const CONTROL_RE = new RegExp(${JSON.stringify(CONNECT_PROMPT_CONTROL_RE_SOURCE)}, 'iu');
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;

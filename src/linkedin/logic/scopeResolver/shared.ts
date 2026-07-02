@@ -1,10 +1,12 @@
 import type { CommandCandidate, FailureKind } from "../../types.js";
+import type { LinkedInActionKind } from "../actionClassifier.js";
 import type { RuntimeVisibleScopeInspection, SnapshotEntry } from "../surface/currentSurfaceTypes.js";
 
 export type ScopedTargetKind = "button" | "input" | "upload";
 
 export interface ResolveScopedTargetInput {
   kind: ScopedTargetKind;
+  actionKind?: LinkedInActionKind;
   label?: string;
   ref?: string;
   scope?: string;

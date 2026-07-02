@@ -1,12 +1,21 @@
 import type { CdpClient } from "../cdp/client.js";
+import { hasComposerSignals } from "./inspectSummary.js";
 import { inferSurface } from "./scopeResolver.js";
 import { FEED_POST_CAP, FEED_POST_SYNTH_JS } from "./snapshotCapture/feedPostSynth.js";
 import {
   synthesizeMessagingComposerEntries,
+  synthesizeMessagingConversationOpeners,
   synthesizeMessagingTranscriptEntries,
 } from "./snapshotCapture/messagingConversationSynth.js";
 import { synthesizePostComposerEntries } from "./snapshotCapture/postComposerSynth.js";
-import { hasComposerSignals } from "./inspectSummary.js";
+import {
+  PROFILE_ACTION_ARIA_SELECTOR,
+  PROFILE_ACTION_RE_SOURCE,
+  PROFILE_BARE_ACTION_RE_SOURCE,
+  PROFILE_CONNECTISH_RE_SOURCE,
+  PROFILE_MORE_ARIA_SELECTOR,
+  PROFILE_MORE_RE_SOURCE,
+} from "./snapshotCapture/profileActionSelectors.js";
 import { PROFILE_SYNTH_JS } from "./snapshotCapture/profileSynth.js";
 import { tagAsideClickables } from "./snapshotCapture/regionTag.js";
 import { SEARCH_RESULT_SYNTH_JS } from "./snapshotCapture/searchResultSynth.js";
@@ -15,8 +24,15 @@ export * from "./snapshotCapture/feedPostSynth.js";
 export * from "./snapshotCapture/profileSynth.js";
 export * from "./snapshotCapture/searchResultSynth.js";
 type FeedPostRaw = { author: string; headline: string; profileUrl: string | null };
-type ProfileCardRaw = { name: string; headline: string | null; company: string | null; location: string | null; connections: string | null };
+type ProfileCardRaw = {
+  name: string;
+  headline: string | null;
+  company: string | null;
+  location: string | null;
+  connections: string | null;
+};
 type SearchResultRaw = { slug: string; name: string; profileUrl: string };
+
 // Mark visible overlay items with a transient data-attr (DOM query is NOT subject to the AX-tree
 // aria-hidden timing race — RC-1), return their {idx, role, label}. Skips aria-hidden subtrees +
 // invisible nodes (avoids surfacing CLOSED-dropdown items still in the DOM).
@@ -60,12 +76,13 @@ const OVERLAY_SYNTH_JS = `(() => {
 const PROFILE_MORE_SYNTH_JS = `(() => {
   const norm = (s) => (s||"").replace(/\\s+/g," ").trim();
   const NAV = "[role='banner'],[role='navigation'],nav,header";
+  const MORE_SELECTOR = ${JSON.stringify(PROFILE_MORE_ARIA_SELECTOR)};
   const m = document.title.match(/^(.+?)\\s*\\|\\s*LinkedIn\\b/);
   const name = m ? (m[1].includes(' - ') ? m[1].split(' - ')[0] : m[1]).trim() : null;
   const headings = Array.from(document.querySelectorAll("h1,h2,h3"));
   const h1 = name ? (headings.find(el => norm(el.innerText)===name && !el.closest(NAV)) || headings.find(el => norm(el.innerText)===name)) : null;
-  const cands = Array.from(document.querySelectorAll('button[aria-label*="More" i],[role="button"][aria-label*="More" i]'))
-    .filter(el => !el.closest(NAV));
+  const cands = Array.from(document.querySelectorAll(MORE_SELECTOR))
+    .filter(el => (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') && !el.closest(NAV));
   let pick = h1 ? cands.find(el => h1.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) : null;
   if (!pick) pick = cands[0] || null;
   if (!pick) return JSON.stringify(null);
@@ -84,6 +101,7 @@ const PROFILE_MORE_SYNTH_JS = `(() => {
 const PROFILE_ACTIONS_SYNTH_JS = `(() => {
   const norm = (s) => (s||"").replace(/\\s+/g," ").trim();
   const EXCL = "[role='banner'],[role='navigation'],nav,header,aside,[role='complementary']";
+  const ACTION_SELECTOR = ${JSON.stringify(PROFILE_ACTION_ARIA_SELECTOR)};
   const m = document.title.match(/^(.+?)\\s*\\|\\s*LinkedIn\\b/);
   const name = m ? (m[1].includes(' - ') ? m[1].split(' - ')[0] : m[1]).trim() : null;
   if (!name) return JSON.stringify(null);
@@ -94,12 +112,14 @@ const PROFILE_ACTIONS_SYNTH_JS = `(() => {
   // staying within the top card and out of nav/aside.
   let card = h1.closest('section') || h1.parentElement;
   for (let k=0; k<3 && card && card.parentElement; k++) {
-    if (card.querySelector('button[aria-label*="More" i],a[aria-label*="connect" i],button[aria-label*="Message" i],a[aria-label*="Message" i]')) break;
+    if (card.querySelector(ACTION_SELECTOR)) break;
     card = card.parentElement;
   }
   if (!card) return JSON.stringify(null);
-  const ACTION_RE = /\\b(connect|invite\\b.*\\bto connect|message|more|follow|pending|following)\\b/i;
-  const BARE_RE = /^(connect|message|more|follow|pending|following)\\b/i;
+  const ACTION_RE = new RegExp(${JSON.stringify(PROFILE_ACTION_RE_SOURCE)}, 'i');
+  const BARE_RE = new RegExp('^(?:' + ${JSON.stringify(PROFILE_BARE_ACTION_RE_SOURCE)} + ')', 'i');
+  const MORE_RE = new RegExp('^(?:' + ${JSON.stringify(PROFILE_MORE_RE_SOURCE)} + ')', 'i');
+  const CONNECTISH_RE = new RegExp(${JSON.stringify(PROFILE_CONNECTISH_RE_SOURCE)}, 'i');
   const nameLc = name.toLowerCase();
   const out = []; let i = 0;
   const cands = Array.from(card.querySelectorAll('button,a[role="button"],a[aria-label]')).filter(el => !el.closest(EXCL));
@@ -114,8 +134,8 @@ const PROFILE_ACTIONS_SYNTH_JS = `(() => {
     const role = (el.tagName === 'A' && el.getAttribute('role') !== 'button') ? 'link' : 'button';
     out.push({ i, role, label });
   }
-  const hasMore = out.some(o => /^more\\b/i.test(o.label) || /more actions/i.test(o.label));
-  const hasConnectish = out.some(o => /^(?:connect|pending|following)\\b/i.test(o.label) || /\\binvite\\b.*\\bto\\s+connect\\b/i.test(o.label));
+  const hasMore = out.some(o => MORE_RE.test(o.label) || /more actions/i.test(o.label));
+  const hasConnectish = out.some(o => CONNECTISH_RE.test(o.label));
   if (hasMore && !hasConnectish) {
     out.push({ i: -1, role: 'text', label: 'Connect is under "More" — click the profile "More" action (@pm1), then inspect scope:"overlay" and click "Connect".' });
   }
@@ -149,7 +169,13 @@ export async function captureCurrentSurfaceContext(client: CdpClient): Promise<C
     entries.push(...synth);
   } else if (surface === "feed") {
     entries.push(...(await synthesizeFeedPostEntries(client))); // P-37 B4
-    if (hasComposerSignals(entries)) { const post = await synthesizePostComposerEntries(client); if (post.entries.length > 0) { entries.push(...post.entries); client.mergeRefs(post.refs); } }
+    if (hasComposerSignals(entries)) {
+      const post = await synthesizePostComposerEntries(client);
+      if (post.entries.length > 0) {
+        entries.push(...post.entries);
+        client.mergeRefs(post.refs);
+      }
+    }
   } else if (surface === "search" || surface === "network") {
     // P-AUTO-3 (B3): synthesize person entries on the search + network discovery
     // surfaces. unshift so synthetic rows lead the list and survive MAX_TEXT truncation.
@@ -234,7 +260,9 @@ async function synthesizeOverlayEntries(client: CdpClient): Promise<{ entries: S
   }
   // best-effort cleanup of the transient markers (zero net DOM mutation)
   try {
-    await client.evaluate("document.querySelectorAll('[data-frondose-ov]').forEach(e=>e.removeAttribute('data-frondose-ov'));");
+    await client.evaluate(
+      "document.querySelectorAll('[data-frondose-ov]').forEach(e=>e.removeAttribute('data-frondose-ov'));",
+    );
   } catch {
     // best-effort cleanup
   }
@@ -255,7 +283,9 @@ async function synthesizeProfileMoreEntry(client: CdpClient): Promise<{ entries:
     const nodeIds = await client.querySelectorAll('[data-frondose-pm="1"]');
     const nodeId = nodeIds[0];
     try {
-      await client.evaluate("document.querySelectorAll('[data-frondose-pm]').forEach(e=>e.removeAttribute('data-frondose-pm'));");
+      await client.evaluate(
+        "document.querySelectorAll('[data-frondose-pm]').forEach(e=>e.removeAttribute('data-frondose-pm'));",
+      );
     } catch {
       // best-effort cleanup
     }
@@ -301,8 +331,6 @@ async function synthesizeSearchResultEntries(client: CdpClient): Promise<Snapsho
   return rows.map((r, i) => ({ ref: `@sr${i}`, role: "searchResult", name: `${r.name} — ${r.profileUrl}` }));
 }
 
-/** P-47 G-3: synthesize structured profile-card entries from the profile DOM.
- *  Best-effort — any extraction failure yields no entries (never throws). */
 /** [P-75 D-11] Resolve the subject's scoped primary action controls (Connect-as-link / Message /
  *  Follow / More) to clickable refs. Mirrors synthesizeProfileMoreEntry: evaluate-mark → resolve each
  *  marked node to a real backendNodeId via describeNode → register @pa{i} refs. Best-effort; never throws. */
@@ -337,7 +365,9 @@ async function synthesizeProfileActionEntries(client: CdpClient): Promise<{ entr
     }
   }
   try {
-    await client.evaluate("document.querySelectorAll('[data-frondose-pa]').forEach(e=>e.removeAttribute('data-frondose-pa'));");
+    await client.evaluate(
+      "document.querySelectorAll('[data-frondose-pa]').forEach(e=>e.removeAttribute('data-frondose-pa'));",
+    );
   } catch {
     // best-effort cleanup
   }
@@ -353,46 +383,16 @@ async function synthesizeProfileEntries(client: CdpClient): Promise<SnapshotEntr
   }
   if (!p || !p.name) return [];
   const out: SnapshotEntry[] = [];
-  // @pp1 — identity line: name + headline.
   out.push({
     ref: "@pp1",
     role: "profileCard",
     name: (p.headline ? `${p.name} — ${p.headline}` : p.name).slice(0, 220),
   });
-  // @pp2 — details line: present-only company / location / connections.
   const details = [p.company, p.location, p.connections].filter(
     (x): x is string => typeof x === "string" && x.length > 0,
   );
   if (details.length > 0) {
     out.push({ ref: "@pp2", role: "profileCard", name: `Profile: ${details.join(" · ")}` });
-  }
-  return out;
-}
-
-/** Synthesize `mr1, mr2, ...` refs for messaging conversation list items. */
-async function synthesizeMessagingConversationOpeners(client: CdpClient): Promise<SnapshotEntry[]> {
-  // Selector per mai-linkedin reference; OQ-P3.2 risk — verify in P-3 live smoke.
-  const nodeIds = await client.querySelectorAll("li[class*='msg-conversation-listitem']");
-  const out: SnapshotEntry[] = [];
-  let i = 0;
-  for (const nodeId of nodeIds) {
-    i++;
-    const ref = `@mr${i}`;
-    let label = "";
-    try {
-      const attrs = await client.raceHandle(client.handle.DOM.getAttributes({ nodeId }), "snapshot.getAttributes");
-      const arr = (attrs?.attributes ?? []) as string[];
-      // Interleaved [name0, value0, name1, value1, ...] per CDP spec.
-      for (let k = 0; k < arr.length - 1; k += 2) {
-        if (arr[k] === "aria-label") {
-          label = arr[k + 1] ?? "";
-          break;
-        }
-      }
-    } catch {
-      // best-effort; continue with empty label
-    }
-    out.push({ ref, role: "messagingConversationOpener", name: label });
   }
   return out;
 }

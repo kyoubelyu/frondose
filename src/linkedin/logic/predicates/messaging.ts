@@ -1,4 +1,5 @@
 import type { SnapshotEntry } from "../../types.js";
+import { MESSAGING_INPUT_RE } from "../actionClassifier.js";
 import type { MessagingSignals } from "../contracts/visibleScope.js";
 import { isInputEntry } from "./_shared.js";
 
@@ -42,7 +43,7 @@ export function isThreadComposerInputEntry(entry: SnapshotEntry): boolean {
   return (
     isInputEntry(entry) &&
     !/search/i.test(entry.name) &&
-    /message|reply|write a message|enter message recipients|recipient/i.test(entry.name)
+    MESSAGING_INPUT_RE.test(entry.name)
   );
 }
 

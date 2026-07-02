@@ -6,6 +6,7 @@ import { failWithReason } from "../../linkedin/envelope.js";
 import { applyPacing, captureCurrentSurfaceContext, fail, failFromError, ok, withHint } from "../../linkedin/index.js";
 import { resolveByLabelWithRetry } from "../../linkedin/labelResolver.js";
 import type { OutwardActionAdvice } from "../../linkedin/logic/outwardAction.js";
+import { hasProfileConnectPromptOverlay } from "../../linkedin/logic/predicates/feedProfile.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/auto-run.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
@@ -232,7 +233,10 @@ export function makeClickTool(session: LinkedinSession) {
         // `connect_send` ONLY (the final invite-send button) — counting the `connect_open` modal-
         // open click would overcount. The existing per-run cap stays attached to BOTH connect_open
         // and connect_send so the agent's first `Connect` click is still blocked when sent>=max.
-        const outboundClass = classifyOutboundEntry(targetEntry, clickSurface);
+        const connectDialogActive = clickContext
+          ? hasProfileConnectPromptOverlay(clickContext.pageUrl ?? "", clickSurface, clickContext.entries)
+          : false;
+        const outboundClass = classifyOutboundEntry(targetEntry, clickSurface, { connectDialogActive });
         if (outboundClass === "message_send" && session.resolvedMode?.() === "auto") {
           return failWithReason(
             "click",
