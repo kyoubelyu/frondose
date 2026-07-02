@@ -252,6 +252,12 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
           void callInOverlay(client.handle, ctxId, `function() { window.__frondoseAppendOutput(${JSON.stringify(s)}); }`);
         }
       },
+      // [P-THINK] Stream the model's live reasoning to the Tauri app as a gray thinking block
+      // that disappears once the turn completes. SSE-only (the primary app target); no overlay sink.
+      onReasoning: (delta) => {
+        noteProgress(); // [P-75 D-27] thinking counts as progress for the silent-hang watcher
+        deps.emitFrame({ type: "reasoning", turnId, chunk: delta });
+      },
       onToolCall: (toolName) => {
         noteProgress(); // [P-75 D-27] feed the silent-hang watcher
         noteToolProgress();

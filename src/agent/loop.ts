@@ -14,6 +14,11 @@ export interface AgentLoopOpts {
   activeTools?: string[];
   /** Called for each text chunk. Optional. */
   onText?: (delta: string) => void;
+  /**
+   * [P-THINK] Called for each reasoning/thinking delta as the model streams its chain of thought.
+   * Ephemeral — thinking is surfaced live (gray in the UI) but NOT persisted to messages. Optional.
+   */
+  onReasoning?: (delta: string) => void;
   /** Max LLM round-trips for tool-call loops. Default 200 (P-46 D-1). */
   maxSteps?: number;
   /** Abort signal for graceful cancellation (P-1; reused by P-6 stop tool). */
