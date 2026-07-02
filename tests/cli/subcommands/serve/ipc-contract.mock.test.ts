@@ -5,7 +5,7 @@
  *   §A  IPC.Transport  (4)  — bearer header + TCP loopback (WIN-1), FRONDOSE_SIDECAR_OWNER,
  *                             --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)
  *   §B  IPC.Endpoints  (3)  — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)
- *   §C  IPC.Frames     (2)  — SseFrame sidecar union (28), UI parallel union (24; WLC added auto-run-completed)
+ *   §C  IPC.Frames     (2)  — SseFrame sidecar union (29), UI parallel union (25; WLC added auto-run-completed, P-THINK added reasoning)
  *   §D  IPC.Mask       (2)  — GET /settings no raw key, POST→GET mask round-trip
  *
  * WIN-1 transport update (Step 3 scaffold):
@@ -108,11 +108,13 @@ const WORKFLOW_SUBPATHS = [
 
 // ─── §C Goldens ──────────────────────────────────────────────────────────────
 
-/** 28 sidecar SSE frame type strings (21 SseFrame context.ts + 7 WorkflowSseFrame types.ts). */
+/** 29 sidecar SSE frame type strings (22 SseFrame context.ts + 7 WorkflowSseFrame types.ts).
+ *  P-THINK 2026-07-02: added `reasoning` (live model-thinking stream) to context.ts SseFrame → 21→22. */
 const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
-  // SseFrame context.ts — multiline block (16):
+  // SseFrame context.ts — multiline block (17):
   "tool-call",
   "text",
+  "reasoning", // P-THINK: gray live-thinking stream frame
   "step-done",
   "done",
   "error",
@@ -143,13 +145,15 @@ const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "commit-warning",
 ]);
 
-/** 24 UI SseFrame literals (app.ts:51-80) — documented drift baseline (4 sidecar-only frames missing).
+/** 25 UI SseFrame literals (app.ts:51-80) — documented drift baseline (4 sidecar-only frames missing).
  *  WORKFLOW-LIFECYCLE-COMPLETION (2026-07-02): the UI now HANDLES `auto-run-completed` (app.ts handleEvent
  *  closes the Auto-run card on completion), so it moved from SIDECAR_ONLY_DRIFT into the UI union —
- *  drift shrank 5→4. See src/tauri/ui/app.ts + src/cli/subcommands/serve/turn/runOne.ts. */
+ *  drift shrank 5→4. P-THINK (2026-07-02): added `reasoning` (UI renders the gray live-thinking block) → 24→25.
+ *  See src/tauri/ui/app.ts + src/cli/subcommands/serve/turn/runOne.ts. */
 const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "tool-call",
   "text",
+  "reasoning", // P-THINK: gray live-thinking block in the agent bubble
   "step-done",
   "done",
   "error",
@@ -737,11 +741,11 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
 // §C — IPC.Frames
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=24)", () => {
+describe("IPC.Frames — SseFrame discriminator union (sidecar=29, UI=25)", () => {
   it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 28-element golden", () => {
     // Given: context.ts declares SseFrame (multiline + standalone forms); types.ts declares WorkflowSseFrame
     // When: TS compiler API extracts all type: discriminants from both files (Approach A — no regex)
-    // Then: context.ts yields exactly 21, types.ts yields exactly 7, combined===28; any drift fails
+    // Then: context.ts yields exactly 22, types.ts yields exactly 7, combined===29; any drift fails
 
     const contextSseFrameSet = extractSseFrameDiscriminants(CONTEXT_TS, "SseFrame");
     const workflowSseFrameSet = extractSseFrameDiscriminants(WORKFLOW_TYPES_TS, "WorkflowSseFrame");
@@ -749,8 +753,8 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=24)", () =
     // Fail-closed counts BEFORE set equality
     assert.strictEqual(
       contextSseFrameSet.size,
-      21,
-      `expected 21 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
+      22,
+      `expected 22 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
     );
     assert.strictEqual(
       workflowSseFrameSet.size,
@@ -761,17 +765,17 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=24)", () =
     const combined = new Set([...contextSseFrameSet, ...workflowSseFrameSet]);
     assert.strictEqual(
       combined.size,
-      28,
-      `expected combined sidecar SseFrame set size === 28, got ${combined.size} (overlap or wrong count)`,
+      29,
+      `expected combined sidecar SseFrame set size === 29, got ${combined.size} (overlap or wrong count)`,
     );
 
-    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (28 literals)");
+    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (29 literals)");
   });
 
-  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 24 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
-    // Given: ui/app.ts:51-80 declares a hand-copied subset SseFrame with 24 literals (4 sidecar-only frames missing)
+  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 25 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
+    // Given: ui/app.ts:51-80 declares a hand-copied subset SseFrame with 25 literals (4 sidecar-only frames missing)
     // When: TS compiler API extracts discriminants from app.ts (Approach A)
-    // Then: count===24 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
+    // Then: count===25 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
     //       WLC 2026-07-02 added auto-run-completed to the UI union → drift 5→4)
 
     const uiSseFrameSet = extractSseFrameDiscriminants(APP_TS, "SseFrame");
@@ -779,11 +783,11 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=24)", () =
     // Fail-closed count BEFORE set equality
     assert.strictEqual(
       uiSseFrameSet.size,
-      24,
-      `expected 24 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
+      25,
+      `expected 25 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
     );
 
-    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (24 literals)");
+    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (25 literals)");
 
     // Delta assertion: sidecar-only frames are EXACTLY the 4 documented drift frames
     const sidecarOnlyActual = new Set([...SIDECAR_SSE_FRAMES_GOLDEN].filter((f) => !uiSseFrameSet.has(f)));
