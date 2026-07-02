@@ -1,7 +1,8 @@
 import type { SnapshotEntry } from "../../types.js";
+import { COMPOSER_INPUT_RE, POST_PUBLISH_RE } from "../actionClassifier.js";
 import { isInputEntry } from "./_shared.js";
 
-export const DEFAULT_COMPOSER_LABEL_PATTERN = /creating content|what do you want to talk about|Text editor for creating content/i;
+export const DEFAULT_COMPOSER_LABEL_PATTERN = COMPOSER_INPUT_RE;
 
 type ComposerLabelPattern = RegExp | string;
 
@@ -56,7 +57,7 @@ export function COMPOSER_EDITOR_JS(labelPattern: ComposerLabelPattern = DEFAULT_
 export function COMPOSER_POST_BUTTON_ENABLED_JS(): string {
   return `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const POST_RE = /^post$/i;
+  const POST_RE = ${POST_PUBLISH_RE.toString()};
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
@@ -197,15 +198,16 @@ export function COMPOSER_CLEAR_JS(labelPattern: ComposerLabelPattern = DEFAULT_C
 }
 
 export function isComposerInputEntry(entry: SnapshotEntry): boolean {
-  return isInputEntry(entry) && /creating content|what do you want to talk about/i.test(entry.name);
+  return isInputEntry(entry) && COMPOSER_INPUT_RE.test(entry.name);
 }
 
 export function isComposerButtonEntry(entry: SnapshotEntry): boolean {
   return (
     entry.role === "button" &&
-    /(post to anyone|edit media preview|remove media|open emoji keyboard|open grammarly\.?|add media|schedule post|create a post|create an event|celebrate an occasion|^post$)/i.test(
+    (/(post to anyone|edit media preview|remove media|open emoji keyboard|open grammarly\.?|add media|schedule post|create a post|create an event|celebrate an occasion)/i.test(
       entry.name,
-    )
+    ) ||
+      POST_PUBLISH_RE.test(entry.name))
   );
 }
 

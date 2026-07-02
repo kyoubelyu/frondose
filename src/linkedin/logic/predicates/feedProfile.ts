@@ -1,4 +1,5 @@
 import type { SnapshotEntry } from "../../types.js";
+import { CONNECT_ADD_NOTE_RE, CONNECT_SEND_RE } from "../actionClassifier.js";
 import type { FeedSignals } from "../contracts/visibleScope.js";
 import { isInputEntry } from "./_shared.js";
 import { isMessagingConversationEntry, isThreadComposerButtonEntry, isThreadComposerInputEntry } from "./messaging.js";
@@ -26,7 +27,11 @@ export function isCommentButtonEntry(entry: SnapshotEntry): boolean {
 
 export function isProfileConnectPromptEntry(entry: SnapshotEntry): boolean {
   if (entry.role === "button") {
-    return /^(dismiss|add a note|send without a note|cancel|cancel adding a note|send invitation)$/i.test(entry.name);
+    return (
+      /^(dismiss|cancel|cancel adding a note)$/i.test(entry.name) ||
+      CONNECT_ADD_NOTE_RE.test(entry.name) ||
+      CONNECT_SEND_RE.test(entry.name)
+    );
   }
 
   return (
@@ -41,10 +46,8 @@ export function hasProfileConnectPromptOverlay(pageUrl: string, surface: string,
     return false;
   }
 
-  const hasAddNote = entries.some((entry) => entry.role === "button" && /^add a note$/i.test(entry.name));
-  const hasSendWithoutNote = entries.some(
-    (entry) => entry.role === "button" && /^send without a note$/i.test(entry.name),
-  );
+  const hasAddNote = entries.some((entry) => entry.role === "button" && CONNECT_ADD_NOTE_RE.test(entry.name));
+  const hasSendWithoutNote = entries.some((entry) => entry.role === "button" && CONNECT_SEND_RE.test(entry.name));
   const hasPromptAction = hasAddNote || hasSendWithoutNote;
   const hasPendingInvite = entries.some(
     (entry) => entry.role === "link" && /^pending, click to withdraw invitation sent to /i.test(entry.name),
@@ -54,10 +57,11 @@ export function hasProfileConnectPromptOverlay(pageUrl: string, surface: string,
       isInputEntry(entry) && /personal note|add a note|please limit personal note to 300 characters/i.test(entry.name),
   );
   const hasCancel = entries.some((entry) => entry.role === "button" && /^cancel(?: adding a note)?$/i.test(entry.name));
-  const hasSendInvitation = entries.some((entry) => entry.role === "button" && /^send invitation$/i.test(entry.name));
+  const hasSendInvitation = entries.some((entry) => entry.role === "button" && CONNECT_SEND_RE.test(entry.name));
   const hasPromptBoundary = entries.some(
     (entry) =>
-      (entry.role === "button" && /^(dismiss|cancel|cancel adding a note|send invitation)$/i.test(entry.name)) ||
+      (entry.role === "button" &&
+        (/^(dismiss|cancel|cancel adding a note)$/i.test(entry.name) || CONNECT_SEND_RE.test(entry.name))) ||
       (isInputEntry(entry) &&
         /personal note|add a note|message|please limit personal note to 300 characters/i.test(entry.name)) ||
       /(you can add a note|personal note|invitation|connect with)/i.test(entry.name),

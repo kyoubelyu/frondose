@@ -68,6 +68,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { describe, it } from "node:test";
+import { ACTION_NAME_TOKENS, buildAriaLabelSelector, buildTokenAlternationSource } from "../../src/linkedin/logic/actionClassifier.js";
 import { buildInspectSummary, CLICKABLE_ROLES, TEXT_ROLES } from "../../src/linkedin/inspectSummary.js";
 import { resolveByLabel } from "../../src/linkedin/labelResolver.js";
 import { classifyOutboundLabel } from "../../src/tools/browser/outboundGuard.js";
@@ -84,10 +85,44 @@ const SNAPSHOT_CAPTURE_SRC = readFileSync(
   "utf-8",
 );
 
+// [P-ZH-2 Step 5] PROFILE_ACTIONS_SYNTH_JS's template literal now interpolates 5 module-private
+// consts (PROFILE_ACTION_ARIA_SELECTOR/_RE_SOURCE/_BARE_ACTION_RE_SOURCE/_MORE_RE_SOURCE/
+// _CONNECTISH_RE_SOURCE — snapshotCapture.ts:26-57), built from the exported ACTION_NAME_TOKENS
+// via buildAriaLabelSelector/buildTokenAlternationSource (Class C safe builders, plan §5.6).
+// Reconstructed HERE, identically to snapshotCapture.ts, so the extracted template literal's
+// `${...}` interpolations resolve instead of throwing "X is not defined" in the isolated
+// `new Function` scope below.
+const PROFILE_MORE_ARIA_SELECTOR = buildAriaLabelSelector(ACTION_NAME_TOKENS.more);
+const PROFILE_ACTION_TOKENS: readonly string[] = [
+  ...ACTION_NAME_TOKENS.connect,
+  ...ACTION_NAME_TOKENS.message,
+  ...ACTION_NAME_TOKENS.more,
+  ...ACTION_NAME_TOKENS.follow,
+];
+const PROFILE_ACTION_ARIA_SELECTOR = buildAriaLabelSelector(PROFILE_ACTION_TOKENS);
+const PROFILE_ACTION_RE_SOURCE = buildTokenAlternationSource([...PROFILE_ACTION_TOKENS, "pending", "following"]);
+const PROFILE_BARE_ACTION_RE_SOURCE = buildTokenAlternationSource([
+  "connect",
+  "message",
+  "more",
+  "follow",
+  "pending",
+  "following",
+  "连接",
+  "添加好友",
+  "写消息",
+  "更多",
+  "关注",
+]);
+const PROFILE_MORE_RE_SOURCE = buildTokenAlternationSource(ACTION_NAME_TOKENS.more);
+const PROFILE_CONNECTISH_RE_SOURCE = buildTokenAlternationSource([...ACTION_NAME_TOKENS.connect, "pending", "following"]);
+
 // Extract and evaluate PROFILE_ACTIONS_SYNTH_JS from the source file.
 // The constant is defined as: const PROFILE_ACTIONS_SYNTH_JS = `...`;
 // We extract the template literal source and evaluate it via `new Function` to get the
-// actual runtime string (resolving template literal escape sequences like \\s → \s in regexes).
+// actual runtime string (resolving template literal escape sequences like \\s → \s in regexes,
+// AND the 5 reconstructed-above interpolations, bound as named parameters so the isolated
+// function scope can resolve them exactly as snapshotCapture.ts's own module scope would).
 // This is necessary because readFileSync returns the raw TS source bytes, where `\\s` is
 // the literal two characters that at JS runtime become `\s` (a regex escape). If we passed
 // the raw source bytes directly to vm.runInNewContext, the regexes would be wrong.
@@ -104,7 +139,20 @@ function extractProfileActionsSynthJs(src: string): string {
   // Evaluate via new Function to resolve those escapes to their runtime values.
   const rawContent = src.slice(backtickStart, backtickEnd + 1); // includes surrounding backticks
   // biome-ignore lint/security/noGlobalEval: test-only; needed to resolve template literal escapes
-  const result = new Function(`return ${rawContent}`)() as string;
+  const result = new Function(
+    "PROFILE_ACTION_ARIA_SELECTOR",
+    "PROFILE_ACTION_RE_SOURCE",
+    "PROFILE_BARE_ACTION_RE_SOURCE",
+    "PROFILE_MORE_RE_SOURCE",
+    "PROFILE_CONNECTISH_RE_SOURCE",
+    `return ${rawContent}`,
+  )(
+    PROFILE_ACTION_ARIA_SELECTOR,
+    PROFILE_ACTION_RE_SOURCE,
+    PROFILE_BARE_ACTION_RE_SOURCE,
+    PROFILE_MORE_RE_SOURCE,
+    PROFILE_CONNECTISH_RE_SOURCE,
+  ) as string;
   return result;
 }
 

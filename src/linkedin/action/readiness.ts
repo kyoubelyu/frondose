@@ -155,7 +155,7 @@ export async function openComposerHardened(deps: {
     let clickedThisRound = false;
     try {
       const opened = await resolveScopedTarget(
-        { kind: "button", label: "Start a post" },
+        { kind: "button", actionKind: "start_post" },
         { captureCurrentSurfaceContext: deps.capture },
       );
       await deps.client.clickAt(opened.target.selector);

@@ -1,4 +1,5 @@
 import { FOLLOW_LABEL_RE, OUTBOUND_LABEL_RE } from "../tools/browser/outboundGuard.js";
+import { COMPOSER_INPUT_RE, MESSAGING_INPUT_RE, POST_PUBLISH_RE } from "./logic/actionClassifier.js";
 import type { CurrentSurfaceContext, InspectSummary, LinkedInSurface, SnapshotEntry } from "./types.js";
 
 export const CLICKABLE_ROLES = new Set([
@@ -71,13 +72,13 @@ const MAX_PERSON_HARD = 60;
 // surface, which stays "feed" while the modal is open).
 const COMPOSER_BUTTON_RE =
   /(post to anyone|edit media preview|remove media|open emoji keyboard|open grammarly\.?|add media|schedule post|create a post|create an event|celebrate an occasion|^post$)/i;
-export const COMPOSER_INPUT_RE = /creating content|what do you want to talk about/i;
+export { COMPOSER_INPUT_RE };
 // The composer's publish control — accessible name exactly "Post" (anchored,
 // so it does NOT match "Repost"). This is the strongest single composer signal.
-const COMPOSER_PUBLISH_RE = /^post$/i;
+const COMPOSER_PUBLISH_RE = POST_PUBLISH_RE;
 
 function isComposerButtonEntry(e: SnapshotEntry): boolean {
-  return e.role === "button" && COMPOSER_BUTTON_RE.test(e.name);
+  return e.role === "button" && (COMPOSER_BUTTON_RE.test(e.name) || POST_PUBLISH_RE.test(e.name));
 }
 
 function isComposerInputEntry(e: SnapshotEntry): boolean {
@@ -101,11 +102,7 @@ function isMessagingConversationEntry(e: SnapshotEntry): boolean {
 }
 
 function isThreadComposerInputEntry(e: SnapshotEntry): boolean {
-  return (
-    INPUT_ROLES.has(e.role) &&
-    !/search/i.test(e.name) &&
-    /message|reply|write a message|enter message recipients|recipient/i.test(e.name)
-  );
+  return INPUT_ROLES.has(e.role) && !/search/i.test(e.name) && MESSAGING_INPUT_RE.test(e.name);
 }
 
 function isThreadComposerButtonEntry(e: SnapshotEntry): boolean {

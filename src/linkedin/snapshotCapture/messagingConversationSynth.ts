@@ -1,4 +1,5 @@
 import type { CdpClient } from "../../cdp/client.js";
+import { MESSAGING_INPUT_RE } from "../logic/actionClassifier.js";
 import type { RefMap, SnapshotEntry } from "../types.js";
 
 export interface MessagingMessageRaw {
@@ -40,7 +41,7 @@ export const MESSAGING_COMPOSER_SYNTH_JS = `(() => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   };
-  const INPUT_RE = /message|reply|write a message|enter message recipients|recipient/i;
+	  const INPUT_RE = ${MESSAGING_INPUT_RE.toString()};
   const BUTTON_RE = /send|reply|attach|emoji|gif/i;
   const SEARCH_RE = /search/i;
   const seen = new Set();
@@ -160,4 +161,32 @@ export async function synthesizeMessagingComposerEntries(
     }
   }
   return { entries, refs };
+}
+
+/** Synthesize `mr1, mr2, ...` refs for messaging conversation list items. */
+export async function synthesizeMessagingConversationOpeners(client: CdpClient): Promise<SnapshotEntry[]> {
+  // Selector per mai-linkedin reference; OQ-P3.2 risk — verify in P-3 live smoke.
+  const nodeIds = await client.querySelectorAll("li[class*='msg-conversation-listitem']");
+  const out: SnapshotEntry[] = [];
+  let i = 0;
+  for (const nodeId of nodeIds) {
+    i++;
+    const ref = `@mr${i}`;
+    let label = "";
+    try {
+      const attrs = await client.raceHandle(client.handle.DOM.getAttributes({ nodeId }), "snapshot.getAttributes");
+      const arr = (attrs?.attributes ?? []) as string[];
+      // Interleaved [name0, value0, name1, value1, ...] per CDP spec.
+      for (let k = 0; k < arr.length - 1; k += 2) {
+        if (arr[k] === "aria-label") {
+          label = arr[k + 1] ?? "";
+          break;
+        }
+      }
+    } catch {
+      // best-effort; continue with empty label
+    }
+    out.push({ ref, role: "messagingConversationOpener", name: label });
+  }
+  return out;
 }
