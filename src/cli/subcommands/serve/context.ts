@@ -15,6 +15,7 @@ export type SseFrame =
       type:
         | "tool-call"
         | "text"
+        | "reasoning"
         | "step-done"
         | "done"
         | "error"

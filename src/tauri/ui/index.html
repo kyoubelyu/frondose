@@ -144,6 +144,10 @@
     .avatar svg { width: 14px; height: 14px; }
     .msg-agent-body { max-width: 88%; }
     .msg-agent-text { font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+    /* P-THINK: gray/semi-transparent live "thinking" block above the answer; removed when the turn's output completes. */
+    .agent-thinking { color: var(--ink-muted); opacity: 0.55; font-size: 12px; line-height: 1.5; margin-bottom: 6px; white-space: pre-wrap; }
+    .agent-thinking.hidden { display: none; }
+    .thinking-line { font-style: italic; opacity: 0.8; }
     /* P-Y2-MA G1+G2: append-list container; preserves the existing .conv layout. */
     .conv-list { list-style: none; margin: 0; padding: 18px 22px 24px; display: flex; flex-direction: column; gap: 16px; }
     .conv-list .msg-user, .conv-list .msg-agent { /* inherit existing styles */ }
