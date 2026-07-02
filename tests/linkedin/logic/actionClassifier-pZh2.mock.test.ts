@@ -23,14 +23,23 @@
  * (this validator) re-runs, fills any remaining edge cases, and replaces the two live-capture
  * placeholders below with the real captured strings.
  *
- * Live-capture TODOs (Step 5, real 中文 LinkedIn):
- *   - ZH_COMPOSER_PLACEHOLDER_TODO — the feed composer's ZH placeholder/name text
- *     (mirrors the `__ZH_COMPOSER_PLACEHOLDER__` token embedded in the plan §5.1
- *     COMPOSER_INPUT_RE sketch — replace BOTH the classifier regex source and this constant
- *     with the same live-captured string).
- *   - Post / Start-a-post ZH forms are NOT YET CAPTURED (ROADMAP P-ZH-AGENT Step 0/1) — T-Classify.6
- *     below only asserts the EN + already-captured More (更多/… 更多) forms + the Repost negative;
- *     the ZH Post/Start-a-post assertions are added at Step 5 once captured (see docs/phase-zh2-test.md).
+ * Live-capture DONE (Step 5, real 中文 LinkedIn account, :9222, 2026-07-02):
+ *   - ZH_COMPOSER_PLACEHOLDER_TODO — replaced with the live-captured feed-composer editor
+ *     accessible name '内容创建文本编辑器' (role=textbox; captured via getFullAXTree on the real
+ *     feed composer — NOT the visible CSS placeholder '您想讨论什么话题？', which is not part of
+ *     the AX name since the element carries an explicit aria-label). Still RED pre-Step-5a: the
+ *     classifier + all three composerReadiness.ts builders still hold the literal placeholder
+ *     token, not this real string — see docs/phase-zh2-test.md § Results.
+ *   - Post / Start-a-post ZH forms — CAPTURED. Post button = '发布' (role=button; already matched
+ *     by the shipped POST_PUBLISH_RE — GREEN). Start-a-post feed-composer TRIGGER = '发动态'
+ *     (role=link) — this is DIFFERENT from the plan §5.1 guess '发起帖子' and is NOT matched by
+ *     the shipped START_POST_RE (`/^(?:start a post$|发起帖子$|写文章$)/i`) — genuinely RED, see
+ *     T-Classify.6 below.
+ *   - Connect-modal (via 更多→邀请X加为好友, Add-a-note dialog) real captured strings differ from
+ *     the plan's §5.1 guess (添加备注/直接发送): the actual dialog uses '添加消息' (add-note
+ *     trigger) and '发送时不添加备注' (send-WITHOUT-note commit) — see T-Classify.8 (new,
+ *     SAFETY-CRITICAL — '发送时不添加备注' is UNCLASSIFIED by any current pattern, so it is not
+ *     even caught by the F1 floor) and docs/phase-zh2-test.md § Results.
  *
  * Run (mock):
  *   node --import tsx --test --test-force-exit tests/linkedin/logic/actionClassifier-pZh2.mock.test.ts
@@ -44,7 +53,7 @@ let classifyActionName: ((name: string, opts?: unknown) => string) | any = null;
 // biome-ignore lint/suspicious/noExplicitAny: dynamic import for pre-Step-4 scaffold
 let personNameFromActionLabel: ((name: string) => unknown) | any = null;
 
-const ZH_COMPOSER_PLACEHOLDER_TODO = "__ZH_COMPOSER_PLACEHOLDER__"; // plan §5.1 COMPOSER_INPUT_RE sketch token — Step 5 replaces with the live-captured ZH string
+const ZH_COMPOSER_PLACEHOLDER_TODO = "内容创建文本编辑器"; // Step 5 LIVE-CAPTURED (real feed-composer editor AX name, :9222) — replaces the plan §5.1 sketch token
 
 before(async () => {
   const mod = await import("../../../src/linkedin/logic/actionClassifier.js").catch(() => null);
@@ -144,18 +153,57 @@ describe("T-Classify — classifyActionName (src/linkedin/logic/actionClassifier
   });
 
   // ─── T-Classify.6 ─────────────────────────────────────────────────────────
-  it("T-Classify.6: post_publish/more anchors — 'Post' → post_publish; 'More'/'更多'/'… 更多' → more; 'Repost' → NOT post_publish (anchor guard)", () => {
-    // Given: the EN publish label, EN+ZH overflow-menu labels, and the classic Repost false-positive.
+  it("T-Classify.6: post_publish/more anchors — 'Post'/'发布' → post_publish; 'More'/'更多'/'… 更多' → more; 'Repost' → NOT post_publish (anchor guard)", () => {
+    // Given: the EN + LIVE-CAPTURED ZH publish label, EN+ZH overflow-menu labels, and the classic
+    //   Repost false-positive.
     // When:  classifyActionName(name) runs for each.
-    // Then:  "Post" → post_publish; the More forms → more; "Repost" → NOT post_publish.
-    //   ZH Post / Start-a-post forms are NOT YET CAPTURED (ROADMAP P-ZH-AGENT Step 0/1) — added at
-    //   Step 5 once live-captured; not asserted here.
+    // Then:  "Post"/"发布" → post_publish; the More forms → more; "Repost" → NOT post_publish.
+    //   '发布' is the real Post-button accessible name captured on :9222 (Step 5) — already matched
+    //   by the shipped POST_PUBLISH_RE (`发布$`), so this assertion is GREEN, locking in the real
+    //   value in place of the plan's placeholder guess.
     requireClassifier("T-Classify.6");
-    assert.equal(classifyActionName("Post"), "post_publish", 'classifyActionName("Post") must return "post_publish"');
+    for (const name of ["Post", "发布"]) {
+      assert.equal(classifyActionName(name), "post_publish", `classifyActionName("${name}") must return "post_publish"`);
+    }
     for (const name of ["More", "更多", "… 更多"]) {
       assert.equal(classifyActionName(name), "more", `classifyActionName("${name}") must return "more"`);
     }
     assert.notEqual(classifyActionName("Repost"), "post_publish", 'classifyActionName("Repost") must NOT return "post_publish" (^post$ anchor)');
+  });
+
+  // ─── T-Classify.8 (Step 5 live-capture, NEW — resolves a real gap the plan did not anticipate) ─
+  it("T-Classify.8: LIVE-CAPTURED start-post trigger '发动态' → start_post; LIVE-CAPTURED connect-modal '添加消息' → connect_add_note, '发送时不添加备注' → connect_send (SAFETY-CRITICAL — currently UNCLASSIFIED)", () => {
+    // Given: three real strings captured on the agent's :9222 Chinese LinkedIn session this
+    //   session (2026-07-02), each DIFFERENT from what the plan §5.1 guessed:
+    //     - feed composer 'Start a post' trigger (role=link): '发动态' (plan guessed '发起帖子').
+    //     - connect-modal add-a-note trigger (role=button, inside the 'Add a note?' dialog,
+    //       reached via 更多→邀请X加为好友 on a Follow-primary profile): '添加消息'
+    //       (plan guessed '添加备注').
+    //     - connect-modal send-WITHOUT-note commit (role=button, same dialog): '发送时不添加备注'
+    //       (plan guessed '直接发送'/bare '发送' — the REAL string is neither).
+    // When:  classifyActionName(name) runs for each.
+    // Then:  '发动态' → "start_post" (RED today — START_POST_RE has no '发动态' alternative, only
+    //   the wrong guesses '发起帖子'/'写文章', the latter of which is actually LinkedIn's "Write an
+    //   article" feature, a DIFFERENT control — flagged for Step-5a, do not conflate the two);
+    //   '添加消息' → "connect_add_note" (RED today); '发送时不添加备注' → "connect_send"
+    //   (SAFETY-CRITICAL, RED today — this string matches NO current pattern at all, so
+    //   classifyActionName returns "none"/benign for it, meaning the REAL live connect-send-
+    //   without-note commit on this UI variant is invisible to the classifier entirely — worse
+    //   than the bare-发送 case the critic's BLOCKER was about, because it isn't even caught by
+    //   MESSAGE_SEND_RE's fallback. Step-5a must add '发送时不添加备注$' to CONNECT_SEND_RE and
+    //   '添加消息$' to CONNECT_ADD_NOTE_RE).
+    requireClassifier("T-Classify.8");
+    assert.equal(classifyActionName("发动态"), "start_post", 'classifyActionName("发动态") must return "start_post" (real captured Start-a-post trigger)');
+    assert.equal(
+      classifyActionName("添加消息"),
+      "connect_add_note",
+      'classifyActionName("添加消息") must return "connect_add_note" (real captured connect-modal add-note trigger)',
+    );
+    assert.equal(
+      classifyActionName("发送时不添加备注"),
+      "connect_send",
+      'classifyActionName("发送时不添加备注") must return "connect_send" (SAFETY-CRITICAL — real captured connect-modal send-without-note commit, currently unclassified/benign)',
+    );
   });
 
   // ─── T-Classify.7 ─────────────────────────────────────────────────────────

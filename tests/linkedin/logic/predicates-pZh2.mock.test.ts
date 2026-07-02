@@ -20,9 +20,9 @@
  * against the CURRENT English-only source (confirmed via a live `node --import tsx -e` probe —
  * see docs/phase-zh2-test.md § Test Contract).
  *
- * Live-capture TODO (Step 5): ZH_COMPOSER_PLACEHOLDER_TODO mirrors the same placeholder used in
- * tests/linkedin/logic/actionClassifier-pZh2.mock.test.ts — replace with the live-captured
- * composer editor accessible name once captured on :9222.
+ * Live-capture DONE (Step 5): ZH_COMPOSER_PLACEHOLDER_TODO mirrors the same real value used in
+ * tests/linkedin/logic/actionClassifier-pZh2.mock.test.ts — '内容创建文本编辑器', the live-captured
+ * feed-composer editor accessible name (role=textbox, captured on :9222 2026-07-02).
  *
  * Run (mock):
  *   node --import tsx --test --test-force-exit tests/linkedin/logic/predicates-pZh2.mock.test.ts
@@ -42,7 +42,7 @@ import { isThreadComposerInputEntry } from "../../../src/linkedin/logic/predicat
 import { MESSAGING_COMPOSER_SYNTH_JS } from "../../../src/linkedin/snapshotCapture/messagingConversationSynth.js";
 import type { SnapshotEntry } from "../../../src/linkedin/types.js";
 
-const ZH_COMPOSER_PLACEHOLDER_TODO = "__ZH_COMPOSER_PLACEHOLDER__"; // Step 5: replace with the live-captured ZH composer placeholder
+const ZH_COMPOSER_PLACEHOLDER_TODO = "内容创建文本编辑器"; // Step 5 LIVE-CAPTURED (real feed-composer editor AX name, :9222)
 
 // ─── T-Detect.5 dynamic-import guard (actionClassifier.ts does not exist yet — Step 4 creates it) ───
 // biome-ignore lint/suspicious/noExplicitAny: dynamic import for pre-Step-4 scaffold (module does not exist yet)
@@ -115,6 +115,24 @@ describe("T-Detect.2 — connect-prompt CONTROL_RE is ZH-aware", () => {
       "CONNECT_PROMPT_PRESENT_JS() must embed a ZH send-commit token (直接发送 or 发送邀请)",
     );
   });
+
+  // ─── T-Detect.2b (Step 5 live-capture, NEW) ────────────────────────────────
+  it("T-Detect.2b: CONNECT_PROMPT_PRESENT_JS() also embeds the LIVE-CAPTURED real dialog tokens ('添加消息', '发送时不添加备注')", () => {
+    // Given: the same JS builder, checked against the ACTUAL strings captured on :9222 this
+    //   session (the 'Add a note to your invitation?' dialog reached via 更多→邀请X加为好友).
+    // When:  CONNECT_PROMPT_PRESENT_JS() is generated.
+    // Then:  the generated source must ALSO contain '添加消息' and '发送时不添加备注' — RED today
+    //   (neither string is in the plan's guessed token set); Step-5a must add both.
+    const js = CONNECT_PROMPT_PRESENT_JS();
+    assert.ok(
+      js.includes("添加消息"),
+      "CONNECT_PROMPT_PRESENT_JS() must embed the real captured add-note token (添加消息)",
+    );
+    assert.ok(
+      js.includes("发送时不添加备注"),
+      "CONNECT_PROMPT_PRESENT_JS() must embed the real captured send-without-note token (发送时不添加备注)",
+    );
+  });
 });
 
 describe("T-Detect.3 — feedProfile connect-prompt overlay detection is ZH-aware", () => {
@@ -127,6 +145,20 @@ describe("T-Detect.3 — feedProfile connect-prompt overlay detection is ZH-awar
       hasProfileConnectPromptOverlay("https://www.linkedin.com/in/jane-doe/", "profile", zhEntries),
       true,
       "hasProfileConnectPromptOverlay must detect the ZH connect-modal button pair",
+    );
+  });
+
+  // ─── T-Detect.3b (Step 5 live-capture, NEW) ────────────────────────────────
+  it("T-Detect.3b: hasProfileConnectPromptOverlay ALSO returns true given the LIVE-CAPTURED real dialog buttons ('添加消息', '发送时不添加备注')", () => {
+    // Given: a profile-surface entry set with the REAL captured add-note + send-without-note
+    //   buttons (:9222, 2026-07-02) — different strings from the plan's guess used in T-Detect.3.
+    // When:  hasProfileConnectPromptOverlay(pageUrl, surface, entries) runs.
+    // Then:  returns true — RED today (English-only + plan-guessed-ZH-only literals).
+    const zhEntries = [entry("button", "添加消息", "@e1"), entry("button", "发送时不添加备注", "@e2")];
+    assert.equal(
+      hasProfileConnectPromptOverlay("https://www.linkedin.com/in/jane-doe/", "profile", zhEntries),
+      true,
+      "hasProfileConnectPromptOverlay must detect the REAL captured ZH connect-modal button pair",
     );
   });
 });
