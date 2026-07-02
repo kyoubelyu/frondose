@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { frondoseEnv } from "../../env.js";
 import { DEFAULT_SECRETS_PATH, readSecrets } from "../../persistence/secrets.js";
 
@@ -15,14 +15,19 @@ const DEFAULT_MODEL_ID = "deepseek-v4-flash";
 export const LLM_COMPLETE_TIMEOUT_MS = 120_000;
 export const LLM_STREAM_IDLE_MS = 30_000;
 export const LLM_STREAM_MAX_RETRIES = 2;
-/** DeepSeek models whose thinking output we disable to match the Vercel makeNoThinkingFetch behavior. */
-const THINKING_DEFAULT_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
+/**
+ * [P-THINK] Reasoning effort passed to stream() to turn DeepSeek thinking ON. Proven live against
+ * api.deepseek.com (deepseek-v4-flash / -chat / -reasoner all emit thinking_delta at "low").
+ * NOTE: the loop drives the LOW-LEVEL stream() (which reads `reasoningEffort`, not `reasoning` —
+ * that clamp only happens in streamSimple), so this value is passed as `reasoningEffort`.
+ */
+const REASONING_LEVEL: ThinkingLevel = "low";
 
 export interface PiModelResolution {
   model: Model<"openai-completions">;
   apiKey: string;
-  /** Pi onPayload hook that injects thinking:disabled for the thinking-default models (parity with Vercel). */
-  onPayload: (payload: unknown) => unknown;
+  /** [P-THINK] Reasoning effort the loop passes to stream() as `reasoningEffort` to enable thinking. */
+  reasoningLevel: ThinkingLevel;
   timeoutMs: number;
 }
 
@@ -60,22 +65,20 @@ export function resolvePiModel(secretsPath: string = DEFAULT_SECRETS_PATH()): Pi
     api: "openai-completions",
     provider: "deepseek",
     baseUrl,
-    reasoning: false,
+    // [P-THINK] Reasoning ON (reverses v0.4-fix1's disable). Pi replays reasoning_content on
+    // assistant messages natively via the deepseek compat flags below, so the multi-step tool
+    // turn no longer 400s on step 2 (that was a Vercel-@ai-sdk/openai gap, absent from the Pi path).
+    reasoning: true,
+    // Set EXPLICITLY rather than relying on URL auto-detect: production runs a custom proxy baseUrl
+    // where only provider==="deepseek" (not the URL) would trip auto-detection. thinkingFormat
+    // "deepseek" sends thinking:{type:"enabled"}; requiresReasoningContentOnAssistantMessages makes
+    // pi replay an (empty) reasoning_content on every assistant message so DeepSeek accepts the history.
+    compat: { thinkingFormat: "deepseek", requiresReasoningContentOnAssistantMessages: true },
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1_000_000,
     maxTokens: 8192,
   };
 
-  const disableThinking = THINKING_DEFAULT_MODELS.has(id);
-  const onPayload = (payload: unknown): unknown => {
-    // Parity with makeNoThinkingFetch: inject thinking:disabled so DeepSeek-v4 models don't
-    // burn tokens on reasoning we don't surface. Idempotent + defensive.
-    if (!disableThinking || !payload || typeof payload !== "object") return payload;
-    const p = payload as Record<string, unknown>;
-    if (!("thinking" in p)) p.thinking = { type: "disabled" };
-    return p;
-  };
-
-  return { model, apiKey, onPayload, timeoutMs: LLM_COMPLETE_TIMEOUT_MS };
+  return { model, apiKey, reasoningLevel: REASONING_LEVEL, timeoutMs: LLM_COMPLETE_TIMEOUT_MS };
 }

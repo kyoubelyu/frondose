@@ -42,7 +42,7 @@ import { buildPiToolBundle } from "./toolAdapter.js";
  */
 export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
-  const { model, apiKey, onPayload, timeoutMs } = resolvePiModel();
+  const { model, apiKey, reasoningLevel, timeoutMs } = resolvePiModel();
   const { tools, dispatch } = buildPiToolBundle(opts.tools, opts.activeTools);
   const { piMessages } = coreMessagesToPi(opts.messages, model.id);
   const newCore: CoreMessage[] = [];
@@ -55,7 +55,10 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
       const assistant: AssistantMessage = await completeWithIdleTimeout(
         model,
         { systemPrompt: opts.system, messages: piMessages, tools },
-        { apiKey, signal: opts.abortSignal, onPayload, timeoutMs },
+        // [P-THINK] reasoningEffort (NOT reasoning) — stream() is the low-level fn; the reasoning→
+        // reasoningEffort clamp only lives in streamSimple. onReasoning surfaces thinking_delta live.
+        { apiKey, signal: opts.abortSignal, reasoningEffort: reasoningLevel, timeoutMs },
+        opts.onReasoning,
       );
       count++;
 
@@ -141,6 +144,7 @@ async function completeWithIdleTimeout(
   model: PiStreamArgs[0],
   context: PiStreamArgs[1],
   opts: NonNullable<PiStreamArgs[2]>,
+  onReasoning?: (delta: string) => void,
 ): Promise<AssistantMessage> {
   let lastIdleError: Error | null = null;
   for (let attempt = 0; attempt <= LLM_STREAM_MAX_RETRIES; attempt++) {
@@ -161,6 +165,9 @@ async function completeWithIdleTimeout(
       for await (const event of eventStream) {
         if (opts.signal?.aborted) break;
         resetIdleTimer();
+        // [P-THINK] Surface reasoning deltas live (gray thinking in the UI). Thinking stays in the
+        // native AssistantMessage for replay; it is NOT added to CoreMessages (adapter drops it).
+        if (event.type === "thinking_delta") onReasoning?.(event.delta);
         terminal = assistantFromTerminalEvent(event);
         if (terminal) break;
       }

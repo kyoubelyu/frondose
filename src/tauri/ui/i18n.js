@@ -18,6 +18,7 @@ const en = {
     "status.listening": "Listening",
     "status.observing": "Observing",
     "status.working": "Working",
+    "status.thinking": "thinking…",
     // composer
     "composer.placeholder.manual": "Reply, or press / for actions",
     "composer.placeholder.auto": "Inject a rule, ask a question, or interrupt…",
@@ -145,6 +146,7 @@ const zhCN = {
     "status.listening": "待命",
     "status.observing": "观察中",
     "status.working": "工作中",
+    "status.thinking": "思考中…",
     // composer
     "composer.placeholder.manual": "回复，或按 / 选择操作",
     "composer.placeholder.auto": "输入规则、提问，或打断当前任务…",
