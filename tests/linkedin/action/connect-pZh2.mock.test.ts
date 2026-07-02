@@ -1,6 +1,6 @@
 /**
  * Phase P-ZH-2 Step 2 — T-Resolve.3 (scaffold): connectViaAction reaches send-dispatch on a
- * ZH-labeled fixture (no connect_target_not_found due to language).
+ * ZH-labeled fixture (no failure due to language).
  *
  * Source-under-test: src/linkedin/action/connect.ts — currently hardcodes ENGLISH labels
  * (CONNECT_LABEL="Connect", ADD_NOTE_LABEL="Add a note", SEND_WITHOUT_NOTE_LABEL="Send without
@@ -9,11 +9,18 @@
  * locale). Harness mirrors tests/linkedin/action/connect.mock.test.ts (fake CdpClient + visible-
  * scope fixtures via createVisibleScopeFromEntries) but every AX entry name is the ZH form.
  *
- * Ground-truthed by construction: a ZH-only "actions"/"connectPrompt" visible scope has NO entry
- * whose name equals the hardcoded English label, so resolveScopedTarget's label match fails and
- * connectViaAction returns reason:"connect_target_not_found" — the genuine pre-Step-4 RED. The
- * assertion below expects `connected:true` (dispatch reached and confirmed), which is what
- * Step 4's actionKind migration must deliver.
+ * ★ NIT CORRECTION (Step 3a — Critic docs/phase-zh2-critics.md § NIT): the CURRENT (pre-Step-4)
+ * failure reason is `more_overflow_failed`, NOT `connect_target_not_found` as an earlier draft of
+ * this comment claimed. Ground-truthed this session (re-ran the scaffold against unmodified
+ * source): the hardcoded English `label:"Connect"` resolve at connect.ts:125 misses on a ZH-only
+ * fixture and throws a not_found error, which connect.ts's own recovery path (connect.ts:132-134)
+ * correctly treats as "Connect may be under More" and falls into the English `More` overflow
+ * fallback (connect.ts:136-142) — which ALSO misses on 中文 (更多 ≠ "More") and fails at
+ * connect.ts:142, returning reason:"more_overflow_failed" BEFORE ever reaching the
+ * connect_target_not_found branch at connect.ts:151. The `connected:true` assertion below is
+ * unchanged and remains the real RED; the `notEqual(...,"connect_target_not_found")` assertion is
+ * consequently non-discriminating today (it already passes, since the actual reason differs) —
+ * kept only as documentation of what NOT to expect, not as the load-bearing check.
  *
  * Run (mock):
  *   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
@@ -23,8 +30,8 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
-import type { ActiveLayer, InspectSummary } from "../../../src/linkedin/logic/contracts/inspect.js";
 import { connectViaAction } from "../../../src/linkedin/action/connect.js";
+import type { ActiveLayer, InspectSummary } from "../../../src/linkedin/logic/contracts/inspect.js";
 import type {
   CurrentSurfaceContext,
   RuntimeVisibleScopeInspection,
@@ -136,11 +143,13 @@ function makeDeps(opts: { client: unknown; capture: () => Promise<CurrentSurface
 }
 
 describe("connectViaAction — ZH-labeled fixture reaches send-dispatch (T-Resolve.3)", () => {
-  it("T-Resolve.3: given a profile whose Connect/Add-a-note/Send controls are ALL ZH-labeled ('邀请X加为好友'/'添加备注'/'直接发送'), when connectViaAction runs without a note, then it reaches send-dispatch and connects — NOT connect_target_not_found due to language", async () => {
+  it("T-Resolve.3: given a profile whose Connect/Add-a-note/Send controls are ALL ZH-labeled ('邀请X加为好友'/'添加备注'/'直接发送'), when connectViaAction runs without a note, then it reaches send-dispatch and connects — NOT a failure due to language", async () => {
     // Given: a profile context where every relevant control is ZH-labeled (no English form present).
     // When:  connectViaAction runs with no note.
-    // Then:  connected:true (dispatch reached + confirmed) — currently reason:"connect_target_not_found"
-    //   because connect.ts's hardcoded label:"Connect" cannot match a ZH-only entry set.
+    // Then:  connected:true (dispatch reached + confirmed). CURRENT pre-Step-4 failure reason is
+    //   "more_overflow_failed" (corrected NIT, see file header) — connect.ts's hardcoded
+    //   label:"Connect" misses the ZH-only entry set, falls into the English "More" overflow
+    //   fallback, which also misses (更多 ≠ "More"). The `connected:true` assertion is the real RED.
     const ctx = zhProfileReadyContext();
     const clickAtLog: string[] = [];
     const raceHandleLog: Array<{ label: string; text?: string }> = [];
@@ -149,7 +158,15 @@ describe("connectViaAction — ZH-labeled fixture reaches send-dispatch (T-Resol
 
     const result = await connectViaAction(deps as never);
 
-    assert.equal(result.connected, true, `connectViaAction must connect on a ZH-only fixture (got reason: ${result.reason})`);
-    assert.notEqual(result.reason, "connect_target_not_found", "must NOT fail due to language (connect_target_not_found)");
+    assert.equal(
+      result.connected,
+      true,
+      `connectViaAction must connect on a ZH-only fixture (got reason: ${result.reason})`,
+    );
+    assert.notEqual(
+      result.reason,
+      "connect_target_not_found",
+      "must NOT fail with connect_target_not_found (documentation-only check — see NIT correction in file header)",
+    );
   });
 });
