@@ -1,3 +1,8 @@
+// P-SP-C: 3-mode model — "magical" is the passive-judgement mode that observes
+// operator browsing, records raw_candidates, scores leads, and surfaces cards
+// without firing outbound. Cron (cronEnabled) wins precedence over passive when
+// both are true — operator has handed off autonomy; Auto mode covers it.
+import { t } from "./i18n.js";
 export const MODE_LABELS = {
     manual: "Manual",
     magical: "Magical",
@@ -23,9 +28,9 @@ export function togglesForMode(mode) {
 }
 export function statusForMode(mode) {
     if (mode === "auto")
-        return { label: "Working", tone: "working" };
+        return { label: t("status.working"), tone: "working" };
     if (mode === "magical")
-        return { label: "Observing", tone: "observing" };
-    return { label: "Listening", tone: "listening" };
+        return { label: t("status.observing"), tone: "observing" };
+    return { label: t("status.listening"), tone: "listening" };
 }
 //# sourceMappingURL=mode.js.map

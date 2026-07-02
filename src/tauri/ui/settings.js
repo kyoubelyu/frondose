@@ -4,6 +4,7 @@
 // DOM-lib-free (mirrors render.ts): compiled by BOTH the Tauri-UI build (lib DOM) and the main build
 // (no DOM lib), so this module references ONLY the structural `*Like` interfaces below — never
 // HTMLInputElement/Document. The global `document` is reached through a typed cast on globalThis.
+import { t } from "./i18n.js";
 export function createSettingsPanel(deps) {
     const doc = globalThis.document;
     const $ = (id) => doc.getElementById(id);
@@ -21,12 +22,12 @@ export function createSettingsPanel(deps) {
         const keyEl = $("settings-key");
         if (keyEl) {
             keyEl.value = ""; // never populate the raw key — only the mask as a placeholder
-            keyEl.placeholder = r.llm.maskedKey ?? "no key set";
+            keyEl.placeholder = r.llm.maskedKey ?? t("settings.noKeySet");
         }
         const braveKeyEl = $("settings-brave-key");
         if (braveKeyEl) {
             braveKeyEl.value = "";
-            braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? "no key set";
+            braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? t("settings.noKeySet");
         }
         for (const f of ["fullName", "company", "role", "headline"]) {
             const el = $(`settings-${f.toLowerCase()}`);
@@ -72,7 +73,7 @@ export function createSettingsPanel(deps) {
             await load(); // re-GET → key re-masked, fields reflect saved state
         }
         catch (e) {
-            deps.surfaceError("Save settings", e);
+            deps.surfaceError(t("action.saveSettings"), e);
         }
     }
     // P-58d.1-UI: manual updater trigger (OQ-58d.6). Invokes the shipped frondose_check_update.
@@ -81,16 +82,16 @@ export function createSettingsPanel(deps) {
     async function checkUpdate() {
         const statusEl = $("settings-update-status");
         if (statusEl)
-            statusEl.textContent = "Checking…";
+            statusEl.textContent = t("settings.checking");
         try {
             const r = await deps.invoke("frondose_check_update");
             if (statusEl)
-                statusEl.textContent = r?.updateAvailable ? "Updating…" : "Up to date";
+                statusEl.textContent = r?.updateAvailable ? t("settings.updating") : t("settings.upToDate");
         }
         catch (e) {
             if (statusEl)
                 statusEl.textContent = "";
-            deps.surfaceError("Check for updates", e);
+            deps.surfaceError(t("action.checkUpdate"), e);
         }
     }
     function close() {
