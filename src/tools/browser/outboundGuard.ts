@@ -1,3 +1,11 @@
+import {
+  classifyActionName,
+  CONNECT_OPEN_RE,
+  CONNECT_SEND_RE,
+  FOLLOW_RE,
+  personNameFromActionLabel,
+} from "../../linkedin/logic/actionClassifier.js";
+
 // [P-75 D-11 round 4] Added `Send\s+invitation\b` — LinkedIn's actual Stage-2 modal button label
 // for both 3rd-deg and 2nd-deg targets. Original regex matched only `Send invite/Send now/Send
 // without a note` and missed the most-common case. Live evidence: Hootan Farhat 2026-05-25 +
@@ -7,10 +15,9 @@
 // approval check (requiresApproval) so this both fixes inspect visibility AND closes a defense
 // gap (Send invitation was previously not requiring step approval since it wasn't recognized
 // as outbound).
-export const OUTBOUND_LABEL_RE =
-  /^(?:Connect\b|Invite\b.*\bto\s+connect\b|Send\s+without\s+a\s+note\b|Send\s+invitation\b|Send\s+invite\b|Send\s+now\b|邀请|添加好友|发送邀请|直接发送|连接$|立即连接)/i;
+export const OUTBOUND_LABEL_RE = new RegExp(`(?:${CONNECT_SEND_RE.source})|(?:${CONNECT_OPEN_RE.source})`, "iu");
 
-export const FOLLOW_LABEL_RE = /^(?:Follow\b(?!ing)|关注$)/i;
+export const FOLLOW_LABEL_RE = FOLLOW_RE;
 
 export const LINKEDIN_OUTBOUND_SURFACES = new Set([
   "feed",
@@ -33,11 +40,17 @@ export function isFollowLabel(label: string): boolean {
   return FOLLOW_LABEL_RE.test(label);
 }
 
+/**
+ * After F1, NO bare send-family label on any LinkedIn outbound surface can reach a real CDP
+ * send without operator approval — the approval gate is independent of connect-vs-message
+ * classification and of any dialog-context detection.
+ */
 export function requiresApproval(label: string, surface: string): boolean {
+  const outboundClass = classifyOutboundLabel(label);
   if (isOutboundLabel(label)) return true;
   if (isFollowLabel(label)) return surface === "profile";
-  if (classifyOutboundLabel(label) === "message_send" && MESSAGING_SURFACES.has(surface)) return true;
-  if (classifyOutboundLabel(label) === "post" && surface === "feed") return true;
+  if (outboundClass === "message_send" && LINKEDIN_OUTBOUND_SURFACES.has(surface)) return true;
+  if (outboundClass === "post" && surface === "feed") return true;
   return false;
 }
 
@@ -59,30 +72,34 @@ export function requiresApproval(label: string, surface: string): boolean {
  */
 export type OutboundClass = "connect_open" | "connect_send" | "message_send" | "post" | "benign";
 
-const CONNECT_SEND_RE =
-  /^(?:Send\s+invitation\b|Send\s+invite\b|Send\s+without\s+a\s+note\b|Send\s+now\b|发送邀请|直接发送|立即连接)/i;
-export const CONNECT_OPEN_RE = /^(?:Connect\b|Invite\b.*\bto\s+connect\b|邀请|添加好友|连接$)/i;
-const MESSAGE_SEND_RE =
-  /^(?:Send\s*|发送(?:\s*(?:消息|信息|私信))?|發送(?:\s*(?:消息|訊息|私訊))?|传送(?:\s*(?:消息|信息|私信))?|傳送(?:\s*(?:消息|訊息|私訊))?|送出)$/iu;
-export const POST_PUBLISH_RE = /^post$/i;
-
 export function classifyOutboundLabel(label: string): OutboundClass {
-  const trimmed = label.trim();
-  if (CONNECT_SEND_RE.test(trimmed)) return "connect_send";
-  if (CONNECT_OPEN_RE.test(trimmed)) return "connect_open";
-  if (MESSAGE_SEND_RE.test(trimmed)) return "message_send";
-  if (POST_PUBLISH_RE.test(trimmed)) return "post";
-  return "benign";
+  switch (classifyActionName(label)) {
+    case "connect_send":
+      return "connect_send";
+    case "connect_open":
+      return "connect_open";
+    case "message_send":
+      return "message_send";
+    case "post_publish":
+      return "post";
+    default:
+      return "benign";
+  }
 }
 
 /** P-AUTO-17 §6.4: classify the resolved element's current accessible name. */
 export function classifyOutboundEntry(
   entry: { name: string; role: string } | null | undefined,
   surface: string,
+  opts: { connectDialogActive?: boolean } = {},
 ): OutboundClass {
   if (!LINKEDIN_OUTBOUND_SURFACES.has(surface)) return "benign";
   if (!entry) return "benign";
-  return classifyOutboundLabel(entry.name);
+  const outboundClass = classifyOutboundLabel(entry.name);
+  if (outboundClass === "message_send" && opts.connectDialogActive === true && !MESSAGING_SURFACES.has(surface)) {
+    return "connect_send";
+  }
+  return outboundClass;
 }
 
 /** P-AUTO-10 (M3): the inner-cleanup chain from personNameFromInviteLabel,
@@ -110,9 +127,8 @@ export function normalizePersonName(name: string): string {
  *  is not an instant-invite ("Connect", "Send invitation"). The inner cleanup
  *  chain lives in normalizePersonName above (extracted in P-AUTO-10). */
 export function personNameFromInviteLabel(label: string): string | null {
-  const m = label.match(/^Invite\s+(.+?)\s+to\s+connect\b/i);
-  if (!m) return null;
-  // biome-ignore lint/style/noNonNullAssertion: regex match guarantees group 1.
-  const name = normalizePersonName(m[1]!);
+  const parsed = personNameFromActionLabel(label);
+  if (parsed?.kind !== "connect_open") return null;
+  const name = normalizePersonName(parsed.personName);
   return name || null;
 }

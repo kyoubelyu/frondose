@@ -1,4 +1,5 @@
 import type { CdpClient } from "../cdp/client.js";
+import { COMPOSER_INPUT_RE } from "./logic/actionClassifier.js";
 
 export const READBACK_RETRY_MS = 120;
 
@@ -9,7 +10,7 @@ export interface ComposerLiveProbeResult {
 
 export const FEED_COMPOSER_EDITOR_JS = `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const INPUT_RE = /creating content|what do you want to talk about|Text editor for creating content/i;
+  const INPUT_RE = ${COMPOSER_INPUT_RE.toString()};
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
@@ -49,7 +50,7 @@ export const FEED_COMPOSER_LIVE_IN_DOM_JS = FEED_COMPOSER_EDITOR_JS;
 
 export const FEED_COMPOSER_FOCUS_JS = `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const INPUT_RE = /creating content|what do you want to talk about|Text editor for creating content/i;
+  const INPUT_RE = ${COMPOSER_INPUT_RE.toString()};
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
@@ -133,7 +134,7 @@ export function composerTextMatches(intended: string, observed: string): boolean
 
 export const FEED_COMPOSER_CLEAR_JS = `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-  const INPUT_RE = /creating content|what do you want to talk about|Text editor for creating content/i;
+  const INPUT_RE = ${COMPOSER_INPUT_RE.toString()};
   const vis = (el) => {
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;

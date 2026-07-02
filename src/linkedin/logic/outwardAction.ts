@@ -1,3 +1,9 @@
+import {
+  classifyActionName,
+  COMPOSER_INPUT_RE,
+  CONNECT_ADD_NOTE_RE,
+  personNameFromActionLabel,
+} from "./actionClassifier.js";
 import type { CurrentSurfaceContext, SnapshotEntry } from "./surface/currentSurfaceTypes.js";
 
 export type OutwardActionAdviceKind = "identity_missing" | "memory_recommended" | "remember_recommended";
@@ -172,31 +178,29 @@ export function parseDynamicLabel(
   label: string,
 ): Partial<Pick<OutwardActionDescriptor, "personName" | "actionKind" | "phase" | "rememberInteraction">> {
   const normalized = normalizeWhitespace(label);
+  const parsed = personNameFromActionLabel(normalized);
 
-  const followMatch = normalized.match(/^Follow\s+(.+)$/i);
-  if (followMatch?.[1]) {
+  if (parsed?.kind === "follow") {
     return {
       actionKind: "follow",
       phase: "commit",
-      personName: normalizeWhitespace(followMatch[1]),
+      personName: normalizeWhitespace(parsed.personName),
     };
   }
 
-  const inviteMatch = normalized.match(/^Invite\s+(.+?)\s+to connect$/i);
-  if (inviteMatch?.[1]) {
+  if (parsed?.kind === "connect_open") {
     return {
       actionKind: "connect",
       phase: "open",
-      personName: normalizeWhitespace(inviteMatch[1]),
+      personName: normalizeWhitespace(parsed.personName),
     };
   }
 
-  const messageMatch = normalized.match(/^Message\s+(.+)$/i) ?? normalized.match(/^Send a message to\s+(.+)$/i);
-  if (messageMatch?.[1]) {
+  if (parsed?.kind === "message_open") {
     return {
       actionKind: "message",
       phase: "open",
-      personName: normalizeWhitespace(messageMatch[1]),
+      personName: normalizeWhitespace(parsed.personName),
     };
   }
 
@@ -209,18 +213,19 @@ function classifyClickActionDescriptor(
 ): OutwardActionDescriptor | null {
   const normalizedLabel = targetLabel(target);
   const dynamic = parseDynamicLabel(normalizedLabel);
+  const linkedInAction = classifyActionName(normalizedLabel);
   const profileTarget = inferProfileTarget(context);
 
-  if (/^Connect$/i.test(normalizedLabel)) {
+  if (linkedInAction === "connect_open") {
     return {
       actionKind: "connect",
       phase: "open",
-      personName: profileTarget.personName,
+      personName: dynamic.personName ?? profileTarget.personName,
       profileUrl: profileTarget.profileUrl,
     };
   }
 
-  if (dynamic.actionKind === "follow") {
+  if (linkedInAction === "follow") {
     return {
       actionKind: "follow",
       phase: "commit",
@@ -238,7 +243,7 @@ function classifyClickActionDescriptor(
     };
   }
 
-  if (dynamic.actionKind === "message") {
+  if (linkedInAction === "message_open") {
     return {
       actionKind: "message",
       phase: "open",
@@ -247,17 +252,7 @@ function classifyClickActionDescriptor(
     };
   }
 
-  if (/^Send without a note$/i.test(normalizedLabel)) {
-    return {
-      actionKind: "connect",
-      phase: "commit",
-      personName: profileTarget.personName,
-      profileUrl: profileTarget.profileUrl,
-      rememberInteraction: "connect",
-    };
-  }
-
-  if (/^(?:Send invitation|Send invite|Send now)$/i.test(normalizedLabel)) {
+  if (linkedInAction === "connect_send") {
     return {
       actionKind: "connect",
       phase: "commit",
@@ -274,7 +269,7 @@ function classifyClickActionDescriptor(
     };
   }
 
-  if (/^Send$/i.test(normalizedLabel)) {
+  if (linkedInAction === "message_send") {
     if (target.scope === "threadInput" || target.scope === "messageOverlayThreadInput") {
       return {
         actionKind: "message",
@@ -282,6 +277,16 @@ function classifyClickActionDescriptor(
         personName: profileTarget.personName,
         profileUrl: profileTarget.profileUrl,
         rememberInteraction: "message",
+      };
+    }
+
+    if (target.scope === "connectPrompt") {
+      return {
+        actionKind: "connect",
+        phase: "commit",
+        personName: profileTarget.personName,
+        profileUrl: profileTarget.profileUrl,
+        rememberInteraction: "connect",
       };
     }
 
@@ -302,7 +307,7 @@ function classifyClickActionDescriptor(
     return null;
   }
 
-  if (/^Post$/i.test(normalizedLabel)) {
+  if (linkedInAction === "post_publish") {
     return {
       actionKind: "post",
       phase: "commit",
@@ -319,12 +324,13 @@ function classifyTypeActionDescriptor(
   target: OutwardActionTarget,
 ): OutwardActionDescriptor | null {
   const normalizedLabel = targetLabel(target);
+  const linkedInAction = classifyActionName(normalizedLabel);
   const profileTarget = inferProfileTarget(context);
 
   if (
     target.scope === "threadInput" ||
     target.scope === "messageOverlayThreadInput" ||
-    /write a message/i.test(normalizedLabel)
+    linkedInAction === "message_open"
   ) {
     return {
       actionKind: "message",
@@ -334,8 +340,8 @@ function classifyTypeActionDescriptor(
     };
   }
 
-  if (target.scope === "comment" || target.scope === "commentReply" || /^Add a note$/i.test(normalizedLabel)) {
-    const isConnectNote = normalizedLabel.toLowerCase() === "add a note";
+  if (target.scope === "comment" || target.scope === "commentReply" || linkedInAction === "connect_add_note") {
+    const isConnectNote = CONNECT_ADD_NOTE_RE.test(normalizedLabel);
     return {
       actionKind: isConnectNote ? "connect" : target.scope === "commentReply" ? "reply" : "comment",
       phase: "draft",
@@ -345,7 +351,7 @@ function classifyTypeActionDescriptor(
     };
   }
 
-  if (target.scope === "composerInput" || /text editor for creating content/i.test(normalizedLabel)) {
+  if (target.scope === "composerInput" || COMPOSER_INPUT_RE.test(normalizedLabel)) {
     return {
       actionKind: "post",
       phase: "draft",

@@ -31,11 +31,6 @@ const TOOL_NAME = "connect_action_runtime";
 // "connectPrompt" visible-scope handle (profile-local-overlay surface only).
 const PROFILE_ACTIONS_SCOPE = "actions";
 const CONNECT_PROMPT_SCOPE = "connectPrompt";
-const CONNECT_LABEL = "Connect";
-const MORE_LABEL = "More";
-const ADD_NOTE_LABEL = "Add a note";
-const SEND_WITHOUT_NOTE_LABEL = "Send without a note";
-const SEND_INVITATION_LABEL = "Send invitation";
 
 // Connect opener resolve budget (the profileActions "actions" scope should be present quickly).
 const CONNECT_SCOPE_READY_ATTEMPTS = 5;
@@ -122,7 +117,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
     let connectResolved: ResolveScopedTargetResult;
     try {
       connectResolved = await resolveScopedTarget(
-        { kind: "button", label: CONNECT_LABEL, scope: PROFILE_ACTIONS_SCOPE },
+        { kind: "button", actionKind: "connect_open", scope: PROFILE_ACTIONS_SCOPE },
         scopeReadyBudget(captureFor, CONNECT_SCOPE_READY_ATTEMPTS, CONNECT_SCOPE_READY_RETRY_MS),
       );
     } catch (e) {
@@ -134,7 +129,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
       }
       try {
         const more = await resolveScopedTarget(
-          { kind: "button", label: MORE_LABEL, scope: PROFILE_ACTIONS_SCOPE },
+          { kind: "button", actionKind: "more", scope: PROFILE_ACTIONS_SCOPE },
           scopeReadyBudget(captureFor, CONNECT_SCOPE_READY_ATTEMPTS, CONNECT_SCOPE_READY_RETRY_MS),
         );
         await deps.client.clickAt(more.target.selector);
@@ -144,7 +139,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
       try {
         // Overflow menu items surface as top-level entries (menuitem/link) — resolve without a scope.
         connectResolved = await resolveScopedTarget(
-          { kind: "button", label: CONNECT_LABEL },
+          { kind: "button", actionKind: "connect_open" },
           scopeReadyBudget(captureFor, CONNECT_SCOPE_READY_ATTEMPTS, CONNECT_SCOPE_READY_RETRY_MS),
         );
       } catch (connectErr) {
@@ -171,7 +166,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
       let addNote: ResolveScopedTargetResult;
       try {
         addNote = await resolveScopedTarget(
-          { kind: "button", label: ADD_NOTE_LABEL, scope: CONNECT_PROMPT_SCOPE },
+          { kind: "button", actionKind: "connect_add_note", scope: CONNECT_PROMPT_SCOPE },
           scopeReadyBudget(captureFor, PROMPT_SCOPE_READY_ATTEMPTS, PROMPT_SCOPE_READY_RETRY_MS),
         );
       } catch (e) {
@@ -201,7 +196,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
 
       try {
         sendResolved = await resolveScopedTarget(
-          { kind: "button", label: SEND_INVITATION_LABEL, scope: CONNECT_PROMPT_SCOPE },
+          { kind: "button", actionKind: "connect_send", scope: CONNECT_PROMPT_SCOPE },
           scopeReadyBudget(captureFor, PROMPT_SCOPE_READY_ATTEMPTS, PROMPT_SCOPE_READY_RETRY_MS),
         );
       } catch (e) {
@@ -214,7 +209,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
       // without-note: Send without a note.
       try {
         sendResolved = await resolveScopedTarget(
-          { kind: "button", label: SEND_WITHOUT_NOTE_LABEL, scope: CONNECT_PROMPT_SCOPE },
+          { kind: "button", actionKind: "connect_send", scope: CONNECT_PROMPT_SCOPE },
           scopeReadyBudget(captureFor, PROMPT_SCOPE_READY_ATTEMPTS, PROMPT_SCOPE_READY_RETRY_MS),
         );
       } catch (e) {

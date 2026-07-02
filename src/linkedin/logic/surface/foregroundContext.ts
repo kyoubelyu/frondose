@@ -8,6 +8,7 @@ import { hasArticleEditorSurfaceSignals, hasArticleManageSurfaceSignals } from "
 import {
   hasComposerAudienceSurfaceSignals,
   hasComposerScheduleSurfaceSignals,
+  isComposerButtonEntry,
   isComposerInputEntry,
 } from "../predicates/composer.js";
 import {
@@ -47,15 +48,6 @@ const MESSAGING_OVERLAY_SHELL_LABELS = new Set([
 ]);
 const MESSAGING_OVERLAY_FILTER_LABELS = new Set(["Filter messages by"]);
 const MESSAGING_OVERLAY_SEARCH_PATTERN = /type to search for connections and conversations/i;
-
-function isComposerModalSurfaceButtonEntry(entry: SnapshotEntry): boolean {
-  return (
-    entry.role === "button" &&
-    /(post to anyone|edit media preview|remove media|add media|schedule post|create a post|create an event|celebrate an occasion|^post$)/i.test(
-      entry.name,
-    )
-  );
-}
 
 function isComposerDraftConfirmationEntry(entry: SnapshotEntry): boolean {
   return entry.role === "button" && /^(discard|save as draft)$/i.test(entry.name);
@@ -116,7 +108,7 @@ function inferLegacySurfaceId(pageUrl: string, entries: SnapshotEntry[]): string
   const lowerUrl = pageUrl.toLowerCase();
   const surfaceEntries = inspectEntriesForPage(pageUrl, entries);
   const hasComposerSignals = surfaceEntries.some(
-    (entry) => isComposerInputEntry(entry) || isComposerModalSurfaceButtonEntry(entry),
+    (entry) => isComposerInputEntry(entry) || isComposerButtonEntry(entry),
   );
   const hasComposerAudienceSignals = hasComposerAudienceSurfaceSignals(surfaceEntries);
   const hasComposerScheduleSignals = hasComposerScheduleSurfaceSignals(surfaceEntries);

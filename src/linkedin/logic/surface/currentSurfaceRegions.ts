@@ -1,5 +1,6 @@
 import type { AmbiguityCase, InteractiveRegion } from "../contracts/inspect.js";
 import type { MinimalPublicScopeId } from "../contracts/minimalPublicContract.js";
+import { ACTION_NAME_TOKENS } from "../actionClassifier.js";
 import { collectActiveCommentComposerEntries } from "./commentComposer.js";
 import type { SnapshotEntry } from "./currentSurfaceTypes.js";
 import {
@@ -306,7 +307,7 @@ function buildAmbiguityCasesForForegroundContext(
     ambiguityCases.push({
       label: "LAYER-COMPOSER",
       anchorScope: "composerModal",
-      repeatedLabels: ["Post"],
+      repeatedLabels: ACTION_NAME_TOKENS.post.slice(),
     });
   }
 

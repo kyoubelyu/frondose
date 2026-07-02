@@ -149,7 +149,7 @@ export async function publishApprovedFeedPostViaAction(deps: PublishPostActionDe
     let postResolved: ResolveScopedTargetResult;
     try {
       postResolved = await resolveScopedTarget(
-        { kind: "button", label: "Post", scope: "composerModal" },
+        { kind: "button", actionKind: "post_publish", scope: "composerModal" },
         {
           captureCurrentSurfaceContext: () => capture(deps.client),
           scopeReadyAttempts: 8,
