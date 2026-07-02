@@ -39,6 +39,7 @@ function copyIntoTempRepo(): string {
     "src/overlay/cssTransform.ts",
     "src/overlay/sharedEntry.ts",
     "src/tauri/ui/frondoseTokens.ts",
+    "src/tauri/ui/i18n.ts", // P0-3: mode.ts + render leaves import the i18n table
     "src/tauri/ui/mode.ts",
     "src/tauri/ui/render.ts",
     "src/tauri/ui/index.html",

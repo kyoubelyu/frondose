@@ -2,6 +2,8 @@
 // operator browsing, records raw_candidates, scores leads, and surfaces cards
 // without firing outbound. Cron (cronEnabled) wins precedence over passive when
 // both are true — operator has handed off autonomy; Auto mode covers it.
+import { t } from "./i18n.js";
+
 export type AppMode = "manual" | "magical" | "auto";
 
 export const MODE_LABELS = {
@@ -27,7 +29,7 @@ export function togglesForMode(mode: AppMode): { cronEnabled: boolean; passiveEn
 }
 
 export function statusForMode(mode: AppMode): { label: string; tone: string } {
-  if (mode === "auto") return { label: "Working", tone: "working" };
-  if (mode === "magical") return { label: "Observing", tone: "observing" };
-  return { label: "Listening", tone: "listening" };
+  if (mode === "auto") return { label: t("status.working"), tone: "working" };
+  if (mode === "magical") return { label: t("status.observing"), tone: "observing" };
+  return { label: t("status.listening"), tone: "listening" };
 }

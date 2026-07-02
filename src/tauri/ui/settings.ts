@@ -5,6 +5,8 @@
 // (no DOM lib), so this module references ONLY the structural `*Like` interfaces below — never
 // HTMLInputElement/Document. The global `document` is reached through a typed cast on globalThis.
 
+import { t } from "./i18n.js";
+
 export interface SettingsDeps {
   invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
   surfaceError: (label: string, e: unknown) => void;
@@ -46,12 +48,12 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
     const keyEl = $("settings-key");
     if (keyEl) {
       keyEl.value = ""; // never populate the raw key — only the mask as a placeholder
-      keyEl.placeholder = r.llm.maskedKey ?? "no key set";
+      keyEl.placeholder = r.llm.maskedKey ?? t("settings.noKeySet");
     }
     const braveKeyEl = $("settings-brave-key");
     if (braveKeyEl) {
       braveKeyEl.value = "";
-      braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? "no key set";
+      braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? t("settings.noKeySet");
     }
     for (const f of ["fullName", "company", "role", "headline"]) {
       const el = $(`settings-${f.toLowerCase()}`);
@@ -94,7 +96,7 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
       await deps.invoke("frondose_set_settings", { settings: collectPatch() });
       await load(); // re-GET → key re-masked, fields reflect saved state
     } catch (e) {
-      deps.surfaceError("Save settings", e);
+      deps.surfaceError(t("action.saveSettings"), e);
     }
   }
 
@@ -103,13 +105,13 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
   // otherwise report "Up to date". A reject (no URL / server down) → surfaceError.
   async function checkUpdate(): Promise<void> {
     const statusEl = $("settings-update-status");
-    if (statusEl) statusEl.textContent = "Checking…";
+    if (statusEl) statusEl.textContent = t("settings.checking");
     try {
       const r = await deps.invoke<{ updateAvailable?: boolean }>("frondose_check_update");
-      if (statusEl) statusEl.textContent = r?.updateAvailable ? "Updating…" : "Up to date";
+      if (statusEl) statusEl.textContent = r?.updateAvailable ? t("settings.updating") : t("settings.upToDate");
     } catch (e) {
       if (statusEl) statusEl.textContent = "";
-      deps.surfaceError("Check for updates", e);
+      deps.surfaceError(t("action.checkUpdate"), e);
     }
   }
 
