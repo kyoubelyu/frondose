@@ -17,6 +17,7 @@ import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "config.json");
+const DEFAULT_UPDATE_SERVER_URL = "http://intranet-host.local:4875";
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
@@ -68,8 +69,8 @@ export const configJsonSchemaV2 = z.object({
   // schema failure, so a single typo here must NOT reset all other config. URL shape is
   // validated where it matters: serve/settings.ts settingsPatchSchema (.url(), write-time)
   // + the Rust endpoint.parse() guard. .trim() drops stray whitespace. No schema_version
-  // bump (additive optional; old configs Zod-fill null).
-  updateServerUrl: z.string().trim().nullable().default(null),
+  // bump (default-value-only change; old configs Zod-fill the intranet URL).
+  updateServerUrl: z.string().trim().nullable().default(DEFAULT_UPDATE_SERVER_URL),
   // P-ZH-1: operator-picked language for the UI chrome + agent reply-language override.
   // "auto" (default) = today's behavior (navigator-detected UI locale, mirror-the-operator
   // replies). Additive optional, NO schema_version bump — old configs Zod-fill "auto".
@@ -104,7 +105,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   worker: { id: null, hostname: null, label: null, input_mode: "cdp" }, // P-32: input_mode added
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
-  updateServerUrl: null, // P-58d.1
+  updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET
   language: "auto", // P-ZH-1
   // identity intentionally omitted (optional).
 };
@@ -201,7 +202,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     telegram: base.telegram,
     identity,
     soul: { override: soulOverride },
-    updateServerUrl: null, // P-58d.1: v1 configs never carried it
+    updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET: v1 configs never carried it
     language: "auto", // P-ZH-1: v1 configs never carried it
   };
 }
