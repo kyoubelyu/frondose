@@ -192,4 +192,39 @@ describe("T-Guard — outbound safety on ZH labels (outboundGuard.ts)", () => {
       "a bare 发送 entry on 'messaging-thread' must stay message_send regardless of connectDialogActive (regression guard)",
     );
   });
+
+  // ─── T-Guard.8 (Step 5 live-capture, NEW — SAFETY-CRITICAL, a real gap the plan/critic
+  // did not anticipate: the actual connect-modal commit string is NEITHER bare 发送 NOR the
+  // plan's guessed 直接发送/发送邀请) ──────────────────────────────────────────────────────
+  it("T-Guard.8: requiresApproval fires on the LIVE-CAPTURED real connect-modal send-without-note commit ('发送时不添加备注') — currently UNGUARDED (worse than the bare-发送 BLOCKER: this string is not even classified as message_send)", () => {
+    // Given: '发送时不添加备注' — the REAL send-without-note commit button captured on the agent's
+    //   :9222 Chinese LinkedIn session this session (2026-07-02), reached via the profile's
+    //   更多 (More) overflow → 邀请X加为好友 → the "Add a note to your invitation?" dialog's
+    //   second button. This is DIFFERENT from every string the plan/critic considered (bare
+    //   发送, 直接发送, 发送邀请) — it is a longer phrase that does not match CONNECT_SEND_RE
+    //   (end-anchored to the shorter guessed forms) NOR MESSAGE_SEND_RE (end-anchored to bare
+    //   发送/发送消息/发送信息/发送私信 — '发送时不添加备注' has extra trailing text after 发送 that
+    //   defeats the anchor). It therefore classifies as "none"/benign today — F1's floor (which
+    //   only broadens the message_send gate) does NOT even apply to it, because
+    //   classifyOutboundLabel never returns message_send for this string in the first place.
+    // When:  requiresApproval("发送时不添加备注", "profile") runs, and
+    //   classifyOutboundLabel("发送时不添加备注") is inspected.
+    // Then:  requiresApproval must be true and the ledger class must be "connect_send" — BOTH ARE
+    //   RED TODAY (requiresApproval is false; classifyOutboundLabel is "benign"). This is a REAL,
+    //   currently-unguarded outbound-send path on the live 中文 LinkedIn UI: clicking this button
+    //   today would dispatch a real connect invite with NO approval gate and NO connect-cap
+    //   decrement. Step-5a MUST add '发送时不添加备注$' to CONNECT_SEND_RE (outboundGuard.ts +
+    //   actionClassifier.ts) as an unconditional fix (not gated behind F2 connect-dialog context,
+    //   since it is unambiguously a connect-send string, unlike bare 发送).
+    assert.equal(
+      requiresApproval("发送时不添加备注", "profile"),
+      true,
+      'requiresApproval("发送时不添加备注", "profile") must be true — SAFETY-CRITICAL, currently unguarded real live string',
+    );
+    assert.equal(
+      classifyOutboundLabel("发送时不添加备注"),
+      "connect_send",
+      'classifyOutboundLabel("发送时不添加备注") must return "connect_send" (currently "benign"/unclassified)',
+    );
+  });
 });

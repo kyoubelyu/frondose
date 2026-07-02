@@ -248,18 +248,21 @@ describe("T-RequiresApproval — requiresApproval() P-MSG-SEND: Send on messagin
   });
 
   // ─── T-RequiresApproval.3 ─────────────────────────────────────────────────
-  it("T-RequiresApproval.3: requiresApproval('Send', 'profile') returns false (Send on non-messaging LinkedIn surface is NOT a message_send gate)", () => {
-    // Given: requiresApproval exported; surface=profile (not a messaging surface)
+  it("T-RequiresApproval.3: requiresApproval('Send', 'profile') returns true (P-ZH-2 F1 — bare send-family on ANY LinkedIn outbound surface is gated, safety-positive)", () => {
+    // Given: requiresApproval exported; surface=profile (a LinkedIn outbound surface)
     // When:  requiresApproval("Send", "profile") called
-    // Then:  returns false — "Send" on profile is benign (not classifiable as message_send there)
-    //        Regression guard: the gate must NOT over-extend to all LinkedIn surfaces.
+    // Then:  returns true — P-ZH-2 F1 broadened the message_send gate from
+    //        MESSAGING_SURFACES to LINKEDIN_OUTBOUND_SURFACES (outboundGuard.ts:36-42),
+    //        because a bare Send/发送-family label on a profile can be a connect-modal
+    //        commit, which must never bypass approval. Superseded pre-P-ZH-2 expectation
+    //        (false) is intentionally flipped safety-positive.
     if (!requiresApproval) {
       assert.fail("T-RequiresApproval.3: requiresApproval not exported from outboundGuard.ts");
     }
     assert.equal(
       requiresApproval("Send", "profile"),
-      false,
-      'T-RequiresApproval.3: requiresApproval("Send", "profile") must return false (not a messaging surface)',
+      true,
+      'T-RequiresApproval.3: requiresApproval("Send", "profile") must return true (P-ZH-2 F1 — any outbound surface)',
     );
   });
 
@@ -502,21 +505,24 @@ describe("T-Post.Approval — outboundGuard: requiresApproval post+feed surface 
   });
 
   // ─── T-Post.Approval.4 ────────────────────────────────────────────────────
-  it("T-Post.Approval.4: existing approval semantics unchanged — regression guard", () => {
+  it("T-Post.Approval.4: existing approval semantics unchanged — regression guard (P-ZH-2 F1 intentional flip noted)", () => {
     // Given: the legacy fixture of (label, surface) pairs from pre-P-POST tests.
     // When:  requiresApproval(label, surface) runs.
-    // Then:  every pre-existing verdict is unchanged.
+    // Then:  every pre-existing verdict is unchanged, EXCEPT the bare Send/profile case,
+    //        which P-ZH-2 F1 intentionally flips to true (safety-positive — see
+    //        T-RequiresApproval.3 above; requiresApproval broadened the message_send
+    //        gate from MESSAGING_SURFACES to LINKEDIN_OUTBOUND_SURFACES).
     if (!requiresApprovalPost) {
       assert.fail("T-Post.Approval.4: requiresApproval not exported from outboundGuard.ts");
     }
     const regressionFixture: Array<[string, string, boolean]> = [
-      ["Send invitation", "profile", true],   // outbound label → always true
-      ["Follow", "profile", true],             // Follow on profile → true
-      ["Follow", "feed", false],               // Follow on feed → false (profile-only)
-      ["Send", "messaging-thread", true],      // message_send on messaging surface → true
-      ["Like", "feed", false],                 // benign → false
-      ["Comment", "feed", false],              // benign → false
-      ["Send", "profile", false],              // message_send on non-messaging → false
+      ["Send invitation", "profile", true], // outbound label → always true
+      ["Follow", "profile", true], // Follow on profile → true
+      ["Follow", "feed", false], // Follow on feed → false (profile-only)
+      ["Send", "messaging-thread", true], // message_send on messaging surface → true
+      ["Like", "feed", false], // benign → false
+      ["Comment", "feed", false], // benign → false
+      ["Send", "profile", true], // P-ZH-2 F1: bare send-family on ANY outbound surface → true (was false)
     ];
     for (const [label, surface, expected] of regressionFixture) {
       assert.equal(
