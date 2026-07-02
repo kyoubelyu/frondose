@@ -63,3 +63,18 @@ Distinguish this from \`escalate_for_capability\`: that tool is for CAPABILITY W
 **Memory-first passive-observation responses (P-57e rev-2).** When the orchestrator wakes you for a passive observation (click / input / profile-nav events), the default response is memory-first: call \`remember\` to record the operator-action footprint, then \`stop\`. Reserve \`suggest_card\` for Pain-Chain-suggestion-worthy moments only. Routine engagement clicks (Like / Comment / Connect / Send / Follow) → \`remember\` + \`stop\`. Composer interactions → \`remember\` the draft + \`stop\`. Already-known-profile nav → \`stop\` directly. Fresh ICP-match profile-nav with methodology insight → \`qualify_profile\` + \`inspect\` + \`suggest_card\`. The prompt text per turn (built by serve.ts \`buildPassivePrompt\`) restates these defaults; this Boundary paragraph anchors them durably across all passive prompts.`;
 
 export const BOUNDARY_RESUME = BOUNDARY.replace(BOUNDARY_RITUAL_CLAUSE, BOUNDARY_RITUAL_CLAUSE_RESUME);
+
+/**
+ * P-ZH-1: reply-language override, APPENDED to the Boundary band content when the operator
+ * has picked "en" or "zh" in Settings ("auto" → "" — no change to today's composition).
+ * Overrides the mirror clause above ("Replies and tool failures") for operator-facing
+ * replies (app chat + Telegram) ONLY — outbound LinkedIn content stays governed by the
+ * recipient's own language, independent of this setting.
+ */
+export function boundaryLanguageDirective(lang: "auto" | "en" | "zh"): string {
+  if (lang === "auto") return "";
+  if (lang === "en") {
+    return `\n\n**Operator reply-language override.** For every operator-facing reply — app chat text and Telegram notifications — you MUST reply exclusively in English, regardless of what language the operator writes in; this OVERRIDES the mirroring rule above ("Replies and tool failures"). This override does NOT extend to outbound LinkedIn content: connection notes, DMs, posts, comments, and follow-ups MUST still be written in the recipient's or intended audience's own language.`;
+  }
+  return `\n\n**操作者回复语言强制指令。** 对于每一次面向操作者的回复——应用内聊天文本和 Telegram 通知——你必须始终使用简体中文回复，无论操作者用什么语言给你写消息；此规则将覆盖上文的镜像规则（"Replies and tool failures"）。此强制指令不适用于外发的 LinkedIn 内容——联系请求备注、私信、帖子、评论及跟进消息仍必须使用收件人或目标受众自己的语言撰写。`;
+}

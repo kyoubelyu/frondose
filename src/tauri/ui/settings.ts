@@ -5,7 +5,8 @@
 // (no DOM lib), so this module references ONLY the structural `*Like` interfaces below — never
 // HTMLInputElement/Document. The global `document` is reached through a typed cast on globalThis.
 
-import { t } from "./i18n.js";
+import type { LocalizableDocumentLike } from "./i18n.js";
+import { getLocale, localizeDocument, prefToLocale, setLocale, t } from "./i18n.js";
 
 export interface SettingsDeps {
   invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
@@ -20,6 +21,7 @@ interface SettingsResp {
   identity: Record<string, unknown>;
   soul: { override: string | null };
   updateServerUrl: string | null; // P-58d.1-UI: plaintext, not masked
+  language?: "auto" | "en" | "zh"; // P-ZH-1
 }
 
 interface FieldLike {
@@ -66,6 +68,8 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
     if (soulEl) soulEl.value = r.soul.override ?? "";
     const updateUrlEl = $("settings-update-url");
     if (updateUrlEl) updateUrlEl.value = r.updateServerUrl ?? ""; // P-58d.1-UI
+    const languageEl = $("settings-language");
+    if (languageEl) languageEl.value = r.language ?? "auto"; // P-ZH-1
   }
 
   function collectPatch(): Record<string, unknown> {
@@ -88,13 +92,21 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
       },
       soul: { override: v("settings-soul") || null },
       updateServerUrl: v("settings-update-url") || null, // P-58d.1-UI: empty=clear; serve .url()-validates
+      language: v("settings-language") || "auto", // P-ZH-1
     };
   }
 
   async function save(): Promise<void> {
     try {
-      await deps.invoke("frondose_set_settings", { settings: collectPatch() });
+      const patch = collectPatch();
+      await deps.invoke("frondose_set_settings", { settings: patch });
       await load(); // re-GET → key re-masked, fields reflect saved state
+      // P-ZH-1: switch the UI chrome locale live (no restart) if the pref changed the effective locale.
+      const nextLocale = prefToLocale(patch.language as "auto" | "en" | "zh");
+      if (nextLocale !== getLocale()) {
+        setLocale(nextLocale);
+        localizeDocument((globalThis as unknown as { document: LocalizableDocumentLike }).document, { force: true });
+      }
     } catch (e) {
       deps.surfaceError(t("action.saveSettings"), e);
     }
