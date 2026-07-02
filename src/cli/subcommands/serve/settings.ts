@@ -3,7 +3,7 @@
 // (routes.ts) sendJsons the result — the raw key never reaches SSE/audit/logs.
 import { z } from "zod";
 import { resolveModel } from "../../../agent/modelResolver.js";
-import { BOUNDARY, BOUNDARY_RESUME } from "../../../agent/systemPrompt/boundary.js";
+import { BOUNDARY, BOUNDARY_RESUME, boundaryLanguageDirective } from "../../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../agent/systemPrompt/soul.js";
@@ -39,6 +39,7 @@ export interface SettingsView {
   soul: { override: string | null };
   search: { brave: { hasKey: boolean; maskedKey: string | null } };
   updateServerUrl: string | null; // P-58d.1: plaintext, NOT masked (contrast llm.maskedKey)
+  language: "auto" | "en" | "zh"; // P-ZH-1
 }
 
 // Step-3b CONCERN-MR — validate-before-write. The write helpers are atomic but do NOT validate SHAPE;
@@ -70,6 +71,7 @@ const settingsPatchSchema = z.object({
   identity: identityPatchSchema.optional(), // EXISTING schema (identitySchema.ts:44)
   soul: z.object({ override: z.string().max(3000).nullable() }).optional(), // EXISTING ≤3000 constraint
   updateServerUrl: z.string().url().nullable().optional(), // P-58d.1: omit=unchanged, null=clear, url=set
+  language: z.enum(["auto", "en", "zh"]).optional(), // P-ZH-1: omit=unchanged
 });
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
@@ -118,6 +120,7 @@ export function readSettings(): SettingsView {
     soul: { override: cfg.soul.override },
     search: { brave: { hasKey: Boolean(braveKey), maskedKey: braveKey ? maskKey(braveKey) : null } },
     updateServerUrl: cfg.updateServerUrl, // P-58d.1: plaintext
+    language: cfg.language, // P-ZH-1
   };
 }
 
@@ -161,7 +164,7 @@ export function applySettings(patch: SettingsPatch): void {
       writeSearchConfig({ ...existingSearch, braveApiKey: submitted });
     }
   }
-  if (patch.identity || patch.soul || patch.updateServerUrl !== undefined) {
+  if (patch.identity || patch.soul || patch.updateServerUrl !== undefined || patch.language !== undefined) {
     const cfg = readConfig();
     const next = { ...cfg };
     if (patch.identity) {
@@ -170,6 +173,7 @@ export function applySettings(patch: SettingsPatch): void {
     }
     if (patch.soul) next.soul = { override: patch.soul.override ?? null };
     if (patch.updateServerUrl !== undefined) next.updateServerUrl = patch.updateServerUrl; // P-58d.1
+    if (patch.language !== undefined) next.language = patch.language; // P-ZH-1
     writeConfig(next, DEFAULT_CONFIG_PATH());
   }
 }
@@ -195,15 +199,20 @@ export function reloadAgentDeps(deps: Pick<ServeDeps, "system" | "model" | "syst
     // runOne.ts (operator branch) and passive.ts (always Magical).
     const soulBandPlain = resolveSoulBand(cfg.soul.override, identity);
     const soulBandWithMode = `${soulBandPlain}\n\n${soulModeFragment(currentMode)}`;
-    const newSystem = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBandPlain, checkpoint: CHECKPOINT });
+    // P-ZH-1: appended to the Boundary band content, never reordering bands ("" for "auto" —
+    // composition is byte-identical to before this field existed).
+    const languageDirective = boundaryLanguageDirective(cfg.language);
+    const boundaryBand = `${BOUNDARY}${languageDirective}`;
+    const boundaryResumeBand = `${BOUNDARY_RESUME}${languageDirective}`;
+    const newSystem = composeSystemPrompt({ boundary: boundaryBand, soul: soulBandPlain, checkpoint: CHECKPOINT });
     const newSystemResume = composeSystemPrompt({
-      boundary: BOUNDARY_RESUME,
+      boundary: boundaryResumeBand,
       soul: soulBandWithMode,
       checkpoint: CHECKPOINT_RESUME,
     });
     const newComposeOperatorSystem = (mode: AppMode): string =>
       composeSystemPrompt({
-        boundary: BOUNDARY,
+        boundary: boundaryBand,
         soul: `${soulBandPlain}\n\n${soulModeFragment(mode)}`,
         checkpoint: CHECKPOINT,
       });

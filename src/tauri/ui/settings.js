@@ -4,7 +4,7 @@
 // DOM-lib-free (mirrors render.ts): compiled by BOTH the Tauri-UI build (lib DOM) and the main build
 // (no DOM lib), so this module references ONLY the structural `*Like` interfaces below — never
 // HTMLInputElement/Document. The global `document` is reached through a typed cast on globalThis.
-import { t } from "./i18n.js";
+import { getLocale, localizeDocument, prefToLocale, setLocale, t } from "./i18n.js";
 export function createSettingsPanel(deps) {
     const doc = globalThis.document;
     const $ = (id) => doc.getElementById(id);
@@ -44,6 +44,9 @@ export function createSettingsPanel(deps) {
         const updateUrlEl = $("settings-update-url");
         if (updateUrlEl)
             updateUrlEl.value = r.updateServerUrl ?? ""; // P-58d.1-UI
+        const languageEl = $("settings-language");
+        if (languageEl)
+            languageEl.value = r.language ?? "auto"; // P-ZH-1
     }
     function collectPatch() {
         const v = (id) => ($(id)?.value ?? "").trim();
@@ -65,12 +68,20 @@ export function createSettingsPanel(deps) {
             },
             soul: { override: v("settings-soul") || null },
             updateServerUrl: v("settings-update-url") || null, // P-58d.1-UI: empty=clear; serve .url()-validates
+            language: v("settings-language") || "auto", // P-ZH-1
         };
     }
     async function save() {
         try {
-            await deps.invoke("frondose_set_settings", { settings: collectPatch() });
+            const patch = collectPatch();
+            await deps.invoke("frondose_set_settings", { settings: patch });
             await load(); // re-GET → key re-masked, fields reflect saved state
+            // P-ZH-1: switch the UI chrome locale live (no restart) if the pref changed the effective locale.
+            const nextLocale = prefToLocale(patch.language);
+            if (nextLocale !== getLocale()) {
+                setLocale(nextLocale);
+                localizeDocument(globalThis.document, { force: true });
+            }
         }
         catch (e) {
             deps.surfaceError(t("action.saveSettings"), e);

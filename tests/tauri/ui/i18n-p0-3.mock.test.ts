@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 // NOTE: leaf modules (render/progress.ts, app/sendButton.ts) are NOT imported directly —
 // the slice-11/12 R-Source guards forbid tests importing UI leaves; use the render.js barrel.
-import { detectLocale, isI18nKey, localizeDocument, setLocale, t } from "../../../src/tauri/ui/i18n.js";
+import { detectLocale, isI18nKey, localizeDocument, prefToLocale, setLocale, t } from "../../../src/tauri/ui/i18n.js";
 import { statusForMode } from "../../../src/tauri/ui/mode.js";
 import { stepChipLabel } from "../../../src/tauri/ui/render.js";
 
@@ -170,5 +170,29 @@ describe("P0-3 i18n — localized module surfaces (mode / progress / sendButton)
     setLocale("zh-CN");
     assert.equal(t("composer.steer"), "转向");
     assert.equal(t("composer.cancel"), "取消");
+  });
+});
+
+describe("P-ZH-1 i18n — settings-language keys + prefToLocale mapping", () => {
+  afterEach(() => {
+    setLocale("en");
+  });
+
+  it("T-I18n.10: settings.groupLanguage / langAuto / langEn / langZh exist in both the en and zh-CN tables", () => {
+    // Given: the 4 new P-ZH-1 keys / When: looked up under en then zh-CN / Then: both tables have non-empty strings
+    for (const key of ["settings.groupLanguage", "settings.langAuto", "settings.langEn", "settings.langZh"] as const) {
+      assert.ok(isI18nKey(key), `${key} must be a valid I18nKey`);
+      assert.ok(t(key).length > 0, `en table must have a non-empty string for ${key}`);
+      setLocale("zh-CN");
+      assert.ok(t(key).length > 0, `zh-CN table must have a non-empty string for ${key}`);
+      setLocale("en");
+    }
+  });
+
+  it("T-I18n.11: prefToLocale maps 'zh'→zh-CN, 'en'→en, 'auto'→detectLocale()", () => {
+    // Given: the 3 language-pref values / When: prefToLocale(pref) / Then: zh/en map fixed; auto defers to detectLocale()
+    assert.equal(prefToLocale("zh"), "zh-CN");
+    assert.equal(prefToLocale("en"), "en");
+    assert.equal(prefToLocale("auto"), detectLocale());
   });
 });

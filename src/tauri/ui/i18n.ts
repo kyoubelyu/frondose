@@ -105,6 +105,10 @@ const en = {
   // settings panel
   "settings.title": "Settings",
   "settings.close": "Close",
+  "settings.groupLanguage": "Language",
+  "settings.langAuto": "Auto (system)",
+  "settings.langEn": "English",
+  "settings.langZh": "中文",
   "settings.groupModel": "Model (custom URL)",
   "settings.baseUrl": "Base URL",
   "settings.model": "Model",
@@ -231,6 +235,10 @@ const zhCN: Record<I18nKey, string> = {
   // settings panel
   "settings.title": "设置",
   "settings.close": "关闭",
+  "settings.groupLanguage": "语言",
+  "settings.langAuto": "自动（跟随系统）",
+  "settings.langEn": "English",
+  "settings.langZh": "中文",
   "settings.groupModel": "模型（自定义 URL）",
   "settings.baseUrl": "服务地址（Base URL）",
   "settings.model": "模型",
@@ -264,6 +272,13 @@ const zhCN: Record<I18nKey, string> = {
 export function detectLocale(lang?: string): Locale {
   const raw = lang ?? (globalThis as { navigator?: { language?: string } }).navigator?.language ?? "";
   return /^zh/i.test(raw) ? "zh-CN" : "en";
+}
+
+/** P-ZH-1: map the operator's Settings language pref to a UI Locale — "auto" defers to detectLocale(). */
+export function prefToLocale(pref: "auto" | "en" | "zh"): Locale {
+  if (pref === "zh") return "zh-CN";
+  if (pref === "en") return "en";
+  return detectLocale();
 }
 
 let locale: Locale = detectLocale();
@@ -311,9 +326,12 @@ const DATA_ATTRS = [
   { attr: "data-i18n-aria", target: "aria-label" },
 ] as const;
 
-/** No-op under en (the static HTML already IS the en table). */
-export function localizeDocument(doc: LocalizableDocumentLike): void {
-  if (locale === "en") return;
+/** No-op under en (the static HTML already IS the en table) UNLESS `force` is set. P-ZH-1:
+ * a live language-pref switch back to "en" (after having switched to zh-CN) needs the DOM
+ * written BACK to en — pass `force: true` for that call; the original boot-time call site
+ * (always en-or-fresh) keeps relying on the no-op default. */
+export function localizeDocument(doc: LocalizableDocumentLike, opts?: { force?: boolean }): void {
+  if (locale === "en" && !opts?.force) return;
   for (const { attr, target } of DATA_ATTRS) {
     const nodes = doc.querySelectorAll?.(`[${attr}]`) ?? [];
     for (let i = 0; i < nodes.length; i++) {
