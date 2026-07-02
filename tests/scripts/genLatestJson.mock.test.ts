@@ -75,14 +75,95 @@ describe("gen-latest-json.mjs — Option-A dual-key manifest (G-P58d2.2)", () =>
         // Script not yet created (ENOENT) — builder Step 4b will create it
       }
       const manifest = JSON.parse(readFileSync(outPath, "utf-8")) as Record<string, unknown>;
-      const platforms = manifest["platforms"] as Record<string, { url: string; signature: string }>;
+      const platforms = manifest.platforms as Record<string, { url: string; signature: string }>;
       assert.deepEqual(Object.keys(platforms).sort(), ["darwin-aarch64", "darwin-x86_64"]);
       const manifestUrl = "http://192.168.1.100:4875/downloads/Frondose.app.tar.gz";
       assert.equal(platforms["darwin-x86_64"]?.url, manifestUrl);
       assert.equal(platforms["darwin-x86_64"]?.signature, "SIGBLOB123");
       assert.equal(platforms["darwin-aarch64"]?.url, manifestUrl);
       assert.equal(platforms["darwin-aarch64"]?.signature, "SIGBLOB123");
-      assert.equal(manifest["version"], "0.5.0-alpha.29");
+      assert.equal(manifest.version, "0.5.0-alpha.29");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("gen-latest-json.mjs — WIN-5 dual-platform manifest keeps darwin and adds windows-x86_64", () => {
+  it("T-Manifest.WIN5.1: when macOS and Windows artifact env are present, platforms contains darwin-x86_64, darwin-aarch64, and windows-x86_64", () => {
+    // Given: macOS and Windows updater sig fixtures plus LAN artifact URLs
+    // When:  node scripts/gen-latest-json.mjs runs with both platform pairs
+    // Then:  darwin keys keep the macOS URL/signature and windows-x86_64 uses the Windows URL/signature
+    const { dir, cleanup } = makeTmp();
+    try {
+      const macSigPath = join(dir, "mac.sig");
+      const winSigPath = join(dir, "win.sig");
+      const outPath = join(dir, "latest.json");
+      writeFileSync(macSigPath, "MAC_SIG", "utf-8");
+      writeFileSync(winSigPath, "WIN_SIG", "utf-8");
+
+      execFileSync("node", [SCRIPT], {
+        env: {
+          ...process.env,
+          SIG_PATH: macSigPath,
+          VERSION: "v0.5.0-alpha.71",
+          MANIFEST_URL: "http://192.168.1.100:4875/downloads/Frondose.app.tar.gz",
+          WINDOWS_SIG_PATH: winSigPath,
+          WINDOWS_MANIFEST_URL: "http://192.168.1.100:4875/downloads/Frondose-windows-x86_64-setup.exe",
+          OUT_PATH: outPath,
+          PUB_DATE: "2026-07-02T00:00:00Z",
+        },
+        encoding: "utf-8",
+      });
+
+      const manifest = JSON.parse(readFileSync(outPath, "utf-8")) as Record<string, unknown>;
+      const platforms = manifest.platforms as Record<string, { url: string; signature: string }>;
+      assert.deepEqual(Object.keys(platforms).sort(), ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]);
+      assert.equal(platforms["darwin-x86_64"]?.url, "http://192.168.1.100:4875/downloads/Frondose.app.tar.gz");
+      assert.equal(platforms["darwin-aarch64"]?.signature, "MAC_SIG");
+      assert.equal(
+        platforms["windows-x86_64"]?.url,
+        "http://192.168.1.100:4875/downloads/Frondose-windows-x86_64-setup.exe",
+      );
+      assert.equal(platforms["windows-x86_64"]?.signature, "WIN_SIG");
+      assert.equal(manifest.version, "0.5.0-alpha.71");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("gen-latest-json.mjs — WIN-5 Windows env must be supplied as a complete pair", () => {
+  it("T-Manifest.WIN5.2: when WINDOWS_MANIFEST_URL is set without WINDOWS_SIG_PATH, exit code !== 0 and OUT_PATH is not written", () => {
+    // Given: Windows URL env is present but the Windows sig path is absent
+    // When:  the manifest generator runs
+    // Then:  it fails before writing OUT_PATH so a broken windows-x86_64 entry cannot publish
+    const { dir, cleanup } = makeTmp();
+    try {
+      const macSigPath = join(dir, "mac.sig");
+      const outPath = join(dir, "latest.json");
+      writeFileSync(macSigPath, "MAC_SIG", "utf-8");
+      const envNoWinSig: Record<string, string> = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (k !== "WINDOWS_SIG_PATH" && k !== "WIN_SIG_PATH" && v !== undefined) {
+          envNoWinSig[k] = v;
+        }
+      }
+
+      const result = spawnSync("node", [SCRIPT], {
+        env: {
+          ...envNoWinSig,
+          SIG_PATH: macSigPath,
+          VERSION: "0.5.0-alpha.71",
+          MANIFEST_URL: "http://host:4875/downloads/Frondose.app.tar.gz",
+          WINDOWS_MANIFEST_URL: "http://host:4875/downloads/Frondose-windows-x86_64-setup.exe",
+          OUT_PATH: outPath,
+        },
+        encoding: "utf-8",
+      });
+
+      assert.notEqual(result.status, 0, "incomplete Windows env pair must fail");
+      assert.ok(!existsSync(outPath), "OUT_PATH must not be written when Windows env is incomplete");
     } finally {
       cleanup();
     }
@@ -116,7 +197,7 @@ describe("gen-latest-json.mjs — strips leading 'v' from VERSION (G-P58d2.2)", 
         // Script not yet created (ENOENT) — builder Step 4b will create it
       }
       const manifest = JSON.parse(readFileSync(outPath, "utf-8")) as Record<string, unknown>;
-      assert.equal(manifest["version"], "1.2.3"); // leading 'v' stripped by .replace(/^v/, "")
+      assert.equal(manifest.version, "1.2.3"); // leading 'v' stripped by .replace(/^v/, "")
     } finally {
       cleanup();
     }
@@ -168,10 +249,10 @@ describe("gen-latest-json.mjs — pub_date is RFC3339; explicit PUB_DATE passes 
 
       // (a) auto-generated pub_date must be RFC3339 (no milliseconds, Z suffix)
       const mA = JSON.parse(readFileSync(outPathA, "utf-8")) as Record<string, unknown>;
-      assert.match(String(mA["pub_date"]), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      assert.match(String(mA.pub_date), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
       // (b) explicit PUB_DATE must pass through verbatim
       const mB = JSON.parse(readFileSync(outPathB, "utf-8")) as Record<string, unknown>;
-      assert.equal(mB["pub_date"], "2026-01-15T12:00:00Z");
+      assert.equal(mB.pub_date, "2026-01-15T12:00:00Z");
     } finally {
       cleanup();
     }
