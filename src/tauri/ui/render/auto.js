@@ -1,6 +1,7 @@
 // P-72 slice 12 — extracted from src/tauri/ui/render.ts L281-401.
 // Auto execution stage: buildHero + buildProgressStrip + buildTimeline + buildAutoStage.
 // Re-exported by the ./render.js barrel: buildAutoStage.
+import { t } from "../i18n.js";
 import { div, glyph, span, asEl, clear, GLYPH } from "./dom.js";
 import { computeProgress, stepChipLabel, stepVisualState } from "./progress.js";
 function buildHero(doc, workflow) {
@@ -12,13 +13,13 @@ function buildHero(doc, workflow) {
     iconWrap.appendChild(div(doc, "hero-icon-ring"));
     hero.appendChild(iconWrap);
     const text = div(doc, "hero-text");
-    text.appendChild(div(doc, "hero-title", workflow?.title ?? "Auto is ready"));
+    text.appendChild(div(doc, "hero-title", workflow?.title ?? t("auto.ready")));
     const meta = div(doc, "hero-sub");
     if (workflow === null) {
-        meta.appendChild(span(doc, "", "Waiting for the next scheduled run"));
+        meta.appendChild(span(doc, "", t("auto.waitingNextRun")));
     }
     else {
-        meta.appendChild(span(doc, "", "Running in Chrome"));
+        meta.appendChild(span(doc, "", t("auto.runningInChrome")));
         meta.appendChild(div(doc, "hero-sub-dot"));
         meta.appendChild(span(doc, "", "linkedin.com"));
     }
@@ -30,7 +31,7 @@ function buildHero(doc, workflow) {
     pause.setAttribute?.("id", "auto-pause-btn");
     pause.classList.add("hero-btn");
     pause.appendChild(glyph(doc, GLYPH.pause, "hero-btn-glyph", 2));
-    pause.appendChild(span(doc, "", "Pause"));
+    pause.appendChild(span(doc, "", t("auto.pause")));
     actions.appendChild(pause);
     const takeover = doc.createElement("button");
     takeover.setAttribute?.("type", "button");
@@ -38,7 +39,7 @@ function buildHero(doc, workflow) {
     takeover.classList.add("hero-btn");
     takeover.classList.add("hero-btn-stop");
     takeover.appendChild(glyph(doc, GLYPH.handStop, "hero-btn-glyph", 2));
-    takeover.appendChild(span(doc, "", "Take over"));
+    takeover.appendChild(span(doc, "", t("auto.takeOver")));
     actions.appendChild(takeover);
     hero.appendChild(actions);
     return hero;
@@ -47,9 +48,9 @@ function buildProgressStrip(doc, workflow) {
     const strip = div(doc, "progress-strip");
     const row = div(doc, "ps-row");
     const left = div(doc, "ps-left");
-    left.appendChild(div(doc, "ps-step-label", "Now"));
+    left.appendChild(div(doc, "ps-step-label", t("auto.now")));
     const current = workflow?.steps.find((s) => s.state === "in_progress") ?? null;
-    const cur = div(doc, "ps-current", current?.title ?? (workflow === null ? "Idle" : "Preparing"));
+    const cur = div(doc, "ps-current", current?.title ?? (workflow === null ? t("auto.idle") : t("auto.preparing")));
     left.appendChild(cur);
     row.appendChild(left);
     const progress = computeProgress(workflow?.steps ?? []);
@@ -71,7 +72,7 @@ function buildTimeline(doc, workflow) {
     const timeline = div(doc, "timeline");
     const steps = workflow?.steps ?? [];
     if (steps.length === 0) {
-        timeline.appendChild(div(doc, "timeline-empty", "Steps will appear here as the workflow runs."));
+        timeline.appendChild(div(doc, "timeline-empty", t("auto.timelineEmpty")));
         return timeline;
     }
     steps.forEach((step, idx) => {
@@ -96,7 +97,8 @@ function buildTimeline(doc, workflow) {
         titleEl.appendChild(span(doc, "tlA-title-text", step.title));
         const chip = stepChipLabel(step, workflow?.pendingStepId ?? null, "auto");
         if (chip.length > 0) {
-            const chipCls = chip === "done" ? "tlA-chip tlA-chip-success" : "tlA-chip";
+            // P0-3: chip text is now localized — key off the (stable) visual state, not the label.
+            const chipCls = visual === "success" ? "tlA-chip tlA-chip-success" : "tlA-chip";
             titleEl.appendChild(span(doc, chipCls, chip));
         }
         body.appendChild(titleEl);

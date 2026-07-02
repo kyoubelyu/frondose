@@ -2,6 +2,7 @@
 // Pure render-data helpers — DOM-free, side-effect-free.
 // Re-exported by the ./render.js barrel.
 
+import { t } from "../i18n.js";
 import type { AppMode } from "../mode.js";
 import type { StepLike } from "./types.js";
 
@@ -18,11 +19,11 @@ export function computeProgress(stepsOrDone: StepLike[] | number, totalArg?: num
 }
 
 export function stepChipLabel(step: StepLike, pendingStepId: string | null = null, mode: AppMode = "manual"): string {
-  if (step.id === pendingStepId) return "needs you";
-  if (step.state === "in_progress") return "working";
-  if (step.state === "completed" && step.requiresApproval === true && mode === "auto") return "auto-approved";
-  if (step.state === "completed") return "done";
-  if (step.state === "failed") return "failed";
+  if (step.id === pendingStepId) return t("chip.needsYou");
+  if (step.state === "in_progress") return t("chip.working");
+  if (step.state === "completed" && step.requiresApproval === true && mode === "auto") return t("chip.autoApproved");
+  if (step.state === "completed") return t("chip.done");
+  if (step.state === "failed") return t("chip.failed");
   return "";
 }
 
