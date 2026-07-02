@@ -154,6 +154,7 @@ before(async () => {
     namedExports: {
       countAutoLedgerByAction: () => ({}),
       endAutoRun: () => ({ alreadyEnded: false }),
+      getAutoRun: () => null,
       getCurrentAutoRun: () => null,
       initSalesDb: () => ({
         run: () => undefined,
