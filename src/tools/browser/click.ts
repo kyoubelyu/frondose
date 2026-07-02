@@ -3,19 +3,14 @@ import { z } from "zod";
 import type { CdpClient } from "../../cdp/client.js";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
 import { failWithReason } from "../../linkedin/envelope.js";
-import {
-  applyPacing,
-  captureCurrentSurfaceContext,
-  fail,
-  failFromError,
-  ok,
-  withHint,
-} from "../../linkedin/index.js";
+import { applyPacing, captureCurrentSurfaceContext, fail, failFromError, ok, withHint } from "../../linkedin/index.js";
 import { resolveByLabelWithRetry } from "../../linkedin/labelResolver.js";
+import type { OutwardActionAdvice } from "../../linkedin/logic/outwardAction.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/auto-run.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
 import { classifyOutboundEntry, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
+import { buildScopedClickAdvice, resolveScopedForTool, scopedResolveEnabled } from "./scopedResolve.js";
 
 const REF_STALE_RETRY_TIMEOUT_MS = 3000;
 const REF_STALE_MAX_RETRIES = 2;
@@ -130,15 +125,37 @@ export function makeClickTool(session: LinkedinSession) {
         const { client } = r;
         let target: string;
         let targetEntry: SnapshotEntry | undefined;
+        // Slice-4 (FRONDOSE_SCOPED_RESOLVE=on): advice added to the success envelope + whether the
+        // resolved target was selector-only (ref absent) so the outbound guard can fail closed.
+        let scopedAdvice: OutwardActionAdvice[] = [];
+        let scopedSelectorOnly = false;
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
+        } else if (scopedResolveEnabled()) {
+          // Slice-4 flag-on: resolve (label, scope) through the logic-layer scope resolver.
+          // biome-ignore lint/style/noNonNullAssertion: refine guarantees ref OR label; ref is undefined here.
+          const scoped = await resolveScopedForTool(client, "button", label!, scope);
+          target = scoped.target;
+          targetEntry = scoped.targetEntry;
+          scopedSelectorOnly = scoped.selectorOnly;
+          // Refresh runtime lastContext so the outbound guard + ref-stale re-validation classify on
+          // the SAME surface + entries the resolver used (runtime inferSurface, resolver's entries).
+          session.setLastContext(scoped.runtimeContext);
+          scopedAdvice = buildScopedClickAdvice(scoped.logicContext, scoped.resolvedTarget);
         } else {
           // biome-ignore lint/style/noNonNullAssertion: refine guarantees ref OR label is set; ref is undefined here so label is non-null.
-	          const entry = await resolveByLabelWithRetry(session, label!, scope, async () => {
-	            const next = await captureCurrentSurfaceContext(client);
-	            session.setLastContext(next);
-	            return next;
-	          }, { abortSignal });
+          const resolveLabel = label!;
+          const entry = await resolveByLabelWithRetry(
+            session,
+            resolveLabel,
+            scope,
+            async () => {
+              const next = await captureCurrentSurfaceContext(client);
+              session.setLastContext(next);
+              return next;
+            },
+            { abortSignal },
+          );
           target = entry.ref;
           targetEntry = entry;
         }
@@ -173,6 +190,25 @@ export function makeClickTool(session: LinkedinSession) {
             `Unresolvable ref on outbound surface: ${target} is not in the current snapshot and a fresh recapture also could not find it (surface=${clickSurface}). ` +
               "Refusing to dispatch an unclassifiable click on a LinkedIn outbound surface. " +
               "Call inspect again to refresh refs, then retry with a fresh ref or with a label.",
+            "unresolvable_ref_on_outbound_surface",
+          );
+        }
+        // Slice-4 flag-on: a selector-only scoped target (ref absent) that we cannot classify
+        // (no accessible name to gate on) MUST NOT bypass the outbound guard — fail closed on a
+        // LinkedIn outbound surface, mirroring the ref-path unresolvable branch above. (The common
+        // case synthesizes a named targetEntry from the resolver's matched label, so classification
+        // still runs; this only catches a truly unnameable selector-only outbound target.)
+        if (
+          scopedSelectorOnly &&
+          !(targetEntry && targetEntry.name.trim().length > 0) &&
+          LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)
+        ) {
+          return failWithReason(
+            "click",
+            "invalid_input",
+            `Unclassifiable selector-only target on outbound surface (surface=${clickSurface}). ` +
+              "Refusing to dispatch an unguardable click on a LinkedIn outbound surface. " +
+              "Call inspect again to refresh refs, then retry with a fresh ref or label.",
             "unresolvable_ref_on_outbound_surface",
           );
         }
@@ -215,7 +251,10 @@ export function makeClickTool(session: LinkedinSession) {
         }
         // P-AUTO-1+2 (B-3): in-memory fail-closed latch. Once a prior connect dispatched but its
         // ledger write failed, ALL further outbound this session is blocked — independent of DB state.
-        if ((outboundClass === "connect_send" || outboundClass === "message_send") && session.outboundDisabled === true) {
+        if (
+          (outboundClass === "connect_send" || outboundClass === "message_send") &&
+          session.outboundDisabled === true
+        ) {
           return failWithReason(
             "click",
             "invalid_input",
@@ -301,28 +340,28 @@ export function makeClickTool(session: LinkedinSession) {
         // this check, a click on a stale ref silently hits the wrong-purpose element.
         // Skip when the agent passed a label (resolveByLabel already used CURRENT entries)
         // OR when the entry wasn't in lastContext (selector fallback OR ad-hoc ref).
-	        if (target.startsWith("@") && targetEntry) {
-	          const currentRef = client.currentRefMap?.[target.slice(1)];
-	          const expected = {
-	            role: targetEntry.role,
-	            name: targetEntry.name || currentRef?.name,
-	          };
-	          let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
-	          for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
-	            throwIfAborted(abortSignal);
-	            latestVerify = await client.verifyRef(target.slice(1), expected);
-	            if (latestVerify.matches) break;
-	            if (attempt >= REF_STALE_MAX_RETRIES) {
-	              return refStaleFailure(target, targetEntry, latestVerify);
-	            }
-	            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
-	            if (!freshEntry) {
-	              return refStaleFailure(target, targetEntry, latestVerify);
-	            }
-	            target = freshEntry.ref;
-	            targetEntry = freshEntry;
-	          }
-	        }
+        if (target.startsWith("@") && targetEntry) {
+          const currentRef = client.currentRefMap?.[target.slice(1)];
+          const expected = {
+            role: targetEntry.role,
+            name: targetEntry.name || currentRef?.name,
+          };
+          let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
+          for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
+            throwIfAborted(abortSignal);
+            latestVerify = await client.verifyRef(target.slice(1), expected);
+            if (latestVerify.matches) break;
+            if (attempt >= REF_STALE_MAX_RETRIES) {
+              return refStaleFailure(target, targetEntry, latestVerify);
+            }
+            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
+            if (!freshEntry) {
+              return refStaleFailure(target, targetEntry, latestVerify);
+            }
+            target = freshEntry.ref;
+            targetEntry = freshEntry;
+          }
+        }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
         else await client.clickAt(target);
@@ -384,7 +423,11 @@ export function makeClickTool(session: LinkedinSession) {
           }
         }
         // State-changing → emit data.hint per cli-primitives.md §click.
-        return withHint(ok("click", { target, pacing }));
+        // Slice-4 flag-on: attach the outward-action advice block when the resolved target is
+        // outbound-classified (additive — envelope + schema unchanged when empty / flag-off).
+        const clickData: Record<string, unknown> = { target, pacing };
+        if (scopedAdvice.length > 0) clickData.advice = scopedAdvice;
+        return withHint(ok("click", clickData));
       } catch (e) {
         return failFromError("click", e);
       }

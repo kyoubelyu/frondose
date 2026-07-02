@@ -13,9 +13,11 @@ import {
 } from "../../linkedin/composerReadiness.js";
 import { applyPacing, fail, failFromError, ok, resolveByLabel } from "../../linkedin/index.js";
 import { COMPOSER_INPUT_RE } from "../../linkedin/inspectSummary.js";
+import type { OutwardActionAdvice } from "../../linkedin/logic/outwardAction.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { DATA_DIR_NAME, getHomeBase } from "../../persistence/paths.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
+import { buildScopedTypeAdvice, resolveScopedForTool, scopedResolveEnabled } from "./scopedResolve.js";
 
 const NOTE_FIELD_RE = /note|message|备注|附言|留言/i;
 const ADD_NOTE_RE = /add\s+a?\s*note|^note$|添加备注|添加附言/i;
@@ -232,6 +234,9 @@ export function makeTypeTool(session: LinkedinSession) {
           }
         }
         let target = "";
+        // Slice-4 (FRONDOSE_SCOPED_RESOLVE=on): advice added to the success envelope when the
+        // resolved input is outbound-classified (e.g. a Connect-note / thread / composer input).
+        let scopedTypeAdvice: OutwardActionAdvice[] = [];
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
         } else {
@@ -259,8 +264,18 @@ export function makeTypeTool(session: LinkedinSession) {
 
           if (!target) {
             if (label) {
-              const entry = resolveByLabel(ctx.entries, label, { kind: "type", scope });
-              target = entry.ref;
+              if (scopedResolveEnabled()) {
+                // Slice-4 flag-on: resolve the input through the logic-layer scope resolver.
+                const scoped = await resolveScopedForTool(client, "input", label, scope);
+                target = scoped.target;
+                // Refresh runtime lastContext so the ref-stale re-validation + feed-composer
+                // detection below run against the resolver's entries + surface.
+                session.setLastContext(scoped.runtimeContext);
+                scopedTypeAdvice = buildScopedTypeAdvice(scoped.logicContext, scoped.resolvedTarget);
+              } else {
+                const entry = resolveByLabel(ctx.entries, label, { kind: "type", scope });
+                target = entry.ref;
+              }
             } else {
               throw new Error("type: provide either 'ref' or 'label'.");
             }
@@ -416,7 +431,10 @@ export function makeTypeTool(session: LinkedinSession) {
         }
         const pacing = await applyPacing();
         // type does NOT emit data.hint per cli-primitives.md §type (focus-and-fill is not surface-changing).
-        return ok("type", { target, text, pacing });
+        // Slice-4 flag-on: attach the outward-action advice block when outbound-classified (additive).
+        const typeData: Record<string, unknown> = { target, text, pacing };
+        if (scopedTypeAdvice.length > 0) typeData.advice = scopedTypeAdvice;
+        return ok("type", typeData);
       } catch (e) {
         return failFromError("type", e);
       }
