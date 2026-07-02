@@ -168,8 +168,9 @@ async fn main() {
     // First periodic tick fires AFTER one interval (so it doesn't double-check
     // back-to-back with the boot check). Runs forever; checks are
     // best-effort (run_update_check swallows all errors). Returns immediately
-    // when no updateServerUrl is configured — same no-op contract as the boot
-    // check, so a typo'd config never wastes cycles.
+    // only when the updater is disabled (config.json updateServerUrl explicitly
+    // null or "" — P-UPDATE-INTRANET Option B; absent config now auto-pulls from
+    // the compiled default), so a disabled config never wastes cycles.
     let app_handle_periodic = app_handle.clone();
     let periodic_ready = ready_notify.clone();
     tokio::spawn(async move {
