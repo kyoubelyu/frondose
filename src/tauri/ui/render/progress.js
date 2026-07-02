@@ -1,6 +1,7 @@
 // P-72 slice 12 — extracted from src/tauri/ui/render.ts L78-106.
 // Pure render-data helpers — DOM-free, side-effect-free.
 // Re-exported by the ./render.js barrel.
+import { t } from "../i18n.js";
 export function computeProgress(stepsOrDone, totalArg) {
     const done = Array.isArray(stepsOrDone)
         ? stepsOrDone.filter((step) => step.state === "completed").length
@@ -10,15 +11,15 @@ export function computeProgress(stepsOrDone, totalArg) {
 }
 export function stepChipLabel(step, pendingStepId = null, mode = "manual") {
     if (step.id === pendingStepId)
-        return "needs you";
+        return t("chip.needsYou");
     if (step.state === "in_progress")
-        return "working";
+        return t("chip.working");
     if (step.state === "completed" && step.requiresApproval === true && mode === "auto")
-        return "auto-approved";
+        return t("chip.autoApproved");
     if (step.state === "completed")
-        return "done";
+        return t("chip.done");
     if (step.state === "failed")
-        return "failed";
+        return t("chip.failed");
     return "";
 }
 export function stepVisualState(step, pendingStepId = null, mode = "manual") {

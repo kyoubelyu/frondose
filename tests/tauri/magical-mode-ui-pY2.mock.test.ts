@@ -61,9 +61,11 @@ describe("P-Y2-Magical desktop mode state (T-PY2MAG.Mode)", () => {
       /function syncModeUi\(mode: AppMode\): void \{[\s\S]*statusEl\.textContent = status\.label/,
       "syncModeUi must write the status label into #status",
     );
+    // P0-3: the badge literal moved into the i18n en table; app.ts renders it via t("badge.magical").
+    const I18N_TS = readFileSync(join(UI_DIR, "i18n.ts"), "utf8");
     assert.ok(
-      APP_TS.includes('mode === "magical" ? "MAGICAL"'),
-      'syncModeUi must render MAGICAL badge text for mode === "magical"',
+      APP_TS.includes('mode === "magical" ? t("badge.magical")') && I18N_TS.includes('"MAGICAL"'),
+      'syncModeUi must render the badge.magical text (en "MAGICAL") for mode === "magical"',
     );
     assert.ok(
       APP_TS.includes("`mode-badge ${mode}`") || APP_TS.includes('"mode-badge magical"'),

@@ -315,30 +315,30 @@
         <img class="brand-logo" src="./frondose-logo-mark.svg" alt="Frondose" />
         <span class="brand-word">Frondose</span>
       </div>
-      <span id="mode-badge" class="mode-badge manual">MANUAL</span>
-      <div class="switcher" role="tablist" aria-label="Mode">
+      <span id="mode-badge" class="mode-badge manual" data-i18n="badge.manual">MANUAL</span>
+      <div class="switcher" role="tablist" aria-label="Mode" data-i18n-aria="aria.mode">
         <button id="mode-manual-tab" class="seg-tab active" type="button" role="tab">
           <svg class="seg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-11.7 7.7L3 21l1.8-6.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
-          Manual
+          <span data-i18n="tab.manual">Manual</span>
         </button>
         <button id="mode-auto-tab" class="seg-tab" type="button" role="tab">
           <svg class="seg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7l1-7z"/></svg>
-          Auto
+          <span data-i18n="tab.auto">Auto</span>
         </button>
       </div>
-      <button id="settings-gear" class="icon-btn" title="Settings" aria-label="Settings" type="button">
+      <button id="settings-gear" class="icon-btn" title="Settings" aria-label="Settings" data-i18n-title="settings.title" data-i18n-aria="settings.title" type="button">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </header>
 
     <div id="scroll-area" class="scroll-area">
       <section id="manual-surface" class="conv">
-        <div class="status-line"><span class="status-dot"></span><span id="status">Listening</span></div>
+        <div class="status-line"><span class="status-dot"></span><span id="status" data-i18n="status.listening">Listening</span></div>
 
         <div id="identity-gate" class="start-card hidden">
           <div>
-            <div id="name" class="start-name">loading identity...</div>
-            <div class="start-hint">Open <strong>Frondose → Settings</strong> to set your identity.</div>
+            <div id="name" class="start-name" data-i18n="identity.loading">loading identity...</div>
+            <div class="start-hint" data-i18n="identity.hint">Open <strong>Frondose → Settings</strong> to set your identity.</div>
           </div>
         </div>
 
@@ -350,7 +350,7 @@
           <div class="iwf-head">
             <div class="iwf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><path d="M6 8.2v7.6"/><path d="M18 6h-4.5a3 3 0 0 0-3 3v6.8"/><circle cx="18" cy="6" r="2.2"/></svg></div>
             <div class="iwf-head-text">
-              <div id="workflow-title" class="iwf-title">workflow</div>
+              <div id="workflow-title" class="iwf-title" data-i18n="workflow.defaultTitle">workflow</div>
               <div id="workflow-sub" class="iwf-sub"></div>
             </div>
             <div class="iwf-progress-wrap">
@@ -361,12 +361,12 @@
           <div id="workflow-steps" class="iwf-steps"></div>
           <div id="workflow-notice" class="iwf-notice hidden"></div>
           <div class="iwf-actions">
-            <button id="workflow-showall-btn" class="iwf-btn-ghost hidden" type="button">Show all steps</button>
+            <button id="workflow-showall-btn" class="iwf-btn-ghost hidden" type="button" data-i18n="workflow.showAll">Show all steps</button>
             <div class="iwf-actions-right">
-              <button id="workflow-approve-btn" class="iwf-btn iwf-btn-approve hidden" type="button">Approve</button>
-              <button id="workflow-decline-btn" class="iwf-btn hidden" type="button">Decline</button>
-              <button id="workflow-pause-btn" class="iwf-btn" type="button">Pause</button>
-              <button id="workflow-handoff-btn" class="iwf-btn iwf-btn-primary" type="button">Hand off to Auto</button>
+              <button id="workflow-approve-btn" class="iwf-btn iwf-btn-approve hidden" type="button" data-i18n="action.approve">Approve</button>
+              <button id="workflow-decline-btn" class="iwf-btn hidden" type="button" data-i18n="action.decline">Decline</button>
+              <button id="workflow-pause-btn" class="iwf-btn" type="button" data-i18n="workflow.pause">Pause</button>
+              <button id="workflow-handoff-btn" class="iwf-btn iwf-btn-primary" type="button" data-i18n="action.handoff">Hand off to Auto</button>
             </div>
           </div>
         </div>
@@ -379,66 +379,66 @@
       <div class="dock-tab">
         <div class="dock-grip"><span></span><span></span><span></span></div>
         <svg class="dock-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-11.7 7.7L3 21l1.8-6.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
-        <span class="dock-tab-label">Conversation</span>
+        <span class="dock-tab-label" data-i18n="dock.conversation">Conversation</span>
       </div>
       <div class="dock-conv">
         <div class="dmsg-agent">
           <div class="dmsg-avatar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z"/></svg></div>
-          <div class="dmsg-text">I'll keep you posted here. Inject a rule or ask a question anytime.</div>
+          <div class="dmsg-text" data-i18n="dock.keepPosted">I'll keep you posted here. Inject a rule or ask a question anytime.</div>
         </div>
       </div>
       <div id="composer" class="composer hidden">
         <div class="composer-inner">
           <svg class="composer-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 9l-9.5 9.5a4 4 0 0 1-5.7-5.7L14 4.6a2.6 2.6 0 0 1 3.7 3.7L9 16.9"/></svg>
-          <input id="command-input" class="hidden" type="text" placeholder="Reply, or press / for actions" />
+          <input id="command-input" class="hidden" type="text" placeholder="Reply, or press / for actions" data-i18n-placeholder="composer.placeholder.manual" />
           <span class="composer-kbd">⌘↵</span>
-          <button id="send-btn" class="composer-send hidden" type="button" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+          <button id="send-btn" class="composer-send hidden" type="button" aria-label="Send" data-i18n-aria="composer.send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
         </div>
       </div>
     </footer>
 
-    <div id="error-banner" class="banner-error hidden">error</div>
-    <button id="retry-btn" class="btn-retry hidden" type="button">Retry</button>
+    <div id="error-banner" class="banner-error hidden" data-i18n="error.generic">error</div>
+    <button id="retry-btn" class="btn-retry hidden" type="button" data-i18n="retry.button">Retry</button>
     <div id="cron-tick-banner" class="cron-banner hidden"></div>
 
     <section id="settings-panel" class="settings-panel hidden">
       <header class="settings-head">
-        <span>Settings</span>
-        <button id="settings-close" class="icon-btn" title="Close" aria-label="Close" type="button">✕</button>
+        <span data-i18n="settings.title">Settings</span>
+        <button id="settings-close" class="icon-btn" title="Close" aria-label="Close" data-i18n-title="settings.close" data-i18n-aria="settings.close" type="button">✕</button>
       </header>
       <div class="settings-group">
-        <h4>Model (custom URL)</h4>
-        <label>Base URL <input id="settings-baseurl" type="text" placeholder="https://your-provider.example/v1" /></label>
-        <small class="settings-hint">内网推理服务地址（向管理员获取），示例：https://.../v1</small>
-        <label>Model <input id="settings-model" type="text" placeholder="deepseek:deepseek-v4-flash" /></label>
-        <small class="settings-hint">格式：提供商:模型名；示例：deepseek:deepseek-v4-flash</small>
-        <label>API key <input id="settings-key" type="password" placeholder="no key set" autocomplete="off" /></label>
-        <small class="settings-hint">你个人的 API key（向管理员获取）。</small>
-        <small class="settings-hint">三项都填好才能使用；详见《Frondose 安装与首次使用指南(内网 / Windows)》。</small>
+        <h4 data-i18n="settings.groupModel">Model (custom URL)</h4>
+        <label><span data-i18n="settings.baseUrl">Base URL</span> <input id="settings-baseurl" type="text" placeholder="https://your-provider.example/v1" /></label>
+        <small class="settings-hint" data-i18n="settings.hint.baseUrl">Intranet inference server URL (ask your admin), e.g. https://.../v1</small>
+        <label><span data-i18n="settings.model">Model</span> <input id="settings-model" type="text" placeholder="deepseek:deepseek-v4-flash" /></label>
+        <small class="settings-hint" data-i18n="settings.hint.model">Format: provider:model — e.g. deepseek:deepseek-v4-flash</small>
+        <label><span data-i18n="settings.apiKey">API key</span> <input id="settings-key" type="password" placeholder="no key set" data-i18n-placeholder="settings.noKeySet" autocomplete="off" /></label>
+        <small class="settings-hint" data-i18n="settings.hint.apiKey">Your personal API key (ask your admin).</small>
+        <small class="settings-hint" data-i18n="settings.hint.fillAll">All three fields are required — see the Frondose install & first-use guide (intranet / Windows).</small>
       </div>
       <div class="settings-group">
-        <h4>Search</h4>
-        <label>Brave Search API key <input id="settings-brave-key" type="password" placeholder="no key set" autocomplete="off" /></label>
+        <h4 data-i18n="settings.groupSearch">Search</h4>
+        <label><span data-i18n="settings.braveKey">Brave Search API key</span> <input id="settings-brave-key" type="password" placeholder="no key set" data-i18n-placeholder="settings.noKeySet" autocomplete="off" /></label>
       </div>
       <div class="settings-group">
-        <h4>Identity</h4>
-        <label>Name <input id="settings-fullname" type="text" /></label>
-        <label>Company <input id="settings-company" type="text" /></label>
-        <label>Role <input id="settings-role" type="text" /></label>
-        <label>Headline <input id="settings-headline" type="text" /></label>
-        <label>ICP target roles <input id="settings-icp-roles" type="text" placeholder="VP Sales, Head of Growth" /></label>
+        <h4 data-i18n="settings.groupIdentity">Identity</h4>
+        <label><span data-i18n="settings.name">Name</span> <input id="settings-fullname" type="text" /></label>
+        <label><span data-i18n="settings.company">Company</span> <input id="settings-company" type="text" /></label>
+        <label><span data-i18n="settings.role">Role</span> <input id="settings-role" type="text" /></label>
+        <label><span data-i18n="settings.headline">Headline</span> <input id="settings-headline" type="text" /></label>
+        <label><span data-i18n="settings.icpRoles">ICP target roles</span> <input id="settings-icp-roles" type="text" placeholder="VP Sales, Head of Growth" data-i18n-placeholder="settings.icpPlaceholder" /></label>
       </div>
       <div class="settings-group">
-        <h4>Soul override (advanced)</h4>
-        <textarea id="settings-soul" maxlength="3000" rows="5" placeholder="Leave blank to use the default soul band."></textarea>
+        <h4 data-i18n="settings.groupSoul">Soul override (advanced)</h4>
+        <textarea id="settings-soul" maxlength="3000" rows="5" placeholder="Leave blank to use the default soul band." data-i18n-placeholder="settings.soulPlaceholder"></textarea>
       </div>
       <div class="settings-group">
-        <h4>Updates</h4>
-        <label>Update server URL <input id="settings-update-url" type="text" placeholder="http://192.168.x.x:8765 or http://host.local:8765" /></label>
-        <button id="settings-check-update" class="btn-primary" type="button">Check for updates</button>
+        <h4 data-i18n="settings.groupUpdates">Updates</h4>
+        <label><span data-i18n="settings.updateUrl">Update server URL</span> <input id="settings-update-url" type="text" placeholder="http://192.168.x.x:8765 or http://host.local:8765" data-i18n-placeholder="settings.updateUrlPlaceholder" /></label>
+        <button id="settings-check-update" class="btn-primary" type="button" data-i18n="action.checkUpdate">Check for updates</button>
         <span id="settings-update-status" class="settings-update-status"></span>
       </div>
-      <footer class="settings-foot"><button id="settings-save" class="btn-primary" type="button">Save</button></footer>
+      <footer class="settings-foot"><button id="settings-save" class="btn-primary" type="button" data-i18n="settings.save">Save</button></footer>
     </section>
   </div>
   <script type="module" src="./app.js"></script>

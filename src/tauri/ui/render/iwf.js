@@ -1,6 +1,7 @@
 // P-72 slice 12 — extracted from src/tauri/ui/render.ts L174-277.
 // buildSwitcher + Manual iwf-card builder (buildIwfCard) + 4 internal helpers.
 // Re-exported by the ./render.js barrel: buildSwitcher, buildIwfCard.
+import { t } from "../i18n.js";
 import { clear, div, glyph, span, asEl, GLYPH } from "./dom.js";
 import { computeProgress, stepVisualState } from "./progress.js";
 // --- switcher (active-tab toggle; tabs live statically in index.html) ---
@@ -11,10 +12,11 @@ export function buildSwitcher(manualTab, autoTab, mode) {
 // --- Manual: inline-workflow card (iwf-card). Mutates the static skeleton in index.html. ---
 function summaryLabel(steps) {
     const approvals = steps.filter((s) => s.requiresApproval === true).length;
-    const stepWord = `${steps.length} ${steps.length === 1 ? "step" : "steps"}`;
+    const stepWord = t(steps.length === 1 ? "workflow.stepOne" : "workflow.stepOther", { n: steps.length });
     if (approvals === 0)
         return stepWord;
-    return `${stepWord} · ${approvals} confirmation${approvals === 1 ? "" : "s"} required`;
+    const confirmWord = t(approvals === 1 ? "workflow.confirmOne" : "workflow.confirmOther", { n: approvals });
+    return `${stepWord} · ${confirmWord}`;
 }
 // Collapsed view (design-doc §7.1): completed/current/needs-you shown; the remaining pending steps fold
 // into the first pending row labelled "<title> · +N more steps". Expanded shows every step individually.
@@ -34,7 +36,7 @@ function visibleStepRows(workflow, expanded) {
     const firstTail = tail[0];
     if (firstTail !== undefined) {
         const extra = tail.length - 1;
-        rows.push({ step: firstTail, moreSuffix: extra > 0 ? ` · +${extra} more steps` : "" });
+        rows.push({ step: firstTail, moreSuffix: extra > 0 ? t("workflow.moreSteps", { n: extra }) : "" });
     }
     return rows;
 }
@@ -51,13 +53,13 @@ function stepDot(doc, visual) {
 }
 function stepRightLabel(step, workflow) {
     if (step.id === workflow.pendingStepId)
-        return "needs you";
+        return t("chip.needsYou");
     if (step.state === "in_progress")
-        return "running";
+        return t("chip.running");
     if (step.state === "completed" && step.requiresApproval === true && workflow.approvalMode === "auto")
-        return "auto-approved";
+        return t("chip.autoApproved");
     if (step.state === "failed")
-        return "failed";
+        return t("chip.failed");
     return "";
 }
 export function buildIwfCard(doc, workflow, expanded) {
@@ -104,7 +106,7 @@ export function buildIwfCard(doc, workflow, expanded) {
     if (showAll) {
         const collapsible = workflow.steps.length > 5;
         showAll.classList.toggle("hidden", !collapsible);
-        showAll.textContent = expanded ? "Show fewer steps" : "Show all steps";
+        showAll.textContent = expanded ? t("workflow.showFewer") : t("workflow.showAll");
     }
 }
 //# sourceMappingURL=iwf.js.map

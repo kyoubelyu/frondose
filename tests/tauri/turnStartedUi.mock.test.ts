@@ -99,21 +99,24 @@ describe('app.ts handleEvent("turn-started") — adopts currentTurnId + opens ag
 
 describe('app.ts handleEvent("turn-started") — source-aware ticker text (FIX-2 UI [3b] cron UX §6.4(E))', () => {
   it('T-Turn.3-C: the case "turn-started" handler sets tickerEl.textContent to "cron running..." when payload.source==="cron" and "starting..." otherwise', () => {
-    // Given: src/tauri/ui/app.ts source as a string
+    // Given: src/tauri/ui/app.ts source as a string (P0-3: the ticker literals moved into the i18n en
+    //        table; app.ts now references them via t("ticker.cronRunning") / t("ticker.starting"))
     // When:  scanned for the source-aware ticker assignment in the turn-started case
-    // Then:  the assignment distinguishes cron vs non-cron: `payload.source === "cron" ? "cron running..." : "starting..."`
+    // Then:  the assignment distinguishes cron vs non-cron and the en table still carries the P-67 literals
+    const I18N_TS = readFileSync(join(REPO, "src/tauri/ui/i18n.ts"), "utf-8");
 
-    // "cron running..." must appear as the cron-turn ticker text (per §6.4(E) sketch)
+    // "cron running..." must remain the en cron-turn ticker text (per §6.4(E) sketch), now via the i18n table
     assert.ok(
-      APP_TS.includes('"cron running..."'),
-      `app.ts must contain the string "cron running..." for the cron-turn ticker text. ` +
-        `tickerEl.textContent must include the cron-specific "cron running..." branch.`,
+      APP_TS.includes('t("ticker.cronRunning")') && I18N_TS.includes('"cron running..."'),
+      `app.ts must reference t("ticker.cronRunning") and the i18n en table must keep "cron running..." ` +
+        `as the cron-turn ticker text.`,
     );
 
-    // "starting..." is the current non-cron ticker text accepted by P-67.
+    // "starting..." is the current non-cron ticker text accepted by P-67, now via the i18n table.
     assert.ok(
-      APP_TS.includes('"starting..."'),
-      `app.ts must contain the string "starting..." for non-cron turn-started ticker text.`,
+      APP_TS.includes('t("ticker.starting")') && I18N_TS.includes('"starting..."'),
+      `app.ts must reference t("ticker.starting") and the i18n en table must keep "starting..." ` +
+        `as the non-cron turn-started ticker text.`,
     );
 
     // The source-conditional must be in the same expression (check for the conditional form)

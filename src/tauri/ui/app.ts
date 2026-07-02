@@ -17,6 +17,8 @@ import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
+import type { LocalizableDocumentLike } from "./i18n.js";
+import { localizeDocument, t } from "./i18n.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -87,6 +89,9 @@ function mustGet<T extends TextElementLike>(id: string): T {
   return el as unknown as T;
 }
 
+// P0-3: re-write the static en strings in index.html for the detected locale (no-op under en).
+localizeDocument(windowRef.document as unknown as LocalizableDocumentLike);
+
 type AppState = "identity-missing" | "idle" | "running" | "error";
 let appState: AppState = "identity-missing";
 let currentTurnId: string | null = null;
@@ -138,7 +143,7 @@ function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promi
 function surfaceError(label: string, e: unknown): void {
   const msg = e instanceof Error ? e.message : String(e);
   console.error(`[frondose] ${label} failed:`, e);
-  errorBannerEl.textContent = `${label} failed: ${msg}`;
+  errorBannerEl.textContent = t("error.actionFailed", { label, msg });
   errorBannerEl.classList.remove("hidden");
 }
 
@@ -225,7 +230,7 @@ function transition(next: AppState): void {
   commandEl.disabled = next !== "idle" && next !== "running";
   sendEl.disabled = next !== "idle" && next !== "running";
   if (next === "idle") {
-    sendEl.setAttribute?.("title", "Send");
+    sendEl.setAttribute?.("title", t("composer.send"));
     sendEl.classList.remove("is-cancel");
     commandEl.value = "";
     retryBtnEl.classList.add("hidden");
@@ -251,12 +256,12 @@ function syncModeUi(mode: AppMode): void {
   // P-Y2-MA G5 desktop: mode-badge text + class flip. Magical uses its badge-only visual hook.
   const modeBadgeEl = windowRef.document.getElementById("mode-badge");
   if (modeBadgeEl) {
-    modeBadgeEl.textContent = mode === "auto" ? "AUTO" : mode === "magical" ? "MAGICAL" : "MANUAL";
+    modeBadgeEl.textContent = mode === "auto" ? t("badge.auto") : mode === "magical" ? t("badge.magical") : t("badge.manual");
     modeBadgeEl.setAttribute?.("class", `mode-badge ${mode}`);
   }
   commandEl.setAttribute?.(
     "placeholder",
-    mode === "auto" ? "Inject a rule, ask a question, or interrupt…" : "Reply, or press / for actions",
+    mode === "auto" ? t("composer.placeholder.auto") : t("composer.placeholder.manual"),
   );
   renderWorkflowCard();
 }
@@ -274,7 +279,7 @@ async function applyMode(mode: AppMode): Promise<void> {
     cronEnabled = cronResp.ok ? (cronResp.cronEnabled ?? toggles.cronEnabled) : toggles.cronEnabled;
   } catch (e) {
     cronEnabled = toggles.cronEnabled;
-    surfaceError("Set mode (cron)", e);
+    surfaceError(t("action.setModeCron"), e);
   }
   try {
     const passiveResp = await invoke<{ ok: boolean; passiveEnabled?: boolean }>("frondose_set_passive_mode", {
@@ -283,7 +288,7 @@ async function applyMode(mode: AppMode): Promise<void> {
     passiveEnabled = passiveResp.ok ? (passiveResp.passiveEnabled ?? toggles.passiveEnabled) : toggles.passiveEnabled;
   } catch (e) {
     passiveEnabled = toggles.passiveEnabled;
-    surfaceError("Set mode (passive)", e);
+    surfaceError(t("action.setModePassive"), e);
   }
   syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
 }
@@ -298,12 +303,12 @@ async function loadIdentity(): Promise<void> {
       return;
     }
     nameEl.classList.remove("error");
-    nameEl.textContent = r.fullName ?? "(no fullName in identity)";
+    nameEl.textContent = r.fullName ?? t("identity.noFullName");
     transition("idle");
   } catch (e) {
     nameEl.classList.add("error");
     nameEl.textContent = String(e);
-    errorBannerEl.textContent = `boot error: ${String(e)}`;
+    errorBannerEl.textContent = t("error.boot", { msg: String(e) });
     transition("error");
   }
 }
@@ -314,7 +319,7 @@ async function abortTurn(): Promise<void> {
     await invoke("frondose_agent_abort");
   } catch (e) {
     // SSE error/done event owns UI recovery, but surface the failure too.
-    surfaceError("Pause/abort", e);
+    surfaceError(t("action.pauseAbort"), e);
   }
 }
 
@@ -337,7 +342,7 @@ async function sendCommand(): Promise<void> {
   try {
     const r = await invoke<TurnResp>("frondose_agent_turn", { prompt });
     if (r.ok === false) {
-      errorBannerEl.textContent = `turn rejected: ${r.reason}`;
+      errorBannerEl.textContent = t("error.turnRejected", { reason: r.reason });
       transition("error");
       return;
     }
@@ -345,10 +350,10 @@ async function sendCommand(): Promise<void> {
     lastTurnPrompt = prompt;
     // P-Y2-MA G1+G2: append user bubble immediately; agent bubble lands on turn-started.
     appendUserBubble(prompt);
-    tickerEl.textContent = "starting...";
+    tickerEl.textContent = t("ticker.starting");
     transition("running");
   } catch (e) {
-    errorBannerEl.textContent = `invoke failed: ${String(e)}`;
+    errorBannerEl.textContent = t("error.invokeFailed", { msg: String(e) });
     transition("error");
   }
 }
@@ -370,13 +375,13 @@ async function performSteer(newPrompt: string): Promise<void> {
     }
     const completed = await waitForDoneSse(previousTurnId, 3000, 50);
     if (!completed) {
-      errorBannerEl.textContent = "steer timeout - aborted turn never confirmed";
+      errorBannerEl.textContent = t("error.steerTimeout");
       transition("error");
       return;
     }
     const r = await invoke<TurnResp>("frondose_agent_turn", { prompt: newPrompt });
     if (r.ok === false) {
-      errorBannerEl.textContent = `steer resubmit rejected: ${r.reason}`;
+      errorBannerEl.textContent = t("error.steerRejected", { reason: r.reason });
       transition("error");
       return;
     }
@@ -384,10 +389,10 @@ async function performSteer(newPrompt: string): Promise<void> {
     lastTurnPrompt = newPrompt;
     // P-Y2-MA: steer sends a NEW user bubble; prior agent bubble stays as history.
     appendUserBubble(newPrompt);
-    tickerEl.textContent = "starting...";
+    tickerEl.textContent = t("ticker.starting");
     transition("running");
   } catch (e) {
-    errorBannerEl.textContent = `steer failed: ${String(e)}`;
+    errorBannerEl.textContent = t("error.steerFailed", { msg: String(e) });
     transition("error");
   } finally {
     steerInFlight = false;
@@ -400,7 +405,7 @@ async function performRetry(): Promise<void> {
   try {
     const r = await invoke<TurnResp>("frondose_agent_retry");
     if (r.ok === false) {
-      errorBannerEl.textContent = `retry rejected: ${r.reason}`;
+      errorBannerEl.textContent = t("error.retryRejected", { reason: r.reason });
       errorBannerEl.classList.remove("hidden");
       transition("error");
       return;
@@ -408,10 +413,10 @@ async function performRetry(): Promise<void> {
     currentTurnId = r.turnId;
     // P-Y2-MA: retry does NOT append a new user bubble (prompt already shown);
     // the new agent bubble lands on turn-started just like first-send.
-    tickerEl.textContent = lastTurnPrompt === null ? "starting..." : "retrying last prompt...";
+    tickerEl.textContent = lastTurnPrompt === null ? t("ticker.starting") : t("ticker.retrying");
     transition("running");
   } catch (e) {
-    errorBannerEl.textContent = `retry invoke failed: ${String(e)}`;
+    errorBannerEl.textContent = t("error.retryInvokeFailed", { msg: String(e) });
     errorBannerEl.classList.remove("hidden");
     transition("error");
   }
@@ -440,7 +445,7 @@ async function approveWorkflowStep(): Promise<void> {
   try {
     await invoke("frondose_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
   } catch (e) {
-    surfaceError("Approve", e);
+    surfaceError(t("action.approve"), e);
   }
 }
 
@@ -453,7 +458,7 @@ async function declineWorkflowStep(): Promise<void> {
       reason: "operator_declined",
     });
   } catch (e) {
-    surfaceError("Decline", e);
+    surfaceError(t("action.decline"), e);
   }
 }
 
@@ -462,7 +467,7 @@ async function handoffWorkflow(): Promise<void> {
   try {
     await invoke("frondose_workflow_handoff", { workflowId: workflowView.workflowId });
   } catch (e) {
-    surfaceError("Hand off to Auto", e);
+    surfaceError(t("action.handoff"), e);
   }
 }
 
@@ -494,14 +499,14 @@ function handleEvent(payload: SseFrame): void {
       // P-Y2-MA G1: every turn-started opens a NEW agent bubble; cron/resume turns get one too.
       currentTurnId = payload.turnId;
       beginAgentBubble();
-      tickerEl.textContent = payload.source === "cron" ? "cron running..." : "starting...";
+      tickerEl.textContent = payload.source === "cron" ? t("ticker.cronRunning") : t("ticker.starting");
       transition("running");
       break;
     case "step-done":
       break;
     case "done":
       if (payload.turnId === currentTurnId) {
-        tickerEl.textContent = `done (${payload.finishReason})`;
+        tickerEl.textContent = t("ticker.done", { reason: payload.finishReason });
         currentTurnId = null;
         // P-Y2-MA G1: close the active agent bubble so the next turn opens a fresh one.
         endAgentBubble();
@@ -514,14 +519,14 @@ function handleEvent(payload: SseFrame): void {
       }
       break;
     case "error":
-      errorBannerEl.textContent = `agent error: ${payload.message}`;
+      errorBannerEl.textContent = t("error.agent", { msg: payload.message });
       currentTurnId = null;
       endAgentBubble();
       transition("error");
       retryBtnEl.classList.toggle("hidden", payload.retryable !== true);
       break;
     case "overlay-reconnected":
-      statusEl.textContent = "overlay reconnected";
+      statusEl.textContent = t("status.overlayReconnected");
       setTimeout(() => {
         statusEl.textContent = statusForMode(appMode).label;
       }, 2000);
@@ -529,13 +534,13 @@ function handleEvent(payload: SseFrame): void {
     case "overlay-event":
       break;
     case "suggestion-card":
-      statusEl.textContent = "suggestion card rendered in-page";
+      statusEl.textContent = t("status.suggestionCard");
       break;
     case "next-actions":
-      statusEl.textContent = "next actions rendered in-page";
+      statusEl.textContent = t("status.nextActions");
       break;
     case "profile-nav":
-      statusEl.textContent = `profile: ${payload.profileHandle ?? "?"}`;
+      statusEl.textContent = t("status.profile", { handle: payload.profileHandle ?? "?" });
       break;
     case "dialog-mode":
       break;
@@ -548,7 +553,7 @@ function handleEvent(payload: SseFrame): void {
       syncExternalMode();
       break;
     case "cron-tick":
-      cronTickBannerEl.textContent = `cron active${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
+      cronTickBannerEl.textContent = `${t("ticker.cronActive")}${payload.taskHint ? `: ${payload.taskHint}` : ""}`;
       cronTickBannerEl.classList.remove("hidden");
       break;
     case "cron-done":
@@ -577,7 +582,7 @@ function handleEvent(payload: SseFrame): void {
       if (workflowView === null) {
         workflowView = {
           workflowId: payload.workflowId,
-          title: "workflow",
+          title: t("workflow.defaultTitle"),
           approvalMode: "manual",
           steps: [],
           pendingStepId: null,
@@ -585,14 +590,14 @@ function handleEvent(payload: SseFrame): void {
         };
       }
       workflowView.pendingStepId = payload.stepId;
-      workflowView.notice = "Approval required before outbound action.";
+      workflowView.notice = t("workflow.approvalRequired");
       upsertWorkflowStep(payload.stepId, payload.stepTitle, "in_progress", true);
       renderWorkflowCard();
       break;
     case "workflow-approval-resolved":
       if (workflowView?.workflowId === payload.workflowId) {
         workflowView.pendingStepId = null;
-        workflowView.notice = payload.decision === "approved" ? "Approved. Resuming workflow." : "Declined.";
+        workflowView.notice = payload.decision === "approved" ? t("workflow.approvedResuming") : t("workflow.declined");
         renderWorkflowCard();
       }
       break;
@@ -600,7 +605,7 @@ function handleEvent(payload: SseFrame): void {
       if (workflowView?.workflowId === payload.workflowId) {
         workflowView.approvalMode = payload.approvalMode;
         workflowView.pendingStepId = null;
-        workflowView.notice = "Auto mode enabled.";
+        workflowView.notice = t("workflow.autoEnabled");
         renderWorkflowCard();
       }
       break;
@@ -612,10 +617,10 @@ function handleEvent(payload: SseFrame): void {
       break;
     case "commit-warning":
       if (workflowView !== null && (payload.workflowId === null || payload.workflowId === workflowView.workflowId)) {
-        workflowView.notice = `Advisory: possible outbound click (${payload.label}).`;
+        workflowView.notice = t("workflow.advisoryNotice", { label: payload.label });
         renderWorkflowCard();
       } else {
-        statusEl.textContent = `Advisory: possible outbound click (${payload.label})`;
+        statusEl.textContent = t("workflow.advisoryStatus", { label: payload.label });
       }
       break;
   }
@@ -651,7 +656,7 @@ modeAutoTabEl.addEventListener("click", () => {
 });
 const settings = createSettingsPanel({ invoke, surfaceError });
 settingsGearEl.addEventListener("click", () => {
-  settings.open().catch((e) => surfaceError("Open settings", e));
+  settings.open().catch((e) => surfaceError(t("action.openSettings"), e));
 });
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();
@@ -665,7 +670,7 @@ commandEl.addEventListener("keydown", (e) => {
 
 async function boot(): Promise<void> {
   if (!windowRef.__TAURI__) {
-    errorBannerEl.textContent = "__TAURI__ missing - not running inside Tauri shell";
+    errorBannerEl.textContent = t("error.noTauri");
     transition("error");
     return;
   }
