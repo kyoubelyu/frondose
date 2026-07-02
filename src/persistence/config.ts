@@ -70,6 +70,10 @@ export const configJsonSchemaV2 = z.object({
   // + the Rust endpoint.parse() guard. .trim() drops stray whitespace. No schema_version
   // bump (additive optional; old configs Zod-fill null).
   updateServerUrl: z.string().trim().nullable().default(null),
+  // P-ZH-1: operator-picked language for the UI chrome + agent reply-language override.
+  // "auto" (default) = today's behavior (navigator-detected UI locale, mirror-the-operator
+  // replies). Additive optional, NO schema_version bump — old configs Zod-fill "auto".
+  language: z.enum(["auto", "en", "zh"]).default("auto"),
 });
 export type ConfigJsonV2 = z.infer<typeof configJsonSchemaV2>;
 
@@ -101,6 +105,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
   updateServerUrl: null, // P-58d.1
+  language: "auto", // P-ZH-1
   // identity intentionally omitted (optional).
 };
 
@@ -197,6 +202,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     identity,
     soul: { override: soulOverride },
     updateServerUrl: null, // P-58d.1: v1 configs never carried it
+    language: "auto", // P-ZH-1: v1 configs never carried it
   };
 }
 
