@@ -5,7 +5,7 @@
  * Tests read and parse the real file — no build or Tauri toolchain required.
  *
  * Gate coverage:
- *   G-WIN3.2  — T-Conf.Win.1 (bundle.windows.webviewInstallMode.type === "downloadBootstrapper"
+ *   G-WIN3.2  — T-Conf.Win.1 (bundle.windows.webviewInstallMode.type === "offlineInstaller"
  *                              AND .silent === true)
  *             — T-Conf.Win.2 (bundle.windows.nsis.installerIcon === "icons/icon.ico",
  *                              .installMode === "perMachine", .languages includes "English")
@@ -64,11 +64,13 @@ const tauriConf: TauriConf = JSON.parse(readFileSync(join(REPO, "src/tauri/src-t
 // G-WIN3.2: bundle.windows webviewInstallMode shape
 // ---------------------------------------------------------------------------
 
-describe("G-WIN3.2 — tauri.conf.json: bundle.windows.webviewInstallMode is downloadBootstrapper+silent", () => {
-  it('T-Conf.Win.1: bundle.windows.webviewInstallMode.type === "downloadBootstrapper" and .silent === true', () => {
-    // Given: tauri.conf.json parsed from the repo (pre-WIN-3 has no bundle.windows block)
+describe("G-WIN3.2 — tauri.conf.json: bundle.windows.webviewInstallMode is offlineInstaller+silent", () => {
+  it('T-Conf.Win.1: bundle.windows.webviewInstallMode.type === "offlineInstaller" and .silent === true', () => {
+    // Given: tauri.conf.json parsed from the repo (WIN-3 direct-build, a03ae23, chose
+    //        offlineInstaller over downloadBootstrapper: bundles WebView2 for the
+    //        air-gapped intranet + offline-WebView2 requirement)
     // When:  bundle.windows.webviewInstallMode is inspected
-    // Then:  type === "downloadBootstrapper" AND silent === true
+    // Then:  type === "offlineInstaller" AND silent === true
 
     const winBlock = tauriConf.bundle?.windows;
     assert.ok(
@@ -80,8 +82,8 @@ describe("G-WIN3.2 — tauri.conf.json: bundle.windows.webviewInstallMode is dow
     assert.ok(wvMode != null, "T-Conf.Win.1: bundle.windows.webviewInstallMode must be defined");
     assert.strictEqual(
       wvMode.type,
-      "downloadBootstrapper",
-      `T-Conf.Win.1: webviewInstallMode.type must be "downloadBootstrapper" (got: ${JSON.stringify(wvMode.type)})`,
+      "offlineInstaller",
+      `T-Conf.Win.1: webviewInstallMode.type must be "offlineInstaller" (got: ${JSON.stringify(wvMode.type)})`,
     );
     assert.strictEqual(
       wvMode.silent,
