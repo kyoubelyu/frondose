@@ -118,12 +118,29 @@ interface FakeClientOpts {
   insertTextLog?: string[];
   clickAtThrowOnCall?: number;
   clickAtThrowError?: Error;
+  /**
+   * CONNECT_PROMPT_PRESENT_JS responses (post-send confirmConnectPromptGone probe), dequeued per
+   * probe. Omitted / empty → default present:false (prompt gone immediately, happy path). A single
+   * element repeats for every probe.
+   */
+  connectPromptPresentQueue?: boolean[];
 }
 
 function makeFakeClient(opts: FakeClientOpts): unknown {
   let clickAtCallCount = 0;
   return {
     getCurrentUrl: async () => PROFILE_URL,
+    evaluate: async <T>(expression: string): Promise<T> => {
+      if (expression.includes("JSON.stringify({present")) {
+        const q = opts.connectPromptPresentQueue;
+        let present = false; // default: connect prompt gone → success
+        if (q && q.length > 0) {
+          present = (q.length === 1 ? q[0] : (q.shift() as boolean)) === true;
+        }
+        return JSON.stringify({ present }) as unknown as T;
+      }
+      return undefined as unknown as T;
+    },
     clickAt: async (selector: string) => {
       clickAtCallCount++;
       opts.clickAtLog.push(selector);
@@ -475,6 +492,117 @@ describe("connectViaAction — no-double-dispatch (T-Connect.NoDoubleDispatch.1)
         .split("\n")
         .filter((l) => /^\s*await deps\.client\.clickAt\(sendResolved\.target\.selector\)/.test(l));
       assert.equal(dispatchLines.length, 1, "source must have exactly ONE send-dispatch clickAt line");
+    },
+  );
+});
+
+// ===========================================================================
+// T-Connect.PromptGone.1 — post-send confirmation: prompt closes → confirmed success
+// ===========================================================================
+
+describe("connectViaAction — post-send prompt-gone confirmation (T-Connect.PromptGone.1)", () => {
+  it(
+    "T-Connect.PromptGone.1: given the send fires and the connect prompt is GONE on the first post-send probe, " +
+      "when connectViaAction runs, " +
+      "then connected:true, dispatchAttempted:true, and connectPromptGoneAttempts:1 (confirmed, not merely fired)",
+    async () => {
+      // Given: without-note profile; connect-prompt-present probe returns present:false immediately.
+      // When: connectViaAction runs with no note.
+      // Then: connected:true with a forensic connectPromptGoneAttempts of 1.
+      const ctx = profileReadyContext(connectPromptWithoutNoteScope());
+      const clickAtLog: string[] = [];
+      const raceHandleLog: Array<{ label: string; text?: string }> = [];
+      const auditRowLog: CapturedAuditRow[] = [];
+      const client = makeFakeClient({ clickAtLog, raceHandleLog, connectPromptPresentQueue: [false] });
+      const deps = makeDeps({ client, capture: async () => ctx, auditRowLog });
+
+      const { restore } = installSleepSpy();
+      let result: Awaited<ReturnType<typeof connectViaAction>>;
+      try {
+        result = await connectViaAction(deps as never);
+      } finally {
+        restore();
+      }
+
+      assert.equal(result.connected, true, "connected must be true when the prompt closes");
+      assert.equal(result.dispatchAttempted, true, "dispatchAttempted must be true");
+      assert.equal(result.connectPromptGoneAttempts, 1, "connectPromptGoneAttempts must be 1 (gone on first probe)");
+      assert.equal(clickAtLog.length, 2, "exactly 2 clickAt (Connect open + Send) — no confirmation click");
+      const row = auditRowLog[auditRowLog.length - 1];
+      assert.equal(row?.output?.connectPromptGoneAttempts, 1, "audit row must carry connectPromptGoneAttempts:1");
+    },
+  );
+});
+
+// ===========================================================================
+// T-Connect.PromptStillOpen.1 — prompt never closes → ambiguous, no second send
+// ===========================================================================
+
+describe("connectViaAction — post-send prompt still open (T-Connect.PromptStillOpen.1)", () => {
+  it(
+    "T-Connect.PromptStillOpen.1: given the send fires but the connect prompt is STILL present through all probes, " +
+      "when connectViaAction runs, " +
+      "then reason:'connect_dispatch_ambiguous', dispatchAttempted:true, fallbackAllowed:false, connectPromptGoneAttempts:6, and clickAt fires EXACTLY twice (no second/retry send)",
+    async () => {
+      // Given: without-note profile; connect-prompt-present probe returns present:true every probe.
+      // When: connectViaAction runs with no note.
+      // Then: post-dispatch ambiguous; the invite may be sent, so NO retry — exactly 2 clickAt.
+      const ctx = profileReadyContext(connectPromptWithoutNoteScope());
+      const clickAtLog: string[] = [];
+      const raceHandleLog: Array<{ label: string; text?: string }> = [];
+      const auditRowLog: CapturedAuditRow[] = [];
+      const client = makeFakeClient({ clickAtLog, raceHandleLog, connectPromptPresentQueue: [true] });
+      const deps = makeDeps({ client, capture: async () => ctx, auditRowLog });
+
+      const { restore } = installSleepSpy();
+      let result: Awaited<ReturnType<typeof connectViaAction>>;
+      try {
+        result = await connectViaAction(deps as never);
+      } finally {
+        restore();
+      }
+
+      assert.equal(result.reason, "connect_dispatch_ambiguous", "reason must be connect_dispatch_ambiguous");
+      assert.equal(result.connected, false, "connected must be false when the prompt never closes");
+      assert.equal(result.dispatchAttempted, true, "dispatchAttempted must be true (send fired)");
+      assert.equal(result.fallbackAllowed, false, "fallbackAllowed must be false (post-dispatch, invite may be sent)");
+      assert.equal(result.connectPromptGoneAttempts, 6, "connectPromptGoneAttempts must exhaust all 6 probes");
+      assert.equal(clickAtLog.length, 2, "exactly 2 clickAt (Connect open + Send) — NO second/retry send");
+    },
+  );
+});
+
+// ===========================================================================
+// T-Connect.PromptGoneAttempts.1 — prompt-gone probe counting (gone on Nth probe)
+// ===========================================================================
+
+describe("connectViaAction — post-send prompt-gone probe counting (T-Connect.PromptGoneAttempts.1)", () => {
+  it(
+    "T-Connect.PromptGoneAttempts.1: given the connect prompt is present for the first two post-send probes then gone on the third, " +
+      "when connectViaAction runs, " +
+      "then connected:true and connectPromptGoneAttempts:3",
+    async () => {
+      // Given: without-note profile; probe queue = [present, present, gone].
+      // When: connectViaAction runs with no note.
+      // Then: connected:true after 3 probes.
+      const ctx = profileReadyContext(connectPromptWithoutNoteScope());
+      const clickAtLog: string[] = [];
+      const raceHandleLog: Array<{ label: string; text?: string }> = [];
+      const auditRowLog: CapturedAuditRow[] = [];
+      const client = makeFakeClient({ clickAtLog, raceHandleLog, connectPromptPresentQueue: [true, true, false] });
+      const deps = makeDeps({ client, capture: async () => ctx, auditRowLog });
+
+      const { restore } = installSleepSpy();
+      let result: Awaited<ReturnType<typeof connectViaAction>>;
+      try {
+        result = await connectViaAction(deps as never);
+      } finally {
+        restore();
+      }
+
+      assert.equal(result.connected, true, "connected must be true once the prompt closes");
+      assert.equal(result.connectPromptGoneAttempts, 3, "connectPromptGoneAttempts must be 3 (gone on the 3rd probe)");
+      assert.equal(clickAtLog.length, 2, "exactly 2 clickAt (Connect open + Send)");
     },
   );
 });

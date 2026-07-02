@@ -51,11 +51,14 @@ type EnsureInputReadyFn = (context: CurrentSurfaceContext, target: ResolvedTarge
 
 type EnsureTargetReadyFn = (context: CurrentSurfaceContext, target: ResolvedTarget) => Promise<void>;
 
+type ConfirmConnectPromptGoneFn = (client: unknown) => Promise<{ gone: boolean; attempts: number }>;
+
 async function loadReadiness(): Promise<{
   fillComposerSurface: FillComposerSurfaceFn;
   verifyTypedTextOnSameTarget: VerifyTypedTextFn;
   ensureInputReady: EnsureInputReadyFn;
   ensureTargetReady: EnsureTargetReadyFn;
+  confirmConnectPromptGone: ConfirmConnectPromptGoneFn;
   FillFailedError: FillFailedErrorCtor;
 }> {
   const mod = (await import(READINESS_SPEC)) as Record<string, unknown>;
@@ -64,7 +67,22 @@ async function loadReadiness(): Promise<{
     verifyTypedTextOnSameTarget: mod.verifyTypedTextOnSameTarget as VerifyTypedTextFn,
     ensureInputReady: mod.ensureInputReady as EnsureInputReadyFn,
     ensureTargetReady: mod.ensureTargetReady as EnsureTargetReadyFn,
+    confirmConnectPromptGone: mod.confirmConnectPromptGone as ConfirmConnectPromptGoneFn,
     FillFailedError: mod.FillFailedError as FillFailedErrorCtor,
+  };
+}
+
+// Queue-based fake client for confirmConnectPromptGone probe-counting tests.
+// Each element of `presentQueue` answers one CONNECT_PROMPT_PRESENT_JS probe: true → prompt present,
+// false → gone, an Error → thrown (transient evaluate failure). A single element repeats.
+function makeConnectPromptClient(presentQueue: Array<boolean | Error>): unknown {
+  const q = [...presentQueue];
+  return {
+    evaluate: async <T>(_expression: string): Promise<T> => {
+      const next = q.length === 1 ? q[0] : q.shift();
+      if (next instanceof Error) throw next;
+      return JSON.stringify({ present: next === true }) as unknown as T;
+    },
   };
 }
 
@@ -594,6 +612,90 @@ describe("ensureTargetReady — modal layer settles (T-TargetReady.1)", () => {
         sleepLog[0] >= 80 && sleepLog[0] <= 120,
         `T-TargetReady.1: settle sleep must be in [80, 120]ms (TARGET_READY_SETTLE_MS=90), got ${sleepLog[0]}ms`,
       );
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// confirmConnectPromptGone — post-send connect-prompt-gone confirmation (T-ConnectPromptGone)
+// Mirrors the confirmComposerGone gate: COMPOSER_GONE_ATTEMPTS=6 probes with progressive backoff,
+// early-break on gone, evaluate-throw treated as still-present (defensive default).
+// ---------------------------------------------------------------------------
+
+describe("confirmConnectPromptGone — prompt gone immediately (T-ConnectPromptGone.1)", () => {
+  it(
+    "T-ConnectPromptGone.1: given CONNECT_PROMPT_PRESENT_JS returns {present:false} on the first probe, " +
+      "when confirmConnectPromptGone runs, " +
+      "then it returns {gone:true, attempts:1} with no backoff sleep",
+    async () => {
+      // Given: the connect prompt is already gone.
+      // When: confirmConnectPromptGone(client).
+      // Then: gone:true after a single probe.
+      const { confirmConnectPromptGone } = await loadReadiness();
+      const client = makeConnectPromptClient([false]);
+      const { sleepLog, restore } = installSleepSpy();
+      let result: { gone: boolean; attempts: number };
+      try {
+        result = await confirmConnectPromptGone(client);
+      } finally {
+        restore();
+      }
+      assert.equal(result.gone, true, "T-ConnectPromptGone.1: gone on first probe");
+      assert.equal(result.attempts, 1, "T-ConnectPromptGone.1: attempts===1");
+      assert.equal(sleepLog.length, 0, "T-ConnectPromptGone.1: no backoff sleep before an immediate gone");
+    },
+  );
+});
+
+describe("confirmConnectPromptGone — prompt never closes (T-ConnectPromptGone.2)", () => {
+  it(
+    "T-ConnectPromptGone.2: given CONNECT_PROMPT_PRESENT_JS returns {present:true} on all 6 probes, " +
+      "when confirmConnectPromptGone runs, " +
+      "then it returns {gone:false, attempts:6}",
+    async () => {
+      // Given: the connect prompt is present on every probe.
+      // When: confirmConnectPromptGone(client).
+      // Then: gone:false after exhausting all 6 attempts (5 backoff sleeps).
+      const { confirmConnectPromptGone } = await loadReadiness();
+      const client = makeConnectPromptClient([true]);
+      const { sleepLog, restore } = installSleepSpy();
+      let result: { gone: boolean; attempts: number };
+      try {
+        result = await confirmConnectPromptGone(client);
+      } finally {
+        restore();
+      }
+      assert.equal(result.gone, false, "T-ConnectPromptGone.2: never gone");
+      assert.equal(result.attempts, 6, "T-ConnectPromptGone.2: attempts===6 (COMPOSER_GONE_ATTEMPTS)");
+      assert.equal(sleepLog.length, 5, "T-ConnectPromptGone.2: 5 backoff sleeps between 6 probes");
+    },
+  );
+});
+
+describe("confirmConnectPromptGone — evaluate throw treated as present (T-ConnectPromptGone.3)", () => {
+  it(
+    "T-ConnectPromptGone.3: given client.evaluate THROWS on probes 1 and 2 then returns {present:false} on probe 3, " +
+      "when confirmConnectPromptGone runs, " +
+      "then a thrown probe is treated as still-present and it returns {gone:true, attempts:3}",
+    async () => {
+      // Given: transient evaluate errors on the first two probes, then gone.
+      // When: confirmConnectPromptGone(client).
+      // Then: throws are swallowed as present=true; gone confirmed on probe 3.
+      const { confirmConnectPromptGone } = await loadReadiness();
+      const client = makeConnectPromptClient([
+        new Error("simulated transient evaluate error"),
+        new Error("simulated transient evaluate error"),
+        false,
+      ]);
+      const { restore } = installSleepSpy();
+      let result: { gone: boolean; attempts: number };
+      try {
+        result = await confirmConnectPromptGone(client);
+      } finally {
+        restore();
+      }
+      assert.equal(result.gone, true, "T-ConnectPromptGone.3: gone after the throws clear");
+      assert.equal(result.attempts, 3, "T-ConnectPromptGone.3: attempts===3 (2 throws treated present + 1 gone)");
     },
   );
 });
