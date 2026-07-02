@@ -500,23 +500,28 @@ describe("handlePostWorkflow — on approve for post step: falls back to LLM res
 // T-Route.KillSwitch (CMR-6 / OQ-4)
 // ---------------------------------------------------------------------------
 
-describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=skip bypasses runtime, calls resumeWorkflowTurn directly (G-P7.route — CMR-6)", () => {
+describe("handlePostWorkflow — kill-switch: FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip bypasses runtime, calls resumeWorkflowTurn directly (G-P7.route — CMR-6)", () => {
   it(
-    "T-Route.KillSwitch: when process.env.MAI_DETERMINISTIC_POST_PUBLISH==='skip', the route does NOT call the injected publishApprovedFeedPost seam AND calls turn.resumeWorkflowTurn(r.resumePrompt) directly",
+    "T-Route.KillSwitch: when process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH==='skip', the route does NOT call the injected publishApprovedFeedPost seam AND calls turn.resumeWorkflowTurn(r.resumePrompt) directly",
     { timeout: 5000 },
     async () => {
-      // Given: process.env.MAI_DETERMINISTIC_POST_PUBLISH = 'skip' (kill-switch active).
+      // Given: process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = 'skip' (kill-switch active).
       //        approve() returns isPostPublish=true + draftId (post step in Manual mode).
       //        deps.publishApprovedFeedPost is injected (CMR-2 seam).
       // When:  handlePostWorkflow runs.
       // Then:  the injected publishApprovedFeedPost is NOT called (kill-switch is PRE-DISPATCH —
       //        no CDP action whatsoever — §6.5 "checked BEFORE the post-step branch");
       //        turn.resumeWorkflowTurn(r.resumePrompt) IS called exactly once (P6 LLM path verbatim).
-      //        Structural: workflow.ts source includes 'MAI_DETERMINISTIC_POST_PUBLISH'.
-      const hasKillSwitch = WORKFLOW_ROUTE_SRC.includes("MAI_DETERMINISTIC_POST_PUBLISH");
+      //        Structural: workflow.ts source reads the kill-switch via the frondoseEnv() shim
+      //        (F-REN-3 — raw process.env.FRONDOSE_/MAI_ reads are disallowed outside src/env.ts,
+      //        enforced by tests/contract/fren3-no-raw-mai-env.mock.test.ts).
+      const hasKillSwitch = WORKFLOW_ROUTE_SRC.includes('frondoseEnv("DETERMINISTIC_POST_PUBLISH")');
 
       // T-Route.KillSwitch: structural assertion
-      assert.ok(hasKillSwitch, "T-Route.KillSwitch: workflow.ts must contain 'MAI_DETERMINISTIC_POST_PUBLISH'");
+      assert.ok(
+        hasKillSwitch,
+        'T-Route.KillSwitch: workflow.ts must contain frondoseEnv("DETERMINISTIC_POST_PUBLISH")',
+      );
 
       // Behavioral: with kill-switch set, publishApprovedFeedPost NOT called, resumeWorkflowTurn called once
       const { handlePostWorkflow: handlePostWorkflow6 } = await import(
@@ -552,8 +557,8 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
           resumeCallCount6++;
         },
       };
-      const prevKillSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
-      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      const prevKillSwitch = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
+      process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = "skip";
       try {
         const req6 = makeFakeReq({ stepId: "step-ks" });
         const { res: res6 } = makeFakeRes();
@@ -568,9 +573,9 @@ describe("handlePostWorkflow — kill-switch: MAI_DETERMINISTIC_POST_PUBLISH=ski
         await new Promise((r) => setTimeout(r, 200));
       } finally {
         if (prevKillSwitch === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
         }
       }
       assert.equal(
@@ -766,12 +771,12 @@ describe("handlePostWorkflow — cron turn: publishApprovedFeedPost is NEVER cal
 //   the route means publishApprovedFeedPost is never invoked regardless.
 // ---------------------------------------------------------------------------
 
-describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH=skip makes the route NOT publish; LLM fallback wins (SC-4)", () => {
+describe("handlePostWorkflow (P8) — kill-switch FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip makes the route NOT publish; LLM fallback wins (SC-4)", () => {
   it(
-    "T-Recover.6: when MAI_DETERMINISTIC_POST_PUBLISH=skip AND a REAL createWorkflowController has a pending post step with step.draftId undefined and recoverPostDraftId returning {id:'draft_recovered'}, the route does NOT call publishApprovedFeedPost AND calls turn.resumeWorkflowTurn exactly once (LLM fallback wins; kill-switch carries the load-bearing invariant)",
+    "T-Recover.6: when FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip AND a REAL createWorkflowController has a pending post step with step.draftId undefined and recoverPostDraftId returning {id:'draft_recovered'}, the route does NOT call publishApprovedFeedPost AND calls turn.resumeWorkflowTurn exactly once (LLM fallback wins; kill-switch carries the load-bearing invariant)",
     { timeout: 5000 },
     async () => {
-      // Given: MAI_DETERMINISTIC_POST_PUBLISH = 'skip' (kill-switch active).
+      // Given: FRONDOSE_DETERMINISTIC_POST_PUBLISH = 'skip' (kill-switch active).
       //        A REAL createWorkflowController whose deps include a recoverPostDraftId
       //        thunk returning { id: 'draft_recovered' }, so approve() would recover a
       //        draftId — but the route kill-switch fires before publishApprovedFeedPost.
@@ -849,8 +854,8 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
         },
       };
 
-      const prevKillSwitch = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
-      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      const prevKillSwitch = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
+      process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = "skip";
       try {
         const reqKs2 = makeFakeReq({ stepId: STEP_ID_KS2 });
         const { res: resKs2 } = makeFakeRes();
@@ -865,9 +870,9 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
         await new Promise((r) => setTimeout(r, 200));
       } finally {
         if (prevKillSwitch === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = prevKillSwitch;
         }
       }
 
@@ -875,7 +880,7 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
       assert.equal(
         publishCallCountKs2,
         0,
-        "T-Recover.6: publishApprovedFeedPostViaAction must NOT be called when MAI_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)",
+        "T-Recover.6: publishApprovedFeedPostViaAction must NOT be called when FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip (kill-switch wins)",
       );
       assert.equal(
         resumeCallCountKs2,
@@ -909,7 +914,7 @@ describe("handlePostWorkflow (P8) — kill-switch MAI_DETERMINISTIC_POST_PUBLISH
 describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTION UNSET → action path is unconditional default (T-Default.1)", () => {
   it(
     "T-Default.1: given process.env.FRONDOSE_PUBLISH_VIA_ACTION is UNSET " +
-      "and process.env.MAI_DETERMINISTIC_POST_PUBLISH is UNSET, " +
+      "and process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH is UNSET, " +
       "when POST /workflow/approve with isPostPublish:true + draftId + stepId arrives, " +
       "then deps.publishApprovedFeedPostViaAction is called exactly once " +
       "(proves action path is the unconditional default after the flag retires)",
@@ -952,9 +957,9 @@ describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTI
       const { res: resD1 } = makeFakeRes();
 
       const origEnvD1 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
-      const origKsD1 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origKsD1 = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
-      delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       try {
         await hpwDefault1(
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
@@ -972,9 +977,9 @@ describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTI
           process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvD1;
         }
         if (origKsD1 === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKsD1;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = origKsD1;
         }
       }
 
@@ -1040,9 +1045,9 @@ describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTI
       const { res: resD2 } = makeFakeRes();
 
       const origEnvD2 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
-      const origKsD2 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origKsD2 = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       process.env.FRONDOSE_PUBLISH_VIA_ACTION = "on";
-      delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       try {
         await hpwDefault2(
           { currentTurn: null, autoRunId: null, lastEmittedAutoCounters: null } as never,
@@ -1060,9 +1065,9 @@ describe("handlePostWorkflow — flag-retired default: FRONDOSE_PUBLISH_VIA_ACTI
           process.env.FRONDOSE_PUBLISH_VIA_ACTION = origEnvD2;
         }
         if (origKsD2 === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKsD2;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = origKsD2;
         }
       }
 
@@ -1152,15 +1157,15 @@ describe("handlePostWorkflow — flag-retired: any FRONDOSE_PUBLISH_VIA_ACTION v
   );
 });
 
-describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_PUBLISH=skip → action seam NOT called regardless of FRONDOSE_PUBLISH_VIA_ACTION value (T-Hook.4)", () => {
+describe("handlePostWorkflow — kill-switch regression: FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip → action seam NOT called regardless of FRONDOSE_PUBLISH_VIA_ACTION value (T-Hook.4)", () => {
   it(
-    "T-Hook.4: given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
+    "T-Hook.4: given process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
       "AND process.env.FRONDOSE_PUBLISH_VIA_ACTION === 'on' (legacy flag — now ignored), " +
       "when POST /workflow/approve with isPostPublish:true is dispatched, " +
       "then action spy NOT called AND turn.resumeWorkflowTurn fires×1 (kill-switch gates the publish path)",
     { timeout: 5000 },
     async () => {
-      // Given: kill-switch (MAI_DETERMINISTIC_POST_PUBLISH=skip) active; only action spy injected.
+      // Given: kill-switch (FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip) active; only action spy injected.
       // When: POST /workflow/approve with isPostPublish:true arrives.
       // Then: action spy fires×0; resumeWorkflowTurn fires×1.
       // The kill-switch guard sits outside the publish selector — it prevents any publish.
@@ -1200,9 +1205,9 @@ describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_
       const reqH4 = makeFakeReq({ stepId: "step-hook4" });
       const { res: resH4 } = makeFakeRes();
 
-      const origKillSwitch4 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origKillSwitch4 = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       const origActionEnv4 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
-      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = "skip";
       process.env.FRONDOSE_PUBLISH_VIA_ACTION = "on";
       try {
         await hpwHook4(
@@ -1216,9 +1221,9 @@ describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_
         await new Promise((r) => setTimeout(r, 200));
       } finally {
         if (origKillSwitch4 === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKillSwitch4;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = origKillSwitch4;
         }
         if (origActionEnv4 === undefined) {
           delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
@@ -1237,9 +1242,9 @@ describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_
   );
 });
 
-describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_PUBLISH=skip + flag UNSET → action NOT called, LLM resume fires (T-Hook.5)", () => {
+describe("handlePostWorkflow — kill-switch regression: FRONDOSE_DETERMINISTIC_POST_PUBLISH=skip + flag UNSET → action NOT called, LLM resume fires (T-Hook.5)", () => {
   it(
-    "T-Hook.5: given process.env.MAI_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
+    "T-Hook.5: given process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH === 'skip' (kill-switch active) " +
       "AND FRONDOSE_PUBLISH_VIA_ACTION UNSET (flag retired — default state), " +
       "when POST /workflow/approve with isPostPublish:true is dispatched, " +
       "then action spy NOT called AND turn.resumeWorkflowTurn fires×1 " +
@@ -1286,9 +1291,9 @@ describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_
       const reqH5 = makeFakeReq({ stepId: "step-hook5" });
       const { res: resH5 } = makeFakeRes();
 
-      const origKillSwitch5 = process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+      const origKillSwitch5 = process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
       const origActionEnv5 = process.env.FRONDOSE_PUBLISH_VIA_ACTION;
-      process.env.MAI_DETERMINISTIC_POST_PUBLISH = "skip";
+      process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = "skip";
       delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;
       try {
         await hpwHook5(
@@ -1302,9 +1307,9 @@ describe("handlePostWorkflow — kill-switch regression: MAI_DETERMINISTIC_POST_
         await new Promise((r) => setTimeout(r, 200));
       } finally {
         if (origKillSwitch5 === undefined) {
-          delete process.env.MAI_DETERMINISTIC_POST_PUBLISH;
+          delete process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH;
         } else {
-          process.env.MAI_DETERMINISTIC_POST_PUBLISH = origKillSwitch5;
+          process.env.FRONDOSE_DETERMINISTIC_POST_PUBLISH = origKillSwitch5;
         }
         if (origActionEnv5 === undefined) {
           delete process.env.FRONDOSE_PUBLISH_VIA_ACTION;

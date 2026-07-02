@@ -332,10 +332,15 @@ describe("T-A16.RLS6 — /workflow/cancel DB-authoritative re-derive + always-ab
       // --- Source structural assertion (the critical contract) ---
       const { readFileSync } = await import("node:fs");
       const { resolve } = await import("node:path");
-      const src = readFileSync(
-        resolve(import.meta.dirname, "../../src/cli/subcommands/serve/routes/workflow.ts"),
-        "utf-8",
-      );
+      // LoC-budget follow-up: the cancel handling body was extracted from routes/workflow.ts
+      // into routes/workflowCancel.ts (T-routes.LoCBudget.1 — workflow.ts must stay ≤80 LoC);
+      // combine both sources so this structural check survives the extraction.
+      const src =
+        readFileSync(resolve(import.meta.dirname, "../../src/cli/subcommands/serve/routes/workflow.ts"), "utf-8") +
+        readFileSync(
+          resolve(import.meta.dirname, "../../src/cli/subcommands/serve/routes/workflowCancel.ts"),
+          "utf-8",
+        );
       // closedAutoRun must be set to !endResult.alreadyEnded (not `current !== null`)
       assert.ok(
         src.includes("closedAutoRun = !endResult.alreadyEnded"),

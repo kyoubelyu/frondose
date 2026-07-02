@@ -24,6 +24,12 @@ const ROOT = resolve(import.meta.dirname, "../..");
 const ROUTES_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes.ts"), "utf-8");
 // P-72 slice 6: /workflow/cancel extension moved to routes/workflow.ts; widen Cancel tests to check EITHER.
 const ROUTES_WORKFLOW_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"), "utf-8");
+// LoC-budget follow-up: the cancel extension's body was further extracted to routes/workflowCancel.ts
+// (T-routes.LoCBudget.1 — workflow.ts must stay ≤80 LoC); widen Cancel tests to check ALL THREE locations.
+const ROUTES_WORKFLOW_CANCEL_SRC = readFileSync(
+  resolve(ROOT, "src/cli/subcommands/serve/routes/workflowCancel.ts"),
+  "utf-8",
+);
 const CONTEXT_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/context.ts"), "utf-8");
 
 describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts + OQ-E5)", () => {
@@ -40,8 +46,9 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     // DEFECT D-SP-E-Cancel.1: routes.ts /workflow/ handler does NOT implement
     // the auto-run extension. Lines 232-238 just call deps.workflow.handleEndpoint()
     // and sendJson the result — no autoRunId check, no endAutoRun, no emitFrame.
-    // P-72 slice 6: /workflow/cancel extension moved to routes/workflow.ts; widen to check EITHER location.
-    const combinedCancel1 = ROUTES_WORKFLOW_SRC + ROUTES_SRC;
+    // P-72 slice 6 + LoC-budget follow-up: /workflow/cancel extension lives in routes/workflowCancel.ts
+    // (called from routes/workflow.ts); widen to check all three source locations.
+    const combinedCancel1 = ROUTES_WORKFLOW_SRC + ROUTES_SRC + ROUTES_WORKFLOW_CANCEL_SRC;
     assert.ok(
       combinedCancel1.includes("autoRunId") &&
         combinedCancel1.includes("endAutoRun") &&
@@ -58,11 +65,15 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     //
     // DEFECT D-SP-E-Cancel.2: routes.ts has no autoRunId guard in cancel handler.
     // The entire extension is missing (D-SP-E-Cancel.1). This test also fails.
-    // P-72 slice 6: guard moved to routes/workflow.ts; widen to check EITHER location.
+    // P-72 slice 6 + LoC-budget follow-up: guard lives in routes/workflowCancel.ts; widen to check ALL locations.
     assert.ok(
-      ROUTES_WORKFLOW_SRC.includes("autoRunId !== null") || ROUTES_WORKFLOW_SRC.includes("state.autoRunId") ||
-        ROUTES_SRC.includes("autoRunId !== null") || ROUTES_SRC.includes("state.autoRunId"),
-      "T-E.Cancel.2: routes.ts or routes/workflow.ts (after P-72 slice 6) must guard the auto-run close path with state.autoRunId check",
+      ROUTES_WORKFLOW_SRC.includes("autoRunId !== null") ||
+        ROUTES_WORKFLOW_SRC.includes("state.autoRunId") ||
+        ROUTES_SRC.includes("autoRunId !== null") ||
+        ROUTES_SRC.includes("state.autoRunId") ||
+        ROUTES_WORKFLOW_CANCEL_SRC.includes("autoRunId !== null") ||
+        ROUTES_WORKFLOW_CANCEL_SRC.includes("state.autoRunId"),
+      "T-E.Cancel.2: routes.ts, routes/workflow.ts, or routes/workflowCancel.ts (after the LoC-budget extraction) must guard the auto-run close path with state.autoRunId check",
     );
   });
 
@@ -75,11 +86,16 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
     //        (c) OVERRIDES with {ok:true, closedAutoRun:true} when autoRunId was set
     //
     // DEFECT D-SP-E-Cancel.3: no override logic present (extension not implemented).
-    // P-72 slice 6: closedAutoRun + stopped_by_user moved to routes/workflow.ts; widen to check EITHER.
+    // P-72 slice 6 + LoC-budget follow-up: closedAutoRun + stopped_by_user moved to
+    // routes/workflowCancel.ts; widen to check ALL locations.
     assert.ok(
-      ROUTES_WORKFLOW_SRC.includes("closedAutoRun") || ROUTES_WORKFLOW_SRC.includes("stopped_by_user") ||
-        ROUTES_SRC.includes("closedAutoRun") || ROUTES_SRC.includes("stopped_by_user"),
-      "T-E.Cancel.3: routes.ts or routes/workflow.ts (after P-72 slice 6) must contain closedAutoRun override or stopped_by_user call",
+      ROUTES_WORKFLOW_SRC.includes("closedAutoRun") ||
+        ROUTES_WORKFLOW_SRC.includes("stopped_by_user") ||
+        ROUTES_SRC.includes("closedAutoRun") ||
+        ROUTES_SRC.includes("stopped_by_user") ||
+        ROUTES_WORKFLOW_CANCEL_SRC.includes("closedAutoRun") ||
+        ROUTES_WORKFLOW_CANCEL_SRC.includes("stopped_by_user"),
+      "T-E.Cancel.3: routes.ts, routes/workflow.ts, or routes/workflowCancel.ts (after the LoC-budget extraction) must contain closedAutoRun override or stopped_by_user call",
     );
   });
 });
