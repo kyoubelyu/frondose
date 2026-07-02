@@ -79,6 +79,7 @@ type SseFrame =
   | { type: "workflow-approval-resolved"; workflowId: string; stepId: string; decision: "approved" | "declined" }
   | { type: "workflow-mode-changed"; workflowId: string; approvalMode: AppMode }
   | { type: "workflow-completed"; workflowId: string; finalState: string }
+  | { type: "auto-run-completed"; runId: string; status: "completed" | "stopped_by_agent" | "stopped_by_user" | "blocked"; summary: string | null; finalCounters: Record<string, number>; endedAt: number; ts: number }
   | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" };
 
 const windowRef = globalThis as unknown as Window & { document: DocumentLike };
@@ -314,9 +315,14 @@ async function loadIdentity(): Promise<void> {
 }
 
 async function abortTurn(): Promise<void> {
-  if (appState !== "running" || currentTurnId === null) return;
+  // P-WLC: with a live turn, abort it. With NO live turn (e.g. the Auto stage still
+  // showing after the run's `done` already cleared currentTurnId), Pause must still
+  // stop the whole auto-run via /workflow/cancel instead of silently no-op'ing —
+  // that closes any active run + emits auto-run-completed so the stage resets.
+  const live = appState === "running" && currentTurnId !== null;
   try {
-    await invoke("frondose_agent_abort");
+    if (live) await invoke("frondose_agent_abort");
+    else await invoke("frondose_workflow_cancel", { workflowId: workflowView?.workflowId ?? "" });
   } catch (e) {
     // SSE error/done event owns UI recovery, but surface the failure too.
     surfaceError(t("action.pauseAbort"), e);
@@ -614,6 +620,14 @@ function handleEvent(payload: SseFrame): void {
         workflowView = null;
         renderWorkflowCard();
       }
+      break;
+    case "auto-run-completed":
+      // P-WLC: the Auto run closed (agent end_auto_run / cancel / reaper). Finalize the
+      // Auto stage to idle via the same close path as workflow-completed. In Auto mode
+      // renderWorkflowCard rebuilds the persistent stage with workflowView=null → the
+      // idle "Auto is ready" hero. The `done` frame owns the turn lifecycle (currentTurnId).
+      workflowView = null;
+      renderWorkflowCard();
       break;
     case "commit-warning":
       if (workflowView !== null && (payload.workflowId === null || payload.workflowId === workflowView.workflowId)) {
