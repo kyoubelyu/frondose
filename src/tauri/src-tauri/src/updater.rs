@@ -117,14 +117,21 @@ pub(crate) async fn run_update_check(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    //! P-UPDATE-INTRANET Step 2 (validator): scaffolds for T-Updater.1-4 — the
-    //! three-way default-URL precedence `read_update_server_url()` implements at
-    //! Step 4 (plan §6.A). Assertions target the SKETCH behavior (absent/null →
-    //! baked default; explicit "" → disabled; explicit url → override), so
-    //! T-Updater.1/.2 are RED against today's source (which still returns None
-    //! for absent/null) and T-Updater.3/.4 are already-green regression pins of
-    //! unchanged behavior. Asserted by literal string value (not the not-yet-
-    //! existing `DEFAULT_UPDATE_SERVER_URL` const name).
+    //! P-UPDATE-INTRANET Step 3a (validator, revised per
+    //! `docs/phase-update-intranet-critics.md` CONCERN-MR-1): scaffolds for
+    //! T-Updater.1-4 + T-Updater.2b — the three-way default-URL precedence
+    //! `read_update_server_url()` implements at Step 4 (plan §6.A, Option B).
+    //! Assertions target the SKETCH behavior (absent key/file → baked default;
+    //! explicit null OR "" → disabled/None; explicit url → override), so
+    //! T-Updater.1 is RED against today's source (which still returns None for
+    //! an absent config file) while T-Updater.2/.2b/.3/.4 are already-green
+    //! regression pins — the current source already returns `None` for an
+    //! explicit `null` (the first `?` on `v.get("updateServerUrl")?.as_str()`
+    //! short-circuits for `Value::Null` exactly like a missing key), so Option
+    //! B's null-disables contract needs NO Rust code change, only these
+    //! flipped/added test names to stop the scaffold asserting the wrong
+    //! (rejected) "null → default" behavior. Asserted by literal string value
+    //! (not the not-yet-existing `DEFAULT_UPDATE_SERVER_URL` const name).
     use super::*;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -185,14 +192,37 @@ mod tests {
     }
 
     // T-Updater.2: given config.json with "updateServerUrl": null, when read,
-    // then Some(default) — null is treated the same as absent (plan §6.A).
-    // RED against current source (null → None today).
+    // then None — the operator "clear the field" opt-out (plan §6.A Option B,
+    // CONCERN-MR-1 fix). FLIPPED from the prior draft's "null → default":
+    // already-green today (explicit null already returns None — the `?` on
+    // `.as_str()` short-circuits for Value::Null), regression-pinning the
+    // preserved disable semantics rather than asserting the rejected behavior.
     #[test]
-    fn t_updater_2_null_config_value_returns_baked_default() {
+    fn t_updater_2_null_config_value_disables_update_check() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("null");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":null}"#);
-        assert_eq!(read_update_server_url(), Some(EXPECTED_DEFAULT_URL.to_string()));
+        assert_eq!(read_update_server_url(), None);
+    }
+
+    // T-Updater.2b (validator-added, CONCERN-MR-1 cross-layer coherence):
+    // given the exact config.json shape the settings API/UI
+    // "clear the field" save produces (schema_version:2, other fields
+    // populated, updateServerUrl EXPLICITLY null — settings.ts:175 writes
+    // `next.updateServerUrl = patch.updateServerUrl` verbatim), when
+    // read_update_server_url() then reads that file, then None — proves the
+    // operator's Settings-clear gesture disables the updater end-to-end under
+    // Option B, not just a bare-minimum JSON fixture. Already-green (same
+    // code path as T-Updater.2; the settings writer itself is covered by its
+    // own TS test at tests/tauri/updater-ui-p58d1.mock.test.ts:270-310).
+    #[test]
+    fn t_updater_2b_settings_clear_produced_null_disables_update_check() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("settings-clear");
+        home.write_config(
+            r#"{"schema_version":2,"server":{"url":null,"bind_address":null,"poll_interval_s":30,"web_port":8090,"ssh_user":null,"ssh_port":22,"rest_port":3031},"worker":{"id":null,"hostname":null,"label":null,"input_mode":"cdp"},"telegram":{"enabled":false,"boundUserId":null,"proxyUrl":null},"soul":{"override":null},"updateServerUrl":null,"language":"auto"}"#,
+        );
+        assert_eq!(read_update_server_url(), None);
     }
 
     // T-Updater.3: given config.json with "updateServerUrl": "", when read, then

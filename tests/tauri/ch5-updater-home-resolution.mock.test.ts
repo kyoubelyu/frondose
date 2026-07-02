@@ -226,7 +226,17 @@ describe('CH-5 REGRESSION GUARD — std::env::var("HOME") outside config_home_di
 
     // Remove the helper body from the source text (replace with empty string).
     // This isolates every OTHER occurrence of std::env::var("HOME") in the file.
-    const remainder = mainRs.replace(helperBody, "");
+    let remainder = mainRs.replace(helperBody, "");
+
+    // P-UPDATE-INTRANET: the `#[cfg(test)] mod tests` block (added for T-Updater.1-4)
+    // legitimately reads/sets/removes HOME via a TempHome RAII guard to hermetically
+    // exercise config_home_dir()'s absent/present-HOME branches — that is test fixture
+    // code, not a production config-reading path, so it is exempt from this guard the
+    // same way config_home_dir's own body is exempt.
+    const testModBody = extractFunctionBody(mainRs, /\bmod\s+tests\b/);
+    if (testModBody !== null) {
+      remainder = remainder.replace(testModBody, "");
+    }
 
     // Match the broad `var("HOME")` substring so the guard also catches the
     // `env::var("HOME")` variant (with a `use std::env` import), not only the
