@@ -1,4 +1,5 @@
 import { isMinimalPublicScopeId } from "../contracts/minimalPublicContract.js";
+import { classifyActionName } from "../actionClassifier.js";
 import {
   classifyUploadVisibleScopeKind,
   findVisibleScopeInspectionByHandle,
@@ -244,10 +245,12 @@ function resolveEntryTarget(
 
   if (label) {
     matchedEntries = matchedEntries.filter((entry) => matchesLabel(entry, label));
+  } else if (input.actionKind) {
+    matchedEntries = matchedEntries.filter((entry) => classifyActionName(entry.name) === input.actionKind);
   }
   matchedEntries = matchedEntries.filter((entry) => entryMatchesScope(context, scope, entry));
 
-  if (input.kind === "input" && !label && !ref && matchedEntries.length > 1) {
+  if (input.kind === "input" && !label && !ref && !input.actionKind && matchedEntries.length > 1) {
     matchedEntries = defaultInputCandidates(matchedEntries);
   }
 
@@ -256,14 +259,16 @@ function resolveEntryTarget(
       ? `ref "${ref}"${scope ? ` within scope "${scope}"` : ""}`
       : label
         ? `"${label}"${scope ? ` within scope "${scope}"` : ""}`
-        : `a scoped ${input.kind}`;
+        : input.actionKind
+          ? `${input.actionKind} ${input.kind}${scope ? ` within scope "${scope}"` : ""}`
+          : `a scoped ${input.kind}`;
     throw new CommandNotFoundError(
       `Unable to resolve ${description} on the current LinkedIn surface.${LABEL_NOT_FOUND_REINSPECT_HINT}`,
     );
   }
 
   if (matchedEntries.length > 1) {
-    const candidateLabel = label ?? matchedEntries[0]?.name ?? input.kind;
+    const candidateLabel = label ?? input.actionKind ?? matchedEntries[0]?.name ?? input.kind;
     throw new CommandAmbiguousTargetError(
       formatAmbiguousInputMessage(
         input.kind,
@@ -281,7 +286,10 @@ function resolveEntryTarget(
   }
   const publicScope = resolveEntryPublicScope(context, entry, input.kind, scope);
   if (!publicScope) {
-    throwOutsideFrozenPublicBoundary(context, `Resolved ${input.kind} target "${entry.name || label || input.kind}"`);
+    throwOutsideFrozenPublicBoundary(
+      context,
+      `Resolved ${input.kind} target "${entry.name || label || input.actionKind || input.kind}"`,
+    );
   }
 
   return {
@@ -290,7 +298,7 @@ function resolveEntryTarget(
       kind: input.kind,
       selector: selectorExpressionForEntry(entry),
       ref: entry.ref,
-      label: entry.name || label || input.kind,
+      label: entry.name || label || input.actionKind || input.kind,
       role: entry.role,
       scope: publicScope,
       preferDirect: true,
@@ -338,7 +346,7 @@ function resolveVisibleScopeTarget(
     }
   }
 
-  if (input.kind === "input" && !label && !ref) {
+  if (input.kind === "input" && !label && !ref && !input.actionKind) {
     matchedControls = defaultVisibleInputCandidates(matchedControls);
   }
 
@@ -346,6 +354,8 @@ function resolveVisibleScopeTarget(
     matchedControls = matchedControls.filter((control) => {
       return control.label.trim().toLowerCase() === label.toLowerCase();
     });
+  } else if (input.actionKind) {
+    matchedControls = matchedControls.filter((control) => classifyActionName(control.label) === input.actionKind);
   }
 
   if (matchedControls.length === 0) {
@@ -353,14 +363,16 @@ function resolveVisibleScopeTarget(
       ? `ref "${ref}" within scope "${scope}"`
       : label
         ? `"${label}" within scope "${scope}"`
-        : `a scoped ${input.kind}`;
+        : input.actionKind
+          ? `${input.actionKind} ${input.kind} within scope "${scope}"`
+          : `a scoped ${input.kind}`;
     throw new CommandNotFoundError(
       `Unable to resolve ${description} on the current LinkedIn surface.${LABEL_NOT_FOUND_REINSPECT_HINT}`,
     );
   }
 
   if (matchedControls.length > 1) {
-    const candidateLabel = label ?? matchedControls[0]?.label ?? input.kind;
+    const candidateLabel = label ?? input.actionKind ?? matchedControls[0]?.label ?? input.kind;
     throw new CommandAmbiguousTargetError(
       formatAmbiguousInputMessage(
         input.kind,
@@ -452,7 +464,7 @@ export async function resolveScopedTarget(
 
   ensureScopeAvailable(context, scope);
 
-  if (input.kind !== "upload" && !label && !ref && input.kind !== "input") {
+  if (input.kind !== "upload" && !label && !ref && !input.actionKind && input.kind !== "input") {
     throw new CommandInvalidInputError(`The ${input.kind} command requires a target label or --ref.`);
   }
 

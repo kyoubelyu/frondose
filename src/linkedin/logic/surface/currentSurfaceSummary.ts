@@ -31,6 +31,7 @@ import {
   isInputEntry,
   uniqueOrdered,
 } from "./visibleScopeCommon.js";
+import { ACTION_NAME_TOKENS } from "../actionClassifier.js";
 
 const REPEATED_CONTROL_LABELS = new Set([
   "Comment",
@@ -42,6 +43,11 @@ const REPEATED_CONTROL_LABELS = new Set([
   "Open reactions menu",
   "Open actor selection screen",
   "Load more comments",
+  "更多",
+  "写消息",
+  "发布",
+  "发帖",
+  ...ACTION_NAME_TOKENS.more,
 ]);
 
 export interface CurrentSurfaceSummaryParts {
