@@ -78,4 +78,63 @@ describe("surface foreground context classifier", () => {
     assert.equal(context.routeBucket, "feed");
     assert.equal(context.activeLayer, "modal");
   });
+
+  it("T-Surface.Foreground.6: notifications URL maps to the notifications route bucket", () => {
+    // Given: a LinkedIn notifications URL with ordinary page entries.
+    // When: createForegroundContext classifies the page.
+    // Then: it returns the notifications legacy surface and notifications route bucket.
+    const context = createForegroundContext("https://www.linkedin.com/notifications/", [
+      entry("heading", "New notifications"),
+    ]);
+
+    assert.equal(context.legacySurface, "notifications");
+    assert.equal(context.kind, "page");
+    assert.equal(context.routeBucket, "notifications");
+    assert.equal(context.activeLayer, "page");
+  });
+
+  it("T-Surface.Foreground.7: company URL maps to the company route bucket", () => {
+    // Given: a LinkedIn company page URL with ordinary page entries.
+    // When: createForegroundContext classifies the page.
+    // Then: it returns the company legacy surface and company route bucket.
+    const context = createForegroundContext("https://www.linkedin.com/company/acme/", [
+      entry("heading", "Acme Inc"),
+    ]);
+
+    assert.equal(context.legacySurface, "company");
+    assert.equal(context.kind, "page");
+    assert.equal(context.routeBucket, "company");
+    assert.equal(context.activeLayer, "page");
+  });
+
+  it("T-Surface.Foreground.8: company admin inbox thread URL maps to the companyInbox route bucket", () => {
+    // Given: a LinkedIn company admin inbox thread URL.
+    // When: createForegroundContext classifies the page.
+    // Then: the route bucket is companyInbox even though the legacy surface stays "company".
+    const context = createForegroundContext(
+      "https://www.linkedin.com/company/acme/admin/inbox/thread/urn123/",
+      [entry("link", "LinkedIn")],
+    );
+
+    assert.equal(context.legacySurface, "company");
+    assert.equal(context.kind, "page");
+    assert.equal(context.routeBucket, "companyInbox");
+    assert.equal(context.activeLayer, "page");
+  });
+
+  it("T-Surface.Foreground.9: article editor AX signals on an /article/ URL map to the article-editor surface", () => {
+    // Given: an /article/ URL with title + body inputs and editor chrome buttons.
+    // When: createForegroundContext classifies the page.
+    // Then: it returns the article-editor legacy surface under the articles route bucket.
+    const context = createForegroundContext("https://www.linkedin.com/article/new/", [
+      entry("button", "Style"),
+      entry("textbox", "Title"),
+      entry("textbox", "Article editor content"),
+    ]);
+
+    assert.equal(context.legacySurface, "article-editor");
+    assert.equal(context.kind, "page");
+    assert.equal(context.routeBucket, "articles");
+    assert.equal(context.activeLayer, "page");
+  });
 });
