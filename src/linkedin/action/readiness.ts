@@ -14,6 +14,7 @@ import {
   COMPOSER_PRESENT_JS,
   DEFAULT_COMPOSER_LABEL_PATTERN,
 } from "../logic/predicates/composer.js";
+import { CONNECT_PROMPT_PRESENT_JS } from "../logic/predicates/connectPrompt.js";
 import { scopeIsAvailable } from "../logic/scopeResolver/normalize.js";
 import { CommandNotFoundError, type ResolvedTarget } from "../logic/scopeResolver/shared.js";
 import { resolveScopedTarget } from "../logic/scopeResolver/targetResolution.js";
@@ -212,6 +213,26 @@ export async function confirmComposerGone(client: CdpClient): Promise<{ gone: bo
     let present = true;
     try {
       const raw = await client.evaluate<string>(COMPOSER_PRESENT_JS());
+      const parsed = JSON.parse(raw) as { present?: boolean };
+      present = parsed.present === true;
+    } catch {
+      present = true;
+    }
+    if (!present) return { gone: true, attempts };
+    if (i < COMPOSER_GONE_ATTEMPTS - 1) {
+      await sleep(OPEN_PROBE_BASE_MS * (1 << i));
+    }
+  }
+  return { gone: false, attempts };
+}
+
+export async function confirmConnectPromptGone(client: CdpClient): Promise<{ gone: boolean; attempts: number }> {
+  let attempts = 0;
+  for (let i = 0; i < COMPOSER_GONE_ATTEMPTS; i += 1) {
+    attempts = i + 1;
+    let present = true;
+    try {
+      const raw = await client.evaluate<string>(CONNECT_PROMPT_PRESENT_JS());
       const parsed = JSON.parse(raw) as { present?: boolean };
       present = parsed.present === true;
     } catch {

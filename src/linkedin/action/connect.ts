@@ -8,6 +8,7 @@ import { type ResolveScopedTargetResult, ScopedTargetResolutionError } from "../
 import { resolveScopedTarget } from "../logic/scopeResolver/targetResolution.js";
 import { captureCurrentSurfaceContext } from "../logic/surface/currentSurface.js";
 import { applyTypingPacing } from "../pacing.js";
+import { confirmConnectPromptGone } from "./readiness.js";
 import type { LinkedinSession } from "../types.js";
 
 // Slice-3 (native-port): the profile-page connect outbound flow over the Slice-1 logic
@@ -77,6 +78,7 @@ export interface ConnectActionResult {
   withNote: boolean;
   advice?: OutwardActionAdvice[];
   connectOpenClicked?: boolean;
+  connectPromptGoneAttempts?: number;
   accountingError?: string;
 }
 
@@ -99,6 +101,7 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
   const withNote = typeof deps.note === "string" && deps.note.trim().length > 0;
   let dispatchAttempted = false;
   let connectOpenClicked = false;
+  let connectPromptGoneAttempts: number | undefined;
 
   if (deps.session.inputMode === "hardware") {
     return finishPreDispatch(deps, t0, withNote, "hardware_input_not_supported");
@@ -224,17 +227,32 @@ export async function connectViaAction(deps: ConnectActionDeps): Promise<Connect
     dispatchAttempted = true;
     await deps.client.clickAt(sendResolved.target.selector);
 
-    // 5. Commit-phase advice → remember_recommended for the connected person.
+    // 5. Post-send confirmation: the connect prompt modal must CLOSE — the proxy that the invite
+    //    was actually dispatched (not blocked by a quota wall / error toast). Mirrors the proven
+    //    confirmComposerGone gate on the post-publish flow. NO second clickAt is issued — the
+    //    single-latch / no-double-send invariant is load-bearing; an unclosed prompt is ambiguous
+    //    (an invite may already be sent), NEVER auto-retried.
+    const goneCheck = await confirmConnectPromptGone(deps.client);
+    connectPromptGoneAttempts = goneCheck.attempts;
+    if (!goneCheck.gone) {
+      return finishPostDispatchAmbiguous(deps, t0, withNote, "post-send: connect prompt still open", {
+        connectOpenClicked,
+        connectPromptGoneAttempts: goneCheck.attempts,
+      });
+    }
+
+    // 6. Commit-phase advice → remember_recommended for the connected person.
     const advice = buildOutwardActionAdvice("connect", sendResolved.context, {
       phase: "commit",
       rememberInteraction: "connect",
     });
 
-    return finishSuccess(deps, t0, withNote, advice, { connectOpenClicked });
+    return finishSuccess(deps, t0, withNote, advice, { connectOpenClicked, connectPromptGoneAttempts: goneCheck.attempts });
   } catch (e) {
     if (dispatchAttempted) {
       return finishPostDispatchAmbiguous(deps, t0, withNote, `post-dispatch-throw: ${errorMessage(e)}`, {
         connectOpenClicked,
+        ...(connectPromptGoneAttempts !== undefined ? { connectPromptGoneAttempts } : {}),
       });
     }
     return finishPreDispatch(deps, t0, withNote, "internal_error", { detail: errorMessage(e), connectOpenClicked });
