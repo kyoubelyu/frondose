@@ -59,7 +59,8 @@ foreach ($candidate in @(
 $latestJson = Join-Path $siteDir "latest.json"
 $macSig = Join-Path $downloadsDir "Frondose.app.tar.gz.sig"
 $macUrl = "$updateServerUrl/downloads/Frondose.app.tar.gz"
-$env:VERSION = (node -p "require('$root\package.json').version")
+$rootFwd = $root -replace '\\','/'  # backslashes in a JS string literal corrupt the path (\U/\b/\f escapes); use forward slashes
+$env:VERSION = (node -p "require('$rootFwd/package.json').version")
 $env:OUT_PATH = $latestJson
 if (Test-Path $macSig) {
   $env:SIG_PATH = $macSig
