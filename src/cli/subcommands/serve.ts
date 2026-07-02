@@ -21,7 +21,7 @@ import type { Database as DB } from "better-sqlite3";
 import { HookRunner } from "../../agent/hooks.js";
 import { resolveMaxSteps } from "../../agent/maxSteps.js";
 import { resolveModelOrNull } from "../../agent/modelResolver.js";
-import { BOUNDARY, BOUNDARY_RESUME } from "../../agent/systemPrompt/boundary.js";
+import { BOUNDARY, BOUNDARY_RESUME, boundaryLanguageDirective } from "../../agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../agent/systemPrompt/soul.js";
@@ -153,15 +153,20 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   // invariant (CLAUDE.md §1 Product Contract).
   const soulBandPlain = resolveSoulBand(cfg.soul.override, identity);
   const soulBandWithMode = `${soulBandPlain}\n\n${soulModeFragment(bootMode)}`;
-  const system = composeSystemPrompt({ boundary: BOUNDARY, soul: soulBandPlain, checkpoint: CHECKPOINT });
+  // P-ZH-1: appended to the Boundary band content, never reordering bands ("" for "auto" —
+  // composition is byte-identical to before this field existed).
+  const languageDirective = boundaryLanguageDirective(cfg.language);
+  const boundaryBand = `${BOUNDARY}${languageDirective}`;
+  const boundaryResumeBand = `${BOUNDARY_RESUME}${languageDirective}`;
+  const system = composeSystemPrompt({ boundary: boundaryBand, soul: soulBandPlain, checkpoint: CHECKPOINT });
   const systemResume = composeSystemPrompt({
-    boundary: BOUNDARY_RESUME,
+    boundary: boundaryResumeBand,
     soul: soulBandWithMode,
     checkpoint: CHECKPOINT_RESUME,
   });
   const composeOperatorSystem = (mode: AppMode): string =>
     composeSystemPrompt({
-      boundary: BOUNDARY,
+      boundary: boundaryBand,
       soul: `${soulBandPlain}\n\n${soulModeFragment(mode)}`,
       checkpoint: CHECKPOINT,
     });

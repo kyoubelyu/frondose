@@ -18,7 +18,7 @@ import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowStep
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
-import { localizeDocument, t } from "./i18n.js";
+import { getLocale, localizeDocument, prefToLocale, setLocale, t } from "./i18n.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -292,6 +292,24 @@ async function applyMode(mode: AppMode): Promise<void> {
     surfaceError(t("action.setModePassive"), e);
   }
   syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
+}
+
+// P-ZH-1: the module-load localizeDocument() call at line 94 only knows navigator.language
+// (no settings yet). Once boot() has the operator's persisted language pref, re-flip the
+// chrome locale if the pref picks something other than the auto-detected default.
+async function applyLanguagePref(): Promise<void> {
+  try {
+    const r = await invoke<{ ok: boolean; language?: "auto" | "en" | "zh" }>("frondose_get_settings");
+    if (!r?.ok) return;
+    const nextLocale = prefToLocale(r.language ?? "auto");
+    if (nextLocale !== getLocale()) {
+      setLocale(nextLocale);
+      localizeDocument(windowRef.document as unknown as LocalizableDocumentLike, { force: true });
+    }
+  } catch (e) {
+    // Non-fatal: the chrome stays on its navigator-detected default; don't block boot on this.
+    console.error("[frondose] applyLanguagePref failed:", e);
+  }
 }
 
 async function loadIdentity(): Promise<void> {
@@ -689,6 +707,7 @@ async function boot(): Promise<void> {
     return;
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
+  await applyLanguagePref();
   await loadIdentity();
   syncModeUi("manual");
 }
