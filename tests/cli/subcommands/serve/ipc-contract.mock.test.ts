@@ -5,7 +5,7 @@
  *   §A  IPC.Transport  (4)  — bearer header + TCP loopback (WIN-1), FRONDOSE_SIDECAR_OWNER,
  *                             --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)
  *   §B  IPC.Endpoints  (3)  — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)
- *   §C  IPC.Frames     (2)  — SseFrame sidecar union (28), UI parallel union (23)
+ *   §C  IPC.Frames     (2)  — SseFrame sidecar union (28), UI parallel union (24; WLC added auto-run-completed)
  *   §D  IPC.Mask       (2)  — GET /settings no raw key, POST→GET mask round-trip
  *
  * WIN-1 transport update (Step 3 scaffold):
@@ -143,7 +143,10 @@ const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "commit-warning",
 ]);
 
-/** 23 UI SseFrame literals (app.ts:51-80) — documented drift baseline (5 sidecar-only frames missing). */
+/** 24 UI SseFrame literals (app.ts:51-80) — documented drift baseline (4 sidecar-only frames missing).
+ *  WORKFLOW-LIFECYCLE-COMPLETION (2026-07-02): the UI now HANDLES `auto-run-completed` (app.ts handleEvent
+ *  closes the Auto-run card on completion), so it moved from SIDECAR_ONLY_DRIFT into the UI union —
+ *  drift shrank 5→4. See src/tauri/ui/app.ts + src/cli/subcommands/serve/turn/runOne.ts. */
 const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "tool-call",
   "text",
@@ -161,6 +164,7 @@ const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "cron-tick",
   "cron-done",
   "turn-started",
+  "auto-run-completed", // WLC 2026-07-02: UI now closes the Auto-run card on this frame
   "workflow-proposed",
   "workflow-step-advanced",
   "workflow-approval-pending",
@@ -170,13 +174,13 @@ const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "commit-warning",
 ]);
 
-/** 5 sidecar-only frames the UI silently drops (latent UX bug — CONCERN-MR-4). */
+/** 4 sidecar-only frames the UI silently drops (latent UX bug — CONCERN-MR-4;
+ *  WLC 2026-07-02 removed `auto-run-completed` from this drift set — the UI now handles it). */
 const SIDECAR_ONLY_DRIFT: ReadonlySet<string> = new Set([
   "passive-fired",
   "passive-skipped",
   "auto-run-started",
   "auto-run-progress",
-  "auto-run-completed",
 ]);
 
 // ─── Source file paths ────────────────────────────────────────────────────────
@@ -733,7 +737,7 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
 // §C — IPC.Frames
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=23)", () => {
+describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=24)", () => {
   it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 28-element golden", () => {
     // Given: context.ts declares SseFrame (multiline + standalone forms); types.ts declares WorkflowSseFrame
     // When: TS compiler API extracts all type: discriminants from both files (Approach A — no regex)
@@ -764,25 +768,26 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=28, UI=23)", () =
     assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (28 literals)");
   });
 
-  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 23 literals (documented drift baseline) and the 5 sidecar-only frames are absent", () => {
-    // Given: ui/app.ts:51-80 declares a hand-copied subset SseFrame with 23 literals (5 sidecar-only frames missing)
+  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 24 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
+    // Given: ui/app.ts:51-80 declares a hand-copied subset SseFrame with 24 literals (4 sidecar-only frames missing)
     // When: TS compiler API extracts discriminants from app.ts (Approach A)
-    // Then: count===23 (fail-closed); set matches UI golden; delta === the exact 5 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4)
+    // Then: count===24 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
+    //       WLC 2026-07-02 added auto-run-completed to the UI union → drift 5→4)
 
     const uiSseFrameSet = extractSseFrameDiscriminants(APP_TS, "SseFrame");
 
     // Fail-closed count BEFORE set equality
     assert.strictEqual(
       uiSseFrameSet.size,
-      23,
-      `expected 23 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
+      24,
+      `expected 24 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
     );
 
-    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (23 literals)");
+    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (24 literals)");
 
-    // Delta assertion: sidecar-only frames are EXACTLY the 5 documented drift frames
+    // Delta assertion: sidecar-only frames are EXACTLY the 4 documented drift frames
     const sidecarOnlyActual = new Set([...SIDECAR_SSE_FRAMES_GOLDEN].filter((f) => !uiSseFrameSet.has(f)));
-    assertSetsEqual(sidecarOnlyActual, SIDECAR_ONLY_DRIFT, "sidecar-only frame drift (must be exactly 5 frames)");
+    assertSetsEqual(sidecarOnlyActual, SIDECAR_ONLY_DRIFT, "sidecar-only frame drift (must be exactly 4 frames)");
 
     // UI must NOT contain any frame not in the sidecar set (UI-only drift is unexpected)
     const uiOnlyActual = new Set([...uiSseFrameSet].filter((f) => !SIDECAR_SSE_FRAMES_GOLDEN.has(f)));
