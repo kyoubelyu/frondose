@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 /// P-UPDATE-INTRANET: baked-in intranet default so a fresh install auto-pulls
@@ -117,6 +117,19 @@ pub(crate) async fn run_update_check(app: AppHandle) {
     match updater.check().await {
         Ok(Some(update)) => {
             eprintln!("[frondose] update available: {}", update.version);
+            // Kill the Node sidecar BEFORE running the installer. On Windows the
+            // sidecar's runtime\node.exe is a running binary, so it holds an
+            // exclusive lock on that file; the NSIS updater then cannot overwrite
+            // the bundled runtime and the whole install silently aborts — the exe
+            // is never swapped and the app does not relaunch (observed live on
+            // win-build-host 2026-07-03: the installer extracted + Frondose.exe
+            // closed, but an orphan node.exe survived and the files were untouched).
+            // shutdown_sidecar sets shutting_down=true so the supervisor will not
+            // respawn it, then taskkills (Windows) / SIGTERMs (unix) the pid.
+            {
+                let state = app.state::<crate::state::FrondoseServeState>();
+                crate::sidecar::shutdown_sidecar(&state).await;
+            }
             if let Err(e) = update
                 .download_and_install(|_chunk, _total| {}, || {})
                 .await
@@ -124,6 +137,17 @@ pub(crate) async fn run_update_check(app: AppHandle) {
                 eprintln!("[frondose] update install failed: {}", e);
                 return;
             }
+            // On Windows the NSIS updater runs the installer, which closes this
+            // app, swaps the files, and relaunches on its own. Calling
+            // app.restart() here would spawn a fresh process that locks the exe
+            // before the installer can replace it, silently aborting the update
+            // (observed live on win-build-host 2026-07-03: installer extracted +
+            // app closed, but exe never replaced). Exit cleanly and let the
+            // installer own the relaunch. macOS/Linux swap the bundle in place
+            // without relaunching, so there we must restart ourselves.
+            #[cfg(target_os = "windows")]
+            app.exit(0);
+            #[cfg(not(target_os = "windows"))]
             app.restart();
         }
         Ok(None) => eprintln!("[frondose] no update available"),
