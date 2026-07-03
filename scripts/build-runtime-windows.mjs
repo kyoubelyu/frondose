@@ -74,7 +74,14 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
     fs.copyFileSync(seedNodeZip, zip);
   } else {
     console.log(`[build-runtime-win] downloading ${url}`);
-    execFile("curl", ["-fsSL", "-o", zip, url], { stdio: "inherit" });
+    // --max-time + --retry so a stalled connection (flaky China-LAN proxy) FAILS
+    // instead of hanging build-release.ps1 forever; --retry-connrefused + backoff
+    // rides out transient blips. Honors HTTP(S)_PROXY (set by build-release.ps1).
+    execFile(
+      "curl",
+      ["-fsSL", "--connect-timeout", "20", "--max-time", "600", "--retry", "3", "--retry-delay", "5", "--retry-connrefused", "-o", zip, url],
+      { stdio: "inherit" },
+    );
   }
   fs.rmSync(nodeDist, { recursive: true, force: true });
   execFile("tar", ["-xf", zip, "-C", tmp], { stdio: "inherit" }); // Win10 bsdtar extracts .zip
