@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/frondose",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). Internal-only package; the operator product is the compiled Frondose.app, not this npm package. CLI surface retained as transitional internal sidecar/build entrypoint until P-APP-11 retirement completes.",
   "type": "module",
   "license": "UNLICENSED",
@@ -16,11 +16,12 @@
   "scripts": {
     "install": "node -e \"\"",
     "build:overlay-assets": "node --import tsx scripts/gen-overlay-assets.ts",
-    "build": "npm run build:overlay-assets && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:web && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
+    "build:default-credentials": "node --import tsx scripts/gen-default-credentials.ts",
+    "build": "npm run build:overlay-assets && npm run build:default-credentials && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:web && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
     "build:web": "esbuild src/web/main.tsx --bundle --minify --jsx=automatic --external:/vendor/* --outfile=dist/web/app.js && tailwindcss -i src/web/style.css -o dist/web/style.css --minify && node scripts/copy-web-assets.mjs",
     "build:native": "node-gyp rebuild || echo '[frondose] cgevent native addon build skipped (Xcode CLT missing) — hardware input mode unavailable; cdp mode unaffected'",
     "build:tauri-ui": "tsc -p src/tauri/ui/tsconfig.json",
-    "build:tauri": "npm run build:overlay-assets && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:tauri-ui",
+    "build:tauri": "npm run build:overlay-assets && npm run build:default-credentials && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:tauri-ui",
     "build:release": "bash scripts/build-release.sh",
     "build:release:win": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "assert-dist": "node --import tsx scripts/assert-dist.ts",

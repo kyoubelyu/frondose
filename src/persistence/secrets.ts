@@ -12,7 +12,14 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { type AuthJson, DEFAULT_AUTH_PATH, migrateProviderEntry } from "./auth.js";
+import {
+  type AuthJson,
+  DEFAULT_AUTH_PATH,
+  isDeepSeekBaseUrl,
+  isOfficialDirectProviderBaseUrl,
+  migrateProviderEntry,
+} from "./auth.js";
+import { readDefaultCredentials } from "./defaultCredentials.js";
 import { DEFAULT_GITHUB_CONFIG_PATH } from "./github.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SEARCH_CONFIG_PATH } from "./search.js";
@@ -85,6 +92,9 @@ export interface LegacyPathOverrides {
   authPath?: string;
   githubPath?: string;
   searchPath?: string;
+  // P-EMBED-KEYS: injectable path for the build-embedded default-credentials JSON (tests only —
+  // production always resolves the co-located defaultCredentials.generated.json via import.meta.url).
+  defaultCredentialsPath?: string;
 }
 
 /** Read secrets.json with one-shot legacy fallback. */
@@ -98,6 +108,7 @@ export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: Lega
     legacy?.authPath ?? process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
     legacy?.githubPath ?? process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
     legacy?.searchPath ?? process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
+    legacy?.defaultCredentialsPath,
   );
   // Check ALL meaningful legacy fields (P-21 `default` / `visionModel` flow
   // through `default` + `visionModel`; P-15 fields through github/search). If
@@ -126,6 +137,7 @@ export function legacyMerged(
   authPath: string = process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
   githubPath: string = process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
   searchPath: string = process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
+  defaultCredentialsPath?: string,
 ): SecretsJson {
   const authLegacy = tryReadJson(
     authPath,
@@ -149,7 +161,36 @@ export function legacyMerged(
   if (searchLegacy && (searchLegacy.braveApiKey || searchLegacy.tavilyApiKey)) {
     out.search = searchLegacy;
   }
-  return migrateProviders(out);
+  return migrateProviders(applyDefaultCredentials(out, defaultCredentialsPath));
+}
+
+/** P-EMBED-KEYS: layer in the build-embedded default LLM provider + Brave key, but ONLY for
+ *  fields the legacy-migration pass above left unset — never overrides a user's / legacy
+ *  config's own values. Only reached via readSecrets' one-shot first-run path (secrets.json
+ *  absent), so once anything is persisted (seeded or operator-set), this never runs again. */
+function applyDefaultCredentials(s: SecretsJson, path?: string): SecretsJson {
+  const defaults = readDefaultCredentials(path);
+  let next = s;
+  if (!next.providers && defaults.llmKey && defaults.llmModel && defaults.llmBaseUrl) {
+    if (isOfficialDirectProviderBaseUrl(defaults.llmBaseUrl)) {
+      // Scope-lock (P-71 / CLAUDE.md provider scope lock): never seed a reserved direct-vendor
+      // baseUrl, even from the build-embedded default — same rule buildModel() enforces at read time.
+      process.stderr.write(
+        "[frondose] embedded default LLM baseUrl is a reserved direct-vendor host — refusing to seed it.\n",
+      );
+    } else {
+      const providerName = isDeepSeekBaseUrl(defaults.llmBaseUrl) ? "deepseek" : "custom";
+      next = {
+        ...next,
+        providers: { [providerName]: { key: defaults.llmKey, baseUrl: defaults.llmBaseUrl, type: "openai" } },
+        default: next.default ?? `${providerName}:${defaults.llmModel}`,
+      };
+    }
+  }
+  if (!next.search && defaults.braveKey) {
+    next = { ...next, search: { braveApiKey: defaults.braveKey } };
+  }
+  return next;
 }
 
 /** Apply P-21's per-provider type/baseUrl migration to providers (in-memory). */
