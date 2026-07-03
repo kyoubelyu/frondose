@@ -17,7 +17,9 @@ import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "config.json");
-const DEFAULT_UPDATE_SERVER_URL = "http://intranet-host.local:4875";
+// P-UPDATE-INTRANET: fixed intranet-IP default (mirrors updater.rs; NOT `.local` —
+// Windows can't resolve mDNS. Future public: set config.json updateServerUrl at runtime.)
+const DEFAULT_UPDATE_SERVER_URL = "http://192.0.2.105:4875";
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.

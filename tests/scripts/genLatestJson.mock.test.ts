@@ -323,9 +323,9 @@ describe("gen-latest-json.mjs — unified multi-platform manifest, auto pub_date
         env: {
           ...process.env,
           SIG_PATH: macSigPath,
-          MANIFEST_URL: "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz",
+          MANIFEST_URL: "http://192.0.2.105:4875/downloads/Frondose.app.tar.gz",
           WINDOWS_SIG_PATH: winSigPath,
-          WINDOWS_MANIFEST_URL: "http://intranet-host.local:4875/downloads/Frondose-windows-x86_64-setup.exe",
+          WINDOWS_MANIFEST_URL: "http://192.0.2.105:4875/downloads/Frondose-windows-x86_64-setup.exe",
           VERSION: "0.5.0-alpha.76",
           OUT_PATH: outPath,
           // PUB_DATE deliberately unset — asserts the auto-RFC3339 path with both platforms present
@@ -336,13 +336,13 @@ describe("gen-latest-json.mjs — unified multi-platform manifest, auto pub_date
       const manifest = JSON.parse(readFileSync(outPath, "utf-8")) as Record<string, unknown>;
       const platforms = manifest.platforms as Record<string, { url: string; signature: string }>;
       assert.deepEqual(Object.keys(platforms).sort(), ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]);
-      assert.equal(platforms["darwin-x86_64"]?.url, "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz");
+      assert.equal(platforms["darwin-x86_64"]?.url, "http://192.0.2.105:4875/downloads/Frondose.app.tar.gz");
       assert.equal(platforms["darwin-x86_64"]?.signature, "MAC_SIGNATURE_BLOB");
-      assert.equal(platforms["darwin-aarch64"]?.url, "http://intranet-host.local:4875/downloads/Frondose.app.tar.gz");
+      assert.equal(platforms["darwin-aarch64"]?.url, "http://192.0.2.105:4875/downloads/Frondose.app.tar.gz");
       assert.equal(platforms["darwin-aarch64"]?.signature, "MAC_SIGNATURE_BLOB");
       assert.equal(
         platforms["windows-x86_64"]?.url,
-        "http://intranet-host.local:4875/downloads/Frondose-windows-x86_64-setup.exe",
+        "http://192.0.2.105:4875/downloads/Frondose-windows-x86_64-setup.exe",
       );
       assert.equal(platforms["windows-x86_64"]?.signature, "WIN_SIGNATURE_BLOB");
       assert.equal(manifest.version, "0.5.0-alpha.76");
