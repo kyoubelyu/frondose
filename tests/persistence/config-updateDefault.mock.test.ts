@@ -2,7 +2,7 @@
  * P-UPDATE-INTRANET Step 2 — T-Config.1–3 — config persistence contract for the
  * hardcoded intranet default `updateServerUrl` (plan §6.C T-Config.1).
  *
- * Builder Step 4 bakes `http://intranet-host.local:4875` in THREE spots in
+ * Builder Step 4 bakes `http://192.0.2.105:4875` in THREE spots in
  * `src/persistence/config.ts`: the Zod `.default(...)` (currently `null`, line
  * 72), `DEFAULT_CONFIG_V2.updateServerUrl` (currently `null`, line 107), and the
  * v1→v2 migration map (currently `null`, line 204). The field SHAPE is
@@ -28,7 +28,7 @@ import { describe, it } from "node:test";
 import { readConfig, writeConfig } from "../../src/persistence/config.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
-const DEFAULT_UPDATE_SERVER_URL = "http://intranet-host.local:4875";
+const DEFAULT_UPDATE_SERVER_URL = "http://192.0.2.105:4875";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ describe("readConfig — updateServerUrl bakes the intranet default when the key
   it("T-Config.1a: a v2 config.json written WITHOUT an updateServerUrl key → readConfig returns the baked default, other fields unchanged", () => {
     // Given: a v2 config.json with no `updateServerUrl` key at all (pre-P-UPDATE-INTRANET config on disk)
     // When:  readConfig(path)
-    // Then:  result.updateServerUrl === "http://intranet-host.local:4875" (Zod default); other fields preserved
+    // Then:  result.updateServerUrl === "http://192.0.2.105:4875" (Zod default); other fields preserved
     const { configPath, cleanup } = makeTmpDir();
     try {
       writeFileSync(
@@ -87,7 +87,7 @@ describe("readConfig — DEFAULT_CONFIG_V2 (no config.json at all) carries the b
     // Given: no config.json on disk at all (fresh install — exercises DEFAULT_CONFIG_V2 via
     //        migrateTelegramIntoConfig(), same code path T-Lang.2 uses for `language`)
     // When:  readConfig(path)
-    // Then:  result.updateServerUrl === "http://intranet-host.local:4875"
+    // Then:  result.updateServerUrl === "http://192.0.2.105:4875"
     const { configPath, cleanup } = makeTmpDir();
     try {
       const result = readConfig(configPath);
@@ -104,7 +104,7 @@ describe("readConfig — a v1→v2-migrated config also yields the baked default
   it("T-Config.1c: a v1 config.json (schema_version:1, never carried updateServerUrl) migrated to v2 → updateServerUrl === the baked default", () => {
     // Given: a v1 config.json on disk (schema_version:1 — v1 never had an updateServerUrl field)
     // When:  readConfig(path) — triggers migrateV1toV2 + persists the migrated v2 config
-    // Then:  the migrated result carries updateServerUrl === "http://intranet-host.local:4875" (not null)
+    // Then:  the migrated result carries updateServerUrl === "http://192.0.2.105:4875" (not null)
     const { configPath, cleanup } = makeTmpDir();
     try {
       writeFileSync(configPath, JSON.stringify({ schema_version: 1 }), "utf-8");

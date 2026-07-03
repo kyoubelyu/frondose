@@ -3,9 +3,12 @@ use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
 /// P-UPDATE-INTRANET: baked-in intranet default so a fresh install auto-pulls
-/// from intranet-host with no per-app config. Explicit null or "" remains the
-/// operator opt-out.
-const DEFAULT_UPDATE_SERVER_URL: &str = "http://intranet-host.local:4875";
+/// with no per-app config. Uses intranet-host's FIXED intranet IP (not `.local`, which
+/// Windows can't resolve without mDNS/Bonjour — an IP resolves on every platform).
+/// Explicit null or "" remains the operator opt-out. FUTURE PUBLIC deployment: set
+/// config.json `updateServerUrl` to the public URL (runtime, no rebuild), or change
+/// this const + the config.ts twin + rebuild for a new baked default.
+const DEFAULT_UPDATE_SERVER_URL: &str = "http://192.0.2.105:4875";
 
 /// CH-5: cross-platform home dir for the update-config reads. macOS/Unix use
 /// `$HOME`; Windows uses `%USERPROFILE%` (`$HOME` is empty there), matching the
@@ -149,7 +152,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    const EXPECTED_DEFAULT_URL: &str = "http://intranet-host.local:4875";
+    const EXPECTED_DEFAULT_URL: &str = "http://192.0.2.105:4875";
 
     // Serializes HOME env-var mutation across these tests only — cargo test runs
     // test fns in parallel threads by default and HOME is process-global. No new
