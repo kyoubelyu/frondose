@@ -50,7 +50,7 @@ for arch in arm64 x64; do
   tmp="/tmp/frondose-node-$arch"
   rm -rf "$tmp"
   mkdir -p "$tmp"
-  curl -fsSL "$url" -o "$tmp/node.tar.gz"
+  curl -fsSL --http1.1 --retry 3 --retry-delay 3 --retry-connrefused --connect-timeout 20 "$url" -o "$tmp/node.tar.gz"
   tar xzf "$tmp/node.tar.gz" -C "$tmp" --strip-components=2 \
     "node-$NODE_VERSION-darwin-$arch/bin/node"
   chmod +x "$tmp/node"
@@ -75,7 +75,7 @@ for arch in arm64 x64; do
   tmp="/tmp/frondose-bsq-$arch"
   rm -rf "$tmp"
   mkdir -p "$tmp"
-  curl -fsSL "$BSQ_BASE/$pkg" -o "$tmp/bsq.tar.gz"
+  curl -fsSL --http1.1 --retry 3 --retry-delay 3 --retry-connrefused --connect-timeout 20 "$BSQ_BASE/$pkg" -o "$tmp/bsq.tar.gz"
   tar xzf "$tmp/bsq.tar.gz" -C "$tmp"
 done
 lipo -create /tmp/frondose-bsq-arm64/build/Release/better_sqlite3.node \
