@@ -56,14 +56,24 @@ export function createSettingsPanel(deps) {
             .filter(Boolean);
         const key = v("settings-key"); // sent ONLY if the operator typed one
         const braveKey = v("settings-brave-key");
+        const baseUrl = v("settings-baseurl");
+        const model = v("settings-model");
+        const fullName = v("settings-fullname");
+        const company = v("settings-company");
+        const role = v("settings-role");
+        const headline = v("settings-headline");
         return {
-            llm: { baseUrl: v("settings-baseurl"), model: v("settings-model"), ...(key ? { key } : {}) },
+            llm: {
+                ...(baseUrl ? { baseUrl } : {}),
+                ...(model ? { model } : {}),
+                ...(key ? { key } : {}),
+            },
             ...(braveKey ? { search: { brave: { key: braveKey } } } : {}),
             identity: {
-                fullName: v("settings-fullname"),
-                company: v("settings-company"),
-                role: v("settings-role"),
-                headline: v("settings-headline"),
+                ...(fullName ? { fullName } : {}),
+                ...(company ? { company } : {}),
+                ...(role ? { role } : {}),
+                ...(headline ? { headline } : {}),
                 ...(roles.length ? { icp: { targetRole: roles } } : {}),
             },
             soul: { override: v("settings-soul") || null },
