@@ -36,6 +36,12 @@ build/
 
 .omx/
 
+# P-EMBED-KEYS: build-time-embedded default credentials (LLM key/baseUrl/model + Brave key).
+# NEVER commit — the gen step (scripts/gen-default-credentials.ts) writes this from
+# FRONDOSE_DEFAULT_LLM_* / FRONDOSE_DEFAULT_BRAVE_KEY env vars at release-build time only.
+# dist/ is already ignored above; src/ copy needs its own entry.
+src/persistence/defaultCredentials.generated.json
+
 # P-56a M-1 Tauri scaffold
 src/tauri/src-tauri/target/
 src/tauri/src-tauri/gen/
