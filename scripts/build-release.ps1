@@ -9,6 +9,46 @@ $root = Split-Path -Parent $PSScriptRoot
 $siteDir = if ($env:FRONDOSE_SITE_DIR) { $env:FRONDOSE_SITE_DIR } elseif ($env:MAI_SITE_DIR) { $env:MAI_SITE_DIR } else { Join-Path $HOME ".frondose\site" }
 $updateServerUrl = if ($env:UPDATE_SERVER_URL) { $env:UPDATE_SERVER_URL.TrimEnd("/") } else { "http://localhost:4875" }
 
+# 0. Preflight — make the build robust on a China-LAN box behind Clash/mihomo
+# (P-RELEASE-SH-WIN-GAP). Two failure modes this clears so `release.sh` runs
+# unattended end-to-end:
+#   (a) Build tools (curl for the Node zip, prebuild-install for the better-sqlite3
+#       native prebuild, npm, WebView2 fetch) honor the HTTP(S)_PROXY env but NOT
+#       the Windows *system* proxy — so direct fetches to nodejs.org/github get
+#       blocked. Route them through the running Clash/mihomo proxy. Opt out /
+#       override with FRONDOSE_WIN_PROXY; set it to "" to disable proxying.
+#   (b) NSIS bundling fails with `os error 10055` (WSAENOBUFS) when the ephemeral
+#       port range is exhausted — the mihomo core does not leak continuously, but
+#       stray Frondose/Chrome/WebView2/orphan-node processes accumulate sockets
+#       over a session. Kill those hoggers (never this build's node) + widen the
+#       ephemeral range. If the proxy is unreachable, fail fast with a clear msg
+#       (so the operator restarts Clash Verge) instead of a cryptic mid-build error.
+if ($null -eq $env:FRONDOSE_WIN_PROXY) {
+  $sysProxy = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue).ProxyServer
+  $proxy = if ($sysProxy) { if ($sysProxy -match '://') { $sysProxy } else { "http://$sysProxy" } } else { "http://127.0.0.1:7897" }
+} else {
+  $proxy = $env:FRONDOSE_WIN_PROXY
+}
+if ($proxy) {
+  $env:HTTP_PROXY = $proxy; $env:HTTPS_PROXY = $proxy
+  $env:http_proxy = $proxy; $env:https_proxy = $proxy   # curl/prebuild-install read lowercase
+  Write-Host "[build-release.ps1] preflight: routing build fetches through proxy $proxy"
+  try {
+    Invoke-WebRequest -Uri "https://nodejs.org" -Method Head -UseBasicParsing -TimeoutSec 20 -Proxy $proxy | Out-Null
+    Write-Host "[build-release.ps1] preflight: proxy reachable (nodejs.org 200)"
+  } catch {
+    throw "[build-release.ps1] preflight: proxy $proxy cannot reach nodejs.org — is Clash Verge/mihomo running? Restart it and retry. ($($_.Exception.Message))"
+  }
+} else {
+  Write-Host "[build-release.ps1] preflight: FRONDOSE_WIN_PROXY='' — no proxy (direct fetches)"
+}
+Get-Process Frondose,chrome,msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.ExecutablePath -like '*runtime\node.exe' -or $_.ExecutablePath -like '*AppData\Local\Frondose*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+& netsh int ipv4 set dynamicport tcp start=10000 num=55000 | Out-Null
+Write-Host "[build-release.ps1] preflight: killed stray socket hoggers + widened ephemeral port range"
+
 # 1. Compile dist (tsc + web + tauri-ui; the WIN-2 cross-platform npm scripts).
 Push-Location $root
 npm run build
