@@ -7,7 +7,9 @@
  * Read invariant: if secrets.json exists, it WINS — legacy auth/github/search
  * files are never consulted. If secrets.json is absent, the function migrates
  * in-memory from legacy files (B-3 env-overridable for tests), writes
- * secrets.json atomically, and returns the merged shape.
+ * secrets.json atomically, and returns the merged shape. Either way, any
+ * embedded-default field (P-EMBED-KEYS) still unset on the result is backfilled
+ * per-field (never overwriting a configured field) and persisted if it changed.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -101,7 +103,19 @@ export interface LegacyPathOverrides {
 export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: LegacyPathOverrides): SecretsJson {
   // (1) Happy path: new file exists.
   const fresh = tryReadJson(path, secretsJsonSchema, "secrets.json");
-  if (fresh !== null) return migrateProviders(fresh);
+  if (fresh !== null) {
+    const migrated = migrateProviders(fresh);
+    // P-EMBED-KEYS bugfix: backfill any embedded-default field the EXISTING file is still
+    // missing. Without this, an install where secrets.json already exists (an upgrade, or any
+    // prior partial config — e.g. LLM set manually before this feature shipped) never reaches
+    // the whole-file-absent branch below, so a newer defaultable field (e.g. Brave) could NEVER
+    // get backfilled even though its own default is embedded and unset. applyDefaultCredentials'
+    // per-field guard (`!next.providers` / `!next.search`) means an already-configured field is
+    // never touched — only a field that is genuinely still unset gets filled, exactly once.
+    const withDefaults = applyDefaultCredentials(migrated, legacy?.defaultCredentialsPath);
+    if (withDefaults !== migrated) writeSecrets(withDefaults, path);
+    return withDefaults;
+  }
 
   // (2) Legacy fallback — gather, merge, write, return.
   const merged = legacyMerged(
@@ -165,9 +179,11 @@ export function legacyMerged(
 }
 
 /** P-EMBED-KEYS: layer in the build-embedded default LLM provider + Brave key, but ONLY for
- *  fields the legacy-migration pass above left unset — never overrides a user's / legacy
- *  config's own values. Only reached via readSecrets' one-shot first-run path (secrets.json
- *  absent), so once anything is persisted (seeded or operator-set), this never runs again. */
+ *  fields still unset on `s` — never overrides a user's / legacy config's own values. Called
+ *  from BOTH readSecrets branches (the whole-file-absent legacy-merge path, AND the happy path
+ *  when secrets.json already exists) so a field that was never seeded/configured — e.g. Brave
+ *  on an install that already had secrets.json from before this feature, or before the operator
+ *  configured it — still gets backfilled from the embedded default exactly once, per field. */
 function applyDefaultCredentials(s: SecretsJson, path?: string): SecretsJson {
   const defaults = readDefaultCredentials(path);
   let next = s;
