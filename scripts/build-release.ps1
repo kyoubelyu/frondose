@@ -29,10 +29,13 @@ if ($null -eq $env:FRONDOSE_WIN_PROXY) {
 } else {
   $proxy = $env:FRONDOSE_WIN_PROXY
 }
+# NOTE: the proxy env is applied ONLY around the runtime-assembly step below (which
+# fetches the Node zip + better-sqlite3 prebuild + npm deps) — NOT globally. Setting
+# HTTP(S)_PROXY for the whole build makes `npm run build`'s build:native (node-gyp)
+# HANG on the China-LAN box (header fetch / WindowsApps python stub) instead of the
+# fast `|| echo skipped` fallback. So verify reachability here, but scope the env narrowly.
 if ($proxy) {
-  $env:HTTP_PROXY = $proxy; $env:HTTPS_PROXY = $proxy
-  $env:http_proxy = $proxy; $env:https_proxy = $proxy   # curl/prebuild-install read lowercase
-  Write-Host "[build-release.ps1] preflight: routing build fetches through proxy $proxy"
+  Write-Host "[build-release.ps1] preflight: runtime-assembly fetches will use proxy $proxy"
   try {
     Invoke-WebRequest -Uri "https://nodejs.org" -Method Head -UseBasicParsing -TimeoutSec 20 -Proxy $proxy | Out-Null
     Write-Host "[build-release.ps1] preflight: proxy reachable (nodejs.org 200)"
@@ -54,9 +57,15 @@ Push-Location $root
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 
-# 2. Assemble the self-contained Windows runtime into build/runtime/.
+# 2. Assemble the self-contained Windows runtime into build/runtime/ — THIS step
+# fetches the Node zip (curl) + better-sqlite3 prebuild (prebuild-install) + prod
+# deps (npm ci), which need the proxy on the China-LAN box. Scope HTTP(S)_PROXY to
+# just this call (see the preflight note) so the dist build above stays proxy-free.
+if ($proxy) { $env:HTTP_PROXY = $proxy; $env:HTTPS_PROXY = $proxy; $env:http_proxy = $proxy; $env:https_proxy = $proxy }
 node "$PSScriptRoot\build-runtime-windows.mjs"
-if ($LASTEXITCODE -ne 0) { throw "build-runtime-windows failed" }
+$runtimeExit = $LASTEXITCODE
+if ($proxy) { Remove-Item Env:\HTTP_PROXY,Env:\HTTPS_PROXY,Env:\http_proxy,Env:\https_proxy -ErrorAction SilentlyContinue }
+if ($runtimeExit -ne 0) { throw "build-runtime-windows failed" }
 Pop-Location
 
 # 3. Tauri bundle → Frondose_<ver>_x64-setup.exe (NSIS).
