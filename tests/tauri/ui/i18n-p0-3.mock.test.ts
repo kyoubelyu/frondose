@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 // NOTE: leaf modules (render/progress.ts, app/sendButton.ts) are NOT imported directly —
 // the slice-11/12 R-Source guards forbid tests importing UI leaves; use the render.js barrel.
-import { detectLocale, isI18nKey, localizeDocument, prefToLocale, setLocale, t } from "../../../src/tauri/ui/i18n.js";
+import { detectLocale, getLocale, isI18nKey, localizeDocument, prefToLocale, setLocale, t } from "../../../src/tauri/ui/i18n.js";
 import { statusForMode } from "../../../src/tauri/ui/mode.js";
 import { stepChipLabel } from "../../../src/tauri/ui/render.js";
 
@@ -194,5 +194,121 @@ describe("P-ZH-1 i18n — settings-language keys + prefToLocale mapping", () => 
     assert.equal(prefToLocale("zh"), "zh-CN");
     assert.equal(prefToLocale("en"), "en");
     assert.equal(prefToLocale("auto"), detectLocale());
+  });
+});
+
+describe("P-ZH-UI-ALIAS i18n — settings Base URL / Model placeholder coverage", () => {
+  afterEach(() => {
+    setLocale("en");
+  });
+
+  it("T-I18n.12: settings.baseUrlPlaceholder / settings.modelPlaceholder exist in both tables and index.html tags the two inputs", () => {
+    // Given: the settings-baseurl / settings-model example-text inputs (previously untagged, only the
+    //        static `placeholder=` attr) / When: looked up + the HTML markup inspected / Then: both keys
+    //        resolve non-empty in en + zh-CN, and each input now carries data-i18n-placeholder.
+    for (const key of ["settings.baseUrlPlaceholder", "settings.modelPlaceholder"] as const) {
+      assert.ok(isI18nKey(key), `${key} must be a valid I18nKey`);
+      assert.ok(t(key).length > 0, `en table must have a non-empty string for ${key}`);
+      setLocale("zh-CN");
+      assert.ok(t(key).length > 0, `zh-CN table must have a non-empty string for ${key}`);
+      setLocale("en");
+    }
+    assert.match(
+      INDEX_HTML,
+      /id="settings-baseurl"[^>]*data-i18n-placeholder="settings\.baseUrlPlaceholder"/,
+      "settings-baseurl input must carry data-i18n-placeholder=settings.baseUrlPlaceholder",
+    );
+    assert.match(
+      INDEX_HTML,
+      /id="settings-model"[^>]*data-i18n-placeholder="settings\.modelPlaceholder"/,
+      "settings-model input must carry data-i18n-placeholder=settings.modelPlaceholder",
+    );
+  });
+});
+
+describe("P-ZH-UI-ALIAS — live language-pref switch actually rewrites the DOM (settings.ts save())", () => {
+  afterEach(() => {
+    setLocale("en");
+  });
+
+  it("T-I18n.13: saving Settings with language=zh live-switches locale + rewrites a tagged node's text without a restart", async () => {
+    // Given: createSettingsPanel() wired to a fake invoke (frondose_get_settings/frondose_set_settings)
+    //        and a fake document exposing BOTH getElementById (the settings-* inputs) and
+    //        querySelectorAll (one [data-i18n] node standing in for the wider static DOM, mirroring
+    //        how localizeDocument({force:true}) rewrites index.html in the real app).
+    // When:  settings-language is set to "zh" and settings-save is clicked (save()).
+    // Then:  getLocale() flips to zh-CN and the tagged node's textContent is rewritten to the zh string
+    //        — proving the P-ZH-1 save()-time re-flip (settings.ts:114-119) is not dead code post-0.5.1.
+    const { createSettingsPanel } = await import("../../../src/tauri/ui/settings.js");
+
+    interface FakeEl {
+      value: string;
+      placeholder: string;
+      textContent: string | null;
+      listeners: Record<string, () => void>;
+      classList: { add(c: string): void; remove(c: string): void };
+      addEventListener(ev: string, fn: () => void): void;
+    }
+    const IDS = [
+      "settings-panel",
+      "settings-save",
+      "settings-close",
+      "settings-check-update",
+      "settings-baseurl",
+      "settings-model",
+      "settings-key",
+      "settings-brave-key",
+      "settings-fullname",
+      "settings-company",
+      "settings-role",
+      "settings-headline",
+      "settings-icp-roles",
+      "settings-soul",
+      "settings-update-url",
+      "settings-language",
+      "settings-update-status",
+    ];
+    const els: Record<string, FakeEl> = {};
+    for (const id of IDS) {
+      const el: FakeEl = {
+        value: "",
+        placeholder: "",
+        textContent: "",
+        listeners: {},
+        classList: { add: () => {}, remove: () => {} },
+        addEventListener(ev, fn) {
+          this.listeners[ev] = fn;
+        },
+      };
+      els[id] = el;
+    }
+    els["settings-language"].value = "zh"; // operator picks 中文
+
+    const statusNode = { textContent: "Listening" as string | null, getAttribute: () => "status.listening" };
+    const fakeDoc = {
+      getElementById: (id: string) => els[id] ?? null,
+      querySelectorAll: (sel: string) => (sel === "[data-i18n]" ? [statusNode] : []),
+      documentElement: { setAttribute: () => {} },
+    };
+    (globalThis as unknown as { document: unknown }).document = fakeDoc;
+
+    const invoke = async (cmd: string) =>
+      cmd === "frondose_get_settings"
+        ? {
+            ok: true,
+            llm: { baseUrl: null, model: null, hasKey: false, maskedKey: null, provider: null },
+            identity: {},
+            soul: { override: null },
+            updateServerUrl: null,
+            language: "zh",
+          }
+        : { ok: true };
+
+    createSettingsPanel({ invoke, surfaceError: () => {} });
+    els["settings-save"].listeners.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    assert.equal(getLocale(), "zh-CN", "save() with language=zh must flip the module-level locale");
+    assert.equal(statusNode.textContent, "待命", "save() must force-localizeDocument the real DOM (no restart needed)");
   });
 });
