@@ -53,8 +53,17 @@ function installEnvForBundledNode(installerNode, baseEnv = process.env) {
 }
 
 export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync } = {}) {
+  // CROSS-BUILD: when this runs on a non-Windows host (release.sh's pure-Mac path,
+  // via cargo-xwin), the bundled win-x64 node.exe CANNOT be executed here — so the
+  // three exec-checks below (ABI probe ×2 + loadability) are skipped (the pinned
+  // NODE_VERSION/SQLITE_ABI are the contract), and `npm ci` runs under the HOST node
+  // instead of the win node.exe, with `--os=win32 --cpu=x64` so npm resolves the
+  // Windows variant of any platform-specific optional dep. Safe specifically because
+  // the seeded-prebuild path already uses --ignore-scripts (no native postinstall
+  // runs). On a real Windows host everything below is unchanged (isCrossBuild=false).
+  const isCrossBuild = process.platform !== "win32";
   const runtime = path.join(root, "build", "runtime");
-  console.log(`[build-runtime-win] assembling self-contained runtime -> ${runtime}`);
+  console.log(`[build-runtime-win] assembling self-contained runtime -> ${runtime}${isCrossBuild ? " (cross-build from " + process.platform + ")" : ""}`);
   fs.rmSync(runtime, { recursive: true, force: true });
   fs.mkdirSync(runtime, { recursive: true });
 
@@ -89,9 +98,11 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
     throw new Error(`[build-runtime-win] bundled npm missing in ${nodeDist}; refusing to use host npm`);
   }
 
-  const installerAbi = bundledNodeAbi(execFile, installerNode);
-  if (installerAbi !== expectedSqliteAbi()) {
-    throw new Error(`[build-runtime-win] ABI mismatch: bundled node=${installerAbi} sqlite=${expectedSqliteAbi()}`);
+  if (!isCrossBuild) {
+    const installerAbi = bundledNodeAbi(execFile, installerNode);
+    if (installerAbi !== expectedSqliteAbi()) {
+      throw new Error(`[build-runtime-win] ABI mismatch: bundled node=${installerAbi} sqlite=${expectedSqliteAbi()}`);
+    }
   }
 
   fs.copyFileSync(installerNode, path.join(runtime, "node.exe"));
@@ -108,10 +119,18 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   // node-gyp / no Python needed) and the native binary is injected below. Unset = default fetch path.
   // ssh2's native binding is optional (pure-JS fallback), so --ignore-scripts is safe for the bundle.
   const seedPrebuild = process.env.FRONDOSE_WIN_SQLITE_PREBUILD?.trim();
+  // On a real Windows host: run npm ci under the bundled win node.exe. Cross-building
+  // on macOS: the win node.exe can't run here, so drive npm-cli.js with the HOST node
+  // and force npm to resolve win32-x64 optional deps (`--os/--cpu`) so the assembled
+  // node_modules is correct FOR Windows despite being built on a Mac.
+  const ciNode = isCrossBuild ? process.execPath : installerNode;
   const ciArgs = [installerNpmCli, "ci", "--omit=dev", "--no-audit", "--no-fund"];
   if (seedPrebuild) ciArgs.push("--ignore-scripts");
-  console.log(`[build-runtime-win] bundled npm ci --omit=dev${seedPrebuild ? " --ignore-scripts (seeded prebuild)" : ""}`);
-  execFile(installerNode, ciArgs, {
+  if (isCrossBuild) ciArgs.push("--os=win32", "--cpu=x64");
+  console.log(
+    `[build-runtime-win] ${isCrossBuild ? "host" : "bundled"} npm ci --omit=dev${seedPrebuild ? " --ignore-scripts (seeded prebuild)" : ""}${isCrossBuild ? " --os=win32 --cpu=x64" : ""}`,
+  );
+  execFile(ciNode, ciArgs, {
     cwd: runtime,
     stdio: ["ignore", "inherit", "inherit"],
     env: installEnvForBundledNode(installerNode),
@@ -128,18 +147,22 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   fs.cpSync(path.join(root, "dist"), path.join(runtime, "dist"), { recursive: true });
 
   // 4. Loadability gate — prove the bundled node can load the native deps.
-  const runtimeNode = path.join(runtime, "node.exe");
-  const runtimeAbi = bundledNodeAbi(execFile, runtimeNode);
-  if (runtimeAbi !== expectedSqliteAbi()) {
-    throw new Error(
-      `[build-runtime-win] ABI mismatch after copy: runtime node=${runtimeAbi} sqlite=${expectedSqliteAbi()}`,
-    );
+  //    Skipped on a cross-build (can't run the win node.exe on the host) — the
+  //    Windows box smoke-test in release.sh is the real cross-build loadability gate.
+  if (!isCrossBuild) {
+    const runtimeNode = path.join(runtime, "node.exe");
+    const runtimeAbi = bundledNodeAbi(execFile, runtimeNode);
+    if (runtimeAbi !== expectedSqliteAbi()) {
+      throw new Error(
+        `[build-runtime-win] ABI mismatch after copy: runtime node=${runtimeAbi} sqlite=${expectedSqliteAbi()}`,
+      );
+    }
+    console.log("[build-runtime-win] loadability check (better-sqlite3 + ssh2)");
+    execFile(runtimeNode, ["-e", "require('better-sqlite3'); require('ssh2');"], {
+      cwd: runtime,
+      stdio: ["ignore", "inherit", "inherit"],
+    });
   }
-  console.log("[build-runtime-win] loadability check (better-sqlite3 + ssh2)");
-  execFile(runtimeNode, ["-e", "require('better-sqlite3'); require('ssh2');"], {
-    cwd: runtime,
-    stdio: ["ignore", "inherit", "inherit"],
-  });
 
   console.log("[build-runtime-win] OK — self-contained Windows runtime assembled");
 }
