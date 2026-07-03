@@ -279,8 +279,10 @@ describe("no-overwrite — a user's own configured secrets.json is never touched
   it("T-NOOVERWRITE.1: when secrets.json already exists with a user-configured provider + brave key, readSecrets returns it unchanged even though embedded defaults are present", () => {
     // Given: secrets.json ALREADY exists on disk with the user's own provider + brave key
     // When:  readSecrets(secretsPath, { defaultCredentialsPath: fixture-with-different-values })
-    // Then:  the happy path (file exists) wins outright — legacyMerged/applyDefaultCredentials
-    //        is never consulted, so the user's own values pass through byte-for-byte
+    // Then:  the happy path (file exists) still consults applyDefaultCredentials (P-EMBED-KEYS
+    //        bugfix — see T-BACKFILL below) but its per-field guard is a no-op here since BOTH
+    //        fields are already configured, so the user's own values pass through byte-for-byte
+    //        and no rewrite occurs
     const { dir, cleanup } = makeTmpDir();
     try {
       const secretsPath = join(dir, "secrets.json");
@@ -316,6 +318,100 @@ describe("no-overwrite — a user's own configured secrets.json is never touched
       // On-disk file must be byte-identical in the fields that matter (no rewrite occurred).
       const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
       assert.equal(onDisk.providers.custom.key, "users-own-key");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── Backfill on an EXISTING secrets.json (the real-box bug) ────────────────
+//
+// Root-cause correction: the box symptom ("LLM seeded, Brave did not") was NOT
+// caused by readSearchConfig() reading a different store than the seed writes to
+// (it reads the identical secrets.json via readSecrets, verified by T-SEED.1 above
+// passing end-to-end through readSearchConfig). The real cause: applyDefaultCredentials
+// was only ever invoked from readSecrets' whole-file-ABSENT branch. Any install where
+// secrets.json already exists — e.g. an upgrade, or the LLM key having been configured
+// by some other prior means — skips that branch entirely via the "happy path" short
+// circuit, so a field that's still unset (Brave) never gets backfilled even though its
+// default is embedded. These tests cover the fixed behavior: applyDefaultCredentials is
+// now also consulted on the happy path, per-field, never overwriting a configured field.
+describe("backfill — an existing secrets.json missing one field still gets that field seeded", () => {
+  it("T-BACKFILL.1: when secrets.json already exists with LLM configured but no search field, and a default Brave key is embedded, readSecrets backfills search without touching the existing LLM config", () => {
+    // Given: secrets.json exists on disk with providers/default set (as if configured before
+    //        this feature shipped, or by any other means) but NO search field at all
+    // When:  readSecrets(secretsPath, { defaultCredentialsPath: fixture-with-a-brave-key })
+    // Then:  search.braveApiKey is now seeded from the default AND persisted to disk; the
+    //        pre-existing LLM config is untouched
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const secretsPath = join(dir, "secrets.json");
+      writeFileSync(
+        secretsPath,
+        JSON.stringify({
+          schema_version: 1,
+          default: "deepseek:deepseek-v4-flash",
+          providers: {
+            deepseek: { key: "pre-existing-llm-key", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+          },
+        }),
+        "utf-8",
+      );
+
+      const defaultsPath = join(dir, "defaultCredentials.generated.json");
+      writeFileSync(
+        defaultsPath,
+        JSON.stringify({
+          llmBaseUrl: "https://should-not-be-used.test/v1",
+          llmModel: "should-not-be-used-model",
+          llmKey: "should-not-be-used-key",
+          braveKey: "placeholder-brave",
+        }),
+        "utf-8",
+      );
+
+      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
+      assert.equal(result.search?.braveApiKey, "placeholder-brave", "T-BACKFILL.1: brave key must be backfilled");
+      assert.equal(
+        result.providers?.deepseek?.key,
+        "pre-existing-llm-key",
+        "T-BACKFILL.1: pre-existing LLM key must be untouched (embedded LLM default must NOT override it)",
+      );
+      assert.equal(result.default, "deepseek:deepseek-v4-flash", "T-BACKFILL.1: pre-existing default spec untouched");
+
+      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
+      assert.equal(onDisk.search?.braveApiKey, "placeholder-brave", "T-BACKFILL.1: backfilled brave key must be persisted to disk");
+      assert.equal(onDisk.providers.deepseek.key, "pre-existing-llm-key", "T-BACKFILL.1: on-disk LLM key must be untouched");
+
+      // Cross-check via the actual shim the app reads (Settings' readSettings()).
+      const search = readSearchConfig(join(dir, "search.json"));
+      assert.equal(search.braveApiKey, "placeholder-brave", "T-BACKFILL.1: readSearchConfig shim must see the backfilled key");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("T-BACKFILL.2: when secrets.json already exists fully configured (LLM + search) and no default is embedded, readSecrets does not rewrite the file", () => {
+    // Given: secrets.json exists with BOTH fields already configured; no defaultCredentialsPath
+    //        fixture exists on disk (absent-defaults case, applied to an existing file)
+    // When:  readSecrets(secretsPath, { defaultCredentialsPath: nonexistentFixture })
+    // Then:  result is unchanged; on-disk mtime-equivalent content is identical (no spurious write)
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const secretsPath = join(dir, "secrets.json");
+      const before = {
+        schema_version: 1,
+        default: "custom:users-own-model",
+        providers: { custom: { key: "users-own-key", baseUrl: "https://users-own-endpoint.test/v1", type: "openai" } },
+        search: { braveApiKey: "users-own-brave-key" },
+      };
+      writeFileSync(secretsPath, JSON.stringify(before), "utf-8");
+
+      const result = readSecrets(secretsPath, { defaultCredentialsPath: join(dir, "does-not-exist.json") });
+      assert.deepEqual(result, before, "T-BACKFILL.2: result must equal the on-disk file verbatim");
+
+      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
+      assert.deepEqual(onDisk, before, "T-BACKFILL.2: on-disk file must be untouched");
     } finally {
       cleanup();
     }
