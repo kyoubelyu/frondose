@@ -66,8 +66,16 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   const installerNode = path.join(nodeDist, "node.exe");
   const installerNpmCli = path.join(nodeDist, "node_modules", "npm", "bin", "npm-cli.js");
   const url = `https://nodejs.org/dist/${NODE_VERSION}/${dir}.zip`;
-  console.log(`[build-runtime-win] downloading ${url}`);
-  execFile("curl", ["-fsSL", "-o", zip, url], { stdio: "inherit" });
+  // FRONDOSE_WIN_NODE_ZIP: path to a pre-downloaded node-${NODE_VERSION}-win-x64.zip. Set it on a
+  // NETWORK-RESTRICTED build machine (where curl to nodejs.org is flaky/blocked) to skip the fetch.
+  const seedNodeZip = process.env.FRONDOSE_WIN_NODE_ZIP?.trim();
+  if (seedNodeZip) {
+    console.log(`[build-runtime-win] using seeded node zip ${seedNodeZip}`);
+    fs.copyFileSync(seedNodeZip, zip);
+  } else {
+    console.log(`[build-runtime-win] downloading ${url}`);
+    execFile("curl", ["-fsSL", "-o", zip, url], { stdio: "inherit" });
+  }
   fs.rmSync(nodeDist, { recursive: true, force: true });
   execFile("tar", ["-xf", zip, "-C", tmp], { stdio: "inherit" }); // Win10 bsdtar extracts .zip
   if (!fs.existsSync(installerNpmCli)) {
@@ -87,12 +95,26 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   //    which places a lipo'd sqlite by hand).
   fs.copyFileSync(path.join(root, "package.json"), path.join(runtime, "package.json"));
   fs.copyFileSync(path.join(root, "package-lock.json"), path.join(runtime, "package-lock.json"));
-  console.log("[build-runtime-win] bundled npm ci --omit=dev");
-  execFile(installerNode, [installerNpmCli, "ci", "--omit=dev", "--no-audit", "--no-fund"], {
+  // FRONDOSE_WIN_SQLITE_PREBUILD: path to a pre-fetched win32-x64 better_sqlite3.node matching
+  // SQLITE_ABI. Set it on a NETWORK-RESTRICTED build machine (e.g. China LAN, where prebuild-install
+  // can't reach GitHub releases) — the install then runs with `--ignore-scripts` (no fetch / no
+  // node-gyp / no Python needed) and the native binary is injected below. Unset = default fetch path.
+  // ssh2's native binding is optional (pure-JS fallback), so --ignore-scripts is safe for the bundle.
+  const seedPrebuild = process.env.FRONDOSE_WIN_SQLITE_PREBUILD?.trim();
+  const ciArgs = [installerNpmCli, "ci", "--omit=dev", "--no-audit", "--no-fund"];
+  if (seedPrebuild) ciArgs.push("--ignore-scripts");
+  console.log(`[build-runtime-win] bundled npm ci --omit=dev${seedPrebuild ? " --ignore-scripts (seeded prebuild)" : ""}`);
+  execFile(installerNode, ciArgs, {
     cwd: runtime,
     stdio: "inherit",
     env: installEnvForBundledNode(installerNode),
   });
+  if (seedPrebuild) {
+    const dest = path.join(runtime, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node");
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(seedPrebuild, dest);
+    console.log(`[build-runtime-win] injected seeded better-sqlite3 prebuild -> ${dest}`);
+  }
 
   // 3. dist payload (the compiled agent/sidecar — assumes `npm run build` already ran).
   console.log("[build-runtime-win] copy dist");
