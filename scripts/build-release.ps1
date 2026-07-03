@@ -53,9 +53,31 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyCon
 Write-Host "[build-release.ps1] preflight: killed stray socket hoggers + widened ephemeral port range"
 
 # 1. Compile dist (tsc + web + tauri-ui; the WIN-2 cross-platform npm scripts).
+# Run inside Start-Job. Without it, the nested `npm run build` → `npm run build:web`
+# → cmd.exe → esbuild chain HANGS forever at build:web when this script runs with no
+# console/pty (over ssh via release.sh, or a detached scheduled task): a child process
+# inherits a broken stdin handle and blocks reading it. A bare `$null |` pipe only
+# fixes the OUTERMOST npm.cmd's stdin, not the nested children. Start-Job gives the
+# ENTIRE process tree valid job stdio, so the chain runs to completion. Proven on
+# win-build-host 2026-07-03: direct `npm run build` over ssh hangs indefinitely at
+# build:web; the identical command inside Start-Job completes exit 0.
 Push-Location $root
-npm run build
-if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
+$buildJob = Start-Job -ScriptBlock {
+  param($r)
+  Set-Location $r
+  $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+  $env:FRONDOSE_DEFAULT_LLM_BASEURL = $using:env:FRONDOSE_DEFAULT_LLM_BASEURL
+  $env:FRONDOSE_DEFAULT_LLM_MODEL   = $using:env:FRONDOSE_DEFAULT_LLM_MODEL
+  $env:FRONDOSE_DEFAULT_LLM_KEY     = $using:env:FRONDOSE_DEFAULT_LLM_KEY
+  $env:FRONDOSE_DEFAULT_BRAVE_KEY   = $using:env:FRONDOSE_DEFAULT_BRAVE_KEY
+  & npm run build 2>&1
+  "BUILD_JOB_EXIT=$LASTEXITCODE"
+} -ArgumentList $root
+$buildJob | Wait-Job -Timeout 900 | Out-Null
+$buildOut = Receive-Job $buildJob
+$buildOut | ForEach-Object { Write-Host $_ }
+Remove-Job $buildJob -Force -ErrorAction SilentlyContinue
+if (-not ($buildOut -match 'BUILD_JOB_EXIT=0')) { throw "npm run build failed or timed out (see output above)" }
 
 # 2. Assemble the self-contained Windows runtime into build/runtime/ — THIS step
 # fetches the Node zip (curl) + better-sqlite3 prebuild (prebuild-install) + prod
@@ -68,7 +90,9 @@ if ($proxy) { Remove-Item Env:\HTTP_PROXY,Env:\HTTPS_PROXY,Env:\http_proxy,Env:\
 if ($runtimeExit -ne 0) { throw "build-runtime-windows failed" }
 Pop-Location
 
-# 3. Tauri bundle → Frondose_<ver>_x64-setup.exe (NSIS).
+# 3. Tauri bundle → Frondose_<ver>_x64-setup.exe (NSIS). Unlike `npm run build`,
+# `npx tauri build` (cargo + makensis) does NOT read stdin, so it runs fine over
+# ssh/detached without the Start-Job workaround (proven by the 0.5.0/0.5.1 builds).
 Push-Location "$root\src\tauri\src-tauri"
 npx tauri build --target x86_64-pc-windows-msvc --bundles nsis
 $tauriExitCode = $LASTEXITCODE
