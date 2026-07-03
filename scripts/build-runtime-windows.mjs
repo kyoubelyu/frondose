@@ -80,11 +80,11 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
     execFile(
       "curl",
       ["-fsSL", "--connect-timeout", "20", "--max-time", "600", "--retry", "3", "--retry-delay", "5", "--retry-connrefused", "-o", zip, url],
-      { stdio: "inherit" },
+      { stdio: ["ignore", "inherit", "inherit"] },
     );
   }
   fs.rmSync(nodeDist, { recursive: true, force: true });
-  execFile("tar", ["-xf", zip, "-C", tmp], { stdio: "inherit" }); // Win10 bsdtar extracts .zip
+  execFile("tar", ["-xf", zip, "-C", tmp], { stdio: ["ignore", "inherit", "inherit"] }); // Win10 bsdtar extracts .zip
   if (!fs.existsSync(installerNpmCli)) {
     throw new Error(`[build-runtime-win] bundled npm missing in ${nodeDist}; refusing to use host npm`);
   }
@@ -113,7 +113,7 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   console.log(`[build-runtime-win] bundled npm ci --omit=dev${seedPrebuild ? " --ignore-scripts (seeded prebuild)" : ""}`);
   execFile(installerNode, ciArgs, {
     cwd: runtime,
-    stdio: "inherit",
+    stdio: ["ignore", "inherit", "inherit"],
     env: installEnvForBundledNode(installerNode),
   });
   if (seedPrebuild) {
@@ -138,7 +138,7 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   console.log("[build-runtime-win] loadability check (better-sqlite3 + ssh2)");
   execFile(runtimeNode, ["-e", "require('better-sqlite3'); require('ssh2');"], {
     cwd: runtime,
-    stdio: "inherit",
+    stdio: ["ignore", "inherit", "inherit"],
   });
 
   console.log("[build-runtime-win] OK — self-contained Windows runtime assembled");
