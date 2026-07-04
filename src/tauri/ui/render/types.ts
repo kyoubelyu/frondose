@@ -28,8 +28,14 @@ export interface ButtonElementLike extends TextElementLike {
 export interface InputElementLike extends TextElementLike {
   value: string;
   disabled: boolean;
-  addEventListener(type: "keydown", listener: (e: { key?: string; preventDefault: () => void }) => void): void;
+  addEventListener(
+    type: "keydown",
+    listener: (e: { key?: string; isComposing?: boolean; keyCode?: number; preventDefault: () => void }) => void,
+  ): void;
   addEventListener(type: "input", listener: () => void): void;
+  // T-FE-CHAT bug 2: WKWebView/WebView2 IME composition tracking (an `isComposing`/keyCode-229
+  // Enter guard alone can race compositionend vs keydown; a module-level flag closes that gap).
+  addEventListener(type: "compositionstart" | "compositionend", listener: () => void): void;
 }
 
 export interface DocumentLike {
