@@ -1,8 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
-import { deriveQualificationFromMatch, isOwnCompanyMatch, matchIcp } from "../../methodology/icpMatcher.js";
-import type { IcpEvidence, IcpMatchDetail, MatchResult, Qualification } from "../../methodology/types.js";
+import { deriveQualificationFromMatch, matchIcp } from "../../methodology/icpMatcher.js";
+import type { IcpEvidence, MatchResult, Qualification } from "../../methodology/types.js";
 import type { IcpCriteria, IdentityRecord } from "../../persistence/identity.js";
 import { icpSchema, readIdentity } from "../../persistence/identity.js";
 
@@ -35,9 +35,9 @@ interface QualifyProfileOpts {
  */
 export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
   let cachedIdentity: IdentityRecord | null | undefined;
-  const getIdentity = (): IdentityRecord | null => {
+  const getDefaultIcp = (): IcpCriteria | undefined => {
     if (cachedIdentity === undefined) cachedIdentity = readIdentity(opts.identityPath);
-    return cachedIdentity;
+    return cachedIdentity?.icp;
   };
 
   return tool({
@@ -49,40 +49,7 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
     parameters: qualifyProfileParams,
     execute: async (params) => {
       try {
-        const identity = getIdentity();
-        const evidence: IcpEvidence = {
-          role: params.role ?? null,
-          industry: params.industry ?? null,
-          region: params.region ?? null,
-          companyName: params.companyName ?? null,
-        };
-
-        const hasIdentityCompanySignal = Boolean(identity?.company);
-        const hasEvidenceCompanySignal = Boolean(evidence.companyName);
-        if (identity && hasIdentityCompanySignal) {
-          const ownCompany = isOwnCompanyMatch({ company: identity.company }, { companyName: evidence.companyName });
-          if (ownCompany) {
-            const detail: IcpMatchDetail = {
-              role: { value: evidence.role, status: "unknown" },
-              industry: { value: evidence.industry, status: "unknown" },
-              region: { value: evidence.region, status: "unknown" },
-              ownCompany: { value: evidence.companyName, status: "match" },
-            };
-            return ok("qualify_profile", {
-              qualification: "disqualified" as Qualification,
-              score: 0,
-              matched: [],
-              missing: [],
-              rationale:
-                `own_company: profile is at the operator's company` +
-                (identity.company ? ` "${identity.company}"` : "") +
-                ". Disqualified — we do not prospect colleagues.",
-              detail,
-            });
-          }
-        }
-
-        const icp = params.icp ?? identity?.icp;
+        const icp = params.icp ?? getDefaultIcp();
         if (!icp) {
           return ok("qualify_profile", {
             qualification: "unknown" as Qualification,
@@ -95,10 +62,14 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
           });
         }
 
+        const evidence: IcpEvidence = {
+          role: params.role ?? null,
+          industry: params.industry ?? null,
+          region: params.region ?? null,
+          companyName: params.companyName ?? null,
+        };
+
         const detail = matchIcp(icp, evidence);
-        if (hasIdentityCompanySignal && hasEvidenceCompanySignal) {
-          detail.ownCompany = { value: evidence.companyName, status: "mismatch" };
-        }
         const qualification = deriveQualificationFromMatch(detail, icp);
         const score = QUALIFICATION_SCORE_MAP[qualification];
 

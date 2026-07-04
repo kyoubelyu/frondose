@@ -63,14 +63,6 @@ function matchCompanyKeywords(
   return hit ? "match" : "unknown"; // positive-only — never "mismatch"
 }
 
-/** True when the profile evidence matches the operator's own company. */
-export function isOwnCompanyMatch(identity: { company?: string }, evidence: { companyName: string | null }): boolean {
-  const idName = identity.company?.trim().toLowerCase();
-  const evName = evidence.companyName?.trim().toLowerCase();
-  if (!idName || !evName) return false;
-  return evName.includes(idName);
-}
-
 /** Match ICP against profile evidence; returns per-dimension detail. */
 export function matchIcp(icp: IcpCriteria, evidence: IcpEvidence): IcpMatchDetail {
   // Role
