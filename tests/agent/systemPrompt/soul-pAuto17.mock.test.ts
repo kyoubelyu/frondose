@@ -7,12 +7,13 @@
  *              the agent classifies the fail-closed reject as result:'skipped' (NON-attempt),
  *              not result:'failed' (genuine send failure).
  *
- *   REGRESSION GUARD — composeSoulBand(null).length <= 8000: proves the +38-char soul.ts:169
- *              edit did NOT accidentally inline into composeSoulBand (which is the surface the
- *              existing T-SOUL.RHYTHM.4 / sp-d / sp-f cap tests assert). composeSoulBand does
- *              NOT call soulModeFragment; they are separate exports. This guard PASSES pre-impl
- *              by design (composeSoulBand is already 7989 before the soul.ts edit) and MUST
- *              continue to pass post-impl.
+ *   REGRESSION GUARD — composeSoulBand(null).length <= 8500 (P-39 raised 6000→8000;
+ *              T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines,
+ *              actual ~8380): proves the +38-char soul.ts:169 edit did NOT accidentally inline
+ *              into composeSoulBand (which is the surface the existing T-SOUL.RHYTHM.4 / sp-d /
+ *              sp-f cap tests assert). composeSoulBand does NOT call soulModeFragment; they are
+ *              separate exports. This guard PASSES pre-impl by design (composeSoulBand is already
+ *              7989 before the soul.ts edit) and MUST continue to pass post-impl.
  *
  * BDD-light:
  *   - describe/it grouping per behavior surface.
@@ -86,23 +87,26 @@ describe("G-A17.20 — soulModeFragment('auto') failure-branch contains the new 
 });
 
 // ─── REGRESSION GUARD — composeSoulBand cap (passes pre-impl, must pass post-impl) ──────────
-describe("REGRESSION GUARD — composeSoulBand(null).length <= 8000 (P-AUTO-17 ND-3 non-regression)", () => {
+describe("REGRESSION GUARD — composeSoulBand(null).length <= 8500 (P-AUTO-17 ND-3 non-regression)", () => {
   // ─── T-A17.20c: composeSoulBand cap not breached ──────────────────────────────────────────
-  it("T-A17.20c: composeSoulBand(null).length <= 8000 — the soul.ts:169 edit (inside soulModeFragment) does NOT push composeSoulBand over the 8000-char cap", () => {
+  it("T-A17.20c: composeSoulBand(null).length <= 8500 — the soul.ts:169 edit (inside soulModeFragment) does NOT push composeSoulBand over the 8500-char cap (T-ICP-PRECISION raised 8000→8500)", () => {
     // Given: composeSoulBand(identity) does NOT call soulModeFragment; they are separate exports.
     //        Before the soul.ts:169 edit, composeSoulBand(null).length === 7989.
-    //        After the edit, composeSoulBand(null).length must remain 7989 (unchanged).
+    //        After the edit, composeSoulBand(null).length must remain 7989 (unchanged by THIS edit;
+    //        T-ICP-PRECISION separately raised it to ~8380 via unrelated own_company/icp-override
+    //        habit lines added to soul.ts, hence the cap itself moved 8000→8500).
     // When:  composeSoulBand(null) is called (null identity → uses all defaults)
-    // Then:  the returned string length <= 8000 (the existing P-AUTO-13 / T-SOUL.RHYTHM.4 cap)
+    // Then:  the returned string length <= 8500 (P-39 raised 6000→8000; T-ICP-PRECISION raised
+    //        8000→8500 for the own_company + icp-override habit lines, actual ~8380)
     //
-    // NOTE: this assertion is LIVE (not TODO) because composeSoulBand is already ≤ 8000 before
+    // NOTE: this assertion is LIVE (not TODO) because composeSoulBand is already ≤ 8500 before
     // Codex edits soul.ts:169. It passes at Step 3 scaffold-time and must continue to pass
     // post-impl. If it ever fails, it means the soul.ts:169 edit accidentally inlined into
     // composeSoulBand (a regression in the builder's implementation, not in this test).
     const band = composeSoulBand(null);
     assert.ok(
-      band.length <= 8000,
-      `REGRESSION: composeSoulBand(null).length=${band.length} exceeds 8000-char cap — ` +
+      band.length <= 8500,
+      `REGRESSION: composeSoulBand(null).length=${band.length} exceeds 8500-char cap (raised for T-ICP-PRECISION) — ` +
         "the soul.ts:169 ND-3 edit must NOT inline into composeSoulBand (composeSoulBand and " +
         "soulModeFragment are separate exports; soulModeFragment is uncapped by existing tests).",
     );
