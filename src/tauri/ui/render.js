@@ -7,4 +7,6 @@ export { computeProgress, stepChipLabel, stepVisualState } from "./render/progre
 export { buildLeafMark } from "./render/dom.js";
 export { buildSwitcher, buildIwfCard } from "./render/iwf.js";
 export { buildAutoStage } from "./render/auto.js";
+// T-FE-CHAT bug 1: safe markdown->DOM renderer for the streamed assistant answer bubble.
+export { buildMarkdownNodes, renderMarkdownInto } from "./render/markdown.js";
 //# sourceMappingURL=render.js.map

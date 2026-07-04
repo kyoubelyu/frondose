@@ -10,7 +10,7 @@ import type {
   InputElementLike,
   TextElementLike,
 } from "./render.js";
-import { buildSwitcher } from "./render.js";
+import { buildSwitcher, renderMarkdownInto } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
 import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendButton.js";
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
@@ -130,6 +130,9 @@ let workflowExpanded = false;
 // scroll-area autoscroll only fires when the user is already near the bottom
 // (within AUTOSCROLL_PX) so manual scrollback is not yanked.
 let activeAgentTextEl: ElementLike | null = null;
+// T-FE-CHAT bug 1: raw (unrendered) answer text for the active bubble, rAF-coalesced re-render.
+let activeAgentRawText = "";
+let agentRenderScheduled = false;
 // [P-THINK] The current turn's gray "thinking" sinks: the wrapper (.agent-thinking, incl. the
 // "thinking…" line) and the streamed-reasoning text node. Both null between turns; the whole
 // wrapper is removed from the DOM when the turn's output completes ("完成输出后消失").
@@ -222,7 +225,23 @@ function beginAgentBubble(): void {
   activeAgentTextEl = text;
   activeAgentThinkingWrap = thinking;
   activeAgentThinkingEl = thinkingText;
+  activeAgentRawText = "";
   scrollToBottomIfPinned();
+}
+
+// T-FE-CHAT bug 1: coalesce a burst of chunks into <= one parse+DOM-replace per frame. Cast (not a
+// bare global ref — the no-DOM-lib main tsconfig also type-checks this file), same idiom as
+// scrollAreaEl above.
+function scheduleAgentTextRender(): void {
+  if (agentRenderScheduled) return;
+  agentRenderScheduled = true;
+  const raf = (windowRef as unknown as { requestAnimationFrame: (cb: () => void) => number }).requestAnimationFrame;
+  raf(() => {
+    agentRenderScheduled = false;
+    if (activeAgentTextEl === null) return; // turn ended before this frame ran
+    renderMarkdownInto(windowRef.document, activeAgentTextEl, activeAgentRawText);
+    scrollToBottomIfPinned();
+  });
 }
 
 function appendAgentChunk(chunk: string): void {
@@ -232,9 +251,8 @@ function appendAgentChunk(chunk: string): void {
   // cron/profile-activate/card-action paths; this auto-open is the Manual fallback.
   if (activeAgentTextEl === null) beginAgentBubble();
   if (activeAgentTextEl === null) return; // defensive — beginAgentBubble couldn't allocate (DOM missing)
-  const prev = activeAgentTextEl.textContent ?? "";
-  activeAgentTextEl.textContent = `${prev}${chunk}`;
-  scrollToBottomIfPinned();
+  activeAgentRawText += chunk;
+  scheduleAgentTextRender();
 }
 
 // [P-THINK] Append a reasoning delta to the gray thinking block, auto-opening the bubble if the
@@ -258,6 +276,7 @@ function endAgentBubble(): void {
   activeAgentThinkingWrap = null;
   activeAgentThinkingEl = null;
   activeAgentTextEl = null;
+  activeAgentRawText = "";
 }
 
 function transition(next: AppState): void {
@@ -415,6 +434,7 @@ async function sendCommand(): Promise<void> {
     // P-Y2-MA G1+G2: append user bubble immediately; agent bubble lands on turn-started.
     appendUserBubble(prompt);
     tickerEl.textContent = t("ticker.starting");
+    commandEl.value = ""; // T-FE-CHAT bug 2: clear only on success — preserves input on failure above
     transition("running");
   } catch (e) {
     errorBannerEl.textContent = t("error.invokeFailed", { msg: String(e) });
@@ -454,6 +474,7 @@ async function performSteer(newPrompt: string): Promise<void> {
     // P-Y2-MA: steer sends a NEW user bubble; prior agent bubble stays as history.
     appendUserBubble(newPrompt);
     tickerEl.textContent = t("ticker.starting");
+    commandEl.value = ""; // T-FE-CHAT bug 2: clear only once the steer turn is accepted
     transition("running");
   } catch (e) {
     errorBannerEl.textContent = t("error.steerFailed", { msg: String(e) });
@@ -740,8 +761,18 @@ settingsGearEl.addEventListener("click", () => {
 commandEl.addEventListener("input", () => {
   updateSendButtonLabel();
 });
+// T-FE-CHAT bug 2: an IME candidate-confirm Enter must not send. isComposing/keyCode-229 is the
+// primary guard; commandComposing additionally tracks composition*  directly since WKWebView/
+// WebView2 can fire compositionend AFTER the confirming keydown (a race isComposing alone can miss).
+let commandComposing = false;
+commandEl.addEventListener("compositionstart", () => {
+  commandComposing = true;
+});
+commandEl.addEventListener("compositionend", () => {
+  commandComposing = false;
+});
 commandEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && e.isComposing !== true && e.keyCode !== 229 && !commandComposing) {
     e.preventDefault();
     void sendCommand();
   }
