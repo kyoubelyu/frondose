@@ -23,7 +23,6 @@ export const icpMatchDetailSchema = z.object({
   region: icpDimensionSchema,
   // Phase 69 (69.2) — emitted only when ICP.companyNameKeywords is configured.
   companyNameKeywords: icpDimensionSchema.optional(),
-  ownCompany: icpDimensionSchema.optional(),
 });
 export type IcpMatchDetail = z.infer<typeof icpMatchDetailSchema>;
 

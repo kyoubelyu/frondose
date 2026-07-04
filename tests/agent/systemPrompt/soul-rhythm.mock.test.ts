@@ -99,16 +99,15 @@ describe("composeSoulBand — old 'Daily rhythm: Morning ...' sentence removed (
 // ─── T-SOUL.RHYTHM.4 ─────────────────────────────────────────────────────────
 
 describe("composeSoulBand — total character count within soul budget (G-P24.13)", () => {
-  it("T-SOUL.RHYTHM.4: when composeSoulBand called, result.length < 8500 characters (P-39 raised budget: 3 new habits + extended Night slot; T-ICP-PRECISION raised 8000→8500 for own_company + icp-override habit lines; ~8380 actual)", () => {
+  it("T-SOUL.RHYTHM.4: when composeSoulBand called, result.length < 8000 characters (P-39 raised budget: 3 new habits + extended Night slot; ~6790 actual)", () => {
     // Given: minimal identity
     // When:  composeSoulBand(MINIMAL_IDENTITY)
-    // Then:  result.length < 8500 (P-39 added 3 trigger habits + extended Night slot → ~6790 chars;
-    //        budget updated from 6000 to 8000 to reflect P-39 growth while preserving regression guard;
-    //        T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines, actual ~8380)
+    // Then:  result.length < 8000 (P-39 added 3 trigger habits + extended Night slot → ~6790 chars;
+    //        budget updated from 6000 to 8000 to reflect P-39 growth while preserving regression guard)
     const result = composeSoulBand(MINIMAL_IDENTITY);
     assert.ok(
-      result.length < 8500,
-      `T-SOUL.RHYTHM.4: soul band must be < 8500 chars (P-39 budget, raised for T-ICP-PRECISION); got ${result.length}`,
+      result.length < 8000,
+      `T-SOUL.RHYTHM.4: soul band must be < 8000 chars (P-39 budget); got ${result.length}`,
     );
   });
 });
