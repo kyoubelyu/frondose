@@ -194,10 +194,18 @@ export async function handleAutoStart(state: ServeState, deps: ServeDeps, req: I
     ts: Date.now(),
   });
   deps.emitFrame({ type: "cron-mode", cronEnabled: true });
-  sendJson(res, 200, { ok: true, sessionId: record.sessionId ?? record.id });
+  sendJson(res, 200, {
+    ok: true,
+    sessionId: record.sessionId ?? record.id,
+    intervalMinutes,
+    cronExpr: record.cronExpr,
+  });
 }
 
 export function handleAutoStop(state: ServeState, deps: ServeDeps, res: ServerResponse): void {
+  if (state.currentTurn !== null) {
+    state.currentTurn.abortController.abort();
+  }
   const records = readSchedule(deps.schedulePath);
   const { next, disabledCount } = disableAutoSessionRecords(records);
   if (disabledCount > 0) writeSchedule(deps.schedulePath, next);
@@ -205,9 +213,13 @@ export function handleAutoStop(state: ServeState, deps: ServeDeps, res: ServerRe
   setCronMode(state, false);
   state.autoSessionId = null;
 
-  deps.emitFrame({ type: "auto-session-completed", reason: "terminated", ts: Date.now() });
+  deps.emitFrame({
+    type: "auto-session-completed",
+    reason: disabledCount === 0 ? "schedule_gone" : "terminated",
+    ts: Date.now(),
+  });
   deps.emitFrame({ type: "cron-mode", cronEnabled: false });
-  sendJson(res, 200, { ok: true });
+  sendJson(res, 200, { ok: true, sessionsDisabled: disabledCount });
 }
 
 export async function handlePostPassiveMode(state: ServeState, deps: ServeDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
