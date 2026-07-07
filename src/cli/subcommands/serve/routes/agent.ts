@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readConfig } from "../../../../persistence/config.js";
 import { setCronMode } from "../../../../persistence/mode.js";
 import { buildAutoSessionRecord, disableAutoSessionRecords, findActiveAutoSessionId, readSchedule, writeSchedule } from "../../../../persistence/schedule.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "../context.js";
@@ -168,7 +169,7 @@ export async function handleAutoStart(state: ServeState, deps: ServeDeps, req: I
   }
 
   const intervalRaw = body?.intervalMinutes;
-  const intervalMinutes = intervalRaw === undefined || intervalRaw === null ? 15 : intervalRaw;
+  const intervalMinutes = intervalRaw === undefined || intervalRaw === null ? (readConfig().auto?.intervalMinutes ?? 15) : intervalRaw;
   if (typeof intervalMinutes !== "number" || !Number.isInteger(intervalMinutes) || intervalMinutes < 15 || intervalMinutes > 1440) {
     sendJson(res, 400, { ok: false, reason: "invalid_interval" });
     return;
@@ -211,10 +212,12 @@ export function handleAutoStop(state: ServeState, deps: ServeDeps, res: ServerRe
   if (disabledCount > 0) writeSchedule(deps.schedulePath, next);
 
   setCronMode(state, false);
+  const sessionId = state.autoSessionId ?? undefined;
   state.autoSessionId = null;
 
   deps.emitFrame({
     type: "auto-session-completed",
+    sessionId,
     reason: disabledCount === 0 ? "schedule_gone" : "terminated",
     ts: Date.now(),
   });
