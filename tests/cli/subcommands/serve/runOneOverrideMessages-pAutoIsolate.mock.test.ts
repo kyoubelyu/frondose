@@ -160,11 +160,8 @@ describe("runOneTurn — selects args.overrideMessages over state.messages when 
     const identityMatch = optsMessages === (overrideMessages as unknown[]);
     const containsY = JSON.stringify(optsMessages ?? null).includes("Y — the pre-existing shared conversation");
 
-    assert.fail(
-      `TODO Step 5: assert identityMatch===true (opts.messages === args.overrideMessages) AND ` +
-        `containsY===false; currently identityMatch=${identityMatch}, containsY=${containsY}, ` +
-        `optsMessages=${JSON.stringify(optsMessages)} (runOne.ts:172 still reads state.messages unconditionally at Step 2)`,
-    );
+    assert.equal(identityMatch, true, "opts.messages must be the SAME reference as args.overrideMessages");
+    assert.equal(containsY, false, "opts.messages must NOT contain the pre-existing state.messages content");
   });
 });
 
@@ -198,16 +195,34 @@ describe("runOneTurn — the stop_auto post-step hook disables cronEnabled + cle
         (f as { type?: unknown }).type === "cron-mode" &&
         (f as { cronEnabled?: unknown }).cronEnabled === false,
     );
+    const completedIdx = frames.findIndex(
+      (f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "auto-session-completed",
+    );
+    const cronModeIdx = frames.findIndex(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        (f as { type?: unknown }).type === "cron-mode" &&
+        (f as { cronEnabled?: unknown }).cronEnabled === false,
+    );
 
-    assert.fail(
-      `TODO Step 5: assert state.cronEnabled===false (currently ${(state as unknown as { cronEnabled: boolean }).cronEnabled}), ` +
-        `state.autoSessionId===null (currently ${JSON.stringify((state as unknown as { autoSessionId: unknown }).autoSessionId)}), ` +
-        `autoSessionCompleted.length===1 with reason:'stop_auto' (currently ${JSON.stringify(autoSessionCompleted)}), ` +
-        `cronModeOff.length===1 (currently ${JSON.stringify(cronModeOff)}) — runOne.ts has no stop_auto branch yet at Step 2. ` +
-        "ALSO assert emitFrame calls order: the auto-session-completed frame's array index is BEFORE the " +
-        "cron-mode{cronEnabled:false} frame's array index (canonical SSE order per plan §10.4/§4.5) — " +
-        `currently completedIdx=${frames.findIndex((f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "auto-session-completed")}, ` +
-        `cronModeIdx=${frames.findIndex((f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "cron-mode" && (f as { cronEnabled?: unknown }).cronEnabled === false)}`,
+    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must flip to false");
+    assert.equal(
+      (state as unknown as { autoSessionId: unknown }).autoSessionId,
+      null,
+      "state.autoSessionId must be cleared to null",
+    );
+    assert.equal(autoSessionCompleted.length, 1, "exactly one auto-session-completed frame must be emitted");
+    assert.equal(
+      (autoSessionCompleted[0] as { reason?: unknown }).reason,
+      "stop_auto",
+      "the auto-session-completed frame's reason must be 'stop_auto'",
+    );
+    assert.equal(cronModeOff.length, 1, "exactly one cron-mode{cronEnabled:false} frame must be emitted");
+    assert.ok(completedIdx >= 0 && cronModeIdx >= 0, "both frames must be present");
+    assert.ok(
+      completedIdx < cronModeIdx,
+      `auto-session-completed (idx ${completedIdx}) must be emitted BEFORE cron-mode (idx ${cronModeIdx}) — canonical SSE order`,
     );
   });
 });
@@ -247,12 +262,17 @@ describe("runOneTurn — the stop_auto post-step hook is a no-op when the tool e
       (f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "cron-mode",
     );
 
-    assert.fail(
-      `TODO Step 5: assert state.cronEnabled===true UNCHANGED (currently ${(state as unknown as { cronEnabled: boolean }).cronEnabled}), ` +
-        `state.autoSessionId==='s-1' UNCHANGED (currently ${JSON.stringify((state as unknown as { autoSessionId: unknown }).autoSessionId)}), ` +
-        `autoSessionCompleted.length===0 (currently ${JSON.stringify(autoSessionCompleted)}), ` +
-        `cronModeFrames.length===0 (currently ${JSON.stringify(cronModeFrames)}) — runOne.ts has no ok:false-gating on the ` +
-        "stop_auto branch yet at Step 2/3a",
+    assert.equal(
+      (state as unknown as { cronEnabled: boolean }).cronEnabled,
+      true,
+      "state.cronEnabled must stay true when stop_auto returns ok:false — nothing was actually disabled",
     );
+    assert.equal(
+      (state as unknown as { autoSessionId: unknown }).autoSessionId,
+      "s-1",
+      "state.autoSessionId must stay unchanged when stop_auto returns ok:false",
+    );
+    assert.equal(autoSessionCompleted.length, 0, "NO auto-session-completed frame must be emitted on ok:false");
+    assert.equal(cronModeFrames.length, 0, "NO cron-mode frame must be emitted on ok:false");
   });
 });

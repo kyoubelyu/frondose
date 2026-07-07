@@ -262,14 +262,17 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     assert.ok(loc <= 150, `turn.ts must be ≤ 150 LoC; got ${loc}`);
   });
 
-  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 370 LoC (relaxed from ≤300 per §4.2.1; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, and P-THINK onReasoning emit, G-P72s7.2)", () => {
+  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 390 LoC (relaxed from ≤370 per P-AUTO-ISOLATE Step 5a F3; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, P-THINK onReasoning emit, and P-AUTO-ISOLATE's overrideMessages field + envelope-gated stop_auto post-step hook, G-P72s7.2)", () => {
     // Given: post-split turn/runOne.ts.
     // When:  LoC counted via split("\n").length (= wc -l + 1).
-    // Then:  ≤ 370 — P-THINK added the `onReasoning` handler (emits the `reasoning` SSE frame, mirrors onText).
+    // Then:  ≤ 390 — P-AUTO-ISOLATE (D2/§6.4) added the `overrideMessages`
+    //        TurnArgs field + the `stop_auto` ok-gated hook (~14 LoC), pushing
+    //        the file to 380 LoC (locOf); 390 gives ~10 LoC headroom over the
+    //        approved additive contract growth.
     const loc = locOf(RUN_ONE_TS);
     assert.ok(
-      loc <= 370,
-      `turn/runOne.ts must be ≤ 370 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit); got ${loc}`,
+      loc <= 390,
+      `turn/runOne.ts must be ≤ 390 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit + P-AUTO-ISOLATE overrideMessages/stop_auto hook); got ${loc}`,
     );
   });
 

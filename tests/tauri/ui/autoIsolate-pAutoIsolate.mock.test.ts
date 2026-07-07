@@ -64,11 +64,10 @@ describe("app.ts — SSE auto-session-started locks the composer + shows Termina
     const showsTerminate = /autoTerminateEl.*classList\.remove\(\s*["']hidden["']\s*\)/.test(arm);
     const hidesSend = /sendEl.*classList\.add\(\s*["']hidden["']\s*\)/.test(arm);
 
-    assert.fail(
-      `TODO Step 5: assert hasCase===true (currently ${hasCase}), disablesComposer===true (currently ` +
-        `${disablesComposer}), showsTerminate===true (currently ${showsTerminate}), hidesSend===true ` +
-        `(currently ${hidesSend}) — app.ts has no auto-session-started handling yet at Step 2`,
-    );
+    assert.equal(hasCase, true, "handleEvent must have a case 'auto-session-started' arm");
+    assert.equal(disablesComposer, true, "the arm must set commandEl.disabled = true");
+    assert.equal(showsTerminate, true, "the arm must remove 'hidden' from autoTerminateEl");
+    assert.equal(hidesSend, true, "the arm must add 'hidden' to sendEl");
   });
 });
 
@@ -88,11 +87,10 @@ describe("app.ts — SSE auto-session-completed unlocks the composer + hides Ter
     const hidesTerminate = /autoTerminateEl.*classList\.add\(\s*["']hidden["']\s*\)/.test(arm);
     const showsSend = /sendEl.*classList\.remove\(\s*["']hidden["']\s*\)/.test(arm);
 
-    assert.fail(
-      `TODO Step 5: assert hasCase===true (currently ${hasCase}), unlocksComposer===true (currently ` +
-        `${unlocksComposer}), hidesTerminate===true (currently ${hidesTerminate}), showsSend===true ` +
-        `(currently ${showsSend})`,
-    );
+    assert.equal(hasCase, true, "handleEvent must have a case 'auto-session-completed' arm");
+    assert.equal(unlocksComposer, true, "the arm must re-enable commandEl (directly or via syncModeUi)");
+    assert.equal(hidesTerminate, true, "the arm must add 'hidden' to autoTerminateEl");
+    assert.equal(showsSend, true, "the arm must remove 'hidden' from sendEl");
   });
 });
 
@@ -111,12 +109,10 @@ describe("app.ts applyMode('auto') — empty prompt is rejected before any invok
     const revertsViaSyncModeUi = /syncModeUi\(\s*previousMode\s*\)/.test(body);
     const callsAutoStart = body.includes("frondose_agent_auto_start");
 
-    assert.fail(
-      `TODO Step 5: assert capturesPreviousMode===true (currently ${capturesPreviousMode}), ` +
-        `hasEmptyGuard===true (currently ${hasEmptyGuard}), revertsViaSyncModeUi===true (currently ` +
-        `${revertsViaSyncModeUi}), and callsAutoStart===true overall (currently ${callsAutoStart}, but ` +
-        "must be gated so the empty-prompt path never reaches it) — applyMode has no prompt gate yet at Step 2",
-    );
+    assert.equal(capturesPreviousMode, true, "applyMode must capture `const previousMode = appMode;`");
+    assert.equal(hasEmptyGuard, true, "applyMode must surface error.autoStartEmpty on an empty prompt");
+    assert.equal(revertsViaSyncModeUi, true, "applyMode must revert via syncModeUi(previousMode)");
+    assert.equal(callsAutoStart, true, "applyMode must call frondose_agent_auto_start somewhere (on the non-empty path)");
   });
 });
 
@@ -131,11 +127,8 @@ describe("app.ts applyMode('auto') — non-empty prompt invokes frondose_agent_a
     const callsAutoStart = /invoke[^(]*\(\s*["']frondose_agent_auto_start["']/.test(body);
     const passesIntervalNull = body.includes("intervalMinutes: null") || body.includes("intervalMinutes:null");
 
-    assert.fail(
-      `TODO Step 5: assert callsAutoStart===true (currently ${callsAutoStart}) AND passesIntervalNull===true ` +
-        `(currently ${passesIntervalNull}) — applyMode does not call frondose_agent_auto_start at Step 2 ` +
-        "(it unconditionally calls frondose_set_cron_mode today)",
-    );
+    assert.equal(callsAutoStart, true, "applyMode('auto') must invoke frondose_agent_auto_start");
+    assert.equal(passesIntervalNull, true, "the invoke call must pass intervalMinutes: null");
   });
 });
 
@@ -152,13 +145,12 @@ describe("app.ts — Terminate button invokes frondose_agent_auto_stop (T-FE.Ter
     const hasListener = listenerIdx >= 0;
     const listenerBody = hasListener ? APP_TS.slice(listenerIdx, listenerIdx + 300) : "";
     const invokesStop = listenerBody.includes("frondose_agent_auto_stop");
+    const indexHtmlHasButton = INDEX_HTML.includes('id="auto-terminate"');
 
-    assert.fail(
-      `TODO Step 5: assert hasElement===true (currently ${hasElement}), hasListener===true (currently ` +
-        `${hasListener}), invokesStop===true (currently ${invokesStop}) — no autoTerminateEl exists in ` +
-        "app.ts at Step 2, and index.html has no #auto-terminate button " +
-        `(indexHtmlHasButton=${INDEX_HTML.includes('id="auto-terminate"')})`,
-    );
+    assert.equal(hasElement, true, "app.ts must reference autoTerminateEl / mustGet(\"auto-terminate\")");
+    assert.equal(indexHtmlHasButton, true, "index.html must have a #auto-terminate button element");
+    assert.equal(hasListener, true, "app.ts must attach a click listener on autoTerminateEl");
+    assert.equal(invokesStop, true, "the click listener must invoke frondose_agent_auto_stop");
   });
 });
 
@@ -173,11 +165,6 @@ describe("app.ts sendCommand — a disabled composer cannot bypass the Auto lock
     const body = fnBody("async function sendCommand(");
     const hasDisabledGuard = /commandEl\.disabled/.test(body);
 
-    assert.fail(
-      `TODO Step 5: assert hasDisabledGuard===true (currently ${hasDisabledGuard}) — sendCommand has no ` +
-        "commandEl.disabled check at Step 2 (defense-in-depth on top of the DOM disabled attribute; " +
-        "plan §3.2 does not name the exact mechanism — Step 5 confirms whichever guard builder lands, " +
-        "e.g. an early return or a keydown-level disabled check, actually blocks dispatch)",
-    );
+    assert.equal(hasDisabledGuard, true, "sendCommand must check commandEl.disabled as a defense-in-depth guard");
   });
 });

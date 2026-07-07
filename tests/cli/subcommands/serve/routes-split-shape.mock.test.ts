@@ -48,7 +48,12 @@ const LOC_BUDGETS: Record<string, number> = {
   "routes/health.ts": 40,
   "routes/settings.ts": 60,
   "routes/cdp.ts": 100,
-  "routes/agent.ts": 200,
+  // P-AUTO-ISOLATE (Step 5a F2): 200 -> 250. handleAutoStart/handleAutoStop
+  // (D1/D2 fixes: intervalMinutes+cronExpr response fields, currentTurn
+  // abort, sessionsDisabled + schedule_gone/terminated reason) pushed this
+  // file to 236 LoC (locOf via countLines); 250 gives ~14 LoC headroom over
+  // the approved additive contract growth.
+  "routes/agent.ts": 250,
   "routes/workflow.ts": 80,
   "routes/events.ts": 70,
   "routes/audit.ts": 30,
