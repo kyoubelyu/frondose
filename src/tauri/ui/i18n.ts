@@ -28,6 +28,7 @@ const en = {
   "composer.send": "Send",
   "composer.steer": "Steer",
   "composer.cancel": "Cancel",
+  "composer.terminate": "Terminate",
   // ticker
   "ticker.starting": "starting...",
   "ticker.cronRunning": "cron running...",
@@ -52,6 +53,7 @@ const en = {
   "error.retryInvokeFailed": "retry invoke failed: {msg}",
   "error.agent": "agent error: {msg}",
   "error.noTauri": "__TAURI__ missing - not running inside Tauri shell",
+  "error.autoStartEmpty": "Type a standing prompt in the composer before switching to Auto.",
   "retry.button": "Retry",
   // surfaceError action labels
   "action.setModeCron": "Set mode (cron)",
@@ -161,6 +163,7 @@ const zhCN: Record<I18nKey, string> = {
   "composer.send": "发送",
   "composer.steer": "转向",
   "composer.cancel": "取消",
+  "composer.terminate": "终止",
   // ticker
   "ticker.starting": "正在启动…",
   "ticker.cronRunning": "定时任务运行中…",
@@ -185,6 +188,7 @@ const zhCN: Record<I18nKey, string> = {
   "error.retryInvokeFailed": "重试调用失败：{msg}",
   "error.agent": "智能体出错：{msg}",
   "error.noTauri": "未检测到 __TAURI__——应用未在 Tauri 壳内运行",
+  "error.autoStartEmpty": "请先在输入框中写下自动模式的常驻指令，再切换到自动。",
   "retry.button": "重试",
   // surfaceError action labels
   "action.setModeCron": "设置模式（定时）",
