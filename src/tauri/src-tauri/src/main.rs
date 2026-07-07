@@ -12,11 +12,11 @@ mod updater;
 // child_process via tokio::process::Command (see CLAUDE.md HR-8).
 
 use crate::commands::{
-    frondose_agent_abort, frondose_agent_retry, frondose_agent_turn, frondose_check_update,
-    frondose_chrome_ensure, frondose_get_settings, frondose_health, frondose_identity,
-    frondose_set_cron_mode, frondose_set_passive_mode, frondose_set_settings,
-    frondose_workflow_approve, frondose_workflow_cancel, frondose_workflow_decline,
-    frondose_workflow_handoff,
+    frondose_agent_abort, frondose_agent_auto_start, frondose_agent_auto_stop,
+    frondose_agent_retry, frondose_agent_turn, frondose_check_update, frondose_chrome_ensure,
+    frondose_get_settings, frondose_health, frondose_identity, frondose_set_cron_mode,
+    frondose_set_passive_mode, frondose_set_settings, frondose_workflow_approve,
+    frondose_workflow_cancel, frondose_workflow_decline, frondose_workflow_handoff,
 };
 use crate::sidecar::{
     await_serve_ready, shutdown_sidecar, spawn_frondose_serve, supervise_sidecar,
@@ -94,6 +94,8 @@ async fn main() {
             frondose_set_settings,
             frondose_chrome_ensure,
             frondose_agent_turn,
+            frondose_agent_auto_start,
+            frondose_agent_auto_stop,
             frondose_agent_abort,
             frondose_agent_retry,
             frondose_set_cron_mode,
