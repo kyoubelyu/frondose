@@ -71,6 +71,28 @@ pub(crate) async fn frondose_agent_turn(
 }
 
 #[tauri::command]
+pub(crate) async fn frondose_agent_auto_start(
+    state: tauri::State<'_, FrondoseServeState>,
+    prompt: String,
+    interval_minutes: Option<u32>,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/agent/auto/start",
+        Some(json!({"prompt": prompt, "intervalMinutes": interval_minutes})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn frondose_agent_auto_stop(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
+    uds_request(state.inner(), Method::POST, "/agent/auto/stop", Some(json!({}))).await
+}
+
+#[tauri::command]
 pub(crate) async fn frondose_agent_abort(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
 }
