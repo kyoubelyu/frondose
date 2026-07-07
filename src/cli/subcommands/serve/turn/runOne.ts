@@ -1,10 +1,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { StepResult, ToolSet } from "ai";
+import type { CoreMessage, StepResult, ToolSet } from "ai";
 import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
+import { setCronMode } from "../../../../persistence/mode.js";
 import { DATA_DIR_NAME, bumpTurnHeartbeat, removeTurnHeartbeat, writeTurnHeartbeat } from "../../../../persistence/paths.js";
 import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { modeFromState } from "../../../../tauri/ui/mode.js";
@@ -53,6 +54,7 @@ export interface TurnArgs {
   maxSteps?: number;
   isCronTurn?: boolean;
   isWorkflowResume?: boolean;
+  overrideMessages?: CoreMessage[];
 }
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
@@ -169,7 +171,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     await runAgentLoopPi({
       model: deps.model,
       system: selectSystemForTurn(args, state, deps),
-      messages: state.messages,
+      messages: args.overrideMessages ?? state.messages,
       tools: filteredTools,
       maxSteps: args.maxSteps ?? deps.maxSteps,
       abortSignal: abortController.signal,
@@ -210,6 +212,18 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
             // P-WLC: emit the terminal auto-run-completed SSE frame for an operator-driven
             // Auto turn's clean close — see emitAutoRunCompleted.ts for the full rationale.
             emitAutoRunCompletedOnEndAutoRun(state, deps, tr, args.isCronTurn === true);
+          }
+          if (tr.toolName === "stop_auto") {
+            const okResult =
+              typeof tr.result === "object" &&
+              tr.result !== null &&
+              (tr.result as { ok?: unknown }).ok === true;
+            if (okResult) {
+              setCronMode(state, false);
+              state.autoSessionId = null;
+              deps.emitFrame({ type: "auto-session-completed", reason: "stop_auto", ts: Date.now() });
+              deps.emitFrame({ type: "cron-mode", cronEnabled: false });
+            }
           }
           if (tr.toolName === "suggest_next_actions") {
             const nextActions = (tr.result as unknown as { ok: boolean }) ?? {};

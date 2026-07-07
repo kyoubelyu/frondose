@@ -55,6 +55,18 @@ export type SseFrame =
   | { type: "passive-skipped"; ts: number; reason: PassiveSkipReason; ctx?: unknown }
   | WorkflowSseFrame
   | {
+      type: "auto-session-started";
+      sessionId: string;
+      prompt: string;
+      intervalMinutes: number;
+      ts: number;
+    }
+  | {
+      type: "auto-session-completed";
+      reason: "stop_auto" | "terminated" | "schedule_gone";
+      ts: number;
+    }
+  | {
       type: "auto-run-started";
       runId: string;
       maxDurationMinutes: number;
@@ -112,6 +124,7 @@ export interface ServeState {
   cronEnabled: boolean;
   passiveEnabled: boolean;
   autoRunId: string | null;
+  autoSessionId?: string | null;
   lastEmittedAutoCounters?: Record<string, number> | null;
   // P-AUTO-12 part (b): per-run no-progress tracking — in-memory only.
   // - cronNoProgressRunId: the auto_run id currently being tracked (null
@@ -149,6 +162,7 @@ export interface ServeDeps {
   session: ReturnType<typeof import("../../../linkedin/session.js").createLinkedinSession>;
   schedulePath: string;
   salesDbPath: string;
+  memoryDbPath?: string;
   auditPath: string;
   expectedToken: Buffer;
   workflow: WorkflowController;
