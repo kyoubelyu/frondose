@@ -9,6 +9,7 @@
  * Unsupported (rejected with clear error): ranges, lists, named tokens, L/W/?.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
 export interface ScheduleRecord {
   id: string; // crypto.randomUUID()
@@ -19,6 +20,8 @@ export interface ScheduleRecord {
   createdAt: string; // ISO 8601
   lastRunAt: string | null; // ISO 8601; null = never run
   nextRunAt: string; // ISO 8601; computed at create + after each run
+  kind?: "auto_session" | "user_task"; // absent on legacy rows
+  sessionId?: string; // set for kind:"auto_session"
 }
 
 interface CronField {
@@ -146,6 +149,46 @@ export function writeSchedule(path: string, records: ScheduleRecord[]): void {
   const body = records.length === 0 ? "" : `${records.map((r) => JSON.stringify(r)).join("\n")}\n`;
   writeFileSync(tmp, body, "utf-8");
   renameSync(tmp, path);
+}
+
+/** P-AUTO-ISOLATE: the id of the first enabled auto_session record, if any. */
+export function findActiveAutoSessionId(records: ScheduleRecord[]): string | null {
+  const hit = records.find((r) => r.enabled && r.kind === "auto_session");
+  return hit?.sessionId ?? null;
+}
+
+/** P-AUTO-ISOLATE: soft-disable every auto_session record. Returns a NEW array. */
+export function disableAutoSessionRecords(records: ScheduleRecord[]): {
+  next: ScheduleRecord[];
+  disabledCount: number;
+} {
+  let disabledCount = 0;
+  const next = records.map((r) => {
+    if (r.enabled && r.kind === "auto_session") {
+      disabledCount++;
+      return { ...r, enabled: false };
+    }
+    return r;
+  });
+  return { next, disabledCount };
+}
+
+/** P-AUTO-ISOLATE: construct the one auto_session record for /agent/auto/start. */
+export function buildAutoSessionRecord(args: { prompt: string; intervalMinutes: number; now: Date }): ScheduleRecord {
+  const cronExpr = `*/${args.intervalMinutes} * * * *`;
+  const parsed = parseCronExpr(cronExpr);
+  return {
+    id: randomUUID(),
+    task: args.prompt.trim(),
+    cronExpr,
+    type: "recurring",
+    enabled: true,
+    createdAt: args.now.toISOString(),
+    lastRunAt: null,
+    nextRunAt: nextRunAfter(parsed, args.now).toISOString(),
+    kind: "auto_session",
+    sessionId: randomUUID(),
+  };
 }
 
 export function isOneShot(record: Pick<ScheduleRecord, "type" | "cronExpr">): boolean {
