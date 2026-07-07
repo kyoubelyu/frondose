@@ -4,13 +4,13 @@ import { failFromError, ok } from "../../linkedin/envelope.js";
 import { disableAutoSessionRecords, readSchedule, writeSchedule } from "../../persistence/schedule.js";
 
 const stopAutoParams = z.object({
-  reason: z
+  summary: z
     .string()
     .trim()
     .min(1)
     .max(2000)
     .optional()
-    .describe("Optional reason for ending the current Auto session."),
+    .describe("Optional summary for ending the current Auto session."),
 });
 
 /** P-AUTO-ISOLATE: disable auto_session schedules; runOne handles cron state + SSE. */
@@ -26,7 +26,7 @@ export function makeStopAutoTool(schedulePath: string) {
         const records = readSchedule(schedulePath);
         const { next, disabledCount } = disableAutoSessionRecords(records);
         writeSchedule(schedulePath, next);
-        return ok("stop_auto", { sessionsDisabled: disabledCount, reason: parsed.reason ?? null });
+        return ok("stop_auto", { sessionsDisabled: disabledCount, summary: parsed.summary ?? null });
       } catch (e) {
         return failFromError("stop_auto", e);
       }
