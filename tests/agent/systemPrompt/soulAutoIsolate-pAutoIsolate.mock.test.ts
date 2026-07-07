@@ -33,10 +33,9 @@ describe("soulModeFragment('auto') — instructs writing the auto:progress note 
     const hasProgressKey = autoFragment.includes("auto:progress");
     const hasStopAuto = autoFragment.includes("stop_auto");
 
-    assert.fail(
-      `TODO Step 5: assert hasSetMemoryNote===true (currently ${hasSetMemoryNote}), ` +
-        `hasProgressKey===true (currently ${hasProgressKey}), hasStopAuto===true (currently ${hasStopAuto})`,
-    );
+    assert.equal(hasSetMemoryNote, true, "soulModeFragment('auto') must mention set_memory_note");
+    assert.equal(hasProgressKey, true, "soulModeFragment('auto') must mention the auto:progress key");
+    assert.equal(hasStopAuto, true, "soulModeFragment('auto') must mention stop_auto");
   });
 });
 
@@ -50,10 +49,7 @@ describe("soulModeFragment('auto') — stateless-tick preamble (T-Soul.Stateless
     const pattern = /each cron tick[^\n]*fresh context/i;
     const matches = pattern.test(autoFragment);
 
-    assert.fail(
-      `TODO Step 5: assert the stateless-tick preamble pattern matches (currently matches=${matches}); ` +
-        `fragment starts: ${JSON.stringify(autoFragment.slice(0, 200))}`,
-    );
+    assert.equal(matches, true, `stateless-tick preamble pattern must match; fragment starts: ${JSON.stringify(autoFragment.slice(0, 200))}`);
   });
 });
 
@@ -67,10 +63,8 @@ describe("soulModeFragment('auto') — progress-write habit substrings (T-Soul.P
     const hasSetMemoryNote = autoFragment.includes("set_memory_note");
     const hasProgressKey = autoFragment.includes("auto:progress");
 
-    assert.fail(
-      `TODO Step 5: assert hasSetMemoryNote===true AND hasProgressKey===true; currently ` +
-        `hasSetMemoryNote=${hasSetMemoryNote}, hasProgressKey=${hasProgressKey}`,
-    );
+    assert.equal(hasSetMemoryNote, true, "must mention set_memory_note");
+    assert.equal(hasProgressKey, true, "must mention auto:progress");
   });
 });
 
@@ -83,7 +77,7 @@ describe("soulModeFragment('auto') — stop_auto announced as a bare word (T-Sou
     // Then:  contains 'stop_auto' (announcing the new tool per plan §6.6 append)
     const hasStopAuto = /\bstop_auto\b/.test(autoFragment);
 
-    assert.fail(`TODO Step 5: assert hasStopAuto===true; currently ${hasStopAuto}`);
+    assert.equal(hasStopAuto, true, "must mention stop_auto as a bare word");
   });
 });
 
@@ -103,6 +97,6 @@ describe("soulModeFragment('auto') — byte-budget headroom, retargeted at Step 
     //        risk-trimming the load-bearing tuned CAPTURE/CONVERT content.
     const length = autoFragment.length;
 
-    assert.fail(`TODO Step 5: assert length <= 10000; currently length=${length}`);
+    assert.ok(length <= 10000, `soulModeFragment('auto').length must be <= 10000; currently ${length}`);
   });
 });

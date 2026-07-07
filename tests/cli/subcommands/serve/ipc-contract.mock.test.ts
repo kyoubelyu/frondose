@@ -4,8 +4,9 @@
  * Freezes the app↔sidecar protocol in 4 groups (11 tests):
  *   §A  IPC.Transport  (4)  — bearer header + TCP loopback (WIN-1), FRONDOSE_SIDECAR_OWNER,
  *                             --port-file parseArgs (WIN-1), NoUDS golden (WIN-1)
- *   §B  IPC.Endpoints  (3)  — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)
- *   §C  IPC.Frames     (2)  — SseFrame sidecar union (29), UI parallel union (25; WLC added auto-run-completed, P-THINK added reasoning)
+ *   §B  IPC.Endpoints  (3)  — sidecar route branches (16), app HTTP paths (17), Tauri commands (17)
+ *   §C  IPC.Frames     (2)  — SseFrame sidecar union (31), UI parallel union (27; WLC added auto-run-completed, P-THINK added reasoning,
+ *                             P-AUTO-ISOLATE added auto-session-started/auto-session-completed to BOTH sides)
  *   §D  IPC.Mask       (2)  — GET /settings no raw key, POST→GET mask round-trip
  *
  * WIN-1 transport update (Step 3 scaffold):
@@ -41,7 +42,8 @@ const FRONDOSE_SIDECAR_OWNER_VALUE = "frondose-app";
 
 // ─── §B Goldens ──────────────────────────────────────────────────────────────
 
-/** 14 sidecar route branches (routes.ts:48-113). Prefix branches recorded as METHOD+prefix. */
+/** 16 sidecar route branches (routes.ts:48-113+). Prefix branches recorded as METHOD+prefix.
+ *  P-AUTO-ISOLATE added 2: POST /agent/auto/start, POST /agent/auto/stop (14→16). */
 const SIDECAR_ROUTE_BRANCHES_GOLDEN: ReadonlySet<string> = new Set([
   "GET /health",
   "GET /identity",
@@ -54,12 +56,15 @@ const SIDECAR_ROUTE_BRANCHES_GOLDEN: ReadonlySet<string> = new Set([
   "POST /agent/retry",
   "POST /workflow/", // startsWith branch
   "POST /agent/cron-mode",
+  "POST /agent/auto/start", // P-AUTO-ISOLATE
+  "POST /agent/auto/stop", // P-AUTO-ISOLATE
   "POST /agent/passive-mode",
   "GET /agent/events",
   "GET /audit/tail", // startsWith branch
 ]);
 
-/** 15 app-side concrete (METHOD PATH) pairs from main.rs uds_request + SSE build_uri. */
+/** 17 app-side concrete (METHOD PATH) pairs from main.rs uds_request + SSE build_uri.
+ *  P-AUTO-ISOLATE added 2: POST /agent/auto/start, POST /agent/auto/stop (15→17). */
 const APP_CONCRETE_PATHS_GOLDEN: ReadonlySet<string> = new Set([
   "GET /health",
   "GET /identity",
@@ -70,6 +75,8 @@ const APP_CONCRETE_PATHS_GOLDEN: ReadonlySet<string> = new Set([
   "POST /agent/abort",
   "POST /agent/retry",
   "POST /agent/cron-mode",
+  "POST /agent/auto/start", // P-AUTO-ISOLATE
+  "POST /agent/auto/stop", // P-AUTO-ISOLATE
   "POST /agent/passive-mode",
   "POST /workflow/approve",
   "POST /workflow/decline",
@@ -78,7 +85,8 @@ const APP_CONCRETE_PATHS_GOLDEN: ReadonlySet<string> = new Set([
   "GET /agent/events",
 ]);
 
-/** 15 Tauri invoke_handler command identifiers (main.rs:745-761). F-REN-2: mai_* → frondose_*. */
+/** 17 Tauri invoke_handler command identifiers (main.rs:745-761+). F-REN-2: mai_* → frondose_*.
+ *  P-AUTO-ISOLATE added 2: frondose_agent_auto_start, frondose_agent_auto_stop (15→17). */
 const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
   "frondose_health",
   "frondose_identity",
@@ -89,6 +97,8 @@ const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
   "frondose_agent_abort",
   "frondose_agent_retry",
   "frondose_set_cron_mode",
+  "frondose_agent_auto_start", // P-AUTO-ISOLATE
+  "frondose_agent_auto_stop", // P-AUTO-ISOLATE
   "frondose_set_passive_mode",
   "frondose_workflow_approve",
   "frondose_workflow_decline",
@@ -108,8 +118,9 @@ const WORKFLOW_SUBPATHS = [
 
 // ─── §C Goldens ──────────────────────────────────────────────────────────────
 
-/** 29 sidecar SSE frame type strings (22 SseFrame context.ts + 7 WorkflowSseFrame types.ts).
- *  P-THINK 2026-07-02: added `reasoning` (live model-thinking stream) to context.ts SseFrame → 21→22. */
+/** 31 sidecar SSE frame type strings (24 SseFrame context.ts + 7 WorkflowSseFrame types.ts).
+ *  P-THINK 2026-07-02: added `reasoning` (live model-thinking stream) to context.ts SseFrame → 21→22.
+ *  P-AUTO-ISOLATE: added `auto-session-started` + `auto-session-completed` to context.ts SseFrame → 22→24. */
 const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   // SseFrame context.ts — multiline block (17):
   "tool-call",
@@ -129,12 +140,14 @@ const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "cron-done",
   "turn-started",
   "passive-mode",
-  // SseFrame context.ts — standalone members (5):
+  // SseFrame context.ts — standalone members (7):
   "passive-fired",
   "passive-skipped",
   "auto-run-started",
   "auto-run-progress",
   "auto-run-completed",
+  "auto-session-started", // P-AUTO-ISOLATE
+  "auto-session-completed", // P-AUTO-ISOLATE
   // WorkflowSseFrame types.ts (7):
   "workflow-proposed",
   "workflow-step-advanced",
@@ -145,10 +158,12 @@ const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "commit-warning",
 ]);
 
-/** 25 UI SseFrame literals (app.ts:51-80) — documented drift baseline (4 sidecar-only frames missing).
+/** 27 UI SseFrame literals (app.ts:51-80+) — documented drift baseline (4 sidecar-only frames missing).
  *  WORKFLOW-LIFECYCLE-COMPLETION (2026-07-02): the UI now HANDLES `auto-run-completed` (app.ts handleEvent
  *  closes the Auto-run card on completion), so it moved from SIDECAR_ONLY_DRIFT into the UI union —
  *  drift shrank 5→4. P-THINK (2026-07-02): added `reasoning` (UI renders the gray live-thinking block) → 24→25.
+ *  P-AUTO-ISOLATE: added `auto-session-started` + `auto-session-completed` to BOTH sides (UI handles the
+ *  composer lock/unlock) → 25→27; drift stays at 4 (these 2 are NOT sidecar-only).
  *  See src/tauri/ui/app.ts + src/cli/subcommands/serve/turn/runOne.ts. */
 const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "tool-call",
@@ -169,6 +184,8 @@ const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "cron-done",
   "turn-started",
   "auto-run-completed", // WLC 2026-07-02: UI now closes the Auto-run card on this frame
+  "auto-session-started", // P-AUTO-ISOLATE
+  "auto-session-completed", // P-AUTO-ISOLATE
   "workflow-proposed",
   "workflow-step-advanced",
   "workflow-approval-pending",
@@ -606,11 +623,11 @@ describe("IPC.Transport — bearer header + TCP loopback (WIN-1), owner constant
 // §B — IPC.Endpoints
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Tauri commands (15)", () => {
-  it("T-IPC.Endpoints.1: when routes.ts is parsed, it has exactly 14 route branches matching the golden set", () => {
-    // Given: routes.ts:48-113 contains all sidecar HTTP dispatch branches
+describe("IPC.Endpoints — sidecar route branches (16), app HTTP paths (17), Tauri commands (17)", () => {
+  it("T-IPC.Endpoints.1: when routes.ts is parsed, it has exactly 16 route branches matching the golden set", () => {
+    // Given: routes.ts:48-113+ contains all sidecar HTTP dispatch branches (P-AUTO-ISOLATE added 2)
     // When: the source is parsed for all if(method===... && url===... / url.startsWith(...)) conditions
-    // Then: extracted count===14 (fail-closed) before set equality; any add/drop/rename fails
+    // Then: extracted count===16 (fail-closed) before set equality; any add/drop/rename fails
 
     const routesTs = readFileSync(ROUTES_TS, "utf-8");
 
@@ -635,8 +652,8 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // Fail-closed count assertion BEFORE set equality
     assert.strictEqual(
       extracted.size,
-      14,
-      `expected exactly 14 sidecar route branches in routes.ts, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
+      16,
+      `expected exactly 16 sidecar route branches in routes.ts, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
     );
 
     assertSetsEqual(extracted, SIDECAR_ROUTE_BRANCHES_GOLDEN, "sidecar route branches");
@@ -648,10 +665,10 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     }
   });
 
-  it("T-IPC.Endpoints.2: when main.rs is parsed, it has exactly 15 app-side concrete (method, path) pairs and every pair is accepted by the sidecar", () => {
-    // Given: main.rs contains all uds_request calls + SSE build_uri call
+  it("T-IPC.Endpoints.2: when main.rs is parsed, it has exactly 17 app-side concrete (method, path) pairs and every pair is accepted by the sidecar", () => {
+    // Given: main.rs contains all uds_request calls + SSE build_uri call (P-AUTO-ISOLATE added 2)
     // When: parsed for Method::X + "/path" literals passed to uds_request + build_uri
-    // Then: count===15 (fail-closed); subset parity holds (every app path accepted by a sidecar branch)
+    // Then: count===17 (fail-closed); subset parity holds (every app path accepted by a sidecar branch)
 
     const mainRsSrc = MAIN_RS;
 
@@ -675,8 +692,8 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // Fail-closed count assertion BEFORE set equality
     assert.strictEqual(
       extracted.size,
-      15,
-      `expected exactly 15 app-side concrete (method, path) pairs in main.rs, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
+      17,
+      `expected exactly 17 app-side concrete (method, path) pairs in main.rs, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
     );
 
     assertSetsEqual(extracted, APP_CONCRETE_PATHS_GOLDEN, "app-side concrete paths");
@@ -706,10 +723,10 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     }
   });
 
-  it("T-IPC.Endpoints.3: when main.rs invoke_handler block is parsed, it has exactly 15 Tauri command names matching the golden set", () => {
-    // Given: main.rs:745-761 contains the tauri::generate_handler![...] block
+  it("T-IPC.Endpoints.3: when main.rs invoke_handler block is parsed, it has exactly 17 Tauri command names matching the golden set", () => {
+    // Given: main.rs:745-761+ contains the tauri::generate_handler![...] block (P-AUTO-ISOLATE added 2)
     // When: the identifier list is extracted
-    // Then: count===15 (fail-closed); any rename or drop fails
+    // Then: count===17 (fail-closed); any rename or drop fails
 
     const mainRsSrc = MAIN_RS;
 
@@ -729,8 +746,8 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
     // Fail-closed count assertion BEFORE set equality
     assert.strictEqual(
       extracted.size,
-      15,
-      `expected exactly 15 Tauri command names in generate_handler!, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
+      17,
+      `expected exactly 17 Tauri command names in generate_handler!, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
     );
 
     assertSetsEqual(extracted, TAURI_COMMANDS_GOLDEN, "Tauri invoke_handler commands");
@@ -741,11 +758,11 @@ describe("IPC.Endpoints — sidecar route branches (14), app HTTP paths (15), Ta
 // §C — IPC.Frames
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Frames — SseFrame discriminator union (sidecar=29, UI=25)", () => {
-  it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 28-element golden", () => {
+describe("IPC.Frames — SseFrame discriminator union (sidecar=31, UI=27)", () => {
+  it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 31-element golden", () => {
     // Given: context.ts declares SseFrame (multiline + standalone forms); types.ts declares WorkflowSseFrame
     // When: TS compiler API extracts all type: discriminants from both files (Approach A — no regex)
-    // Then: context.ts yields exactly 22, types.ts yields exactly 7, combined===29; any drift fails
+    // Then: context.ts yields exactly 24, types.ts yields exactly 7, combined===31; any drift fails
 
     const contextSseFrameSet = extractSseFrameDiscriminants(CONTEXT_TS, "SseFrame");
     const workflowSseFrameSet = extractSseFrameDiscriminants(WORKFLOW_TYPES_TS, "WorkflowSseFrame");
@@ -753,8 +770,8 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=29, UI=25)", () =
     // Fail-closed counts BEFORE set equality
     assert.strictEqual(
       contextSseFrameSet.size,
-      22,
-      `expected 22 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
+      24,
+      `expected 24 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
     );
     assert.strictEqual(
       workflowSseFrameSet.size,
@@ -765,17 +782,17 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=29, UI=25)", () =
     const combined = new Set([...contextSseFrameSet, ...workflowSseFrameSet]);
     assert.strictEqual(
       combined.size,
-      29,
-      `expected combined sidecar SseFrame set size === 29, got ${combined.size} (overlap or wrong count)`,
+      31,
+      `expected combined sidecar SseFrame set size === 31, got ${combined.size} (overlap or wrong count)`,
     );
 
-    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (29 literals)");
+    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (31 literals)");
   });
 
-  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 25 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
-    // Given: ui/app.ts:51-80 declares a hand-copied subset SseFrame with 25 literals (4 sidecar-only frames missing)
+  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 27 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
+    // Given: ui/app.ts:51-80+ declares a hand-copied subset SseFrame with 27 literals (4 sidecar-only frames missing)
     // When: TS compiler API extracts discriminants from app.ts (Approach A)
-    // Then: count===25 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
+    // Then: count===27 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
     //       WLC 2026-07-02 added auto-run-completed to the UI union → drift 5→4)
 
     const uiSseFrameSet = extractSseFrameDiscriminants(APP_TS, "SseFrame");
@@ -783,11 +800,11 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=29, UI=25)", () =
     // Fail-closed count BEFORE set equality
     assert.strictEqual(
       uiSseFrameSet.size,
-      25,
-      `expected 25 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
+      27,
+      `expected 27 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
     );
 
-    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (25 literals)");
+    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (27 literals)");
 
     // Delta assertion: sidecar-only frames are EXACTLY the 4 documented drift frames
     const sidecarOnlyActual = new Set([...SIDECAR_SSE_FRAMES_GOLDEN].filter((f) => !uiSseFrameSet.has(f)));

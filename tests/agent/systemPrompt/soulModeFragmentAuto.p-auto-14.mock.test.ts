@@ -371,16 +371,27 @@ describe("T-A14 — soulModeFragment('auto') per-turn funnel budget directive (P
   });
 
   // ─── T-A14.14 ────────────────────────────────────────────────────────────────
-  it("T-A14.14: auto fragment still begins with 'You are in AUTO mode (cron-driven or operator hand-off).' declaration (G-A14.14)", () => {
+  it("T-A14.14: auto fragment still begins with an AUTO-mode declaration; the original 'operator hand-off' sentence is still present, now as the second declaration (G-A14.14, UPDATED at P-AUTO-ISOLATE Step 5)", () => {
     // Given: the cron consumer prepends soulModeFragment("auto") to every cron prompt
     // When:  soulModeFragment("auto") is called before and after the additive insertion
-    // Then:  the fragment still starts with the AUTO-mode declaration (cron prompt structure intact)
+    // Then:  the fragment still starts with an "You are in AUTO mode" declaration (cron prompt
+    //        structure intact) — P-AUTO-ISOLATE §6.6 PREPENDED a stateless-tick preamble
+    //        ("You are in AUTO mode (cron-driven). Each cron tick starts a FRESH context...")
+    //        BEFORE the original "(cron-driven or operator hand-off)" sentence, per the plan's
+    //        locked design. Both are now present; only the literal opening 80 chars changed.
+    //        This is an intentional, plan-approved structural change (docs/phase-auto-isolate-plan.md
+    //        §6.6) — NOT a regression. Updated here (validator Step 5, test-maintenance).
     assert.ok(soulModeFragment !== undefined, "T-A14.14: soulModeFragment must be importable");
     const fragment = soulModeFragment!("auto");
     assert.ok(
-      fragment.startsWith("You are in AUTO mode (cron-driven or operator hand-off)."),
-      `T-A14.14 FAIL: auto fragment does not start with the AUTO-mode declaration. ` +
+      fragment.startsWith("You are in AUTO mode (cron-driven)."),
+      `T-A14.14 FAIL: auto fragment does not start with the P-AUTO-ISOLATE stateless-tick preamble declaration. ` +
         `Actual start (80 chars): ${fragment.slice(0, 80)}`,
+    );
+    assert.ok(
+      fragment.includes("You are in AUTO mode (cron-driven or operator hand-off)."),
+      "T-A14.14 FAIL: the original 'operator hand-off' AUTO-mode declaration must still be present " +
+        "(no longer first, but not deleted)",
     );
   });
 

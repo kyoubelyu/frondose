@@ -100,11 +100,12 @@ describe("makeStopAutoTool — disables the enabled kind:auto_session schedule r
     const after = readSchedule(schedulePath);
     const stillEnabled = after.find((r) => r.id === record.id)?.enabled;
 
-    assert.fail(
-      `TODO Step 5: assert makeStopAutoTool !== null (currently ${makeStopAutoTool !== null}), ` +
-        `after-record.enabled===false (currently ${stillEnabled}), and result===` +
-        `{ok:true,command:'stop_auto',data:{sessionsDisabled:1,summary:'done'}} (currently ${JSON.stringify(result)}) ` +
-        "— src/tools/cron/stopAuto.ts does not exist yet (builder Step 4b pending)",
+    assert.ok(makeStopAutoTool !== null, "makeStopAutoTool must be importable from src/tools/cron/stopAuto.ts");
+    assert.equal(stillEnabled, false, "the auto_session record must be disabled after stop_auto");
+    assert.deepEqual(
+      result,
+      { ok: true, command: "stop_auto", data: { sessionsDisabled: 1, summary: "done" } },
+      "stop_auto({summary:'done'}) must return {ok:true,command:'stop_auto',data:{sessionsDisabled:1,summary:'done'}}",
     );
   });
 });
@@ -126,9 +127,11 @@ describe("makeStopAutoTool — idempotent when no auto_session records exist (T-
       result = await runStopAuto(tool, {});
     }
 
-    assert.fail(
-      `TODO Step 5: assert makeStopAutoTool !== null (currently ${makeStopAutoTool !== null}) and result===` +
-        `{ok:true,command:'stop_auto',data:{sessionsDisabled:0,summary:null}} (currently ${JSON.stringify(result)})`,
+    assert.ok(makeStopAutoTool !== null, "makeStopAutoTool must be importable");
+    assert.deepEqual(
+      result,
+      { ok: true, command: "stop_auto", data: { sessionsDisabled: 0, summary: null } },
+      "stop_auto() with no auto_session records must return {ok:true,data:{sessionsDisabled:0,summary:null}}",
     );
   });
 });
@@ -155,9 +158,8 @@ describe("makeStopAutoTool — leaves legacy (non-auto_session) schedule records
     const after = readSchedule(schedulePath);
     const legacyAfter = after.find((r) => r.id === legacyRecord.id);
 
-    assert.fail(
-      `TODO Step 5: assert legacyAfter.enabled===true and legacyAfter has no 'kind' field; currently ` +
-        `legacyAfter=${JSON.stringify(legacyAfter)} (makeStopAutoTool !== null: ${makeStopAutoTool !== null})`,
-    );
+    assert.ok(makeStopAutoTool !== null, "makeStopAutoTool must be importable");
+    assert.equal(legacyAfter?.enabled, true, "the legacy (non-auto_session) record must remain enabled:true");
+    assert.equal((legacyAfter as { kind?: unknown } | undefined)?.kind, undefined, "the legacy record must gain no 'kind' field");
   });
 });
