@@ -9,21 +9,19 @@
  *
  * Design: seeds a temp-file salesDb with a running auto_run and a mix of connect_sent
  * rows (success/skipped/failed), then drives one cron tick and asserts the injected
- * [CONNECTS_USED=N/cap] prompt segment via state.messages (the cron driver pushes the
- * cronPrompt as state.messages.push({ role:"user", content: cronPrompt }) before calling
- * turn.runOneTurn — see cron.ts:141).
+ * [CONNECTS_USED=N/cap] prompt segment via the turn stub's captured `userPrompt` arg.
+ *
+ * UPDATED (P-AUTO-ISOLATE, Step 5): cron.ts no longer pushes the cronPrompt into
+ * `state.messages` (that seam was DELETED — the isolation guarantee this later phase
+ * introduced). The cronPrompt is now only observable via the args passed to
+ * `turn.runOneTurn({ userPrompt, overrideMessages, ... })`. The turn stub below was
+ * changed from a bare no-op to a capturing stub so this pre-existing characterization
+ * test keeps working against the new seam. This is a MECHANICAL update (read the
+ * cronPrompt from a different place) — the actual G-A13.9 behavior under test
+ * (CONNECTS_USED success-only counting) is untouched by P-AUTO-ISOLATE.
  *
  * Follows the tests/serve/cronAutoRunLifecycle.mock.test.ts pattern:
- *   createCronDriver(state, deps, turn) → driver.tick() → read state.messages[last].content.
- *
- * Step-3 compile note:
- *   The cron.ts:116 change does NOT exist until builder Step 4. At Step 3,
- *   the cron driver still reads `counters.connect_sent ?? 0` (all-rows), so:
- *   - T-A13.Cron.1 FAILS: the cron prompt says CONNECTS_USED=4/5 (all 4 rows)
- *     but the test expects CONNECTS_USED=1/5 (1 success).
- *   - T-A13.Cron.2 FAILS: similar — expects 0/5 but gets 3/5.
- *   - T-A13.Cron.3 PASSES: all rows are success, so all-rows === success-only.
- *   Intentional Step-3 red-state.
+ *   createCronDriver(state, deps, turn) → driver.tick() → read the captured turn call's userPrompt.
  *
  * Run (mock):
  *   node --import tsx --test --test-force-exit --test-timeout=30000 \
@@ -124,9 +122,19 @@ function makeMockDeps(
   };
 }
 
-/** No-op turn runner — cron driver calls turn.runOneTurn(...). */
-function makeNoopTurn(): { runOneTurn: AnyFn } {
-  return { runOneTurn: async () => {} };
+/**
+ * Capturing turn runner — cron driver calls turn.runOneTurn(args).
+ * P-AUTO-ISOLATE (Step 5): captures args so the cronPrompt (args.userPrompt) can be
+ * inspected directly, since cron.ts no longer pushes it into state.messages.
+ */
+function makeCapturingTurn(): { runOneTurn: AnyFn; calls: MockRecord[] } {
+  const calls: MockRecord[] = [];
+  return {
+    calls,
+    runOneTurn: async (args: MockRecord) => {
+      calls.push(args);
+    },
+  };
 }
 
 /** Insert a connect_sent ledger row with the given result into the given DB. */
@@ -138,15 +146,15 @@ function insertConnectRow(db: any, runId: string, result: string): void {
 }
 
 /**
- * Extract the cronPrompt from state.messages after a tick.
- * The cron driver does: state.messages.push({ role: "user", content: cronPrompt })
- * before calling turn.runOneTurn (cron.ts:141).
+ * Extract the cronPrompt from the captured turn.runOneTurn call's userPrompt arg.
+ * P-AUTO-ISOLATE (Step 5): cron.ts no longer pushes into state.messages (that push
+ * was DELETED as part of the per-tick isolation guarantee) — the cronPrompt is
+ * threaded through TurnArgs.userPrompt (and TurnArgs.overrideMessages) instead.
  */
-function extractCronPrompt(state: MockRecord): string | null {
-  // biome-ignore lint/suspicious/noExplicitAny: state.messages shape
-  const last = (state.messages as any[]).at(-1);
+function extractCronPrompt(turnStub: { calls: MockRecord[] }): string | null {
+  const last = turnStub.calls.at(-1);
   if (!last) return null;
-  return typeof last.content === "string" ? last.content : null;
+  return typeof last.userPrompt === "string" ? last.userPrompt : null;
 }
 
 describe("T-A13.Cron — cron CONNECTS_USED uses success-only count (G-A13.9, P-AUTO-13)", () => {
@@ -184,10 +192,11 @@ describe("T-A13.Cron — cron CONNECTS_USED uses success-only count (G-A13.9, P-
     const state = makeMockState({ autoRunId: runRow.id });
     const deps = makeMockDeps(schedulePath, salesDbPath, emittedFrames);
 
-    const driver = createCronDriver!(state, deps, makeNoopTurn());
+    const turnStub = makeCapturingTurn();
+    const driver = createCronDriver!(state, deps, turnStub);
     await driver.tick();
 
-    const cronPrompt = extractCronPrompt(state);
+    const cronPrompt = extractCronPrompt(turnStub);
     assert.ok(
       typeof cronPrompt === "string" && cronPrompt.length > 0,
       "T-A13.Cron.1: cronPrompt must be pushed to state.messages after tick",
@@ -233,10 +242,11 @@ describe("T-A13.Cron — cron CONNECTS_USED uses success-only count (G-A13.9, P-
     const state = makeMockState({ autoRunId: runRow.id });
     const deps = makeMockDeps(schedulePath, salesDbPath, emittedFrames);
 
-    const driver = createCronDriver!(state, deps, makeNoopTurn());
+    const turnStub = makeCapturingTurn();
+    const driver = createCronDriver!(state, deps, turnStub);
     await driver.tick();
 
-    const cronPrompt = extractCronPrompt(state);
+    const cronPrompt = extractCronPrompt(turnStub);
     assert.ok(
       typeof cronPrompt === "string" && cronPrompt.length > 0,
       "T-A13.Cron.2: cronPrompt must be pushed to state.messages",
@@ -276,10 +286,11 @@ describe("T-A13.Cron — cron CONNECTS_USED uses success-only count (G-A13.9, P-
     const state = makeMockState({ autoRunId: runRow.id });
     const deps = makeMockDeps(schedulePath, salesDbPath, emittedFrames);
 
-    const driver = createCronDriver!(state, deps, makeNoopTurn());
+    const turnStub = makeCapturingTurn();
+    const driver = createCronDriver!(state, deps, turnStub);
     await driver.tick();
 
-    const cronPrompt = extractCronPrompt(state);
+    const cronPrompt = extractCronPrompt(turnStub);
     assert.ok(
       typeof cronPrompt === "string" && cronPrompt.length > 0,
       "T-A13.Cron.3: cronPrompt must be pushed to state.messages",

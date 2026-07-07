@@ -130,10 +130,6 @@ describe("handlePostAgentTurn — manual-turn path keeps pushing to state.messag
       (m) => (m as { role?: string }).role === "user" && (m as { content?: unknown }).content === "hello manual",
     );
 
-    assert.fail(
-      `TODO Step 5: assert state.messages contains {role:'user',content:'hello manual'} (pushed===${pushed}); ` +
-        `currently state.messages=${JSON.stringify(state.messages)} (this is a pure regression guard — ` +
-        "expected to pass immediately once the real assertion replaces this TODO, since manual-turn behavior is out of scope for this phase)",
-    );
+    assert.equal(pushed, true, "manual-turn path must still push {role:'user',content:'hello manual'} into state.messages (out of scope for this phase)");
   });
 });

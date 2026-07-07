@@ -52,10 +52,12 @@ test("T-M82: MAI_CDP_PORT env var: default is 9222; custom value parses to integ
 
 // ─── T-M83 (D-12 refresh — P-11 Step 4a) ──────────────────────────────────────
 
-test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 24-tool no-session set (P-Y3 rebaseline)", () => {
+test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns the 25-tool no-session set (P-AUTO-ISOLATE rebaseline)", () => {
   // Given: no CDP session (no LinkedIn tools), no memory, no identity, no control tools
   // When: makeAllTools(undefined, undefined, undefined, undefined) called
-  // Then: sorted keys === the 24 session-independent tools (base + 17 sales-kernel tools)
+  // Then: sorted keys === the 25 session-independent tools (base + 17 sales-kernel tools +
+  //       stop_auto — P-AUTO-ISOLATE added stop_auto to makeCronTools, which is always
+  //       registered in the no-session/worker branch alongside schedule_task, 24→25)
 
   const toolsNoSession = makeAllTools(undefined);
   const keys = Object.keys(toolsNoSession).sort();
@@ -84,13 +86,14 @@ test("T-M83: makeAllTools(undefined, undefined, undefined, undefined) returns th
       "score_account",
       "score_lead",
       "start_auto_run",
+      "stop_auto",
       "update_lead_stage",
       "web_fetch",
       "web_search",
     ],
-    `T-M83: makeAllTools(undefined) must return the 24-tool no-session set; got: [${keys.join(", ")}]`,
+    `T-M83: makeAllTools(undefined) must return the 25-tool no-session set; got: [${keys.join(", ")}]`,
   );
-  assert.equal(keys.length, 24, "exactly 24 tools when no session (P-Y3 rebaseline)");
+  assert.equal(keys.length, 25, "exactly 25 tools when no session (P-AUTO-ISOLATE rebaseline)");
 
   // Spot-check that echo tool is still functional
   assert.ok(typeof toolsNoSession.echo?.execute === "function", "echo tool execute must be a function");

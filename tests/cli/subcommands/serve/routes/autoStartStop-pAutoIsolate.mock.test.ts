@@ -38,6 +38,7 @@ import { createWorkflowController } from "../../../../../src/agent/workflow/cont
 import type { ServeDeps, ServeState } from "../../../../../src/cli/subcommands/serve/context.js";
 import { createRequestHandler } from "../../../../../src/cli/subcommands/serve/routes.js";
 import type { createTurnRunner } from "../../../../../src/cli/subcommands/serve/turn.js";
+import { readSchedule } from "../../../../../src/persistence/schedule.js";
 
 // ─── Mock HTTP classes (mirrors routes-characterization.mock.test.ts) ────────
 
@@ -197,11 +198,10 @@ describe("POST /agent/auto/start — empty/whitespace prompt rejected (T-Start.1
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "" } });
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===400 and res.parsedBody()===` +
-        `{ok:false,reason:'missing_prompt'} and state.cronEnabled===false; currently statusCode=${res.statusCode}, ` +
-        `body=${JSON.stringify(res.parsedBody())} (route doesn't exist yet at Step 2 — 404 expected)`,
-    );
+    assert.equal(res.statusCode, 400, "empty prompt must be rejected with HTTP 400");
+    assert.deepEqual(res.parsedBody(), { ok: false, reason: "missing_prompt" });
+    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must stay unchanged");
+    assert.equal(readSchedule(schedulePath).length, 0, "no schedule record must be written");
   });
 
   it("T-Start.2: given body {prompt:'   \\n  '} (whitespace-only), then 400 {ok:false, reason:'missing_prompt'}", async () => {
@@ -216,10 +216,8 @@ describe("POST /agent/auto/start — empty/whitespace prompt rejected (T-Start.1
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "   \n  " } });
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===400 and reason==='missing_prompt'; currently statusCode=${res.statusCode}, ` +
-        `body=${JSON.stringify(res.parsedBody())}`,
-    );
+    assert.equal(res.statusCode, 400, "whitespace-only prompt must be rejected with HTTP 400");
+    assert.deepEqual(res.parsedBody(), { ok: false, reason: "missing_prompt" });
   });
 });
 
@@ -249,15 +247,30 @@ describe("POST /agent/auto/start — non-empty prompt writes a record + flips cr
         (f as { type?: unknown }).type === "cron-mode" &&
         (f as { cronEnabled?: unknown }).cronEnabled === true,
     );
+    const body = res.parsedBody() as { ok?: unknown; sessionId?: unknown; intervalMinutes?: unknown; cronExpr?: unknown };
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===200, body.ok===true, body.intervalMinutes===15, ` +
-        `body.cronExpr==='*/15 * * * *', state.cronEnabled===true, emittedFrames contains auto-session-started + ` +
-        `cron-mode{cronEnabled:true}, AND auto-session-started's array index is BEFORE cron-mode's array index ` +
-        "(canonical SSE order per plan §10.4/§4.5 — 'auto-session-started FIRST, then cron-mode'); " +
-        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, ` +
-        `state.cronEnabled=${(state as unknown as { cronEnabled: boolean }).cronEnabled}, frames=${JSON.stringify(emittedFrames)}, ` +
-        `startedIdx=${startedIdx}, cronModeOnIdx=${cronModeOnIdx}`,
+    assert.equal(res.statusCode, 200, "non-empty prompt must succeed with HTTP 200");
+    assert.equal(body.ok, true);
+    assert.equal(typeof body.sessionId, "string", "response must carry a sessionId");
+    assert.equal(body.intervalMinutes, 15, "response must carry intervalMinutes:15 per plan §4.5 contract");
+    assert.equal(body.cronExpr, "*/15 * * * *", "response must carry cronExpr per plan §4.5 contract");
+    const records = readSchedule(schedulePath);
+    const newRecord = records.find((r) => (r as unknown as { sessionId?: unknown }).sessionId === body.sessionId);
+    assert.ok(newRecord, "a new kind:auto_session record must exist matching the returned sessionId");
+    assert.equal((newRecord as unknown as { kind?: unknown })?.kind, "auto_session");
+    assert.equal(newRecord?.enabled, true);
+    assert.equal(newRecord?.task, "Prospect HK founders");
+    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, true, "state.cronEnabled must flip to true");
+    assert.equal(
+      (state as unknown as { autoSessionId: unknown }).autoSessionId,
+      body.sessionId,
+      "state.autoSessionId must equal the returned sessionId",
+    );
+    assert.ok(startedIdx >= 0, "auto-session-started frame must be emitted");
+    assert.ok(cronModeOnIdx >= 0, "cron-mode{cronEnabled:true} frame must be emitted");
+    assert.ok(
+      startedIdx < cronModeOnIdx,
+      `auto-session-started (idx ${startedIdx}) must be emitted BEFORE cron-mode (idx ${cronModeOnIdx}) — canonical SSE order`,
     );
   });
 });
@@ -274,11 +287,11 @@ describe("POST /agent/auto/start — interval override honored + clamped (T-Star
     const handler = createRequestHandler(state, deps, makeTurnStub(), makeDispatch());
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "X", intervalMinutes: 30 } });
+    const body = res.parsedBody() as { cronExpr?: unknown; intervalMinutes?: unknown };
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===200 and body.cronExpr==='*/30 * * * *'; currently statusCode=${res.statusCode}, ` +
-        `body=${JSON.stringify(res.parsedBody())}`,
-    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.cronExpr, "*/30 * * * *");
+    assert.equal(body.intervalMinutes, 30);
   });
 
   it("T-Start.4b: given {prompt:'X', intervalMinutes:5} (below the 15-min floor), then 400 {ok:false, reason:'invalid_interval'}", async () => {
@@ -293,10 +306,9 @@ describe("POST /agent/auto/start — interval override honored + clamped (T-Star
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "X", intervalMinutes: 5 } });
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===400 and reason==='invalid_interval'; currently statusCode=${res.statusCode}, ` +
-        `body=${JSON.stringify(res.parsedBody())}`,
-    );
+    assert.equal(res.statusCode, 400);
+    assert.deepEqual(res.parsedBody(), { ok: false, reason: "invalid_interval" });
+    assert.equal(readSchedule(schedulePath).length, 0, "no schedule record must be written on rejection");
   });
 });
 
@@ -314,10 +326,9 @@ describe("POST /agent/auto/start — already-active rejected (T-Start.5, non-goa
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "a second task" } });
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===409, body.reason==='already_active', body.sessionId==='${existingSessionId}'; ` +
-        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}`,
-    );
+    assert.equal(res.statusCode, 409);
+    assert.deepEqual(res.parsedBody(), { ok: false, reason: "already_active", sessionId: existingSessionId });
+    assert.equal(readSchedule(schedulePath).length, 1, "no second record must be written");
   });
 });
 
@@ -333,11 +344,11 @@ describe("POST /agent/auto/start — default interval when omitted (T-Start.6)",
     const handler = createRequestHandler(state, deps, makeTurnStub(), makeDispatch());
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "X" } });
+    const body = res.parsedBody() as { intervalMinutes?: unknown; cronExpr?: unknown };
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===200, body.intervalMinutes===15, body.cronExpr==='*/15 * * * *'; ` +
-        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}`,
-    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.intervalMinutes, 15);
+    assert.equal(body.cronExpr, "*/15 * * * *");
   });
 });
 
@@ -358,9 +369,7 @@ describe("POST /agent/auto/stop — aborts a live tick (T-Terminate.1, LOCKED-4)
 
     await issue(handler, { url: "/agent/auto/stop" });
 
-    assert.fail(
-      `TODO Step 5: assert abortController.signal.aborted===true; currently aborted=${abortController.signal.aborted}`,
-    );
+    assert.equal(abortController.signal.aborted, true, "the live tick's AbortController must be aborted");
   });
 });
 
@@ -393,13 +402,22 @@ describe("POST /agent/auto/stop — disables all auto_session records + flips cr
         (f as { cronEnabled?: unknown }).cronEnabled === false,
     );
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===200, state.cronEnabled===false, state.autoSessionId===null, ` +
-        `emittedFrames contains auto-session-completed{reason:'terminated'} then cron-mode{cronEnabled:false}, ` +
-        "AND auto-session-completed's array index is BEFORE cron-mode's array index (canonical SSE order per " +
-        "plan §10.4/§4.5 — 'auto-session-completed FIRST, then cron-mode'); " +
-        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, frames=${JSON.stringify(emittedFrames)}, ` +
-        `completedIdx=${completedIdx}, cronModeOffIdx=${cronModeOffIdx}`,
+    assert.equal(res.statusCode, 200);
+    const records = readSchedule(schedulePath);
+    const record = records.find((r) => (r as unknown as { sessionId?: unknown }).sessionId === sessionId);
+    assert.equal(record?.enabled, false, "the auto_session record must be disabled");
+    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must flip to false");
+    assert.equal((state as unknown as { autoSessionId: unknown }).autoSessionId, null, "state.autoSessionId must be cleared");
+    assert.ok(completedIdx >= 0, "auto-session-completed frame must be emitted");
+    assert.equal(
+      (emittedFrames[completedIdx] as { reason?: unknown }).reason,
+      "terminated",
+      "auto-session-completed's reason must be 'terminated'",
+    );
+    assert.ok(cronModeOffIdx >= 0, "cron-mode{cronEnabled:false} frame must be emitted");
+    assert.ok(
+      completedIdx < cronModeOffIdx,
+      `auto-session-completed (idx ${completedIdx}) must be emitted BEFORE cron-mode (idx ${cronModeOffIdx}) — canonical SSE order`,
     );
   });
 });
@@ -417,12 +435,15 @@ describe("POST /agent/auto/stop — idempotent when nothing active (T-Terminate.
     const handler = createRequestHandler(state, deps, makeTurnStub(), makeDispatch());
 
     const res = await issue(handler, { url: "/agent/auto/stop" });
+    const body = res.parsedBody() as { sessionsDisabled?: unknown };
 
-    assert.fail(
-      `TODO Step 5: assert res.statusCode===200, body.sessionsDisabled===0, emittedFrames contains ` +
-        `auto-session-completed{reason:'schedule_gone'}; currently statusCode=${res.statusCode}, ` +
-        `body=${JSON.stringify(res.parsedBody())}, frames=${JSON.stringify(emittedFrames)}`,
-    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.sessionsDisabled, 0);
+    const completedFrame = emittedFrames.find(
+      (f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "auto-session-completed",
+    ) as { reason?: unknown } | undefined;
+    assert.ok(completedFrame, "auto-session-completed frame must still fire so a stuck FE resyncs");
+    assert.equal(completedFrame?.reason, "schedule_gone");
   });
 });
 
@@ -440,9 +461,10 @@ describe("POST /agent/auto/stop — no cross-mode side effects (T-Terminate.4)",
 
     await issue(handler, { url: "/agent/auto/stop" });
 
-    assert.fail(
-      `TODO Step 5: assert state.passiveEnabled===true (unchanged); currently ` +
-        `passiveEnabled=${(state as unknown as { passiveEnabled: boolean }).passiveEnabled}`,
+    assert.equal(
+      (state as unknown as { passiveEnabled: boolean }).passiveEnabled,
+      true,
+      "terminate must not touch state.passiveEnabled (Magical mode toggle)",
     );
   });
 });
