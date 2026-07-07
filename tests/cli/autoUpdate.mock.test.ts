@@ -917,20 +917,22 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool() invocation count in src/tools/ (current: 59 = 53 factory-returns + 6 const exports)", async () => {
+  it("T-CONTRACT: tool() invocation count in src/tools/ (current: 60 = 54 factory-returns + 6 const exports)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  count actual tool({...}) invocations in src/tools/**
-    // Then:  59 tool() invocations across two definition styles:
-    //          - 53 `return tool({...})` factory returns (makeXTool helpers)
+    // Then:  60 tool() invocations across two definition styles:
+    //          - 54 `return tool({...})` factory returns (makeXTool helpers — P-AUTO-ISOLATE
+    //            added `makeStopAutoTool` (stop_auto), 53→54)
     //          - 6 `export const X = tool({...})` constants (todoWrite, suggestCard,
     //            presentSummary, echo, sleep, suggestNextActions — added by P-Y1/Y3 etc)
-    // Updated 2026-06-08 to reflect post-P-Y3 inventory drift.
+    // Updated 2026-06-08 to reflect post-P-Y3 inventory drift; updated again (validator
+    // Step 5) for P-AUTO-ISOLATE's new stop_auto tool.
     const out = execSync(
       'grep -rE "(return|=)\\s+tool\\(" src/tools/ --include="*.ts" | wc -l',
       { encoding: "utf-8" },
     );
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 59, `Expected exactly 59 tool() invocations in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 60, `Expected exactly 60 tool() invocations in src/tools/, got ${count}.`);
   });
 });
 

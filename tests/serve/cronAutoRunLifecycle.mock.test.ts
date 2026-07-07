@@ -112,10 +112,22 @@ function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: 
   };
 }
 
-/** Noop turn runner. */
-function makeNoopTurn(): { runOneTurn: AnyFn } {
+/**
+ * Noop turn runner — ALSO captures each call's args.
+ * P-AUTO-ISOLATE (Step 5): cron.ts no longer pushes the cronPrompt into
+ * `state.messages` (that push was DELETED as part of the per-tick isolation
+ * guarantee) — the cronPrompt is now only observable via the args passed to
+ * `turn.runOneTurn({ userPrompt, overrideMessages, ... })`. `calls` lets the
+ * 3 tests that inspect the cronPrompt (T-E.Cron.1/2/4) read it from the new
+ * seam; other tests in this file ignore `calls`.
+ */
+function makeNoopTurn(): { runOneTurn: AnyFn; calls: MockState[] } {
+  const calls: MockState[] = [];
   return {
-    runOneTurn: async () => {},
+    calls,
+    runOneTurn: async (args: MockState) => {
+      calls.push(args);
+    },
   };
 }
 
@@ -165,11 +177,11 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     assert.equal(rows[0].max_duration_minutes, 30, "T-E.Cron.1: max_duration_minutes must be 30");
     assert.equal(rows[0].max_connects, 5, "T-E.Cron.1: max_connects must be 5");
 
-    // (2) cronPrompt injected into state.messages
-    const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
+    // (2) cronPrompt in the turn.runOneTurn args (P-AUTO-ISOLATE: no longer in state.messages)
+    const cronPrompt = (turn.calls[turn.calls.length - 1] as any)?.userPrompt as string;
     assert.ok(
       typeof cronPrompt === "string" && cronPrompt.length > 0,
-      "T-E.Cron.1: cronPrompt must be a non-empty string in state.messages",
+      "T-E.Cron.1: cronPrompt must be a non-empty string",
     );
     assert.ok(cronPrompt.includes("[AUTO_RUN_ID="), "T-E.Cron.1: cronPrompt must contain [AUTO_RUN_ID=");
     assert.ok(/\[ELAPSED=0\/30min\]/.test(cronPrompt), "T-E.Cron.1: cronPrompt must contain [ELAPSED=0/30min]");
@@ -228,7 +240,7 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     );
 
     // cronPrompt contains original runId + ELAPSED ≈ 10
-    const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
+    const cronPrompt = (turn.calls[turn.calls.length - 1] as any)?.userPrompt as string;
     assert.ok(cronPrompt.includes(originalRunId), "T-E.Cron.2: cronPrompt must contain the original runId");
     const elapsedMatch = cronPrompt.match(/\[ELAPSED=(\d+)\/30min\]/);
     assert.ok(elapsedMatch !== null, "T-E.Cron.2: cronPrompt must contain [ELAPSED=N/30min]");
@@ -352,7 +364,7 @@ describe("T-E.Cron — cron.ts Auto lifecycle integration (P-SP-E Sketch E)", ()
     );
 
     // cronPrompt has AUTO_RUN_ID + CONNECTS_USED=0/5 (not 0/none — default is now 5)
-    const cronPrompt = (state.messages[state.messages.length - 1] as any)?.content as string;
+    const cronPrompt = (turn.calls[turn.calls.length - 1] as any)?.userPrompt as string;
     assert.ok(
       cronPrompt.includes("[AUTO_RUN_ID="),
       "T-E.Cron.4: cronPrompt must contain [AUTO_RUN_ID= even without AUTO directives",

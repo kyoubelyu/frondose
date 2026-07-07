@@ -161,9 +161,10 @@ describe("createCronDriver — cron never pushes into state.messages (T-Iso.1, L
     const driver = createCronDriver(state as any, deps as any, turnStub as any);
     await driver.tick();
 
-    assert.fail(
-      `TODO Step 5: assert state.messages.length === 0 AFTER driver.tick() too (cron.ts:145's ` +
-        `state.messages.push(...) must be deleted per plan §6.1); currently state.messages.length=${state.messages.length}`,
+    assert.equal(
+      state.messages.length,
+      0,
+      "cron.ts must never push into state.messages (cron.ts:145's state.messages.push(...) must be deleted per plan §6.1)",
     );
   });
 });
@@ -190,11 +191,16 @@ describe("createCronDriver — passes a fresh overrideMessages array to runOneTu
     const call = turnStub.calls[0];
     const overrideMessages = call?.overrideMessages as unknown[] | undefined;
 
-    assert.fail(
-      "TODO Step 5: assert call.overrideMessages is an array of length 1 with [0].role==='user' " +
-        `and [0].content===cronPrompt, and the array reference !== state.messages; currently ` +
-        `overrideMessages=${JSON.stringify(overrideMessages)} (undefined until cron.ts Step 4b passes it)`,
+    assert.ok(Array.isArray(overrideMessages), "call.overrideMessages must be an array");
+    assert.equal(overrideMessages?.length, 1, "overrideMessages must have exactly 1 element");
+    const first = overrideMessages?.[0] as { role?: string; content?: unknown };
+    assert.equal(first?.role, "user", "overrideMessages[0].role must be 'user'");
+    assert.equal(
+      typeof first?.content === "string" && (first.content as string).includes("iso2 task"),
+      true,
+      "overrideMessages[0].content must be the assembled cronPrompt (containing the task text)",
     );
+    assert.notEqual(overrideMessages, state.messages, "overrideMessages must NOT be the same reference as state.messages");
   });
 });
 
@@ -217,7 +223,18 @@ describe("createCronDriver — inter-tick payload leak proof (T-Iso.4, THE anti-
     const deps = makeMockDeps(schedulePath, salesDbPath, memoryDbPath, emittedFrames);
 
     // Tick #1: stub simulates the real loop.ts:137 push into the caller-supplied array.
+    // NOTE (Step 5 scaffold fix): the poison must be injected ONLY on tick #1's call —
+    // if it fired on EVERY call (the original Step-2 scaffold's onCall ran unconditionally),
+    // tick #2's own (fresh, correctly-isolated) array would ALSO get poisoned by this same
+    // hook during tick #2's own execution, producing a false failure regardless of whether
+    // cron.ts actually isolates. A per-call counter scopes the simulated loop.ts:137 push
+    // to tick #1 only, matching the intent: "does tick #1's mutation leak into tick #2's
+    // array" (not "does every tick's own onStepFinish mutate its own array" — a separate,
+    // expected-true fact that isn't what this test is proving).
+    let callCount = 0;
     const turnStub = makeCapturingTurn((args) => {
+      callCount += 1;
+      if (callCount !== 1) return;
       const arr = args.overrideMessages as unknown[] | undefined;
       if (Array.isArray(arr)) arr.push({ role: "tool", content: POISON });
     });
@@ -234,10 +251,12 @@ describe("createCronDriver — inter-tick payload leak proof (T-Iso.4, THE anti-
     const tick2Messages = tick2Args?.overrideMessages;
     const leaked = JSON.stringify(tick2Messages ?? null).includes(POISON);
 
-    assert.fail(
-      `TODO Step 5: assert tick #2's overrideMessages does NOT contain "${POISON}" anywhere ` +
-        `(JSON.stringify search); currently leaked=${leaked}, tick2Messages=${JSON.stringify(tick2Messages)} ` +
-        "(today cron.ts doesn't build a per-tick array at all — this is THE load-bearing assertion of the phase)",
+    assert.equal(turnStub.calls.length, 2, "sanity: both ticks fired");
+    assert.equal(
+      leaked,
+      false,
+      `tick #2's overrideMessages must NOT contain "${POISON}" — this is THE anti-injection guarantee; ` +
+        `tick2Messages=${JSON.stringify(tick2Messages)}`,
     );
   });
 });
@@ -268,12 +287,13 @@ describe("createCronDriver — injects [PROGRESS SO FAR] from memory.sqlite when
 
     const call = turnStub.calls[0];
     const promptText = (call?.userPrompt as string | undefined) ?? "";
-
-    assert.fail(
-      `TODO Step 5: assert promptText contains "[PROGRESS SO FAR]" AND "${NOTE_VALUE}"; ` +
-        `currently promptText=${JSON.stringify(promptText.slice(0, 200))} (cron.ts doesn't read ` +
-        "deps.memoryDbPath / getMemoryNote yet at Step 2)",
-    );
+    // NOTE (Step 5 scaffold fix): the plain phrase "[PROGRESS SO FAR" is ambiguous — the
+    // soul fragment's OWN explanatory text ("...under a [PROGRESS SO FAR] block...") always
+    // contains it, regardless of whether a note was actually injected. Search for the
+    // injected block's unambiguous signature instead: the "[END PROGRESS]" closing sentinel,
+    // which never appears in the soul fragment's exposition, only in the real fenced block.
+    assert.ok(promptText.includes("[END PROGRESS]"), "cronPrompt must contain the injected [PROGRESS SO FAR ...][END PROGRESS] block");
+    assert.ok(promptText.includes(NOTE_VALUE), `cronPrompt must contain the note value "${NOTE_VALUE}"`);
   });
 });
 
@@ -295,12 +315,12 @@ describe("createCronDriver — absent auto:progress note is silent (T-Progress.2
 
     const call = turnStub.calls[0];
     const promptText = (call?.userPrompt as string | undefined) ?? "";
-    const hasHeader = promptText.includes("[PROGRESS SO FAR]");
+    // NOTE (Step 5 scaffold fix): same ambiguity as T-Progress.1 — the soul fragment's own
+    // exposition always contains the plain phrase "[PROGRESS SO FAR". Check for the injected
+    // block's unambiguous signature ("[END PROGRESS]" sentinel) instead.
+    const hasInjectedBlock = promptText.includes("[END PROGRESS]");
 
-    assert.fail(
-      `TODO Step 5: assert promptText does NOT contain "[PROGRESS SO FAR]" when no note exists; ` +
-        `currently hasHeader=${hasHeader}`,
-    );
+    assert.equal(hasInjectedBlock, false, "cronPrompt must NOT contain an injected [PROGRESS SO FAR...][END PROGRESS] block when no note exists");
   });
 });
 
@@ -346,11 +366,12 @@ describe("createCronDriver — the [PROGRESS SO FAR] block is fenced as untruste
     const endIdx = promptText.indexOf(END_SENTINEL);
     const injectionBetween = fenceIdx !== -1 && injectionIdx !== -1 && endIdx !== -1 && fenceIdx < injectionIdx && injectionIdx < endIdx;
 
-    assert.fail(
-      `TODO Step 5: assert hasFenceLiteral===true (currently ${hasFenceLiteral}), ` +
-        `hasEndSentinel===true (currently ${hasEndSentinel}), injectionBetween===true (currently ` +
-        `${injectionBetween}); currently promptText=${JSON.stringify(promptText.slice(0, 300))} ` +
-        "(cron.ts doesn't build the fenced [PROGRESS SO FAR] block yet at Step 2/3a)",
+    assert.equal(hasFenceLiteral, true, `cronPrompt must contain the verbatim literal "${FENCE_LITERAL}"`);
+    assert.equal(hasEndSentinel, true, `cronPrompt must contain the closing sentinel "${END_SENTINEL}"`);
+    assert.equal(
+      injectionBetween,
+      true,
+      "the injection-style note text must sit BETWEEN the fence literal and the end sentinel (framed as data)",
     );
   });
 });
@@ -373,10 +394,7 @@ describe("createCronDriver — a running turn blocks a cron tick, no overlap (T-
     const driver = createCronDriver(state as any, deps as any, turnStub as any);
     await driver.tick();
 
-    assert.fail(
-      `TODO Step 5: assert turnStub.calls.length === 0 (no-overlap guard held); currently ` +
-        `calls.length=${turnStub.calls.length}`,
-    );
+    assert.equal(turnStub.calls.length, 0, "a running turn must block the cron tick (no-overlap guard on cron.ts:40-42)");
   });
 });
 
@@ -405,9 +423,10 @@ describe("cron findDueJobs — after stop_auto disables the auto_session record,
     const driver = createCronDriver(state as any, deps as any, turnStub as any);
     await driver.tick();
 
-    assert.fail(
-      `TODO Step 5: assert turnStub.calls.length === 0 (disabled auto_session record must not fire); ` +
-        `currently calls.length=${turnStub.calls.length}`,
+    assert.equal(
+      turnStub.calls.length,
+      0,
+      "findDueJobs must exclude the now-disabled kind:auto_session record — no new tick fires",
     );
   });
 });
