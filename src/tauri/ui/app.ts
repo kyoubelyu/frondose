@@ -81,6 +81,10 @@ type SseFrame =
   | { type: "workflow-mode-changed"; workflowId: string; approvalMode: AppMode }
   | { type: "workflow-completed"; workflowId: string; finalState: string }
   | { type: "auto-run-completed"; runId: string; status: "completed" | "stopped_by_agent" | "stopped_by_user" | "blocked"; summary: string | null; finalCounters: Record<string, number>; endedAt: number; ts: number }
+  // P-AUTO-ISOLATE: new session-lifecycle frames per plan §4.5 (BE emits these BEFORE
+  // the paired `cron-mode` frame).
+  | { type: "auto-session-started"; sessionId?: string; prompt?: string; intervalMinutes?: number; ts?: number }
+  | { type: "auto-session-completed"; sessionId?: string; reason?: "stop_auto" | "terminated" | "schedule_gone"; ts?: number }
   | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" };
 
 const windowRef = globalThis as unknown as Window & { document: DocumentLike };
@@ -110,6 +114,10 @@ const statusEl = mustGet<TextElementLike>("status");
 const composerEl = mustGet<ElementLike>("composer");
 const commandEl = mustGet<InputElementLike>("command-input");
 const sendEl = mustGet<ButtonElementLike>("send-btn");
+// P-AUTO-ISOLATE: Terminate button — visible while an Auto session is running so the
+// operator can end it. Locked composer means the only Auto-mode composer-strip control
+// is Terminate (Send is hidden while auto-session is active).
+const autoTerminateEl = mustGet<ButtonElementLike>("auto-terminate");
 const modeManualTabEl = mustGet<ButtonElementLike>("mode-manual-tab");
 const modeAutoTabEl = mustGet<ButtonElementLike>("mode-auto-tab");
 const settingsGearEl = mustGet<ButtonElementLike>("settings-gear");
@@ -327,6 +335,38 @@ function syncModeUi(mode: AppMode): void {
 }
 
 async function applyMode(mode: AppMode): Promise<void> {
+  // P-AUTO-ISOLATE §3.2: capture the mode we're leaving so we can revert if the operator
+  // clicks "Auto" without a prompt or the BE rejects auto_start.
+  const previousMode = appMode;
+  // P-AUTO-ISOLATE §3.2 / §6.7: prompt-gated auto-start. Auto tab click without a
+  // non-empty prompt surfaces error.autoStartEmpty and reverts the tab; a non-empty
+  // prompt drives frondose_agent_auto_start (BE writes the schedule record + flips cron).
+  if (mode === "auto") {
+    const prompt = commandEl.value.trim();
+    if (prompt.length === 0) {
+      surfaceError(t("action.setModeCron"), new Error(t("error.autoStartEmpty")));
+      syncModeUi(previousMode);
+      return;
+    }
+    try {
+      const r = await invoke<{ ok: boolean; sessionId?: string; reason?: string }>(
+        "frondose_agent_auto_start",
+        { prompt, intervalMinutes: null },
+      );
+      if (!r.ok) {
+        surfaceError(t("action.setModeCron"), new Error(r.reason ?? "unknown"));
+        syncModeUi(previousMode);
+        return;
+      }
+      cronEnabled = true;
+      commandEl.value = "";
+      syncModeUi("auto");
+    } catch (e) {
+      surfaceError(t("action.setModeCron"), e);
+      syncModeUi(previousMode);
+    }
+    return;
+  }
   syncModeUi(mode);
   const toggles = {
     cronEnabled: togglesForMode(mode).cronEnabled,
@@ -407,6 +447,10 @@ async function abortTurn(): Promise<void> {
 }
 
 async function sendCommand(): Promise<void> {
+  // P-AUTO-ISOLATE §3.2 T-FE.SteerBypassBlocked: defense-in-depth on top of the DOM
+  // `disabled` attribute — an Auto-locked composer cannot dispatch a manual turn or a
+  // steer even if the Enter handler somehow still fires.
+  if (commandEl.disabled) return;
   if (appState === "running" && currentTurnId !== null) {
     const text = commandEl.value.trim();
     if (text.length > 0) {
@@ -715,6 +759,25 @@ function handleEvent(payload: SseFrame): void {
       workflowView = null;
       renderWorkflowCard();
       break;
+    case "auto-session-started":
+      // P-AUTO-ISOLATE §4.5 T-FE.LockOnAuto: session went live — lock the composer,
+      // reveal Terminate, hide Send. The paired `cron-mode {cronEnabled:true}` frame
+      // that follows drives the mode-tab UI via syncExternalMode.
+      cronEnabled = true;
+      commandEl.disabled = true;
+      autoTerminateEl.classList.remove("hidden");
+      sendEl.classList.add("hidden");
+      break;
+    case "auto-session-completed":
+      // P-AUTO-ISOLATE §4.5 T-FE.UnlockOnCompleted: session ended (stop_auto / operator
+      // terminate / schedule_gone) — unlock the composer, hide Terminate, restore Send,
+      // and resync the mode tabs back to Manual (cron off, passive unchanged).
+      cronEnabled = false;
+      commandEl.disabled = false;
+      autoTerminateEl.classList.add("hidden");
+      sendEl.classList.remove("hidden");
+      syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
+      break;
     case "commit-warning":
       if (workflowView !== null && (payload.workflowId === null || payload.workflowId === workflowView.workflowId)) {
         workflowView.notice = t("workflow.advisoryNotice", { label: payload.label });
@@ -728,6 +791,11 @@ function handleEvent(payload: SseFrame): void {
 
 sendEl.addEventListener("click", () => {
   void sendCommand();
+});
+// P-AUTO-ISOLATE §3.2 T-FE.TerminateInvokes: Terminate ends the active Auto session;
+// the incoming auto-session-completed + cron-mode SSE frames drive the UI back to Manual.
+autoTerminateEl.addEventListener("click", () => {
+  invoke("frondose_agent_auto_stop").catch((e) => surfaceError(t("action.pauseAbort"), e));
 });
 retryBtnEl.addEventListener("click", () => {
   void performRetry();
