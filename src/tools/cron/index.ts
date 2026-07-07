@@ -7,8 +7,12 @@
  */
 import type { ToolSet } from "ai";
 import { makeScheduleTaskTool } from "./scheduleTask.js";
+import { makeStopAutoTool } from "./stopAuto.js";
 
-/** P-31: cron tool group. One tool (`schedule_task`). */
+/** P-31: cron tool group. */
 export function makeCronTools(schedulePath: string): ToolSet {
-  return { schedule_task: makeScheduleTaskTool(schedulePath) };
+  return {
+    schedule_task: makeScheduleTaskTool(schedulePath),
+    stop_auto: makeStopAutoTool(schedulePath),
+  };
 }
