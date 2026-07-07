@@ -317,6 +317,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     session,
     schedulePath,
     salesDbPath,
+    memoryDbPath,
     auditPath,
     expectedToken,
     workflow,
