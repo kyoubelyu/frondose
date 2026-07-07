@@ -154,6 +154,53 @@ describe("app.ts — Terminate button invokes frondose_agent_auto_stop (T-FE.Ter
   });
 });
 
+// ─── T-FE.LockDurable ────────────────────────────────────────────────────────
+// ADDED at Step-4 re-validation (Step 6 audit BLOCKER, LOCKED-4 durability):
+// the generic transition() logic (composer/Send enabled whenever next is
+// "idle"/"running") would silently RE-ENABLE the composer + RE-SHOW Send on
+// every cron turn-started/done event while an Auto session is live, because
+// each cron tick re-runs transition("running")/transition("idle"). The fix
+// added a `cronEnabled`-gated re-lock tail INSIDE transition(), after the
+// generic logic, that re-asserts the Auto-locked UI unconditionally. This is
+// a structural regression guard: T-FE.LockOnAuto/UnlockOnCompleted above only
+// check the one-shot SSE-handler arms, not that the lock SURVIVES a later,
+// unrelated transition() call — which is exactly what a future edit to the
+// generic logic (e.g. reordering, or moving the cronEnabled check earlier)
+// could silently break without failing either of those two tests.
+
+describe("app.ts transition() — the Auto composer lock survives every cron turn-started/done (T-FE.LockDurable, LOCKED-4 durability, audit BLOCKER regression guard)", () => {
+  it("T-FE.LockDurable: transition() has an `if (cronEnabled)` block AFTER the generic idle/running logic that re-asserts commandEl.disabled=true and hides sendEl (Terminate stays visible), so a cron tick's transition(\"running\")/transition(\"idle\") calls cannot re-unlock the composer while an Auto session is active", () => {
+    // Given: transition()'s full body
+    // When:  scanned for a `if (cronEnabled)` block appearing AFTER the generic
+    //        `next === "idle"`/`next === "running"` branch, per the audit fix
+    // Then:  that block sets commandEl.disabled = true and adds "hidden" to
+    //        sendEl's classList (the durable re-lock, not just the one-shot
+    //        SSE-handler arms covered by T-FE.LockOnAuto/UnlockOnCompleted)
+    const body = fnBody("function transition(");
+    const genericIdleIdx = body.indexOf('next === "idle"');
+    const lockBlockMatch = /if\s*\(\s*cronEnabled\s*\)\s*\{([\s\S]*?)\}/.exec(body);
+
+    assert.ok(genericIdleIdx >= 0, "transition() must still have the generic next===\"idle\" branch (sanity check on the slice)");
+    assert.ok(lockBlockMatch, "transition() must contain an `if (cronEnabled) { ... }` re-lock block");
+    const lockBlockIdx = lockBlockMatch ? body.indexOf(lockBlockMatch[0]) : -1;
+    assert.ok(
+      lockBlockIdx > genericIdleIdx,
+      "the `if (cronEnabled)` re-lock block must appear AFTER the generic idle/running logic, so it overrides rather than gets overridden",
+    );
+    const lockBlockBody = lockBlockMatch ? lockBlockMatch[1] : "";
+    assert.match(
+      lockBlockBody,
+      /commandEl\.disabled\s*=\s*true/,
+      "the cronEnabled re-lock block must force commandEl.disabled = true",
+    );
+    assert.match(
+      lockBlockBody,
+      /sendEl\.classList\.add\(\s*["']hidden["']\s*\)/,
+      "the cronEnabled re-lock block must hide sendEl (add 'hidden' to its classList)",
+    );
+  });
+});
+
 // ─── T-FE.SteerBypassBlocked ─────────────────────────────────────────────────
 
 describe("app.ts sendCommand — a disabled composer cannot bypass the Auto lock via steer (T-FE.SteerBypassBlocked, defense-in-depth)", () => {
