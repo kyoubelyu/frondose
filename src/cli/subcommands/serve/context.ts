@@ -63,6 +63,7 @@ export type SseFrame =
     }
   | {
       type: "auto-session-completed";
+      sessionId?: string;
       reason: "stop_auto" | "terminated" | "schedule_gone";
       ts: number;
     }
