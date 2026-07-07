@@ -58,6 +58,10 @@ const soulSubSchema = z.object({
   override: z.string().max(3000).nullable().default(null),
 });
 
+const autoSubSchema = z.object({
+  intervalMinutes: z.number().int().min(15).max(1440).default(15),
+});
+
 export const configJsonSchemaV2 = z.object({
   schema_version: z.literal(2),
   server: serverSubSchema.default({ url: null, bind_address: null, poll_interval_s: 30 }),
@@ -77,6 +81,7 @@ export const configJsonSchemaV2 = z.object({
   // "auto" (default) = today's behavior (navigator-detected UI locale, mirror-the-operator
   // replies). Additive optional, NO schema_version bump — old configs Zod-fill "auto".
   language: z.enum(["auto", "en", "zh"]).default("auto"),
+  auto: autoSubSchema.optional().default({ intervalMinutes: 15 }),
 });
 export type ConfigJsonV2 = z.infer<typeof configJsonSchemaV2>;
 
@@ -109,6 +114,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   soul: { override: null },
   updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET
   language: "auto", // P-ZH-1
+  auto: { intervalMinutes: 15 },
   // identity intentionally omitted (optional).
 };
 
@@ -206,6 +212,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     soul: { override: soulOverride },
     updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET: v1 configs never carried it
     language: "auto", // P-ZH-1: v1 configs never carried it
+    auto: { intervalMinutes: 15 },
   };
 }
 
