@@ -303,6 +303,14 @@ function transition(next: AppState): void {
   } else if (next === "running") {
     updateSendButtonLabel();
   }
+  // P-AUTO-ISOLATE Step 6 audit fix (LOCKED-4 durability): while an Auto session is live
+  // (cronEnabled=true), the generic logic above would re-enable the composer + re-show
+  // Send on every cron tick's turn-started/done. Force-hold the Auto-locked UI.
+  if (cronEnabled) {
+    commandEl.disabled = true;
+    sendEl.classList.add("hidden");
+    autoTerminateEl.classList.remove("hidden");
+  }
 }
 
 function updateSendButtonLabel(): void {
