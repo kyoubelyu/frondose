@@ -11,6 +11,11 @@
  * Validator fills real assertions at Step 5 once Codex's Step 4b lands the routes
  * per plan §6.5 + wires them into routes.ts + persistence/schedule.ts helpers.
  *
+ * T-Start.3 and T-Terminate.2 were TIGHTENED at Step 3a (plan §10.4 NIT response):
+ * they now compute the emittedFrames array index of each SSE frame and assert
+ * canonical ORDER (auto-session-started BEFORE cron-mode on start; auto-session-
+ * completed BEFORE cron-mode on terminate) — not just presence.
+ *
  * Harness mirrors tests/cli/subcommands/serve/routes-characterization.mock.test.ts
  * (local MockIncomingMessage/MockServerResponse + createRequestHandler + a
  * bearer-token round trip). No dynamic-import guard needed — createRequestHandler
@@ -234,11 +239,25 @@ describe("POST /agent/auto/start — non-empty prompt writes a record + flips cr
 
     const res = await issue(handler, { url: "/agent/auto/start", body: { prompt: "Prospect HK founders" } });
 
+    const startedIdx = emittedFrames.findIndex(
+      (f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "auto-session-started",
+    );
+    const cronModeOnIdx = emittedFrames.findIndex(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        (f as { type?: unknown }).type === "cron-mode" &&
+        (f as { cronEnabled?: unknown }).cronEnabled === true,
+    );
+
     assert.fail(
       `TODO Step 5: assert res.statusCode===200, body.ok===true, body.intervalMinutes===15, ` +
         `body.cronExpr==='*/15 * * * *', state.cronEnabled===true, emittedFrames contains auto-session-started + ` +
-        `cron-mode{cronEnabled:true}; currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, ` +
-        `state.cronEnabled=${(state as unknown as { cronEnabled: boolean }).cronEnabled}, frames=${JSON.stringify(emittedFrames)}`,
+        `cron-mode{cronEnabled:true}, AND auto-session-started's array index is BEFORE cron-mode's array index ` +
+        "(canonical SSE order per plan §10.4/§4.5 — 'auto-session-started FIRST, then cron-mode'); " +
+        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, ` +
+        `state.cronEnabled=${(state as unknown as { cronEnabled: boolean }).cronEnabled}, frames=${JSON.stringify(emittedFrames)}, ` +
+        `startedIdx=${startedIdx}, cronModeOnIdx=${cronModeOnIdx}`,
     );
   });
 });
@@ -363,10 +382,24 @@ describe("POST /agent/auto/stop — disables all auto_session records + flips cr
 
     const res = await issue(handler, { url: "/agent/auto/stop" });
 
+    const completedIdx = emittedFrames.findIndex(
+      (f) => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "auto-session-completed",
+    );
+    const cronModeOffIdx = emittedFrames.findIndex(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        (f as { type?: unknown }).type === "cron-mode" &&
+        (f as { cronEnabled?: unknown }).cronEnabled === false,
+    );
+
     assert.fail(
       `TODO Step 5: assert res.statusCode===200, state.cronEnabled===false, state.autoSessionId===null, ` +
-        `emittedFrames ends with auto-session-completed{reason:'terminated'} then cron-mode{cronEnabled:false}; ` +
-        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, frames=${JSON.stringify(emittedFrames)}`,
+        `emittedFrames contains auto-session-completed{reason:'terminated'} then cron-mode{cronEnabled:false}, ` +
+        "AND auto-session-completed's array index is BEFORE cron-mode's array index (canonical SSE order per " +
+        "plan §10.4/§4.5 — 'auto-session-completed FIRST, then cron-mode'); " +
+        `currently statusCode=${res.statusCode}, body=${JSON.stringify(res.parsedBody())}, frames=${JSON.stringify(emittedFrames)}, ` +
+        `completedIdx=${completedIdx}, cronModeOffIdx=${cronModeOffIdx}`,
     );
   });
 });

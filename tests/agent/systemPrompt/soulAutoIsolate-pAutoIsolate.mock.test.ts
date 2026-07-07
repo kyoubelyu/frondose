@@ -89,16 +89,20 @@ describe("soulModeFragment('auto') — stop_auto announced as a bare word (T-Sou
 
 // ─── T-Soul.ByteBudget ───────────────────────────────────────────────────────
 
-describe("soulModeFragment('auto') — byte-budget headroom under the composeSoulBand cap (T-Soul.ByteBudget, defensive)", () => {
-  it("T-Soul.ByteBudget: soulModeFragment('auto').length < 8000", () => {
+describe("soulModeFragment('auto') — byte-budget headroom, retargeted at Step 3a (T-Soul.ByteBudget, defensive)", () => {
+  it("T-Soul.ByteBudget: soulModeFragment('auto').length <= 10000 (RETARGETED at Step 3a — see plan §10.1)", () => {
     // Given: the current soulModeFragment("auto") string (post-rewrite, with the
     //        §6.6 preamble PREPENDED and the stop_auto sentence APPENDED)
     // When:  its length is measured
-    // Then:  length < 8000 (defensive — the composeSoulBand hard cap surfaced in
-    //        T-ICP-PRECISION was 8500; plan §Appendix A notes current fragment ~5.7KB,
-    //        adds ~600 bytes — should have headroom, but MUST be re-measured for real)
+    // Then:  length <= 10000 — RETARGETED at Step 3a per plan §10.1/§5: the prior
+    //        `< 8000` threshold was IMPOSSIBLE (pre-phase baseline is 8926 chars,
+    //        already over it, and `soulModeFragment` is NOT governed by the
+    //        `composeSoulBand` 8500-char cap — that cap is a DIFFERENT function).
+    //        Baseline 8926 + estimated ~850 chars of added preamble/sentence ≈ 9776;
+    //        `<= 10000` gives ~224 chars headroom to catch a runaway edit without
+    //        risk-trimming the load-bearing tuned CAPTURE/CONVERT content.
     const length = autoFragment.length;
 
-    assert.fail(`TODO Step 5: assert length < 8000; currently length=${length}`);
+    assert.fail(`TODO Step 5: assert length <= 10000; currently length=${length}`);
   });
 });
