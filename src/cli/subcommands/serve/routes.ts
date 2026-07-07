@@ -3,6 +3,8 @@ import type { ServeDeps, ServeState } from "./context.js";
 import type { createOverlayDispatcher } from "./dispatch.js";
 import { checkBearer, sendJson } from "./http.js";
 import {
+  handleAutoStart,
+  handleAutoStop,
   handlePostAgentAbort,
   handlePostAgentActivate,
   handlePostAgentRetry,
@@ -97,6 +99,16 @@ export function createRequestHandler(
 
       if (method === "POST" && url === "/agent/cron-mode") {
         await handlePostCronMode(state, deps, req, res);
+        return;
+      }
+
+      if (method === "POST" && url === "/agent/auto/start") {
+        await handleAutoStart(state, deps, req, res);
+        return;
+      }
+
+      if (method === "POST" && url === "/agent/auto/stop") {
+        handleAutoStop(state, deps, res);
         return;
       }
 
