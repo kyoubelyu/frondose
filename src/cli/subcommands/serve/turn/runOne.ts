@@ -220,8 +220,9 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
               (tr.result as { ok?: unknown }).ok === true;
             if (okResult) {
               setCronMode(state, false);
+              const sessionId = state.autoSessionId ?? undefined;
               state.autoSessionId = null;
-              deps.emitFrame({ type: "auto-session-completed", reason: "stop_auto", ts: Date.now() });
+              deps.emitFrame({ type: "auto-session-completed", sessionId, reason: "stop_auto", ts: Date.now() });
               deps.emitFrame({ type: "cron-mode", cronEnabled: false });
             }
           }
