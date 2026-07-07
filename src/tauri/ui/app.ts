@@ -12,13 +12,14 @@ import type {
 } from "./render.js";
 import { buildSwitcher, renderMarkdownInto } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
+import { createAppActions } from "./appActions.js";
 import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendButton.js";
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
-import { getLocale, localizeDocument, prefToLocale, setLocale, t } from "./i18n.js";
+import { localizeDocument, t } from "./i18n.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -33,9 +34,6 @@ declare global {
   }
 }
 
-type IdentityOk = { ok: true; fullName?: string; role?: string; company?: string; headline?: string };
-type IdentityErr = { ok: false; reason: string };
-type IdentityResp = IdentityOk | IdentityErr;
 type TurnOk = { ok: true; turnId: string };
 type TurnErr = { ok: false; reason: string; turnId?: string; attempts?: number };
 type TurnResp = TurnOk | TurnErr;
@@ -393,43 +391,28 @@ async function applyMode(mode: AppMode): Promise<void> {
   syncModeUi(modeFromState({ cronEnabled, passiveEnabled }));
 }
 
-// P-ZH-1: the module-load localizeDocument() call at line 94 only knows navigator.language
-// (no settings yet). Once boot() has the operator's persisted language pref, re-flip the
-// chrome locale if the pref picks something other than the auto-detected default.
-async function applyLanguagePref(): Promise<void> {
-  try {
-    const r = await invoke<{ ok: boolean; language?: "auto" | "en" | "zh" }>("frondose_get_settings");
-    if (!r?.ok) return;
-    const nextLocale = prefToLocale(r.language ?? "auto");
-    if (nextLocale !== getLocale()) {
-      setLocale(nextLocale);
-      localizeDocument(windowRef.document as unknown as LocalizableDocumentLike, { force: true });
-    }
-  } catch (e) {
-    // Non-fatal: the chrome stays on its navigator-detected default; don't block boot on this.
-    console.error("[frondose] applyLanguagePref failed:", e);
-  }
-}
+// P-AUTO-ISOLATE Step 5a F1: async action handlers extracted into ./appActions.ts to
+// bring app.ts back under CLAUDE.md's 800-line cap. Factory closes over module state
+// via the getter/setter callbacks passed here; behavior is byte-preserved. A one-line
+// `loadIdentity()` local wrapper below preserves the T-Switcher.3 lexical ordering pin
+// (first `loadIdentity()` substring must precede the last `applyMode("manual")`).
+const appActions = createAppActions({
+  invoke,
+  surfaceError,
+  document: windowRef.document,
+  nameEl,
+  errorBannerEl,
+  retryBtnEl,
+  tickerEl,
+  transition,
+  setCurrentTurnId: (id) => {
+    currentTurnId = id;
+  },
+  getLastTurnPrompt: () => lastTurnPrompt,
+  getWorkflowView: () => workflowView,
+});
 
-async function loadIdentity(): Promise<void> {
-  try {
-    const r = await invoke<IdentityResp>("frondose_identity");
-    if (r.ok === false) {
-      nameEl.classList.add("error");
-      nameEl.textContent = r.reason;
-      transition("identity-missing");
-      return;
-    }
-    nameEl.classList.remove("error");
-    nameEl.textContent = r.fullName ?? t("identity.noFullName");
-    transition("idle");
-  } catch (e) {
-    nameEl.classList.add("error");
-    nameEl.textContent = String(e);
-    errorBannerEl.textContent = t("error.boot", { msg: String(e) });
-    transition("error");
-  }
-}
+const loadIdentity = (): Promise<void> => appActions.loadIdentity();
 
 async function abortTurn(): Promise<void> {
   // P-WLC: with a live turn, abort it. With NO live turn (e.g. the Auto stage still
@@ -528,29 +511,6 @@ async function performSteer(newPrompt: string): Promise<void> {
   }
 }
 
-async function performRetry(): Promise<void> {
-  retryBtnEl.classList.add("hidden");
-  errorBannerEl.classList.add("hidden");
-  try {
-    const r = await invoke<TurnResp>("frondose_agent_retry");
-    if (r.ok === false) {
-      errorBannerEl.textContent = t("error.retryRejected", { reason: r.reason });
-      errorBannerEl.classList.remove("hidden");
-      transition("error");
-      return;
-    }
-    currentTurnId = r.turnId;
-    // P-Y2-MA: retry does NOT append a new user bubble (prompt already shown);
-    // the new agent bubble lands on turn-started just like first-send.
-    tickerEl.textContent = lastTurnPrompt === null ? t("ticker.starting") : t("ticker.retrying");
-    transition("running");
-  } catch (e) {
-    errorBannerEl.textContent = t("error.retryInvokeFailed", { msg: String(e) });
-    errorBannerEl.classList.remove("hidden");
-    transition("error");
-  }
-}
-
 function bindAutoStageButtons(): void {
   bindAutoStageButtonsImpl(windowRef.document, () => {
     void abortTurn();
@@ -567,37 +527,6 @@ function renderWorkflowCard(): void {
 function upsertWorkflowStep(stepId: string, title: string, state: WorkflowStepState, requiresApproval: boolean): void {
   if (workflowView === null) return;
   upsertWorkflowStepImpl(workflowView, stepId, title, state, requiresApproval);
-}
-
-async function approveWorkflowStep(): Promise<void> {
-  if (workflowView?.pendingStepId === null || workflowView === null) return;
-  try {
-    await invoke("frondose_workflow_approve", { workflowId: workflowView.workflowId, stepId: workflowView.pendingStepId });
-  } catch (e) {
-    surfaceError(t("action.approve"), e);
-  }
-}
-
-async function declineWorkflowStep(): Promise<void> {
-  if (workflowView?.pendingStepId === null || workflowView === null) return;
-  try {
-    await invoke("frondose_workflow_decline", {
-      workflowId: workflowView.workflowId,
-      stepId: workflowView.pendingStepId,
-      reason: "operator_declined",
-    });
-  } catch (e) {
-    surfaceError(t("action.decline"), e);
-  }
-}
-
-async function handoffWorkflow(): Promise<void> {
-  if (workflowView === null) return;
-  try {
-    await invoke("frondose_workflow_handoff", { workflowId: workflowView.workflowId });
-  } catch (e) {
-    surfaceError(t("action.handoff"), e);
-  }
 }
 
 function syncExternalMode(): void {
@@ -798,16 +727,16 @@ autoTerminateEl.addEventListener("click", () => {
   invoke("frondose_agent_auto_stop").catch((e) => surfaceError(t("action.pauseAbort"), e));
 });
 retryBtnEl.addEventListener("click", () => {
-  void performRetry();
+  void appActions.performRetry();
 });
 workflowApproveBtnEl.addEventListener("click", () => {
-  void approveWorkflowStep();
+  void appActions.approveWorkflowStep();
 });
 workflowDeclineBtnEl.addEventListener("click", () => {
-  void declineWorkflowStep();
+  void appActions.declineWorkflowStep();
 });
 workflowHandoffBtnEl.addEventListener("click", () => {
-  void handoffWorkflow();
+  void appActions.handoffWorkflow();
 });
 workflowPauseBtnEl.addEventListener("click", () => {
   void abortTurn();
@@ -853,7 +782,7 @@ async function boot(): Promise<void> {
     return;
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
-  await applyLanguagePref();
+  await appActions.applyLanguagePref();
   await loadIdentity();
   syncModeUi("manual");
 }
