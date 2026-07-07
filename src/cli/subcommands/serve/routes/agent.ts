@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setCronMode } from "../../../../persistence/mode.js";
+import { buildAutoSessionRecord, disableAutoSessionRecords, findActiveAutoSessionId, readSchedule, writeSchedule } from "../../../../persistence/schedule.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "../context.js";
 import { readJsonBody, sendJson } from "../http.js";
 import type { createTurnRunner } from "../turn.js";
@@ -156,6 +157,57 @@ export async function handlePostCronMode(state: ServeState, deps: ServeDeps, req
   setCronMode(state, enabled);
   deps.emitFrame({ type: "cron-mode", cronEnabled: enabled });
   sendJson(res, 200, { ok: true, cronEnabled: state.cronEnabled });
+}
+
+export async function handleAutoStart(state: ServeState, deps: ServeDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req);
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    sendJson(res, 400, { ok: false, reason: "missing_prompt" });
+    return;
+  }
+
+  const intervalRaw = body?.intervalMinutes;
+  const intervalMinutes = intervalRaw === undefined || intervalRaw === null ? 15 : intervalRaw;
+  if (typeof intervalMinutes !== "number" || !Number.isInteger(intervalMinutes) || intervalMinutes < 15 || intervalMinutes > 1440) {
+    sendJson(res, 400, { ok: false, reason: "invalid_interval" });
+    return;
+  }
+
+  const records = readSchedule(deps.schedulePath);
+  const activeSessionId = findActiveAutoSessionId(records);
+  if (activeSessionId !== null) {
+    sendJson(res, 409, { ok: false, reason: "already_active", sessionId: activeSessionId });
+    return;
+  }
+
+  const record = buildAutoSessionRecord({ prompt, intervalMinutes, now: new Date() });
+  writeSchedule(deps.schedulePath, [...records, record]);
+  setCronMode(state, true);
+  state.autoSessionId = record.sessionId ?? null;
+
+  deps.emitFrame({
+    type: "auto-session-started",
+    sessionId: record.sessionId ?? record.id,
+    prompt,
+    intervalMinutes,
+    ts: Date.now(),
+  });
+  deps.emitFrame({ type: "cron-mode", cronEnabled: true });
+  sendJson(res, 200, { ok: true, sessionId: record.sessionId ?? record.id });
+}
+
+export function handleAutoStop(state: ServeState, deps: ServeDeps, res: ServerResponse): void {
+  const records = readSchedule(deps.schedulePath);
+  const { next, disabledCount } = disableAutoSessionRecords(records);
+  if (disabledCount > 0) writeSchedule(deps.schedulePath, next);
+
+  setCronMode(state, false);
+  state.autoSessionId = null;
+
+  deps.emitFrame({ type: "auto-session-completed", reason: "terminated", ts: Date.now() });
+  deps.emitFrame({ type: "cron-mode", cronEnabled: false });
+  sendJson(res, 200, { ok: true });
 }
 
 export async function handlePostPassiveMode(state: ServeState, deps: ServeDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
