@@ -61,8 +61,14 @@ if [ -n "$PROXY" ]; then unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy; fi
 popd >/dev/null
 
 NSIS_DIR="$REPO_ROOT/src/tauri/src-tauri/target/$TARGET/release/bundle/nsis"
-SETUP="$(ls "$NSIS_DIR"/*-setup.exe 2>/dev/null | head -1 || true)"
-[ -n "$SETUP" ] && [ -f "$SETUP" ] || die "no NSIS installer produced under $NSIS_DIR"
+# [P-RELEASE-WIN-STALE-FIX 2026-07-05] Pick the exe matching the CURRENT package version —
+# NOT `ls ... | head -1`, which sorts ALPHABETICALLY and would publish a stale older-version
+# exe still in the dir (e.g. a leftover Frondose_0.5.3_x64-setup.exe sorts before 0.5.5),
+# silently deploying the wrong installer while latest.json advertises the new version.
+# Root-caused during the 0.5.5 release (shipped a stale 0.5.3 exe until caught + re-deployed).
+VER="$(node -p "require('$REPO_ROOT/package.json').version")"
+SETUP="$NSIS_DIR/Frondose_${VER}_x64-setup.exe"
+[ -n "$SETUP" ] && [ -f "$SETUP" ] || die "no NSIS installer for v${VER} under $NSIS_DIR (found: $(ls "$NSIS_DIR"/*-setup.exe 2>/dev/null | tr '\n' ' '))"
 echo "[build-win-mac] built: $SETUP ($(du -h "$SETUP" | cut -f1))"
 
 # ── 4. sign (minisign updater .sig) + publish into the site ──
