@@ -72,7 +72,7 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
     // When:  composeSoulBand(null) called
     // Then:  contains ALL of: "mark_message_sent", "update_lead_stage", "connect_sent"
     //        AND the DM-asymmetry note ("for a DM, mark_message_sent only" or equivalent)
-    //        soul cap invariant: composeSoulBand(null).length ≤ 8000
+    //        soul cap invariant: composeSoulBand(null).length ≤ 8500 (T-ICP-PRECISION raised 8000→8500)
 
     const band = composeSoulBand(null);
 
@@ -94,10 +94,11 @@ describe("T-SP-D.Soul — outbound-chain trigger habit + soulModeFragment draft-
       "soul band must include the DM-asymmetry note 'for a DM, mark_message_sent only' (G-PSPD.1)",
     );
 
-    // Soul cap invariant (builder measured: 7987 chars)
+    // Soul cap invariant (builder measured: 7987 chars; P-39 raised 6000→8000;
+    // T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines, actual ~8380)
     assert.ok(
-      band.length <= 8000,
-      `composeSoulBand(null).length must be ≤ 8000 chars (got ${band.length}) — P-SP-D Sketch A must not push over cap (G-PSPD.1)`,
+      band.length <= 8500,
+      `composeSoulBand(null).length must be ≤ 8500 chars (got ${band.length}) — P-SP-D Sketch A must not push over cap (G-PSPD.1)`,
     );
   });
 
