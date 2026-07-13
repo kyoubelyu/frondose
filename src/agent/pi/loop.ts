@@ -46,6 +46,13 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
   const { tools, dispatch } = buildPiToolBundle(opts.tools, opts.activeTools);
   const { piMessages } = coreMessagesToPi(opts.messages, model.id);
   const newCore: CoreMessage[] = [];
+  // [P-CONVO-GATE] Tool calls made THIS turn (across phases). The D-22 stall nudge must only
+  // fire when in-flight work went silent — a turn that made ZERO tool calls and replied in
+  // plain text is a legitimate conversational reply (Boundary "Conversational-turn gate"),
+  // not a stall. Live-proven 2026-07-13: on "你好" the model correctly answered text-only,
+  // then the unconditional stall nudge ("call a tool NOW … navigate_to_url to my LinkedIn
+  // feed") countermanded it and launched the full sales flow — the operator-reported bug.
+  let turnToolCallCount = 0;
 
   /** Run one phase (up to stepCap complete() iterations); returns the iteration count. */
   const runPhase = async (stepCap: number): Promise<number> => {
@@ -87,6 +94,7 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
       }
 
       const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
+      turnToolCallCount += toolCalls.length; // [P-CONVO-GATE] see declaration above
       const stepToolResults: Array<{ toolCallId: string; toolName: string; args: unknown; result: unknown }> = [];
       for (const tc of toolCalls) {
         if (opts.abortSignal?.aborted) break;
@@ -113,9 +121,16 @@ export async function runAgentLoopPi(opts: AgentLoopOpts): Promise<void> {
     if (!opts.abortSignal?.aborted) {
       const transcript = [...opts.messages, ...newCore];
       const narrative = lastAssistantMessageMissedExecute(transcript);
+      // [P-CONVO-GATE] turnToolCallCount > 0: the stall nudge fires ONLY when the turn
+      // started acting (>=1 tool call) and then went silent — D-22's original dogfood case
+      // (start_auto_run + todo_write then silence). A zero-tool text-only turn is a
+      // conversational reply, which the Boundary conversational-turn gate makes a
+      // first-class outcome; nudging it with "call a tool NOW" re-created the reported
+      // greeting-launches-sales-flow bug.
       const stalled =
         !narrative &&
         stepCount > 0 &&
+        turnToolCallCount > 0 &&
         stepCount <= STALL_STEP_THRESHOLD &&
         lastAssistantMessageHasNoToolCalls(transcript);
       if (narrative || stalled) {
