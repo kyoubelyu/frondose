@@ -756,7 +756,17 @@ modeManualTabEl.addEventListener("click", () => {
 modeAutoTabEl.addEventListener("click", () => {
   void applyMode("auto");
 });
-const settings = createSettingsPanel({ invoke, surfaceError });
+// P-FIX-MAC-UPDATER-RELAUNCH: inject the Tauri event listener lazily guarded — this module
+// constructs the panel BEFORE boot()'s __TAURI__ check, so the closure defers the global
+// access to call time and degrades to a no-op unlisten outside the Tauri shell.
+const settings = createSettingsPanel({
+  invoke,
+  surfaceError,
+  listen: (event, handler) => {
+    if (!windowRef.__TAURI__) return Promise.resolve(() => {});
+    return windowRef.__TAURI__.event.listen(event, handler);
+  },
+});
 settingsGearEl.addEventListener("click", () => {
   settings.open().catch((e) => surfaceError(t("action.openSettings"), e));
 });
