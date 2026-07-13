@@ -83,17 +83,35 @@ describe("composeSoulBand — new own-company worldview habit line (plan §5 T-S
 // T-Soul.OverrideICP.1 — new effective-ICP-override habit line present
 // ---------------------------------------------------------------------------
 
-describe("composeSoulBand — new effective-ICP-override habit line (plan §5 T-Soul.OverrideICP.1, F-5, design A)", () => {
-  it("T-Soul.OverrideICP.1: given identity = a full IdentityRecord, when composeSoulBand(identity) is called, then the output contains 'icp` override' AND \"operator's live intent\" (teaches the LLM to pass the operator's turn-instruction target as the qualify_profile/score_lead icp override param)", () => {
+describe("composeSoulBand — effective-ICP-override habit line binds `icp` to qualify_profile only, score_lead inherits via qualification pass-through (P-FIX-SOUL-ICP-PARAM)", () => {
+  it("T-Soul.OverrideICP.1: given identity = a full IdentityRecord, when composeSoulBand(identity) is called, then the output binds the `icp` override to `qualify_profile` (not score_lead), preserves \"operator's live intent\", states score_lead has no `icp` param of its own, and states score_lead inherits via qualify_profile's qualification pass-through — proving the prior nonexistent score_lead.icp claim is gone, not merely appended over", () => {
     // Given: a representative identity record.
     const identity = makeIdentity();
 
     // When: composeSoulBand(identity) is called.
     const band = composeSoulBand(identity);
 
-    // Then: band.includes("icp` override") && band.includes("operator's live intent").
-    assert.ok(band.includes("icp` override"), `soul band must contain "icp\` override"; band=${band}`);
+    // Then: the override is scoped to qualify_profile, live-intent wording survives (load-bearing for
+    // tests/agent/user-precedence.mock.test.ts T-Prec.SoulUntouched, outside this phase's write range),
+    // score_lead's lack of an icp param is stated explicitly, the qualification pass-through linkage is
+    // present, and the old two-tool claim string no longer appears anywhere in the band.
+    assert.ok(
+      band.includes("`icp` override for `qualify_profile`"),
+      `soul band must bind the icp override to qualify_profile; band=${band}`,
+    );
     assert.ok(band.includes("operator's live intent"), `soul band must contain "operator's live intent"; band=${band}`);
+    assert.ok(
+      band.includes("`score_lead` has no `icp` param"),
+      `soul band must state score_lead has no icp param; band=${band}`,
+    );
+    assert.ok(
+      band.includes("pass qualify_profile's qualification through"),
+      `soul band must state the qualification pass-through linkage; band=${band}`,
+    );
+    assert.ok(
+      !band.includes("`icp` override for `qualify_profile` and `score_lead`"),
+      `soul band must NOT still claim score_lead takes the icp override; band=${band}`,
+    );
   });
 });
 
