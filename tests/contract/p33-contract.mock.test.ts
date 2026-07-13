@@ -113,6 +113,7 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "sleep",
   "start_auto_run",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   // P-Z2 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
   "suggest_next_actions",
@@ -152,6 +153,7 @@ const FROZEN_SERVER_TOOL_KEYS = [
   "set_memory_note",
   "sleep",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   "telegram_notify",
   "todo_write",
   "web_fetch",
@@ -262,10 +264,10 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 52 tool keys (P-Y3)", () => {
+  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 53 tool keys (P-Y3)", () => {
     // Given: makeAllTools called in worker mode with session + persistence + control
     // When:  worker mode tool set is built (clear_cookies removed from browser registry)
-    // Then:  exactly 52 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    // Then:  exactly 53 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot (P-REBASE-TOOL-COUNT: stop_auto)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -282,8 +284,8 @@ describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
 
       assert.equal(
         keys.length,
-        52,
-        `worker mode must have exactly 52 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        53,
+        `worker mode must have exactly 53 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match current P-Y3 snapshot");
     } finally {
@@ -295,7 +297,7 @@ describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
 // ─── T-P33.COUNT.SERVER ──────────────────────────────────────────────────────
 
 describe("makeAllTools server mode (G-P33.6 + P-Y3 supersedes count)", () => {
-  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 27 tool keys (P-Y3)", () => {
+  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 26 tool keys (P-Y3)", () => {
     // Given: makeAllTools called in server mode with persistence + control (no session)
     // When:  server mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
     // Then:  exactly 27 keys returned; no LinkedIn/browser primitives; key set matches snapshot
@@ -314,8 +316,8 @@ describe("makeAllTools server mode (G-P33.6 + P-Y3 supersedes count)", () => {
 
       assert.equal(
         keys.length,
-        25,
-        `server mode must have exactly 25 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        26,
+        `server mode must have exactly 26 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match current P-Y3 snapshot");
     } finally {
@@ -582,6 +584,8 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   sleep: ["reason", "seconds"],
   start_auto_run: ["maxConnects", "maxDurationMinutes"],
   stop: ["reason"],
+  // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
+  stop_auto: ["summary"],
   suggest_card: [
     "dismissed",
     "evidenceSummary",
@@ -619,7 +623,7 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
 };
 
 describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1)", () => {
-  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 52 tools)", () => {
+  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 53 tools)", () => {
     // Given: makeAllTools in worker-power mode (reuses existing p33 harness + MAI_TIER=power above).
     // When:  building {name: sorted field names} for every tool via getZodFieldNames.
     // Then:  the map deep-equals FROZEN_TOOL_SCHEMAS_P72 — every tool present, no unexpected tool,
@@ -637,8 +641,8 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
 
       assert.equal(
         Object.keys(tools).length,
-        52,
-        `T-P72.Schema.1: expected 52 worker-power tools; got ${Object.keys(tools).length}`,
+        53,
+        `T-P72.Schema.1: expected 53 worker-power tools; got ${Object.keys(tools).length}`,
       );
 
       const actual: Record<string, string[]> = {};
@@ -657,10 +661,10 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
   });
 
   it("T-P72.Schema.2: server tool schemas are a consistent subset — shared tools have identical field sets to the worker golden", () => {
-    // Given: makeAllTools in server mode (25 tools post-P-73).
-    // When:  for each server tool present in FROZEN_TOOL_SCHEMAS_P72 (the 19 shared tools),
+    // Given: makeAllTools in server mode (26 tools post-P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+    // When:  for each server tool present in FROZEN_TOOL_SCHEMAS_P72 (the 20 shared tools),
     //        compare getZodFieldNames to the golden entry.
-    // Then:  all 19 shared tools have identical field sets (same Zod schema objects, no per-mode variation).
+    // Then:  all 20 shared tools have identical field sets (same Zod schema objects, no per-mode variation).
     //        The 6 server-only tools (dispatch_google_login, list_workers, list_personas,
     //        provision_worker, revoke_worker, send_worker_message) are outside the worker golden;
     //        they are NOT checked here (covered structurally by FROZEN_SERVER_TOOL_KEYS).
@@ -687,11 +691,11 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
         checkedCount++;
       }
 
-      // 25 server tools − 6 server-only = 19 shared
+      // 26 server tools − 6 server-only = 20 shared
       assert.equal(
         checkedCount,
-        19,
-        `T-P72.Schema.2: expected 19 shared server tools to be checked against the golden; got ${checkedCount}`,
+        20,
+        `T-P72.Schema.2: expected 20 shared server tools to be checked against the golden; got ${checkedCount}`,
       );
     } finally {
       cleanup();
