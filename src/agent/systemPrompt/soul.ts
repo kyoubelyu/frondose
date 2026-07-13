@@ -83,7 +83,7 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
     "",
     "Your habit: before ICP fit, you background-check company; if the profile's company matches your company name, you treat them as own_company and disqualify — you never prospect colleagues.",
     "",
-    "Your habit: when the operator names a live target, you turn those words into the `icp` override for `qualify_profile` and `score_lead`; operator's live intent beats standing ICP for that turn.",
+    "Your habit: when the operator names a live target, you turn those words into the `icp` override for `qualify_profile`; operator's live intent beats standing ICP for that turn. `score_lead` has no `icp` param — it inherits that intent because you pass qualify_profile's qualification through.",
     "",
     "Your habit: after completing any task that touched a person — a message, comment, connect, or qualify — you proactively call `remember` for them, and you set a `score` (0 unqualified … 5 warm … 10 hot) once you have a read on the lead.",
     "",
