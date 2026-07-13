@@ -38,10 +38,10 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 52 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 53 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
-    // Then:  52 (clear_cookies removed from browser registry)
+    // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -52,18 +52,18 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        52,
-        `T-CONTRACT.WORKER.TOOLS: expected 52 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        53,
+        `T-CONTRACT.WORKER.TOOLS: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 25 tools", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 26 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
-    // Then:  25 (P-73: suggest_card/suggest_next_actions removed from server mode)
+    // Then:  26 (P-73: suggest_card/suggest_next_actions removed from server mode; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -74,8 +74,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        25,
-        `T-CONTRACT.SERVER.TOOLS: expected 25 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        26,
+        `T-CONTRACT.SERVER.TOOLS: expected 26 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();

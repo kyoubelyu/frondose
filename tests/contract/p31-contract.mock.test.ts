@@ -88,7 +88,8 @@ const PRE_P31_WORKER_KEYS = [
   "web_search",
 ].sort();
 
-// P-Y3 rebaseline: current worker tool snapshot (52 keys with present_summary + 17 sales tools).
+// P-Y3 rebaseline: current worker tool snapshot (53 keys with present_summary + 17 sales tools
+// + stop_auto [P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE]).
 // clear_cookies removed from browser registry (no longer LLM-visible).
 const POST_P31_WORKER_KEYS = [
   ...PRE_P31_WORKER_KEYS,
@@ -107,6 +108,7 @@ const POST_P31_WORKER_KEYS = [
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
+  "stop_auto",
   "suggest_card",
   "suggest_next_actions",
   "todo_write",
@@ -143,17 +145,24 @@ const PRE_P31_SERVER_KEYS = [
   "web_search",
 ].sort();
 
-// P-73 rebaseline: current server tool snapshot (25 keys = pre-P-31 22 + schedule_task [P-31]
-// + todo_write [P-Y1] + present_summary [P-Y3]; suggest_card/suggest_next_actions worker-only per P-73).
-const POST_P31_SERVER_KEYS = [...PRE_P31_SERVER_KEYS, "present_summary", "schedule_task", "todo_write"].sort();
+// P-73 rebaseline: current server tool snapshot (26 keys = pre-P-31 22 + schedule_task [P-31]
+// + todo_write [P-Y1] + present_summary [P-Y3] + stop_auto [P-REBASE-TOOL-COUNT: stop_auto added
+// at P-AUTO-ISOLATE]; suggest_card/suggest_next_actions worker-only per P-73).
+const POST_P31_SERVER_KEYS = [
+  ...PRE_P31_SERVER_KEYS,
+  "present_summary",
+  "schedule_task",
+  "stop_auto",
+  "todo_write",
+].sort();
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools worker mode → 52 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 52 keys; set includes present_summary + 17 sales tools", () => {
+describe("makeAllTools worker mode → 53 tool keys (rebaselined to P-Y3) (G-P31.12)", () => {
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 53 keys; set includes present_summary + 17 sales tools + stop_auto", () => {
     // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
     // When:   worker mode tool set is built post-P-31
-    // Then:   52 keys; deepEqual to POST_P31_WORKER_KEYS (clear_cookies removed).
+    // Then:   53 keys; deepEqual to POST_P31_WORKER_KEYS (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -174,8 +183,8 @@ describe("makeAllTools worker mode → 52 tool keys (rebaselined to P-Y3) (G-P31
 
       assert.equal(
         keys.length,
-        52,
-        `worker mode must return exactly 52 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        53,
+        `worker mode must return exactly 53 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
@@ -190,11 +199,11 @@ describe("makeAllTools worker mode → 52 tool keys (rebaselined to P-Y3) (G-P31
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
 
-describe("makeAllTools server mode → 25 tool keys (rebaselined to P-73) (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 25 keys; set includes present_summary", () => {
+describe("makeAllTools server mode → 26 tool keys (rebaselined to P-73) (G-P31.12)", () => {
+  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 26 keys; set includes present_summary + stop_auto", () => {
     // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
     // When:   server mode tool set is built post-P-31
-    // Then:   25 keys; deepEqual to POST_P31_SERVER_KEYS (P-73: suggest_card/suggest_next_actions worker-only)
+    // Then:   26 keys; deepEqual to POST_P31_SERVER_KEYS (P-73: suggest_card/suggest_next_actions worker-only; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -214,8 +223,8 @@ describe("makeAllTools server mode → 25 tool keys (rebaselined to P-73) (G-P31
 
       assert.equal(
         keys.length,
-        25,
-        `server mode must return exactly 25 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        26,
+        `server mode must return exactly 26 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
