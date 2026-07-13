@@ -600,7 +600,7 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
     // Given: the 9 modules under src/persistence/sales/ + the barrel src/persistence/salesDb.ts
     // When:  fs.readFileSync(path).split('\n').length is computed for each
     // Then:  schema<=250, url-normalize<=15, raw-candidates<=90, leads<=140,
-    //        drafts<=75, timeline<=75, accounts<=45, scores<=40, auto-run<=165,
+    //        drafts<=125, timeline<=75, accounts<=45, scores<=40, auto-run<=165,
     //        barrel<=80 (raised from 50 by [2a-r2] for the named export type blocks)
     //        [P-AUTO-5] schema 240→250 for the v3 applyV3 migration (icp_qualification column)
     //        [P-AUTO-13] auto-run 165→185 for countSuccessfulConnects (the success-filtered
@@ -609,12 +609,18 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
     //        182 is still far under the 800 global limit)
     //        [P-MSG-SEND-LEDGER] schema 250→285 for the v4 applyV4 migration (nullable run_id
     //        recreate-and-swap; ~30 lines; still far under the 800-line global hard rule)
+    //        [P-FIX-TEST-DEBT-MECH] drafts 75→125 — the original 75 was the P-72-slice-4 origin
+    //        figure; ae4c2dd (P-POST-PUBLISH-8 draftId recovery) + f5dac02 (P-FIX-MARK-SENT-STALE-DRAFT,
+    //        204/204-suite-validated) grew it to ~104 lines. ~20% headroom above that is proportionate:
+    //        the module has stayed cohesive (CRUD + recovery/decline, no unrelated concerns accreting)
+    //        across two legitimate growth phases; if a third feature phase pushes it past 125, that is
+    //        the trigger to split the module rather than bump this budget again.
     const LOC_BUDGETS: Record<string, number> = {
       schema: 285,
       urlNormalize: 15,
       rawCandidates: 90,
       leads: 140,
-      drafts: 75,
+      drafts: 125,
       timeline: 75,
       accounts: 45,
       scores: 40,
