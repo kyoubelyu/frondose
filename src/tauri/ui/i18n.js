@@ -138,6 +138,11 @@ const en = {
     "settings.checking": "Checking…",
     "settings.updating": "Updating…",
     "settings.upToDate": "Up to date",
+    // P-FIX-MAC-UPDATER-RELAUNCH: update-status event stages (settings status line)
+    "settings.downloading": "Downloading update {version}…",
+    "settings.installing": "Installing update…",
+    "settings.relaunching": "Update installed — relaunching…",
+    "settings.updateError": "Update failed: {msg}",
 };
 const zhCN = {
     // topbar / mode
@@ -270,6 +275,11 @@ const zhCN = {
     "settings.checking": "检查中…",
     "settings.updating": "更新中…",
     "settings.upToDate": "已是最新版本",
+    // P-FIX-MAC-UPDATER-RELAUNCH: update-status event stages (settings status line)
+    "settings.downloading": "正在下载更新 {version}…",
+    "settings.installing": "正在安装更新…",
+    "settings.relaunching": "更新完成——即将重启…",
+    "settings.updateError": "更新失败：{msg}",
 };
 /** zh* (zh, zh-CN, zh-TW, zh-Hans-CN…) → zh-CN; everything else → en. */
 export function detectLocale(lang) {

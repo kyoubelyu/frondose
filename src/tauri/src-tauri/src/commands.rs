@@ -52,11 +52,17 @@ pub(crate) async fn frondose_check_update(app: tauri::AppHandle) -> Result<Value
         .map_err(|e| e.to_string())?;
     match updater.check().await.map_err(|e| e.to_string())? {
         Some(update) => {
-            update
-                .download_and_install(|_chunk, _total| {}, || {})
-                .await
-                .map_err(|e| e.to_string())?;
-            app.restart() // -> ! ; coerces to Result, no code after
+            // P-FIX-MAC-UPDATER-RELAUNCH: route through the shared helper — this fixes
+            // TWO latent bugs in the old bare download-and-install + restart()
+            // shape: (a) on Windows, restart() re-locked the exe before NSIS could swap
+            // it AND the sidecar was never killed (locked runtime\node.exe); (b) on
+            // macOS, restart() after the bundle swap silently exits without relaunching.
+            // Busy → Err("already_updating") propagates to the FE as a stable string.
+            crate::updater::install_and_relaunch(&app, update).await?;
+            // Reached when exit has been REQUESTED (macOS accepted relaunch) or never
+            // (Windows: install() diverged inside the plugin). The invoke promise may
+            // resolve pre-teardown; the FE trusts the update-status event stream.
+            Ok(json!({ "ok": true, "updateAvailable": true }))
         }
         None => Ok(json!({ "ok": true, "updateAvailable": false })),
     }
