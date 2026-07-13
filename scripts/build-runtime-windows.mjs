@@ -52,18 +52,64 @@ function installEnvForBundledNode(installerNode, baseEnv = process.env) {
   };
 }
 
+function betterSqliteVersion(root) {
+  const lockfile = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  const version = lockfile.packages?.["node_modules/better-sqlite3"]?.version;
+  if (typeof version !== "string" || !version.trim()) {
+    throw new Error("[build-runtime-win] better-sqlite3 version missing from package-lock.json");
+  }
+  return version.trim();
+}
+
+function assertWindowsX64Pe(file) {
+  if (!fs.existsSync(file)) {
+    throw new Error(`[build-runtime-win] invalid better_sqlite3.node PE: missing ${file}`);
+  }
+  const bytes = fs.readFileSync(file);
+  if (bytes.length < 0x40) {
+    throw new Error(`[build-runtime-win] invalid better_sqlite3.node PE: length=${bytes.length}`);
+  }
+
+  const dosMagic = bytes.subarray(0, 2).toString("hex");
+  if (dosMagic !== "4d5a") {
+    const actualMagic = bytes.subarray(0, 4).toString("hex");
+    throw new Error(`[build-runtime-win] invalid better_sqlite3.node DOS magic=0x${actualMagic}; expected MZ`);
+  }
+
+  const peOffset = bytes.readUInt32LE(0x3c);
+  if (peOffset > bytes.length - 6) {
+    throw new Error(
+      `[build-runtime-win] invalid better_sqlite3.node PE offset=0x${peOffset.toString(16)} length=${bytes.length}`,
+    );
+  }
+
+  const peMagic = bytes.subarray(peOffset, peOffset + 4).toString("hex");
+  if (peMagic !== "50450000") {
+    throw new Error(`[build-runtime-win] invalid better_sqlite3.node PE magic=0x${peMagic}; expected PE\\0\\0`);
+  }
+
+  const machine = bytes.readUInt16LE(peOffset + 4);
+  if (machine !== 0x8664) {
+    throw new Error(
+      `[build-runtime-win] invalid better_sqlite3.node COFF machine=0x${machine.toString(16).padStart(4, "0")}; expected 0x8664`,
+    );
+  }
+}
+
 export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync } = {}) {
   // CROSS-BUILD: when this runs on a non-Windows host (release.sh's pure-Mac path,
   // via cargo-xwin), the bundled win-x64 node.exe CANNOT be executed here — so the
   // three exec-checks below (ABI probe ×2 + loadability) are skipped (the pinned
   // NODE_VERSION/SQLITE_ABI are the contract), and `npm ci` runs under the HOST node
   // instead of the win node.exe, with `--os=win32 --cpu=x64` so npm resolves the
-  // Windows variant of any platform-specific optional dep. Safe specifically because
-  // the seeded-prebuild path already uses --ignore-scripts (no native postinstall
-  // runs). On a real Windows host everything below is unchanged (isCrossBuild=false).
+  // Windows variant of any platform-specific optional dep. The Windows sqlite prebuild
+  // is injected explicitly and install scripts stay disabled. On a real Windows host
+  // everything below is unchanged (isCrossBuild=false).
   const isCrossBuild = process.platform !== "win32";
   const runtime = path.join(root, "build", "runtime");
-  console.log(`[build-runtime-win] assembling self-contained runtime -> ${runtime}${isCrossBuild ? " (cross-build from " + process.platform + ")" : ""}`);
+  console.log(
+    `[build-runtime-win] assembling self-contained runtime -> ${runtime}${isCrossBuild ? ` (cross-build from ${process.platform})` : ""}`,
+  );
   fs.rmSync(runtime, { recursive: true, force: true });
   fs.mkdirSync(runtime, { recursive: true });
 
@@ -88,7 +134,21 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
     // rides out transient blips. Honors HTTP(S)_PROXY (set by build-release.ps1).
     execFile(
       "curl",
-      ["-fsSL", "--connect-timeout", "20", "--max-time", "600", "--retry", "3", "--retry-delay", "5", "--retry-connrefused", "-o", zip, url],
+      [
+        "-fsSL",
+        "--connect-timeout",
+        "20",
+        "--max-time",
+        "600",
+        "--retry",
+        "3",
+        "--retry-delay",
+        "5",
+        "--retry-connrefused",
+        "-o",
+        zip,
+        url,
+      ],
       { stdio: ["ignore", "inherit", "inherit"] },
     );
   }
@@ -107,18 +167,49 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
 
   fs.copyFileSync(installerNode, path.join(runtime, "node.exe"));
 
-  // 2. Production-only node_modules. The root `install` script is the WIN-2 cross-platform
-  //    no-op (`node -e ""`), so npm does NOT node-gyp the cgevent binding.gyp; better-sqlite3's
-  //    own install fetches the win32-x64 prebuild (NO --ignore-scripts, unlike the macOS path
-  //    which places a lipo'd sqlite by hand).
+  // 2. Production-only node_modules. Native Windows lets better-sqlite3 install its
+  //    prebuild normally. Cross-builds disable scripts and inject a Windows x64 prebuild.
   fs.copyFileSync(path.join(root, "package.json"), path.join(runtime, "package.json"));
   fs.copyFileSync(path.join(root, "package-lock.json"), path.join(runtime, "package-lock.json"));
   // FRONDOSE_WIN_SQLITE_PREBUILD: path to a pre-fetched win32-x64 better_sqlite3.node matching
   // SQLITE_ABI. Set it on a NETWORK-RESTRICTED build machine (e.g. China LAN, where prebuild-install
   // can't reach GitHub releases) — the install then runs with `--ignore-scripts` (no fetch / no
-  // node-gyp / no Python needed) and the native binary is injected below. Unset = default fetch path.
+  // node-gyp / no Python needed) and the native binary is injected below. An unseeded
+  // cross-build downloads the lockfile-matched Windows prebuild explicitly.
   // ssh2's native binding is optional (pure-JS fallback), so --ignore-scripts is safe for the bundle.
-  const seedPrebuild = process.env.FRONDOSE_WIN_SQLITE_PREBUILD?.trim();
+  let seedPrebuild = process.env.FRONDOSE_WIN_SQLITE_PREBUILD?.trim();
+  if (isCrossBuild && !seedPrebuild) {
+    const sqliteVersion = betterSqliteVersion(root);
+    const releaseVersion = `v${sqliteVersion}`;
+    const sqlitePackage = `better-sqlite3-${releaseVersion}-node-${SQLITE_ABI}-win32-x64.tar.gz`;
+    const extractDir = path.join(tmp, `frondose-better-sqlite3-${releaseVersion}-win32-x64`);
+    const archive = path.join(extractDir, sqlitePackage);
+    const sqliteUrl = `https://github.com/WiseLibs/better-sqlite3/releases/download/${releaseVersion}/${sqlitePackage}`;
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    fs.mkdirSync(extractDir, { recursive: true });
+    console.log(`[build-runtime-win] downloading ${sqliteUrl}`);
+    execFile(
+      "curl",
+      [
+        "-fsSL",
+        "--connect-timeout",
+        "20",
+        "--max-time",
+        "300",
+        "--retry",
+        "3",
+        "--retry-delay",
+        "5",
+        "--retry-connrefused",
+        "-o",
+        archive,
+        sqliteUrl,
+      ],
+      { stdio: ["ignore", "inherit", "inherit"] },
+    );
+    execFile("tar", ["-xzf", archive, "-C", extractDir], { stdio: ["ignore", "inherit", "inherit"] });
+    seedPrebuild = path.join(extractDir, "build", "Release", "better_sqlite3.node");
+  }
   // On a real Windows host: run npm ci under the bundled win node.exe. Cross-building
   // on macOS: the win node.exe can't run here, so drive npm-cli.js with the HOST node
   // and force npm to resolve win32-x64 optional deps (`--os/--cpu`) so the assembled
@@ -141,6 +232,9 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
     fs.copyFileSync(seedPrebuild, dest);
     console.log(`[build-runtime-win] injected seeded better-sqlite3 prebuild -> ${dest}`);
   }
+
+  const bundledSqlite = path.join(runtime, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node");
+  assertWindowsX64Pe(bundledSqlite);
 
   // 3. dist payload (the compiled agent/sidecar — assumes `npm run build` already ran).
   console.log("[build-runtime-win] copy dist");
