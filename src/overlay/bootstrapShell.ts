@@ -20,6 +20,14 @@ export const SHELL_JS = `
 
   var panelRoot = null;
 
+  // P-UI-THINK-OVERLAY (2026-07-13, operator direction): the overlay keeps its OWN chat
+  // input/send controls but their conversation diverges from the main window's — operator wants
+  // them HIDDEN for now (main window owns the chat); a later phase (P-UI-CONVERGE) decides
+  // whether the overlay reuses main's chat code instead of maintaining its own. Feature-hide
+  // only — the composer DOM/listeners below are left fully intact, just not shown. Flip to
+  // true to re-enable.
+  var OVERLAY_CHAT_CONTROLS_ENABLED = false;
+
   // ---- frondose collapsed pill (inline leaf + wordmark) ----
   var pill = document.createElement('div');
   pill.className = 'frondose-pill';
@@ -106,6 +114,10 @@ export const SHELL_JS = `
     inner.appendChild(input);
     var send = el('button', 'composer-send', 'send-btn'); inner.appendChild(send);
     composer.appendChild(inner); footer.appendChild(composer); panelRoot.appendChild(footer);
+    // P-UI-THINK-OVERLAY: feature-hide (not delete) the overlay's own chat controls — see the
+    // OVERLAY_CHAT_CONTROLS_ENABLED comment above. .hidden is the same display:none!important
+    // class index.html/main uses; approval/status/progress surfaces below are unaffected.
+    if (!OVERLAY_CHAT_CONTROLS_ENABLED) { footer.classList.add('hidden'); }
 
     // shared error/retry/cron banners
     panelRoot.appendChild(el('div', 'banner-error hidden', 'error-banner'));

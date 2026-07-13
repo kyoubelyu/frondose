@@ -18,6 +18,7 @@ import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
+import { scrollToBottomIfPinned as scrollToBottomIfPinnedImpl } from "./app/scrolling.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
 import { localizeDocument, t } from "./i18n.js";
 
@@ -163,20 +164,10 @@ function surfaceError(label: string, e: unknown): void {
   errorBannerEl.classList.remove("hidden");
 }
 
-function isNearBottom(): boolean {
-  const sc = scrollAreaEl as unknown as {
-    scrollTop: number;
-    scrollHeight: number;
-    clientHeight: number;
-  };
-  const distance = sc.scrollHeight - (sc.scrollTop + sc.clientHeight);
-  return distance <= AUTOSCROLL_PX;
-}
-
+// P-UI-THINK-OVERLAY: isNearBottom/scrollToBottomIfPinned bodies extracted to ./app/scrolling.js
+// (800-line cap exhausted; established split pattern). Behavior byte-preserved.
 function scrollToBottomIfPinned(): void {
-  if (!isNearBottom()) return;
-  const sc = scrollAreaEl as unknown as { scrollTop: number; scrollHeight: number; clientHeight: number };
-  sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+  scrollToBottomIfPinnedImpl(scrollAreaEl, AUTOSCROLL_PX);
 }
 
 function appendUserBubble(text: string): void {
@@ -496,6 +487,11 @@ async function performSteer(newPrompt: string): Promise<void> {
     const completed = await waitForDoneSse(previousTurnId, 3000, 50);
     if (!completed) {
       errorBannerEl.textContent = t("error.steerTimeout");
+      // P-UI-THINK-OVERLAY CMR-2: the abandoned turn will never get a trusted `done` — close its
+      // bubble (hides the gray thinking block, mirrors the done/error handlers) and drop the stale
+      // turnId so a late `reasoning`/`text` frame for it cannot reopen/reveal a new bubble.
+      currentTurnId = null;
+      endAgentBubble();
       transition("error");
       return;
     }
