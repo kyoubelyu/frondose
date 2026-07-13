@@ -22,7 +22,7 @@ import { spawn as spawnChild } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path, { join, resolve } from "node:path";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -57,12 +57,26 @@ interface RunResult {
   exitCode: number;
 }
 
+// P-FIX-TEST-CONFIG-CLOBBER: sandbox home for every spawned CLI — `mai status` etc.
+// read identity/config/secrets/telegram/schedule state from getHomeBase(); forwarding
+// the real HOME let those subprocesses read the operator's real ~/.frondose state.
+const SANDBOX_HOME = mkdtempSync(join(tmpdir(), "mai-b1-sandbox-home-"));
+after(() => {
+  try {
+    rmSync(SANDBOX_HOME, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch {
+    /* best-effort */
+  }
+});
+
 function runCliProcess(argv: string[], env?: Record<string, string>, stdinData?: string): Promise<RunResult> {
   return new Promise((resolve) => {
     const baseEnv: Record<string, string> = {
       FRONDOSE_AUTOUPDATE: "skip",
+      FRONDOSE_DOTENV: "skip",
       PATH: process.env.PATH ?? "",
-      HOME: process.env.HOME ?? "",
+      HOME: SANDBOX_HOME,
+      FRONDOSE_HOME_BASE: SANDBOX_HOME,
       USER: process.env.USER ?? "",
     };
     const child = spawnChild("node", [CLI, ...argv], {
@@ -548,6 +562,11 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
     } = await import("../../src/persistence/identity.js");
 
     const identityPath = join(tmpdir(), `mai-b1-soul-reset-${process.pid}.json`);
+    // P-FIX-TEST-CONFIG-CLOBBER: writeIdentity/readIdentity treat config.json.identity as
+    // AUTHORITATIVE — without an explicit 3rd configPath arg they default to the REAL
+    // ~/.frondose/agent/config.json and clobber the operator's identity/ICP (the recurring
+    // "B1ResetTest" incident). Always pass an isolated configPath.
+    const configPath = join(tmpdir(), `mai-b1-soul-reset-config-${process.pid}.json`);
     try {
       // 1. Write initial identity with past timestamp
       const initial = schema.parse({
@@ -561,7 +580,7 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
         },
         updatedAt: "2026-01-01T00:00:00.000Z",
       });
-      writeId(initial, identityPath);
+      writeId(initial, identityPath, configPath);
 
       // 2. Simulate a new axis pick (as promptFreeAxes would return after TTY interaction)
       const newAxes = {
@@ -574,10 +593,10 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
       // 3. Apply patch + persist (exact sequence runSoulReset uses)
       const patched = applyPatch(initial, { freeAxes: newAxes });
       const merged = schema.parse({ ...patched, updatedAt: new Date().toISOString() });
-      writeId(merged, identityPath);
+      writeId(merged, identityPath, configPath);
 
       // 4. Re-read and verify OUTCOME ANCHOR
-      const updated = readId(identityPath);
+      const updated = readId(identityPath, configPath);
       assert.ok(updated !== null, "T-App11b1.12c: identity.json must be readable after reset persist");
       assert.equal(
         updated?.freeAxes?.pain_chain_lean,
@@ -597,6 +616,7 @@ describe("T-App11b1.12: mai soul reset still works; mai soul show/edit now error
     } finally {
       try {
         rmSync(identityPath, { force: true, maxRetries: 5, retryDelay: 100 });
+        rmSync(configPath, { force: true, maxRetries: 5, retryDelay: 100 });
       } catch {
         /* best-effort */
       }
