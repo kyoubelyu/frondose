@@ -38,8 +38,26 @@ export interface AgentLoopOpts {
  * recurring failure mode where the agent announces an action and quits without performing
  * it. We inject one synthetic continuation message and re-run a small phase.
  */
-const NARRATIVE_HOOK_RE =
-  /(let me (now |start |continue |first |go ahead |proceed |then |)|now let me|i['']?ll (now |start |go |then |next |proceed |first )|i will (now |then |proceed |first )|let['']?s (now |then |next )|next,?\s*(i['']?ll|i will))/i;
+// [P-CONVO-GATE] The `let me` / `now let me` branches must NOT match conversational
+// phrasings. The original bare `let me (…|)` empty alternative — and the unrestricted
+// `now let me` branch — matched sign-offs and hesitation phrases ("Let me know what you
+// need", "Now let me know…", "Let me think", "Let me see", "Let me explain/help"), turning
+// a legitimate zero-tool plain-text reply into a "call the next tool NOW" nudge. D-12 is
+// evaluated on zero-tool turns by design (its canonical case is an ANNOUNCEMENT with no
+// tool call), so it is NOT gated on turnToolCallCount and any false positive here still
+// fires. A shared negative lookahead excludes the common conversational verbs from both
+// `let me` and `now let me` while still catching genuine action announcements ("Let me now
+// open the feed", "Let me open the profile"). Bias: fail toward NOT nudging conversational
+// text — a missed D-12 nudge just ends the turn in text; a false one re-creates the
+// operator-reported greeting→sales-flow bug. Tradeoff (accepted, see
+// docs/phase-convo-gate-plan.md §7): the exact wording "Let me know the results after I run
+// the search" is treated as conversational and not recovered; the natural announcement form
+// is "I'll let you know", which the detector already does not special-case.
+const NARRATIVE_CONV_VERBS = "know|think|see|check|explain|clarify|recap|summarize|reiterate|help";
+const NARRATIVE_HOOK_RE = new RegExp(
+  `(let me (?!(?:${NARRATIVE_CONV_VERBS})\\b)|now let me (?!(?:${NARRATIVE_CONV_VERBS})\\b)|i['’]?ll (now |start |go |then |next |proceed |first )|i will (now |then |proceed |first )|let['’]?s (now |then |next )|next,?\\s*(i['’]?ll|i will))`,
+  "i",
+);
 
 export function lastAssistantMessageMissedExecute(messages: CoreMessage[]): boolean {
   // Walk backward to find the LAST assistant message (tool results may follow it).
@@ -86,7 +104,10 @@ export function narrationContinueMessage(): CoreMessage {
  * inject a continuation pushing the model to call its NEXT planned tool.
  *
  * Heuristic gate: stepCount <= STALL_STEP_THRESHOLD AND last assistant message
- * had no tool calls. Combined with the D-12 narrative check, we cover both
+ * had no tool calls. [P-CONVO-GATE] The pi/loop.ts caller adds a THIRD condition —
+ * turnToolCallCount > 0 — so D-22 fires only when in-flight work went silent, never
+ * on a zero-tool conversational reply (which the Boundary conversational-turn gate
+ * makes a first-class outcome). Combined with the D-12 narrative check, we cover both
  * "stopped after announcing intent" (D-12) and "stopped without saying anything"
  * (D-22). Same retry budget pool — at most one retry per turn.
  */
