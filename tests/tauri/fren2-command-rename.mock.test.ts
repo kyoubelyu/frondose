@@ -11,8 +11,8 @@
  *              Rust handler; every Rust handler is in generate_handler!; 2 zero-TS-caller
  *              commands (frondose_health / frondose_chrome_ensure; WLC gave workflow_cancel a TS caller)
  *              are allowed as handler-only entries
- *   T-REN.3 — exactly 15 frondose_* handlers defined, registered, and pinned in the
- *              P-APP-7 golden
+ *   T-REN.3 — exactly 17 frondose_* handlers defined, registered, and pinned in the
+ *              P-APP-7 golden (rebased 15→17 for P-AUTO-ISOLATE's frondose_agent_auto_start/stop)
  *
  * All assertion bodies are intentionally TODO (replaced with assert.fail stubs) so these
  * tests FAIL before Codex Step 4 renames the production code.
@@ -74,7 +74,8 @@ const IPC_FIXTURE = join(
 const LEGACY_CMD_RE =
   /\bmai_(health|identity|chrome_ensure|get_settings|set_settings|check_update|agent_turn|agent_abort|agent_retry|set_cron_mode|set_passive_mode|workflow_approve|workflow_decline|workflow_handoff|workflow_cancel)\b/;
 
-/** The canonical 15 post-rename command names. */
+/** The canonical 17 post-rename command names (rebased 15→17: P-AUTO-ISOLATE, f546d8c,
+ *  added frondose_agent_auto_start/frondose_agent_auto_stop after the rename landed). */
 const EXPECTED_FRONDOSE_COMMANDS: ReadonlySet<string> = new Set([
   "frondose_health",
   "frondose_identity",
@@ -82,6 +83,8 @@ const EXPECTED_FRONDOSE_COMMANDS: ReadonlySet<string> = new Set([
   "frondose_set_settings",
   "frondose_chrome_ensure",
   "frondose_agent_turn",
+  "frondose_agent_auto_start",
+  "frondose_agent_auto_stop",
   "frondose_agent_abort",
   "frondose_agent_retry",
   "frondose_set_cron_mode",
@@ -325,20 +328,21 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
   });
 });
 
-// ─── T-REN.3 — exactly 15 frondose_* handlers; count pinned in fixture golden ─
+// ─── T-REN.3 — exactly 17 frondose_* handlers; count pinned in fixture golden ─
 
-describe("F-REN-2 — exactly 15 frondose_* commands defined, registered, and in the golden (T-REN.3)", () => {
-  it("T-REN.3a: given renamed main.rs, when #[tauri::command] fn names are extracted, then exactly 15 frondose_* names exist and match EXPECTED_FRONDOSE_COMMANDS", () => {
-    // Given: all 15 Rust handler fn names have been renamed to frondose_*
+describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in the golden (T-REN.3)", () => {
+  it("T-REN.3a: given renamed main.rs, when #[tauri::command] fn names are extracted, then exactly 17 frondose_* names exist and match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+    // Given: the original 15 Rust handler fn names were renamed to frondose_*; P-AUTO-ISOLATE
+    //        (f546d8c) later added frondose_agent_auto_start/frondose_agent_auto_stop (15→17)
     // When:  tauri-command fn-names are extracted from main.rs
-    // Then:  exactly 15 frondose_* names, set-equal to EXPECTED_FRONDOSE_COMMANDS
+    // Then:  exactly 17 frondose_* names, set-equal to EXPECTED_FRONDOSE_COMMANDS
     const src = MAIN_RS;
     const fnNames = extractTauriCommandFnNames(src);
     const frondoseFns = new Set([...fnNames].filter((n) => n.startsWith("frondose_")));
     assert.equal(
       frondoseFns.size,
-      15,
-      `Expected exactly 15 frondose_* #[tauri::command] fn names; got ${frondoseFns.size}: ${JSON.stringify([...frondoseFns])}`,
+      17,
+      `Expected exactly 17 frondose_* #[tauri::command] fn names; got ${frondoseFns.size}: ${JSON.stringify([...frondoseFns])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
       assert.ok(
@@ -354,17 +358,18 @@ describe("F-REN-2 — exactly 15 frondose_* commands defined, registered, and in
     }
   });
 
-  it("T-REN.3b: given renamed main.rs, when generate_handler! block is extracted, then exactly 15 frondose_* entries match EXPECTED_FRONDOSE_COMMANDS", () => {
-    // Given: all 15 generate_handler! registrations have been renamed to frondose_*
+  it("T-REN.3b: given renamed main.rs, when generate_handler! block is extracted, then exactly 17 frondose_* entries match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+    // Given: the original 15 generate_handler! registrations were renamed to frondose_*;
+    //        P-AUTO-ISOLATE (f546d8c) later added 2 more entries (15→17)
     // When:  the generate_handler! identifier set is extracted
-    // Then:  size===15 and set equals EXPECTED_FRONDOSE_COMMANDS
+    // Then:  size===17 and set equals EXPECTED_FRONDOSE_COMMANDS
     const src = MAIN_RS;
     const registrations = extractGenerateHandlerIds(src);
     const frondoseRegs = new Set([...registrations].filter((n) => n.startsWith("frondose_")));
     assert.equal(
       frondoseRegs.size,
-      15,
-      `Expected exactly 15 frondose_* entries in generate_handler!; got ${frondoseRegs.size}: ${JSON.stringify([...frondoseRegs])}`,
+      17,
+      `Expected exactly 17 frondose_* entries in generate_handler!; got ${frondoseRegs.size}: ${JSON.stringify([...frondoseRegs])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
       assert.ok(
@@ -380,16 +385,17 @@ describe("F-REN-2 — exactly 15 frondose_* commands defined, registered, and in
     }
   });
 
-  it("T-REN.3c: given the P-APP-7 golden flipped to frondose_*, when TAURI_COMMANDS_GOLDEN is extracted, then it contains exactly 15 frondose_* names matching EXPECTED_FRONDOSE_COMMANDS", () => {
-    // Given: ipc-contract.mock.test.ts TAURI_COMMANDS_GOLDEN has been flipped to frondose_* by validator
+  it("T-REN.3c: given the P-APP-7 golden flipped to frondose_*, when TAURI_COMMANDS_GOLDEN is extracted, then it contains exactly 17 frondose_* names matching EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+    // Given: ipc-contract.mock.test.ts TAURI_COMMANDS_GOLDEN has been flipped to frondose_* by validator;
+    //        P-AUTO-ISOLATE (f546d8c) later added 2 more entries to that golden (15→17)
     // When:  the golden set is extracted from the fixture source
-    // Then:  size===15 and set equals EXPECTED_FRONDOSE_COMMANDS
+    // Then:  size===17 and set equals EXPECTED_FRONDOSE_COMMANDS
     const src = readFileSync(IPC_FIXTURE, "utf-8");
     const golden = extractFixtureGolden(src);
     assert.equal(
       golden.size,
-      15,
-      `Expected exactly 15 entries in TAURI_COMMANDS_GOLDEN; got ${golden.size}: ${JSON.stringify([...golden])}`,
+      17,
+      `Expected exactly 17 entries in TAURI_COMMANDS_GOLDEN; got ${golden.size}: ${JSON.stringify([...golden])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
       assert.ok(

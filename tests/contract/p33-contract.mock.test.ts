@@ -163,11 +163,11 @@ const FROZEN_SERVER_TOOL_KEYS = [
 // ─── T-P33.STRUCT.1 ───────────────────────────────────────────────────────────
 
 describe("P-33 source tree structure (G-P33.1)", () => {
-  it("T-P33.STRUCT.1: src/tools/browser/ has 12 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
-    // Given: post-reorg source tree (P-33 builder Step 4b + P-63 outboundGuard.ts)
+  it("T-P33.STRUCT.1: src/tools/browser/ has 13 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
+    // Given: post-reorg source tree (P-33 builder Step 4b + P-63 outboundGuard.ts + Slice-4 scopedResolve.ts)
     // When:  listing src/tools/browser/ and src/tools/linkedin/ directory contents
-    // Then:  browser/ = 13 .ts files (12 tools + index.ts); linkedin/ = 2 .ts files only
-    //        P-63 added outboundGuard.ts (silent-send safety) → 12 browser tool files total
+    // Then:  browser/ = 14 .ts files (13 tools + index.ts); linkedin/ = 2 .ts files only
+    //        P-63 added outboundGuard.ts (silent-send safety) → 13 browser tool files total
 
     const browserDir = join(SRC_ROOT, "tools", "browser");
     const linkedinDir = join(SRC_ROOT, "tools", "linkedin");
@@ -189,6 +189,7 @@ describe("P-33 source tree structure (G-P33.1)", () => {
       "outboundGuard.ts", // P-63: sidebar silent-send safety guard (pre-existing regression fix)
       "press.ts",
       "reload.ts",
+      "scopedResolve.ts", // Slice-4 (ff86845): native-port tool-layer wire-in, flag-gated OFF by default
       "screenshot.ts",
       "scroll.ts",
       "type.ts",
