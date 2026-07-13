@@ -92,6 +92,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "sleep",
   "start_auto_run",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   // P-Z3 rebaseline: accreted since P-44 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
   "suggest_next_actions",
@@ -129,6 +130,7 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "set_memory_note",
   "sleep",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   // P-73: suggest_card/suggest_next_actions are worker-only overlay tools (removed from server)
   "telegram_notify",
   "todo_write",
@@ -229,11 +231,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 52 / server 25 (G-P38.8/.11, rebaselined)", () => {
-  it("T-CONTRACT.TOOLS: tool set is worker 52 / server 25 (clear_cookies removed)", () => {
+describe("tool counts: worker 53 / server 26 (G-P38.8/.11, rebaselined)", () => {
+  it("T-CONTRACT.TOOLS: tool set is worker 53 / server 26 (P-REBASE-TOOL-COUNT: stop_auto)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 52 / server 25 (clear_cookies removed from browser registry)
+    // Then:  worker 53 / server 26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -248,8 +250,8 @@ describe("tool counts: worker 52 / server 25 (G-P38.8/.11, rebaselined)", () => 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        52,
-        `worker tool count must be 52; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        53,
+        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen P-Y3 snapshot");
 
@@ -263,8 +265,8 @@ describe("tool counts: worker 52 / server 25 (G-P38.8/.11, rebaselined)", () => 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        25,
-        `server tool count must be 25; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        26,
+        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
     } finally {
