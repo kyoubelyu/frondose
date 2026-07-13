@@ -48,19 +48,19 @@ function makeIdentity(): IdentityRecord {
 // ---------------------------------------------------------------------------
 
 describe("composeSoulBand — new own-company worldview habit line (plan §5 T-Soul.OwnCompany.1, F-5)", () => {
-  it("T-Soul.OwnCompany.1: given identity = a full IdentityRecord (or null), when composeSoulBand(identity) is called, then the output contains the exact literal 'own_company' AND the phrase 'you never prospect colleagues' (pins habitual, second-person, no-modal wording per soul.ts:17-22 conventions), AND does NOT contain the substring 'URL' or 'companyLinkedInUrl' (pins the §13 simplification — name-based only, no URL wording)", () => {
+  it("T-Soul.OwnCompany.1: given identity = a full IdentityRecord (or null), when composeSoulBand(identity) is called, then the output contains the exact literal 'own_company' AND the phrase 'you exclude colleagues from prospecting' (pins habitual, second-person, no-modal wording per soul.ts:17-22 conventions AND G-P39.10's zero-modal-token rule), AND does NOT contain the substring 'URL' or 'companyLinkedInUrl' (pins the §13 simplification — name-based only, no URL wording)", () => {
     // Given: a representative identity record.
     const identity = makeIdentity();
 
     // When: composeSoulBand(identity) is called.
     const band = composeSoulBand(identity);
 
-    // Then: band.includes("own_company") && band.includes("you never prospect colleagues")
+    // Then: band.includes("own_company") && band.includes("you exclude colleagues from prospecting")
     //       && !band.includes("URL") && !band.includes("companyLinkedInUrl").
     assert.ok(band.includes("own_company"), `soul band must contain "own_company"; band=${band}`);
     assert.ok(
-      band.includes("you never prospect colleagues"),
-      `soul band must contain the habitual "you never prospect colleagues" phrase; band=${band}`,
+      band.includes("you exclude colleagues from prospecting"),
+      `soul band must contain the habitual "you exclude colleagues from prospecting" phrase; band=${band}`,
     );
     assert.ok(!band.includes("URL"), `soul band must NOT contain "URL" (§13 name-only simplification); band=${band}`);
     assert.ok(
