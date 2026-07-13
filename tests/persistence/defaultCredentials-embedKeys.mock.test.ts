@@ -126,12 +126,27 @@ describe("readDefaultCredentials — reads the gitignored generated JSON sidecar
     }
   });
 
-  it("T-DEFCRED.5: real shipped reader — the actual co-located generated file is absent in this checkout, so readDefaultCredentials() (no args) returns all-null", () => {
-    // Given: the REAL default path (co-located with src/persistence/defaultCredentials.ts)
+  it("T-DEFCRED.5: real shipped reader — when the co-located generated file is absent in this checkout, readDefaultCredentials() (no args) returns all-null; skips with reason when a prior local build left the file on disk", (t) => {
+    // Given: the REAL default path (co-located with src/persistence/defaultCredentials.ts). The
+    //        generated file is gitignored and never committed (T-NOKEY.1/2), but a local checkout
+    //        that has run scripts/gen-default-credentials.ts (directly, or via scripts/release.sh —
+    //        see docs/issue-test-debt-15-intake.md item 4) leaves it on disk permanently. That is a
+    //        build-history-dependent per-machine artifact, not a code defect, so this test SKIPS
+    //        with an explicit reason on such a machine rather than failing or silently passing.
     // When:  readDefaultCredentials() is called with no override — the actual production path
-    // Then:  the generated file must NOT exist in this checkout (never committed) and the
-    //        reader must return all-null, proving "absent-defaults => behaves like today" for
-    //        the real code path, not just an injected test path.
+    // Then:  on a fresh checkout (file absent) the reader returns all-null, proving
+    //        "absent-defaults => behaves like today" for the real code path, not just an injected
+    //        test path; on a machine where the file pre-exists, this assertion is skipped (T-DEFCRED.2
+    //        already covers absent-file reader behavior hermetically via an injected fixture path).
+    if (existsSync(DEFAULT_CREDENTIALS_PATH())) {
+      t.skip(
+        "T-DEFCRED.5: skipped — src/persistence/defaultCredentials.generated.json already exists on " +
+          "this checkout (build history, e.g. scripts/release.sh has run here before; gitignored, never " +
+          "committed — see docs/issue-test-debt-15-intake.md item 4). Absent-file behavior is covered " +
+          "hermetically by T-DEFCRED.2.",
+      );
+      return;
+    }
     assert.equal(existsSync(DEFAULT_CREDENTIALS_PATH()), false, "T-DEFCRED.5: generated file must not be committed/present");
     assert.deepEqual(readDefaultCredentials(), { llmBaseUrl: null, llmModel: null, llmKey: null, braveKey: null });
   });

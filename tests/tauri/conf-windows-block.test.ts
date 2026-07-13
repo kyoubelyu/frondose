@@ -8,7 +8,7 @@
  *   G-WIN3.2  — T-Conf.Win.1 (bundle.windows.webviewInstallMode.type === "offlineInstaller"
  *                              AND .silent === true)
  *             — T-Conf.Win.2 (bundle.windows.nsis.installerIcon === "icons/icon.ico",
- *                              .installMode === "perMachine", .languages includes "English")
+ *                              .installMode === "currentUser", .languages includes "English")
  *   G-WIN3.2 + G-WIN3.M-1 pre-check:
  *             — T-Conf.Win.3 (bundle.targets deep-equals ["app","dmg"] — UNCHANGED from
  *                              pre-WIN-3; macOS release path uses --bundles app CLI override)
@@ -98,11 +98,13 @@ describe("G-WIN3.2 — tauri.conf.json: bundle.windows.webviewInstallMode is off
 // ---------------------------------------------------------------------------
 
 describe("G-WIN3.2 — tauri.conf.json: bundle.windows.nsis installer icon, installMode, and languages", () => {
-  it('T-Conf.Win.2: nsis.installerIcon === "icons/icon.ico", .installMode === "perMachine", .languages includes "English"', () => {
+  it('T-Conf.Win.2: nsis.installerIcon === "icons/icon.ico", .installMode === "currentUser", .languages includes "English"', () => {
     // Given: tauri.conf.json parsed (pre-WIN-3 has no bundle.windows block)
     // When:  bundle.windows.nsis is inspected
     // Then:  installerIcon === "icons/icon.ico"
-    //        installMode === "perMachine"
+    //        installMode === "currentUser" (live-proven 2026-07-03, reference-windows-tauri-autoupdate-fixes.md —
+    //          currentUser is REQUIRED for the Windows NSIS silent auto-update path; perMachine forces an
+    //          elevation prompt on every auto-update and breaks unattended update. Do not flip back.)
     //        languages array includes "English"
 
     const nsis = tauriConf.bundle?.windows?.nsis;
@@ -115,10 +117,12 @@ describe("G-WIN3.2 — tauri.conf.json: bundle.windows.nsis installer icon, inst
       "icons/icon.ico",
       `T-Conf.Win.2: nsis.installerIcon must be "icons/icon.ico" (got: ${JSON.stringify(nsis.installerIcon)})`,
     );
+    // currentUser is REQUIRED for the Windows NSIS silent auto-update path (live-proven 2026-07-03,
+    // reference-windows-tauri-autoupdate-fixes.md) — do not flip back to perMachine.
     assert.strictEqual(
       nsis.installMode,
-      "perMachine",
-      `T-Conf.Win.2: nsis.installMode must be "perMachine" (got: ${JSON.stringify(nsis.installMode)})`,
+      "currentUser",
+      `T-Conf.Win.2: nsis.installMode must be "currentUser" (got: ${JSON.stringify(nsis.installMode)})`,
     );
     const langs = nsis.languages ?? [];
     assert.ok(

@@ -57,9 +57,11 @@ function seedScore(
 describe("T-A4 — promote_candidate_to_lead qualification gate (P-AUTO-4)", () => {
 
   // ─── T-A4.Cold.1 ─────────────────────────────────────────────────────────────
-  it("T-A4.Cold.1: when totalScore=35 and no bypass, promote fails with below-floor reason; no lead inserted; status stays scored", async () => {
-    // Given: candidate status='scored', lead_scores row totalScore=35 (cold band), no bypass
-    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual'}) — bypassScoreGate omitted
+  it("T-A4.Cold.1: when totalScore=35, bypassPersonaCheck:true (isolating the persona gate), and bypassScoreGate omitted, promote fails with below-floor reason; no lead inserted; status stays scored", async () => {
+    // Given: candidate status='scored', lead_scores row totalScore=35 (cold band), bypassScoreGate omitted
+    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual', bypassPersonaCheck:true}) —
+    //        bypassPersonaCheck isolates the unrelated D-29 persona-vs-ICP gate (see
+    //        docs/issue-test-debt-15-intake.md item 6); bypassScoreGate is the param under test, omitted
     // Then:  {ok:false, error:{kind:'invalid_input'}} with message naming the floor; NO leads row; candidate status='scored'
     closeSalesDatabase(":memory:");
     const db = openSalesDatabase(":memory:");
@@ -67,7 +69,11 @@ describe("T-A4 — promote_candidate_to_lead qualification gate (P-AUTO-4)", () 
     seedScore(db, candidateId, { totalScore: 35 });
 
     const tool = makePromoteCandidateToLeadTool(":memory:");
-    const result = await (tool.execute as Function)({ candidateId, ownerMode: "manual" });
+    const result = await (tool.execute as Function)({
+      candidateId,
+      ownerMode: "manual",
+      bypassPersonaCheck: true,
+    });
 
     // TODO: fill assertions at Step 5 after builder ships the gate
     assert.strictEqual(result.ok, false, "TODO: gate must reject cold candidate");
@@ -80,31 +86,48 @@ describe("T-A4 — promote_candidate_to_lead qualification gate (P-AUTO-4)", () 
   });
 
   // ─── T-A4.Disqualify.1 ───────────────────────────────────────────────────────
-  it("T-A4.Disqualify.1: when nextAction='disqualify' (even totalScore=90) and no bypass, promote fails; no lead", async () => {
-    // Given: candidate status='scored', lead_scores row totalScore=90 but nextAction='disqualify', no bypass
-    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual'})
-    // Then:  {ok:false, error:{kind:'invalid_input'}}; NO leads row
+  it("T-A4.Disqualify.1: when nextAction='disqualify' (even totalScore=90), bypassPersonaCheck:true (isolating the persona gate), and bypassScoreGate omitted, promote fails naming the disqualify reason specifically; no lead", async () => {
+    // Given: candidate status='scored', lead_scores row totalScore=90 but nextAction='disqualify', bypassScoreGate omitted
+    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual', bypassPersonaCheck:true}) —
+    //        bypassPersonaCheck isolates the unrelated D-29 persona-vs-ICP gate (see
+    //        docs/issue-test-debt-15-intake.md item 6 + reconciliation §3)
+    // Then:  {ok:false, error:{kind:'invalid_input'}} whose message names the disqualify-nextAction
+    //        reason specifically (not the persona-mismatch reason this test used to pass on before); NO leads row
     closeSalesDatabase(":memory:");
     const db = openSalesDatabase(":memory:");
     const candidateId = seedFreshCandidate(db, { status: "scored" });
     seedScore(db, candidateId, { totalScore: 90, nextAction: "disqualify" });
 
     const tool = makePromoteCandidateToLeadTool(":memory:");
-    const result = await (tool.execute as Function)({ candidateId, ownerMode: "manual" });
+    const result = await (tool.execute as Function)({
+      candidateId,
+      ownerMode: "manual",
+      bypassPersonaCheck: true,
+    });
 
-    // TODO: fill assertions at Step 5
-    assert.strictEqual(result.ok, false, "TODO: disqualify nextAction must be rejected");
-    assert.strictEqual(result.error.kind, "invalid_input", "TODO: kind must be invalid_input");
+    assert.strictEqual(result.ok, false, "disqualify nextAction must be rejected");
+    assert.strictEqual(result.error.kind, "invalid_input", "kind must be invalid_input");
+    // Pins the SPECIFIC gate reason (promoteCandidateToLead.ts's why-string for the
+    // nextAction==='disqualify' branch) — not the generic invalid_input kind alone, which the
+    // earlier persona gate would also have satisfied before bypassPersonaCheck was added.
+    assert.match(
+      result.error.message,
+      /nextAction='disqualify'/,
+      "message must name the disqualify reason specifically, not a floor/persona mismatch",
+    );
     const leadCount = (db.prepare("SELECT COUNT(*) AS n FROM leads").get() as { n: number }).n;
-    assert.strictEqual(leadCount, 0, "TODO: no leads row must be inserted");
+    assert.strictEqual(leadCount, 0, "no leads row must be inserted");
   });
 
   // ─── T-A4.Null.1 ─────────────────────────────────────────────────────────────
-  it("T-A4.Null.1: when candidate status='scored' but NO lead_scores row exists, promote fails; no lead", async () => {
+  it("T-A4.Null.1: when candidate status='scored' but NO lead_scores row exists, bypassPersonaCheck:true (isolating the persona gate), and bypassScoreGate omitted, promote fails naming the missing-score reason specifically; no lead", async () => {
     // Given: candidate status='scored' but lead_scores table has NO row for this candidate
     //        (anomalous case — status set externally without score_lead; getLatestScoreByCandidate returns null)
-    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual'})
-    // Then:  {ok:false, error:{kind:'invalid_input'}} (no qualifying score); NO leads row
+    // When:  promote_candidate_to_lead({candidateId, ownerMode:'manual', bypassPersonaCheck:true}) —
+    //        bypassPersonaCheck isolates the unrelated D-29 persona-vs-ICP gate (see
+    //        docs/issue-test-debt-15-intake.md item 6 + reconciliation §3)
+    // Then:  {ok:false, error:{kind:'invalid_input'}} whose message names the missing-qualifying-score
+    //        reason specifically (not the persona-mismatch reason this test used to pass on before); NO leads row
     closeSalesDatabase(":memory:");
     const db = openSalesDatabase(":memory:");
     // Seed candidate as 'scored' but intentionally omit any lead_scores row
@@ -112,13 +135,24 @@ describe("T-A4 — promote_candidate_to_lead qualification gate (P-AUTO-4)", () 
     // No seedScore() call — score row is MISSING
 
     const tool = makePromoteCandidateToLeadTool(":memory:");
-    const result = await (tool.execute as Function)({ candidateId, ownerMode: "manual" });
+    const result = await (tool.execute as Function)({
+      candidateId,
+      ownerMode: "manual",
+      bypassPersonaCheck: true,
+    });
 
-    // TODO: fill assertions at Step 5
-    assert.strictEqual(result.ok, false, "TODO: missing score row must be rejected");
-    assert.strictEqual(result.error.kind, "invalid_input", "TODO: kind must be invalid_input");
+    assert.strictEqual(result.ok, false, "missing score row must be rejected");
+    assert.strictEqual(result.error.kind, "invalid_input", "kind must be invalid_input");
+    // Pins the SPECIFIC gate reason (promoteCandidateToLead.ts's why-string for the
+    // score==null/totalScore==null branch) — not the generic invalid_input kind alone, which the
+    // earlier persona gate would also have satisfied before bypassPersonaCheck was added.
+    assert.match(
+      result.error.message,
+      /no qualifying score on record/,
+      "message must name the missing-score reason specifically",
+    );
     const leadCount = (db.prepare("SELECT COUNT(*) AS n FROM leads").get() as { n: number }).n;
-    assert.strictEqual(leadCount, 0, "TODO: no leads row must be inserted");
+    assert.strictEqual(leadCount, 0, "no leads row must be inserted");
   });
 
   // ─── T-A4.NextActionNull.1 ───────────────────────────────────────────────────
