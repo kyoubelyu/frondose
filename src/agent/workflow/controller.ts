@@ -11,6 +11,15 @@ export interface WorkflowControllerDeps {
   emitFrame: (frame: WorkflowSseFrame) => void;
   writeWorkflowAudit: (event: WorkflowAuditEntry["event"]) => void;
   recoverPostDraftId?: () => PostDraftRecovery;
+  /** [P-FIX-MARK-SENT-STALE-DRAFT] Retire the declined step's draft (draft → rejected)
+   *  so a stale draftId can never be marked sent later. Called by decline() BEFORE any workflow
+   *  state mutation; a throw keeps the approval gate pending/retryable. Optional for back-compat. */
+  markDraftDeclined?: (draftId: string) => void;
+  /** [P-FIX-MARK-SENT-STALE-DRAFT] Server-side semantic correlation for a declined step with NO
+   *  captured draftId (the prescribed save→todo_write order drops the in-memory binding): resolve
+   *  the pending draft whose lead is named in the step title. Ambiguous → decline() emits a
+   *  DraftLineageAmbiguous commit warning and retires nothing. Optional for back-compat. */
+  findDraftForDeclinedStep?: (stepTitle: string) => PostDraftRecovery;
 }
 
 export interface WorkflowController {
