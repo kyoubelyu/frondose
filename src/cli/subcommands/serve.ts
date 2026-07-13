@@ -33,7 +33,7 @@ import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
 import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { clearWatchdogKills, DATA_DIR_NAME, getHomeBase, readWatchdogKillTimestamps } from "../../persistence/paths.js";
-import { findPendingPostDraftId } from "../../persistence/sales/drafts.js";
+import { findDraftForDeclinedStep, findPendingPostDraftId, markDraftRejected } from "../../persistence/sales/drafts.js";
 import {
   type AutoRunRow,
   countOutboundSince,
@@ -231,6 +231,14 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     },
     writeWorkflowAudit: (event) => writeWorkflowAudit(auditPath, event),
     recoverPostDraftId: () => findPendingPostDraftId(getSalesDb(salesDbPath)),
+    // [P-FIX-MARK-SENT-STALE-DRAFT] Retire a declined step's draft (draft → rejected) so its
+    // stale draftId can never be marked sent later; when the step carries no captured draftId
+    // (the prescribed save→todo_write order drops it), resolve by semantic correlation —
+    // pending draft whose lead is named in the step title.
+    markDraftDeclined: (draftId) => {
+      markDraftRejected(getSalesDb(salesDbPath), draftId);
+    },
+    findDraftForDeclinedStep: (stepTitle) => findDraftForDeclinedStep(getSalesDb(salesDbPath), stepTitle),
   });
   // P-AUTO-1+2 (B-1+B-2 fix): mode-aware outbound authorization, fail-closed.
   session.canClickOutbound = (_label, _surface) => {
