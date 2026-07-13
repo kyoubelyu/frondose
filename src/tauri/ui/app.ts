@@ -273,6 +273,7 @@ function appendReasoningChunk(chunk: string): void {
 }
 
 function endAgentBubble(): void {
+  if (activeAgentTextEl !== null) renderMarkdownInto(windowRef.document, activeAgentTextEl, activeAgentRawText); // P-FE-MD-HISTORY: flush the pending rAF render BEFORE detach, else the bubble freezes on a stale partial parse
   // [P-THINK] "完成输出后消失": once the turn's output completes, hide the whole thinking block
   // (gray reasoning + "thinking…" line) and clear its text, leaving only the final answer. Hidden
   // (display:none) via the existing ClassListLike API — ElementLike exposes no remove()/removeChild,
