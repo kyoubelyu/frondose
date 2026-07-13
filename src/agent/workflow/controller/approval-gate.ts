@@ -124,6 +124,30 @@ export function decline(
   if (!wf || !step || state.awaitingApprovalStepId !== stepId) {
     return { status: 200, response: { ok: false, reason: "no_pending_approval" } };
   }
+  // [P-FIX-MARK-SENT-STALE-DRAFT] Retire the declined step's draft BEFORE any workflow mutation
+  // (fail-closed ordering): a throwing persistence call keeps the approval gate pending and
+  // retryable — no state mutation, no resolved frame, no audit event. The overlay dispatch
+  // path has no local catch, so decline() swallows the throw and returns 500 instead.
+  // Resolution: the captured step.draftId when present; otherwise server-side SEMANTIC correlation
+  // (deps.findDraftForDeclinedStep — pending draft whose lead is named in the step title; posts
+  // excluded). Ambiguity retires nothing and emits a DraftLineageAmbiguous warning (r2 critic:
+  // cardinality/order guessing can retire or publish the WRONG draft — never guess).
+  try {
+    let declinedDraftId = step.draftId ?? null;
+    if (!declinedDraftId && deps.findDraftForDeclinedStep) {
+      const rec = deps.findDraftForDeclinedStep(step.title);
+      if (rec && "ambiguous" in rec) {
+        // biome-ignore format: keep compact for approval-gate LoC budget
+        emitCommitWarning(deps, { workflowId: wf.id, stepId: step.id, label: "DraftLineageAmbiguous", severity: "low" });
+      } else if (rec) {
+        declinedDraftId = rec.id;
+      }
+    }
+    if (declinedDraftId) deps.markDraftDeclined?.(declinedDraftId);
+  } catch (e) {
+    // biome-ignore format: keep compact for approval-gate LoC budget
+    return { status: 500, response: { ok: false, reason: "draft_decline_persist_failed", message: e instanceof Error ? e.message : String(e) } };
+  }
   state.awaitingApprovalStepId = null;
   step.state = "failed";
   step.failureReason = "operator_declined";
