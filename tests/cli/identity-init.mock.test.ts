@@ -58,6 +58,11 @@ function cleanupDir(path: string): void {
 
 test("T-M123: identity persistence round-trip: writeIdentity then readIdentity returns Zod-valid record", () => {
   const idPath = uniqueIdPath();
+  // P-FIX-TEST-CONFIG-CLOBBER: without an explicit 3rd configPath arg, writeIdentity
+  // defaults to the REAL ~/.frondose/agent/config.json (authoritative) and clobbers the
+  // operator's identity/ICP. Isolate to a sibling in this test's own tmp dir
+  // (cleanupDir removes the whole dir).
+  const configPath = join(idPath, "..", "config.json");
   try {
     const record = identityRecordSchema.parse({
       fullName: "Test Operator",
@@ -71,11 +76,11 @@ test("T-M123: identity persistence round-trip: writeIdentity then readIdentity r
       updatedAt: new Date().toISOString(),
     });
 
-    writeIdentity(record, idPath);
+    writeIdentity(record, idPath, configPath);
 
     assert.ok(existsSync(idPath), "identity.json must exist after writeIdentity");
 
-    const readBack = readIdentity(idPath);
+    const readBack = readIdentity(idPath, configPath);
     assert.ok(readBack !== null, "readIdentity must return non-null for a valid file");
     assert.equal(readBack.fullName, "Test Operator");
     assert.equal(readBack.company, "Test Co");
