@@ -61,6 +61,14 @@ export function markDraftSent(db: DB, id: string): void {
   db.prepare("UPDATE message_drafts SET status = 'sent' WHERE id = ?").run(id);
 }
 
+/** [P-FIX-MARK-SENT-STALE-DRAFT] Retire a draft whose owning approval step was declined.
+ *  Guarded transition: ONLY the legal edge draft → rejected fires; a sent/rejected/other
+ *  row is left untouched (benign no-op, returns false). Returns true when the row changed. */
+export function markDraftRejected(db: DB, id: string): boolean {
+  const info = db.prepare("UPDATE message_drafts SET status = 'rejected' WHERE id = ? AND status = 'draft'").run(id);
+  return info.changes === 1;
+}
+
 export type PostDraftRecovery = { id: string } | { ambiguous: true } | null;
 
 const PENDING_POST_DRAFT_SQL =
@@ -68,6 +76,27 @@ const PENDING_POST_DRAFT_SQL =
 
 export function findPendingPostDraftId(db: DB): PostDraftRecovery {
   const rows = db.prepare(PENDING_POST_DRAFT_SQL).all() as Array<{ id: string }>;
+  if (rows.length >= 2) return { ambiguous: true };
+  const row = rows[0];
+  return row ? { id: row.id } : null;
+}
+
+/** [P-FIX-MARK-SENT-STALE-DRAFT] Resolve the pending draft a DECLINED approval step refers to,
+ *  when the step has no captured draftId (the prescribed save→todo_write order drops the binding).
+ *  Semantic correlation, not order/cardinality guessing: the draft's LEAD must be named in the
+ *  declined step's title (e.g. "Send connect note to Wilfred Fan" ⊃ leads.person_name). Posts are
+ *  excluded by the JOIN (lead_id IS NULL — they have their own recovery). person_name shorter than
+ *  4 chars is skipped (substring false-positives like "Lin" ⊂ "LinkedIn"; under-retirement is the
+ *  fail-safe direction). Two or more matching pending drafts → ambiguous (caller warns, retires
+ *  nothing); zero → null (benign: steps without drafts are common). */
+export function findDraftForDeclinedStep(db: DB, stepTitle: string): PostDraftRecovery {
+  const rows = db
+    .prepare(`
+    SELECT d.id FROM message_drafts d JOIN leads l ON d.lead_id = l.id
+    WHERE d.status = 'draft' AND length(l.person_name) >= 4 AND instr(?, l.person_name) > 0
+    ORDER BY d.created_at DESC LIMIT 2
+  `)
+    .all(stepTitle) as Array<{ id: string }>;
   if (rows.length >= 2) return { ambiguous: true };
   const row = rows[0];
   return row ? { id: row.id } : null;
