@@ -84,10 +84,10 @@ describe("no-bash boundary — P-32 new/edited files (G-P32.21)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("tool count freeze — G-P32.21 / D-6", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools worker mode returns 52 tools; server mode returns 25 tools (P-73 rebaseline)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools worker mode returns 53 tools; server mode returns 26 tools (P-REBASE-TOOL-COUNT rebaseline)", () => {
     // Given: makeAllTools called with worker mode and server mode
     // When:  tool counts are measured
-    // Then:  worker=52, server=25 (clear_cookies removed from browser registry)
+    // Then:  worker=53, server=26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
@@ -98,8 +98,8 @@ describe("tool count freeze — G-P32.21 / D-6", () => {
       const serverTools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
       const workerCount = Object.keys(workerTools).length;
       const serverCount = Object.keys(serverTools).length;
-      assert.equal(workerCount, 52, `T-CONTRACT.TOOLS: worker tool count must be 52, got ${workerCount}`);
-      assert.equal(serverCount, 25, `T-CONTRACT.TOOLS: server tool count must be 25, got ${serverCount}`);
+      assert.equal(workerCount, 53, `T-CONTRACT.TOOLS: worker tool count must be 53, got ${workerCount}`);
+      assert.equal(serverCount, 26, `T-CONTRACT.TOOLS: server tool count must be 26, got ${serverCount}`);
     } finally {
       cleanup();
     }

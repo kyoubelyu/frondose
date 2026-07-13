@@ -39,7 +39,7 @@ const LINKEDIN_TOOL_NAMES = [
 // When:  makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "...control })
 // Then:  returned ToolSet has exactly 53 keys. All 10 LinkedIn tool names present.
 
-test("T-Tools.1: all 52 tools registered with fake session", async () => {
+test("T-Tools.1: all 53 tools registered with fake session", async () => {
   const world = new FakeLinkedInWorld();
   const session = world.makeSession();
   const control: ControlSignals = {
@@ -50,8 +50,8 @@ test("T-Tools.1: all 52 tools registered with fake session", async () => {
   const tools = makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "" }, control);
   const toolNames = Object.keys(tools);
 
-  // Total count assertion (clear_cookies removed from browser registry)
-  assert.equal(toolNames.length, 52, `Expected 52 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
+  // Total count assertion (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+  assert.equal(toolNames.length, 53, `Expected 53 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
 
   // All 10 LinkedIn tool names present
   const missing = LINKEDIN_TOOL_NAMES.filter((name) => !toolNames.includes(name));

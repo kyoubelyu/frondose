@@ -88,6 +88,7 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "sleep",
   "start_auto_run",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   // P-Z2 rebaseline: accreted since P-39 (P-57a suggestion tools + P-Y1 workflow)
   "suggest_card",
   "suggest_next_actions",
@@ -125,6 +126,7 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
   "set_memory_note",
   "sleep",
   "stop",
+  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
   // P-73: suggest_card/suggest_next_actions are worker-only overlay tools (removed from server)
   "telegram_notify",
   "todo_write",
@@ -134,11 +136,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: worker 52 (rebaselined) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 52 tools, including present_summary and current sales tools", () => {
+describe("P-39 tool count: worker 53 (rebaselined) (G-P39.11)", () => {
+  it("T-Count.1: makeAllTools worker mode → exactly 53 tools, including present_summary and current sales tools", () => {
     // Given: makeAllTools called with a fake session + persistence + control in worker mode
-    // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools
-    // Then:  52 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (clear_cookies removed)
+    // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools + stop_auto
+    // Then:  53 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -152,8 +154,8 @@ describe("P-39 tool count: worker 52 (rebaselined) (G-P39.11)", () => {
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        52,
-        `worker tool count must be 52; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        53,
+        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-Y3 snapshot");
     } finally {
@@ -164,11 +166,11 @@ describe("P-39 tool count: worker 52 (rebaselined) (G-P39.11)", () => {
 
 // ─── T-Count.2 ────────────────────────────────────────────────────────────────
 
-describe("P-39 tool count: server 25 (rebaselined to P-73) (G-P39.11)", () => {
-  it("T-Count.2: makeAllTools server mode → exactly 25 tools, including present_summary", () => {
+describe("P-39 tool count: server 26 (rebaselined to P-73) (G-P39.11)", () => {
+  it("T-Count.2: makeAllTools server mode → exactly 26 tools, including present_summary", () => {
     // Given: makeAllTools called with undefined session + persistence + control in server mode
     // When:  Object.keys(serverTools).length checked; set excludes suggest_card/suggest_next_actions (P-73)
-    // Then:  25 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-73 rebaseline)
+    // Then:  26 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-73 rebaseline; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       const serverTools = makeAllTools(
@@ -181,8 +183,8 @@ describe("P-39 tool count: server 25 (rebaselined to P-73) (G-P39.11)", () => {
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        25,
-        `server tool count must be 25; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        26,
+        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P39, "server tool set must match frozen P-39 snapshot");
     } finally {
