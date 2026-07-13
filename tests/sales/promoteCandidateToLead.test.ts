@@ -54,7 +54,14 @@ describe("T-SP-A.Promote — promote_candidate_to_lead tool", () => {
     );
 
     const tool = makePromoteCandidateToLeadTool(":memory:");
-    const result = await (tool.execute as Function)({ candidateId, ownerMode: "manual" });
+    // bypassPersonaCheck:true isolates this test from the developer machine's real, populated
+    // ICP targetRole list (readIdentity() has no DI seam) — the fixture's generic evidence_summary
+    // was never designed to token-match a real ICP; see docs/issue-test-debt-15-intake.md item 5.
+    const result = await (tool.execute as Function)({
+      candidateId,
+      ownerMode: "manual",
+      bypassPersonaCheck: true,
+    });
 
     assert.ok(result.ok, "Tool must return ok:true for successful promotion");
     assert.strictEqual(result.command, "promote_candidate_to_lead");
