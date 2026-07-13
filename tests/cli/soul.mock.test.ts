@@ -36,6 +36,10 @@ import {
 
 test("T-M_p5.20: soul reset core persist path — applyIdentityPatch(freeAxes) + writeIdentity + re-read validates", () => {
   const identityPath = path.resolve(process.cwd(), `tests/_tmp_soul_identity_${process.pid}.json`);
+  // P-FIX-TEST-CONFIG-CLOBBER: without an explicit 3rd configPath arg, writeIdentity
+  // defaults to the REAL ~/.frondose/agent/config.json (authoritative) and clobbers the
+  // operator's identity/ICP with the ResetTestUser fixture. Always isolate.
+  const configPath = path.resolve(process.cwd(), `tests/_tmp_soul_config_${process.pid}.json`);
   try {
     // 1. Write initial identity with OLD axes (fixed past timestamp to ensure updatedAt changes)
     const initial = identityRecordSchema.parse({
@@ -49,7 +53,7 @@ test("T-M_p5.20: soul reset core persist path — applyIdentityPatch(freeAxes) +
       },
       updatedAt: "2026-01-01T00:00:00.000Z", // fixed past ts so merged.updatedAt differs
     });
-    writeIdentity(initial, identityPath);
+    writeIdentity(initial, identityPath, configPath);
 
     // 2. Simulate axis re-pick (as promptFreeAxes would return)
     const newAxes = {
@@ -65,10 +69,10 @@ test("T-M_p5.20: soul reset core persist path — applyIdentityPatch(freeAxes) +
       ...patched,
       updatedAt: new Date().toISOString(),
     });
-    writeIdentity(merged, identityPath);
+    writeIdentity(merged, identityPath, configPath);
 
     // 4. Re-read and verify
-    const updated = readIdentity(identityPath);
+    const updated = readIdentity(identityPath, configPath);
     assert.ok(updated !== null, "T-M_p5.20: identity.json must be readable after reset persist");
     assert.equal(
       updated.freeAxes?.pain_chain_lean,
@@ -93,6 +97,7 @@ test("T-M_p5.20: soul reset core persist path — applyIdentityPatch(freeAxes) +
   } finally {
     try {
       rmSync(identityPath, { force: true, maxRetries: 5, retryDelay: 100 });
+      rmSync(configPath, { force: true, maxRetries: 5, retryDelay: 100 });
     } catch {
       // best-effort
     }

@@ -47,7 +47,11 @@ export async function runScenario(opts: ScenarioOpts): Promise<ScenarioResult> {
   const modelSpec = opts.modelSpec ?? process.env.MAI_TEST_MODEL ?? "anthropic:claude-sonnet-4-5";
   const model = resolveModel({ factory: modelSpec });
 
-  const identity = readIdentity(TEST_IDENTITY_PATH);
+  // P-FIX-TEST-CONFIG-CLOBBER: readIdentity prefers config.json.identity (authoritative)
+  // over the fixture path — without an explicit configPath it would read the operator's
+  // REAL ~/.frondose/agent/config.json identity and send it to the LLM. Point configPath
+  // at a nonexistent sibling so the fixture file is the only source.
+  const identity = readIdentity(TEST_IDENTITY_PATH, `${TEST_IDENTITY_PATH}.no-config.json`);
 
   const system = composeSystemPrompt({
     boundary: BOUNDARY,
