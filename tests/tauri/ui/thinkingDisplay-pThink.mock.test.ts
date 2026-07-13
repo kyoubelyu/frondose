@@ -20,6 +20,11 @@ import { setLocale, t } from "../../../src/tauri/ui/i18n.js";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const APP_TS = readFileSync(join(REPO, "src/tauri/ui/app.ts"), "utf-8");
 const INDEX_HTML = readFileSync(join(REPO, "src/tauri/ui/index.html"), "utf-8");
+// P-SPLIT-APPTS-LOC (2026-07-14): beginAgentBubble()'s DOM-construction body (incl. the gray
+// thinking block asserted below) was extracted to app/agentBubble.ts. Read it as source (not the
+// compiled .js) — a plain readFileSync string-scan mirrors this file's existing style; the separate
+// agentBubble-pSplitAppTsLoc.mock.test.ts covers the compiled leaf's actual runtime DOM shape.
+const AGENT_BUBBLE_TS = readFileSync(join(REPO, "src/tauri/ui/app/agentBubble.ts"), "utf-8");
 
 // Isolate the handleEvent switch body so case-arm assertions don't match the union type.
 function handleEventBody(): string {
@@ -47,9 +52,12 @@ describe("app.ts — SseFrame union carries the reasoning frame (P-THINK)", () =
 });
 
 describe("app.ts — the gray thinking block is built + streamed + removed (P-THINK)", () => {
-  it("T-Think.UI.2: beginAgentBubble builds a hidden .agent-thinking wrapper with a .thinking-line (t status.thinking) and a .thinking-text, above .msg-agent-text", () => {
-    // Given: beginAgentBubble source. When: scanned. Then: it creates the thinking DOM, hidden, with the i18n line.
-    const begin = fnBody("function beginAgentBubble(");
+  it("T-Think.UI.2: buildAgentBubble (app/agentBubble.ts) builds a hidden .agent-thinking wrapper with a .thinking-line (t status.thinking) and a .thinking-text, above .msg-agent-text", () => {
+    // Given: app/agentBubble.ts source — P-SPLIT-APPTS-LOC (2026-07-14) extracted this DOM
+    //        construction out of app.ts's beginAgentBubble() (800-line cap; see T-Think.UI.2b for
+    //        the app.ts-side wrapper pins). When: scanned. Then: it creates the thinking DOM,
+    //        hidden, with the i18n line.
+    const begin = AGENT_BUBBLE_TS;
     assert.ok(begin.includes('classList.add("agent-thinking")'), "must create the .agent-thinking wrapper");
     assert.ok(begin.includes('classList.add("hidden")'), "the thinking wrapper must start hidden");
     assert.ok(begin.includes('classList.add("thinking-line")'), "must create the .thinking-line label");
@@ -59,6 +67,31 @@ describe("app.ts — the gray thinking block is built + streamed + removed (P-TH
     assert.ok(
       begin.indexOf("body.appendChild(thinking)") < begin.indexOf('text.classList.add("msg-agent-text")'),
       "the thinking block must be inserted before the answer text element",
+    );
+  });
+
+  it("T-Think.UI.2b: app.ts's beginAgentBubble() wrapper calls buildAgentBubbleImpl and assigns all 3 returned refs (textEl/thinkingWrap/thinkingTextEl) to the module-state sinks", () => {
+    // Given: app.ts's beginAgentBubble() wrapper (post-P-SPLIT-APPTS-LOC). When: scanned.
+    // Then: it delegates to the agentBubble.ts leaf and wires up activeAgentTextEl/
+    //       activeAgentThinkingWrap/activeAgentThinkingEl from the leaf's return value — not
+    //       from locally-constructed DOM (which no longer exists in app.ts).
+    const begin = fnBody("function beginAgentBubble(");
+    assert.ok(
+      begin.includes("buildAgentBubbleImpl(windowRef.document, conversationListEl)"),
+      "beginAgentBubble must call the extracted buildAgentBubbleImpl leaf",
+    );
+    assert.ok(begin.includes("activeAgentTextEl = refs.textEl"), "must assign the returned answer-text ref");
+    assert.ok(
+      begin.includes("activeAgentThinkingWrap = refs.thinkingWrap"),
+      "must assign the returned thinking-wrapper ref",
+    );
+    assert.ok(
+      begin.includes("activeAgentThinkingEl = refs.thinkingTextEl"),
+      "must assign the returned thinking-text ref",
+    );
+    assert.ok(
+      APP_TS.includes('import { buildAgentBubble as buildAgentBubbleImpl } from "./app/agentBubble.js"'),
+      "app.ts must import buildAgentBubble from the extracted leaf",
     );
   });
 
