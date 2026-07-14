@@ -26,6 +26,7 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -252,9 +253,13 @@ describe("No child_process or node-cron in P-31 new files (G-P31.11)", () => {
 
     for (const file of files) {
       const content = readFileSync(join(cronDir, file), "utf-8");
-      assert.ok(
-        !content.includes("child_process"),
-        `src/tools/cron/${file} must NOT import child_process (no-bash boundary)`,
+      const violations = findChildProcessImports(file, content);
+      assert.equal(
+        violations.length,
+        0,
+        `src/tools/cron/${file} must NOT import child_process (no-bash boundary): ${violations
+          .map((v) => `${v.kind} of "${v.specifier}" at line ${v.line}`)
+          .join("; ")}`,
       );
       assert.ok(
         !content.includes("node-cron"),

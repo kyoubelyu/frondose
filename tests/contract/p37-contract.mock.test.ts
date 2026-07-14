@@ -24,6 +24,7 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -164,9 +165,13 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 
     for (const filePath of p37Files) {
       const content = readFileSync(filePath, "utf-8");
-      assert.ok(
-        !content.includes("child_process"),
-        `no-bash boundary violated: '${filePath}' contains 'child_process' (P-37 must not introduce any child_process usage in src/)`,
+      const violations = findChildProcessImports(filePath, content);
+      assert.equal(
+        violations.length,
+        0,
+        `no-bash boundary violated: '${filePath}' contains a child_process reference (P-37 must not introduce any child_process usage in src/): ${violations
+          .map((v) => `${v.kind} of "${v.specifier}" at line ${v.line}`)
+          .join("; ")}`,
       );
     }
   });
