@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createLinkedinSession } from "../../src/linkedin/index.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -32,11 +33,17 @@ function makeTmpDir(): { memoryDbPath: string; identityPath: string; cleanup: ()
 
 const fakeControl = { requestStop: () => {}, auditPath: "/tmp/fake-audit.jsonl" };
 
+// P-FIX-NOBASH-DETECTOR round-2 BLOCKER 3 + round-3 BLOCKER 2: widened from
+// .ts-only to the broad extension set used elsewhere, incl. .mts/.cts
+// (tsconfig.json's Node16 module resolution treats these as valid source
+// extensions; a .js/.mts file under src/tools/** previously evaded this walker).
+const SOURCE_FILE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+
 function tsFilesUnder(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return tsFilesUnder(path);
-    return entry.isFile() && path.endsWith(".ts") ? [path] : [];
+    return entry.isFile() && SOURCE_FILE_RE.test(entry.name) ? [path] : [];
   });
 }
 
@@ -150,14 +157,17 @@ describe("makeAllTools mode parameter (G-P25.2, G-P25.3)", () => {
 
   it("T-CONTRACT.NO-BASH: zero child_process imports under src/tools/**", () => {
     // Given: source tree at current HEAD
-    // When:  TypeScript files under the LLM-callable src/tools/** tree are scanned for child_process imports
-    // Then:  zero import/require hits (Hard Rule 8 lint boundary — G-P25.18)
+    // When:  TypeScript files under the LLM-callable src/tools/** tree are AST-scanned for child_process
+    //        imports/requires/re-exports (P-FIX-NOBASH-DETECTOR: replaces a regex that missed
+    //        side-effect-only `import "child_process"` and string-concat/wrapped-callee obfuscation)
+    // Then:  zero violations (Hard Rule 8 lint boundary — G-P25.18)
     const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
     const toolsRoot = join(projectRoot, "src", "tools");
-    const forbiddenImportPattern = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?child_process["']/;
     const hits = tsFilesUnder(toolsRoot).flatMap((file) => {
       const source = readFileSync(file, "utf-8");
-      return forbiddenImportPattern.test(source) ? [relative(projectRoot, file)] : [];
+      return findChildProcessImports(relative(projectRoot, file), source).length > 0
+        ? [relative(projectRoot, file)]
+        : [];
     });
     assert.deepStrictEqual(hits, [], `child_process imports found in src/tools/**: ${hits.join(", ")}`);
   });

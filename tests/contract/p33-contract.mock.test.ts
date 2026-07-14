@@ -39,6 +39,7 @@ import { makeBrowserTools } from "../../src/tools/browser/index.js"; // ← red 
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { makeLinkedinTools } from "../../src/tools/linkedin/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -449,7 +450,9 @@ describe("BOUNDARY band — Web automation paragraph (G-P33.9 + G-P33.11)", () =
 describe("No child_process in src/tools/browser/** (G-P33.12)", () => {
   it("T-CONTRACT.NO-BASH: zero child_process imports in all src/tools/browser/*.ts files", () => {
     // Given: src/tools/browser/ exists with 11 tool files + index.ts (after Step 4b)
-    // When:  reading each .ts file and checking for 'child_process'
+    // When:  reading each .ts file and AST-scanning for a child_process import/require/re-export
+    //        (P-FIX-NOBASH-DETECTOR: replaces the raw substring scan that false-positived on
+    //        scopedResolve.ts:5's comment documenting the ABSENCE of child_process)
     // Then:  no file contains an import of child_process — no-bash boundary holds
 
     const browserDir = join(SRC_ROOT, "tools", "browser");
@@ -459,9 +462,13 @@ describe("No child_process in src/tools/browser/** (G-P33.12)", () => {
 
     for (const file of files) {
       const content = readFileSync(join(browserDir, file), "utf-8");
-      assert.ok(
-        !content.includes("child_process"),
-        `src/tools/browser/${file} must NOT import child_process (no-bash boundary)`,
+      const violations = findChildProcessImports(file, content);
+      assert.equal(
+        violations.length,
+        0,
+        `src/tools/browser/${file} must NOT import child_process (no-bash boundary): ${violations
+          .map((v) => `${v.kind} of "${v.specifier}" at line ${v.line}`)
+          .join("; ")}`,
       );
     }
   });

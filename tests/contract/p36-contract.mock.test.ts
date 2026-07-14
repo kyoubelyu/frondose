@@ -19,6 +19,7 @@ import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -159,9 +160,13 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
     ];
     for (const filePath of p36Files) {
       const content = readFileSync(filePath, "utf-8");
-      assert.ok(
-        !content.includes("child_process"),
-        `child_process found in ${filePath} — violates no-bash boundary (G-P36.14)`,
+      const violations = findChildProcessImports(filePath, content);
+      assert.equal(
+        violations.length,
+        0,
+        `child_process found in ${filePath} — violates no-bash boundary (G-P36.14): ${violations
+          .map((v) => `${v.kind} of "${v.specifier}" at line ${v.line}`)
+          .join("; ")}`,
       );
     }
     // T-CONTRACT.NO-BASH passes at Step 4a (invariant — none of these files had child_process) ✅
