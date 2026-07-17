@@ -454,12 +454,64 @@
         <label><span data-i18n="settings.braveKey">Brave Search API key</span> <input id="settings-brave-key" type="password" placeholder="no key set" data-i18n-placeholder="settings.noKeySet" autocomplete="off" /></label>
       </div>
       <div class="settings-group">
+        <!-- P-ONBOARD-CONVERSATIONAL-IDENTITY: backfilled fields identityRecordSchema/icpSchema already supported but the form never exposed. -->
         <h4 data-i18n="settings.groupIdentity">Identity</h4>
         <label><span data-i18n="settings.name">Name</span> <input id="settings-fullname" type="text" /></label>
         <label><span data-i18n="settings.company">Company</span> <input id="settings-company" type="text" /></label>
         <label><span data-i18n="settings.role">Role</span> <input id="settings-role" type="text" /></label>
         <label><span data-i18n="settings.headline">Headline</span> <input id="settings-headline" type="text" /></label>
+        <label><span data-i18n="settings.profileUrl">LinkedIn profile URL</span> <input id="settings-profileurl" type="text" placeholder="https://www.linkedin.com/in/..." /></label>
+        <label><span data-i18n="settings.persona">Persona</span> <input id="settings-persona" type="text" /></label>
+        <label><span data-i18n="settings.style">Communication style</span> <input id="settings-style" type="text" /></label>
+        <label><span data-i18n="settings.contact">Contact</span> <input id="settings-contact" type="text" /></label>
         <label><span data-i18n="settings.icpRoles">ICP target roles</span> <input id="settings-icp-roles" type="text" placeholder="VP Sales, Head of Growth" data-i18n-placeholder="settings.icpPlaceholder" /></label>
+        <label><span data-i18n="settings.icpIndustry">ICP industry</span> <input id="settings-icp-industry" type="text" placeholder="SaaS, Fintech" data-i18n-placeholder="settings.icpIndustryPlaceholder" /></label>
+        <label><span data-i18n="settings.icpRegion">ICP region</span> <input id="settings-icp-region" type="text" placeholder="US, EMEA" data-i18n-placeholder="settings.icpRegionPlaceholder" /></label>
+        <label><span data-i18n="settings.icpKeywords">ICP company keywords</span> <input id="settings-icp-keywords" type="text" placeholder="fintech, payments" data-i18n-placeholder="settings.icpKeywordsPlaceholder" /></label>
+      </div>
+      <div class="settings-group">
+        <h4 data-i18n="settings.groupAxes">Methodology habits (advanced)</h4>
+        <label><span data-i18n="settings.axisPainChain">Pain Chain direction</span>
+          <select id="settings-axis-painchain">
+            <option value="cause-first">cause-first</option>
+            <option value="economic-buyer-first">economic-buyer-first</option>
+            <option value="speculative-chain-built">speculative-chain-built</option>
+            <option value="admitted-pain-start">admitted-pain-start</option>
+            <option value="lateral-stakeholder-first">lateral-stakeholder-first</option>
+            <option value="cause-confirmed-then-up">cause-confirmed-then-up</option>
+          </select>
+        </label>
+        <label><span data-i18n="settings.axisLeadRole">Key Players entry point</span>
+          <select id="settings-axis-leadrole">
+            <option value="pain-owner first">pain-owner first</option>
+            <option value="economic-buyer first">economic-buyer first</option>
+            <option value="technical-evaluator first">technical-evaluator first</option>
+            <option value="practitioner first">practitioner first</option>
+            <option value="champion-led">champion-led</option>
+            <option value="multi-thread-parallel">multi-thread-parallel</option>
+          </select>
+        </label>
+        <label><span data-i18n="settings.axisDiscovery">Discovery pacing</span>
+          <select id="settings-axis-discovery">
+            <option value="R-lean">R-lean</option>
+            <option value="I-lean">I-lean</option>
+            <option value="C-lean">C-lean</option>
+            <option value="ratio-disciplined">ratio-disciplined</option>
+            <option value="precall-thorough">precall-thorough</option>
+            <option value="validate-close-fast">validate-close-fast</option>
+            <option value="spark-interest-focused">spark-interest-focused</option>
+          </select>
+        </label>
+        <label><span data-i18n="settings.axisStory">Spark-interest story shape</span>
+          <select id="settings-axis-story">
+            <option value="reference-story led">reference-story led</option>
+            <option value="initial-value-prop led">initial-value-prop led</option>
+            <option value="cause-named direct">cause-named direct</option>
+            <option value="pain-question first">pain-question first</option>
+            <option value="number-anchored opener">number-anchored opener</option>
+            <option value="C3-shaped closer">C3-shaped closer</option>
+          </select>
+        </label>
       </div>
       <div class="settings-group">
         <h4 data-i18n="settings.groupSoul">Soul override (advanced)</h4>

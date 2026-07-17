@@ -24,6 +24,43 @@ import type { IdentityRecord } from "../../persistence/identity.js";
  *                 If null (file missing OR bootstrap not yet run), use placeholder
  *                 identity sentence + 4 axis defaults.
  */
+/**
+ * P-ONBOARD-CONVERSATIONAL-IDENTITY: first-contact onboarding habit. Included ONLY when
+ * identity is truly unset (readIdentity() returned null — matches the FE gate's own
+ * null-check in routes/health.ts handleIdentity). Retires itself the turn after `identity`
+ * commits a record: turn/runOne.ts's onStepFinish calls reloadAgentDeps() on a successful
+ * identity-tool write, which recomposes this band from the fresh (non-null) record before
+ * the next turn — without that hook this directive would keep re-firing every turn forever.
+ *
+ * Extracted to its own function (not inlined in composeSoulBand) so `resolveSoulBand` can
+ * append it even when `soul.override` is set — an operator-authored override REPLACES the
+ * composed band's content, but must not silently swallow the onboarding habit; see the
+ * call site below and T-Onboard.Soul.3.
+ *
+ * Methodology axes ARE part of this directive's conversational ask (P-ONBOARD-CONVERSATIONAL-IDENTITY
+ * revision 2): the `identity` tool's parameter schema now accepts an optional `freeAxes`
+ * (operator-approved additive/optional widening, 2026-07-17, per CLAUDE.md Hard Rule 8 — see
+ * `src/tools/identity/identity.ts`), so you offer the defaults and let the operator confirm
+ * or pick differently, same as everything else you gather here.
+ */
+function onboardingDirectiveFor(identity: IdentityRecord | null): string {
+  if (identity !== null) return "";
+  return (
+    "\n\nYour habit: you have not met this operator yet — there is no identity on file. " +
+    "Before anything else, you introduce yourself, then get acquainted: check whether " +
+    "their own LinkedIn profile is reachable (navigate to https://www.linkedin.com/in/me/, " +
+    "inspect) and read their name, headline, and company off it rather than asking. If " +
+    "it isn't reachable (login screen, no session), you just ask instead, leaving login " +
+    "to the operator. Either way you still ask what a profile can't tell you: target " +
+    "roles, industry, region, persona, style, and contact. You also ask about your four " +
+    "methodological habits below — you're already running with sensible defaults for " +
+    "those, so you offer them and let the operator confirm or pick differently; Settings " +
+    "can fine-tune those later too. Once you have a fair picture, you read it back in " +
+    "plain language and wait for them to say it's right (or fix something) before you call " +
+    "`identity` to save it — first impressions matter, so confirmation comes first."
+  );
+}
+
 export function composeSoulBand(identity: IdentityRecord | null): string {
   // Section 1: identity sentence
   const id: Partial<IdentityRecord> = identity ?? {};
@@ -35,7 +72,7 @@ export function composeSoulBand(identity: IdentityRecord | null): string {
   const industries = id.icp?.industry?.join(", ") ?? "";
   const icpSentence = industries ? `Your ICP is ${targetRoles} — in ${industries}.` : `Your ICP is ${targetRoles}.`;
 
-  const identitySentence = `You are ${name}, ${role} at ${company}. ${persona}. ${icpSentence}`;
+  const identitySentence = `You are ${name}, ${role} at ${company}. ${persona}. ${icpSentence}${onboardingDirectiveFor(identity)}`;
 
   // Section 3: style/voice (using existing identity.style)
   const style = id.style ?? "Direct, technical, empathetic";
@@ -140,7 +177,11 @@ export const SOUL = composeSoulBand(null);
  *  formerly the write-only soul_band_override.txt) REPLACES the whole composed
  *  band; null → dynamic composition. composeSoulBand's signature is unchanged. */
 export function resolveSoulBand(override: string | null, identity: IdentityRecord | null): string {
-  if (override !== null && override.trim() !== "") return override;
+  // P-ONBOARD-CONVERSATIONAL-IDENTITY BLOCKER fix (Step-3 Codex critic): an operator-authored
+  // override REPLACES the composed band's CONTENT, but must not silently disable onboarding —
+  // append the same conditional directive composeSoulBand would carry, so identity===null
+  // reliably activates onboarding regardless of whether an override is configured.
+  if (override !== null && override.trim() !== "") return override + onboardingDirectiveFor(identity);
   return composeSoulBand(identity);
 }
 
