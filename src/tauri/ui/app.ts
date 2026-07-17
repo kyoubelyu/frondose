@@ -731,6 +731,11 @@ const settings = createSettingsPanel({
     if (!windowRef.__TAURI__) return Promise.resolve(() => {});
     return windowRef.__TAURI__.event.listen(event, handler);
   },
+  // P-FIX-ICP-STALE-CACHE: a Settings save can change identity/ICP — refresh the home page
+  // without requiring a restart.
+  onSaved: () => {
+    void loadIdentity();
+  },
 });
 settingsGearEl.addEventListener("click", () => {
   settings.open().catch((e) => surfaceError(t("action.openSettings"), e));
