@@ -201,14 +201,16 @@ describe("runServeSubcommand — GET /health auth variants (G-P56a.1)", () => {
 // ─── T-Serve.2 — GET /identity: identity set vs. not set (G-P56a.3) ─────────
 
 describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.3)", () => {
-  it("T-Serve.2: given (A) tmp MAI_HOME_BASE with config.json containing fullName:'Test Operator' and (B) empty tmp MAI_HOME_BASE with no config.json, WHEN GET /identity with valid bearer, THEN (A) 200 {ok:true, fullName:'Test Operator', ...} and (B) 200 {ok:false, reason:'identity not set; open Frondose → Settings to complete setup'}", async () => {
+  it("T-Serve.2: given (A) tmp MAI_HOME_BASE with config.json containing fullName:'Test Operator' and (B) empty tmp MAI_HOME_BASE with no config.json, WHEN GET /identity with valid bearer, THEN (A) 200 {ok:true, fullName:'Test Operator', ...} and (B) 200 {ok:false, reason:'identity not set yet — say hello to get started (or set it in Frondose → Settings)'}", async () => {
     // Given: variant A — tmp dir as MAI_HOME_BASE;
     //          write <tmpDir>/.frondose/agent/config.json with identity
     //        variant B — empty tmp dir as MAI_HOME_BASE; no config/identity files
     //        Both: runServeSubcommand started with tmp portFile + bearer "tok456"
     // When:  GET /identity with Authorization: Bearer tok456
     // Then:  variant A → 200 {ok:true, fullName:"Test Operator"}
-    //        variant B → 200 {ok:false, reason:"identity not set; open Frondose → Settings to complete setup"}
+    //        variant B → 200 {ok:false, reason:"identity not set yet — say hello to get started (or set it in Frondose → Settings)"}
+    //        (P-ONBOARD-CONVERSATIONAL-IDENTITY: conversational-first wording replaces the old
+    //        "open Frondose → Settings" P-APP-11 b1 literal — Step-3 Codex critic CONCERN-MR)
 
     const { runServeSubcommand } = await import("../../../src/cli/subcommands/serve.js");
     const origHome = process.env.FRONDOSE_HOME_BASE;
@@ -268,8 +270,8 @@ describe("runServeSubcommand — GET /identity identity-set vs. not-set (G-P56a.
       assert.equal(rB.body.ok, false, "variant B: ok should be false");
       assert.equal(
         rB.body.reason,
-        "identity not set; open Frondose → Settings to complete setup",
-        "variant B: reason must match exactly (P-APP-11 b1 PINNED)",
+        "identity not set yet — say hello to get started (or set it in Frondose → Settings)",
+        "variant B: reason must match exactly (P-ONBOARD-CONVERSATIONAL-IDENTITY rewrite of the former P-APP-11 b1 PINNED literal)",
       );
     } finally {
       rmSync(portFileB, { force: true, maxRetries: 5, retryDelay: 100 });

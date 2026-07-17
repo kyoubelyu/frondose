@@ -155,13 +155,15 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
     );
   });
 
-  it("T-Entry.4: when frondose_identity fails, boot() lands appState='identity-missing' with composer hidden+disabled and #identity-gate showing the reason", async () => {
-    // Given: a DOM harness whose frondose_identity returns { ok:false, reason:"identity not set; open Frondose → Settings to complete setup" }
+  it("T-Onboard.FE.1 (was T-Entry.4): when frondose_identity fails, boot() lands appState='identity-missing' with the composer VISIBLE+ENABLED (conversational first-contact) and #identity-gate showing the reason", async () => {
+    // Given: a DOM harness whose frondose_identity returns { ok:false, reason:"identity not set yet — say hello to get started (or set it in Frondose → Settings)" }
     // When:  boot() runs
-    // Then:  appState==="identity-missing", #composer/#command-input/#send-btn are hidden + disabled,
-    //        #identity-gate is visible (not .hidden), and #name textContent === the reason string
-    // P-APP-11 b1 PINNED: health.ts:12 = "identity not set; open Frondose → Settings to complete setup"
-    const reason = "identity not set; open Frondose → Settings to complete setup";
+    // Then:  appState==="identity-missing", #composer/#command-input/#send-btn are VISIBLE + ENABLED
+    //        (P-ONBOARD-CONVERSATIONAL-IDENTITY: there must be something to talk INTO on first
+    //        contact — this deliberately supersedes the pre-phase "composer hidden" behavior),
+    //        #identity-gate is still visible (not .hidden), and #name textContent === the reason string
+    // P-APP-11 b1 PINNED: health.ts:12 = "identity not set yet — say hello to get started (or set it in Frondose → Settings)"
+    const reason = "identity not set yet — say hello to get started (or set it in Frondose → Settings)";
     await bootWith({ ok: false, reason });
     const snap = await evalIn(`(() => {
       const g = (id) => document.getElementById(id);
@@ -175,14 +177,36 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
         name: g('name').textContent,
       };
     })()`);
-    // identity-gate visible; composer surface hidden + disabled when identity missing
+    // identity-gate stays visible (still informational); composer surface now VISIBLE + ENABLED
+    // so the operator has something to talk into on first contact.
     assert.equal(snap.gateHidden, false, "identity-gate must be VISIBLE when identity missing");
-    assert.equal(snap.composerHidden, true, "composer must be hidden when identity missing");
-    assert.equal(snap.cmdHidden, true, "command-input must be hidden when identity missing");
-    assert.equal(snap.cmdDisabled, true, "command-input must be DISABLED when identity missing");
-    assert.equal(snap.sendHidden, true, "send-btn must be hidden when identity missing");
-    assert.equal(snap.sendDisabled, true, "send-btn must be DISABLED when identity missing");
+    assert.equal(snap.composerHidden, false, "composer must be VISIBLE when identity missing (first-contact conversation)");
+    assert.equal(snap.cmdHidden, false, "command-input must be VISIBLE when identity missing");
+    assert.equal(snap.cmdDisabled, false, "command-input must be ENABLED when identity missing");
+    assert.equal(snap.sendHidden, false, "send-btn must be VISIBLE when identity missing");
+    assert.equal(snap.sendDisabled, false, "send-btn must be ENABLED when identity missing");
     assert.equal(snap.name, reason, "#name must show the identity-missing reason");
+  });
+
+  it("T-Onboard.FE.2: when appState='identity-missing' and the operator types a prompt and clicks Send, frondose_agent_turn IS invoked (first-contact send is not blocked)", async () => {
+    // Given: a DOM harness whose frondose_identity fails (appState lands 'identity-missing')
+    // When:  the operator types into #command-input and clicks #send-btn
+    // Then:  frondose_agent_turn appears in the recorded invokes (sendCommand()'s guard must
+    //        permit dispatch from 'identity-missing', not only 'idle')
+    await bootWith({ ok: false, reason: "identity not set yet — say hello to get started (or set it in Frondose → Settings)" });
+    await evalIn(`(() => {
+      const cmd = document.getElementById('command-input');
+      cmd.value = 'Hi Frondose';
+      cmd.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('send-btn').click();
+      return true;
+    })()`);
+    await sleep(300);
+    const invokes = await evalIn(`(window.__mai_invokes || []).map((i) => i.cmd)`);
+    assert.ok(
+      invokes.includes("frondose_agent_turn"),
+      `frondose_agent_turn must be invoked from identity-missing state; invokes=${JSON.stringify(invokes)}`,
+    );
   });
 });
 

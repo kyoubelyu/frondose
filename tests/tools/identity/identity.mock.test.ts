@@ -188,3 +188,98 @@ test("T-M114: identity tool execute does NOT include data.hint (identity is not 
     cleanupTmpDir(tmpHome);
   }
 });
+
+// ─── P-ONBOARD-CONVERSATIONAL-IDENTITY: identityToolParams gains an optional freeAxes ────
+// (operator-approved additive/optional tool-schema widening, 2026-07-17, Hard Rule 8) ─────
+
+test("T-Onboard.Identity.1: identity tool Zod schema accepts a complete freeAxes object (all 4 keys, valid enum values)", () => {
+  const idPath = uniqueIdPath();
+  try {
+    const tool = makeIdentityTool(idPath);
+    const parsed = tool.parameters.parse({
+      freeAxes: {
+        pain_chain_lean: "economic-buyer-first",
+        lead_role: "champion-led",
+        discovery_lean: "R-lean",
+        story_shape: "number-anchored opener",
+      },
+    });
+    assert.ok(parsed !== null && typeof parsed === "object", "a complete valid freeAxes object must parse");
+  } finally {
+    cleanupDir(idPath);
+  }
+});
+
+test("T-Onboard.Identity.2: identity tool Zod schema REJECTS a partial freeAxes object (freeAxesSchema requires all 4 keys together)", () => {
+  const idPath = uniqueIdPath();
+  try {
+    const tool = makeIdentityTool(idPath);
+    assert.throws(
+      () => tool.parameters.parse({ freeAxes: { pain_chain_lean: "economic-buyer-first" } }),
+      "a partial freeAxes object (missing lead_role/discovery_lean/story_shape) must be rejected",
+    );
+  } finally {
+    cleanupDir(idPath);
+  }
+});
+
+test("T-Onboard.Identity.3: identity tool Zod schema REJECTS an invalid freeAxes option key (not one of the enum's exact keys)", () => {
+  const idPath = uniqueIdPath();
+  try {
+    const tool = makeIdentityTool(idPath);
+    assert.throws(
+      () =>
+        tool.parameters.parse({
+          freeAxes: {
+            pain_chain_lean: "not-a-real-option",
+            lead_role: "champion-led",
+            discovery_lean: "R-lean",
+            story_shape: "number-anchored opener",
+          },
+        }),
+      "an invalid enum option key must be rejected",
+    );
+  } finally {
+    cleanupDir(idPath);
+  }
+});
+
+test("T-Onboard.Identity.4: identity tool execute persists freeAxes through applyIdentityPatch/writeIdentity (round-trip)", async () => {
+  const tmpHome = mkdtempSync(join(tmpdir(), "mai-onboard-id-tool-"));
+  const origHome = process.env.HOME;
+  const origHomeBase = process.env.FRONDOSE_HOME_BASE;
+  process.env.HOME = tmpHome;
+  process.env.FRONDOSE_HOME_BASE = tmpHome;
+  const idPath = uniqueIdPath();
+  try {
+    const tool = makeIdentityTool(idPath);
+    const result = await tool.execute(
+      {
+        fullName: "Test Operator",
+        freeAxes: {
+          pain_chain_lean: "economic-buyer-first",
+          lead_role: "champion-led",
+          discovery_lean: "R-lean",
+          story_shape: "number-anchored opener",
+        },
+      },
+      { toolCallId: "tc-onboard-4", messages: [] },
+    );
+    const envelope = result as unknown as Record<string, unknown>;
+    assert.equal(envelope.ok, true);
+    const record = (envelope.data as Record<string, unknown>).record as { freeAxes?: Record<string, string> };
+    assert.deepEqual(record.freeAxes, {
+      pain_chain_lean: "economic-buyer-first",
+      lead_role: "champion-led",
+      discovery_lean: "R-lean",
+      story_shape: "number-anchored opener",
+    });
+  } finally {
+    cleanupDir(idPath);
+    if (origHome !== undefined) process.env.HOME = origHome;
+    else delete process.env.HOME;
+    if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
+    else delete process.env.FRONDOSE_HOME_BASE;
+    cleanupTmpDir(tmpHome);
+  }
+});

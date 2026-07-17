@@ -111,7 +111,12 @@ describe("app.ts — clear-after-success / preserve-on-failure (T-FE-CHAT bug 2)
     // When:  scanned
     // Then:  it reads commandEl.value (to build `text`) but never assigns to it directly
     const body = fnBody("async function sendCommand(");
-    const steerBranch = body.slice(0, body.indexOf("if (appState !== \"idle\") return;"));
+    // P-ONBOARD-CONVERSATIONAL-IDENTITY: sendCommand's post-steer guard widened to also permit
+    // "identity-missing" (first-contact dispatch) — the delimiter must match the new full line.
+    const steerBranch = body.slice(
+      0,
+      body.indexOf('if (appState !== "idle" && appState !== "identity-missing") return;'),
+    );
     assert.ok(steerBranch.includes("void performSteer(text)"), "must dispatch performSteer with the captured text");
     assert.ok(!/commandEl\.value\s*=/.test(steerBranch), "sendCommand's steer branch must not assign commandEl.value itself");
   });

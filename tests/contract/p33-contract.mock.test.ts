@@ -530,7 +530,10 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   getIdentity: [],
   getMemory: ["personName", "profileUrl"],
   gh_issue: ["body", "dedupKey", "labels", "title"],
-  identity: ["company", "contact", "fullName", "headline", "icp", "persona", "profileUrl", "role", "style"],
+  // P-ONBOARD-CONVERSATIONAL-IDENTITY (2026-07-17): `identity` gains an additive/optional
+  // `freeAxes` param (operator-approved widening, Hard Rule 8) so the onboarding conversation
+  // can persist the 4 methodology axes, not just Settings. Deliberate golden update.
+  identity: ["company", "contact", "freeAxes", "fullName", "headline", "icp", "persona", "profileUrl", "role", "style"],
   inspect: ["full", "scope"],
   launch: ["args", "destination"],
   list_due_followups: ["limit"],

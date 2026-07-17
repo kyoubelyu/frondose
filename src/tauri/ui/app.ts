@@ -244,14 +244,20 @@ function endAgentBubble(): void {
 
 function transition(next: AppState): void {
   appState = next;
+  // P-ONBOARD-CONVERSATIONAL-IDENTITY: the composer is now available in "identity-missing"
+  // too — there must be something to talk INTO on first contact, or a conversational
+  // onboarding is structurally impossible. #identity-gate stays visible alongside it as an
+  // informational banner (see i18n identity.hint); it retires once any turn completes
+  // (transition("idle") on `done`, unconditionally hiding it).
+  const composerActive = next === "idle" || next === "running" || next === "identity-missing";
   identityGateEl.classList.toggle("hidden", next !== "identity-missing");
-  composerEl.classList.toggle("hidden", next !== "idle" && next !== "running");
-  commandEl.classList.toggle("hidden", next !== "idle" && next !== "running");
-  sendEl.classList.toggle("hidden", next !== "idle" && next !== "running");
+  composerEl.classList.toggle("hidden", !composerActive);
+  commandEl.classList.toggle("hidden", !composerActive);
+  sendEl.classList.toggle("hidden", !composerActive);
   tickerEl.classList.toggle("hidden", next !== "running");
   errorBannerEl.classList.toggle("hidden", next !== "error");
-  commandEl.disabled = next !== "idle" && next !== "running";
-  sendEl.disabled = next !== "idle" && next !== "running";
+  commandEl.disabled = !composerActive;
+  sendEl.disabled = !composerActive;
   if (next === "idle") {
     sendEl.setAttribute?.("title", t("composer.send"));
     sendEl.classList.remove("is-cancel");
@@ -409,7 +415,9 @@ async function sendCommand(): Promise<void> {
     return;
   }
 
-  if (appState !== "idle") return;
+  // P-ONBOARD-CONVERSATIONAL-IDENTITY: a first-contact turn dispatches from "identity-missing"
+  // too — sendCommand's guard used to only permit "idle".
+  if (appState !== "idle" && appState !== "identity-missing") return;
   const prompt = commandEl.value.trim();
   if (!prompt) return;
   retryBtnEl.classList.add("hidden");
