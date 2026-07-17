@@ -7,13 +7,17 @@
  *              the agent classifies the fail-closed reject as result:'skipped' (NON-attempt),
  *              not result:'failed' (genuine send failure).
  *
- *   REGRESSION GUARD — composeSoulBand(null).length <= 8500 (P-39 raised 6000→8000;
- *              T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines,
- *              actual ~8380): proves the +38-char soul.ts:169 edit did NOT accidentally inline
- *              into composeSoulBand (which is the surface the existing T-SOUL.RHYTHM.4 / sp-d /
- *              sp-f cap tests assert). composeSoulBand does NOT call soulModeFragment; they are
- *              separate exports. This guard PASSES pre-impl by design (composeSoulBand is already
- *              7989 before the soul.ts edit) and MUST continue to pass post-impl.
+ *   REGRESSION GUARD — composeSoulBand(null).length <= 9600 (P-39 raised 6000→8000;
+ *              T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines;
+ *              P-ONBOARD-CONVERSATIONAL-IDENTITY raised 8500→9600 for the conditional
+ *              first-contact onboarding directive — identity===null-only, transient, and Auto
+ *              mode is not a meaningful concern in that state since it requires an ICP that
+ *              doesn't exist yet; actual ~9480): proves the +38-char soul.ts:169 edit did NOT
+ *              accidentally inline into composeSoulBand (which is the surface the existing
+ *              T-SOUL.RHYTHM.4 / sp-d / sp-f cap tests assert). composeSoulBand does NOT call
+ *              soulModeFragment; they are separate exports. This guard PASSES pre-impl by design
+ *              (composeSoulBand is already 7989 before the soul.ts edit) and MUST continue to
+ *              pass post-impl.
  *
  * BDD-light:
  *   - describe/it grouping per behavior surface.
@@ -87,9 +91,9 @@ describe("G-A17.20 — soulModeFragment('auto') failure-branch contains the new 
 });
 
 // ─── REGRESSION GUARD — composeSoulBand cap (passes pre-impl, must pass post-impl) ──────────
-describe("REGRESSION GUARD — composeSoulBand(null).length <= 8500 (P-AUTO-17 ND-3 non-regression)", () => {
+describe("REGRESSION GUARD — composeSoulBand(null).length <= 9600 (P-AUTO-17 ND-3 non-regression)", () => {
   // ─── T-A17.20c: composeSoulBand cap not breached ──────────────────────────────────────────
-  it("T-A17.20c: composeSoulBand(null).length <= 8500 — the soul.ts:169 edit (inside soulModeFragment) does NOT push composeSoulBand over the 8500-char cap (T-ICP-PRECISION raised 8000→8500)", () => {
+  it("T-A17.20c: composeSoulBand(null).length <= 9600 — the soul.ts:169 edit (inside soulModeFragment) does NOT push composeSoulBand over the 9600-char cap (T-ICP-PRECISION raised 8000→8500; P-ONBOARD-CONVERSATIONAL-IDENTITY raised 8500→9600)", () => {
     // Given: composeSoulBand(identity) does NOT call soulModeFragment; they are separate exports.
     //        Before the soul.ts:169 edit, composeSoulBand(null).length === 7989.
     //        After the edit, composeSoulBand(null).length must remain 7989 (unchanged by THIS edit;
@@ -105,8 +109,8 @@ describe("REGRESSION GUARD — composeSoulBand(null).length <= 8500 (P-AUTO-17 N
     // composeSoulBand (a regression in the builder's implementation, not in this test).
     const band = composeSoulBand(null);
     assert.ok(
-      band.length <= 8500,
-      `REGRESSION: composeSoulBand(null).length=${band.length} exceeds 8500-char cap (raised for T-ICP-PRECISION) — ` +
+      band.length <= 9600,
+      `REGRESSION: composeSoulBand(null).length=${band.length} exceeds 9600-char cap (raised for P-ONBOARD-CONVERSATIONAL-IDENTITY) — ` +
         "the soul.ts:169 ND-3 edit must NOT inline into composeSoulBand (composeSoulBand and " +
         "soulModeFragment are separate exports; soulModeFragment is uncapped by existing tests).",
     );

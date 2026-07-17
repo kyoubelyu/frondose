@@ -351,13 +351,17 @@ describe("T-Prec structural invariants: composition order + placement + language
     }
   });
 
-  it("T-Prec.SoulUntouched: given composeSoulBand(null), when length and the pre-existing ICP-override habit are inspected, then length stays <= 8500 AND the habit text 'operator's live intent' is still present (no accidental delete, this phase does not edit soul.ts)", () => {
-    // Given: composeSoulBand(null) — this phase makes NO edits to soul.ts (plan §8 "Out of plan")
+  it("T-Prec.SoulUntouched: given composeSoulBand(null), when length and the pre-existing ICP-override habit are inspected, then length stays <= 9600 AND the habit text 'operator's live intent' is still present (no accidental delete — this phase did not edit soul.ts; P-ONBOARD-CONVERSATIONAL-IDENTITY later legitimately did, raising the cap 8500→9600)", () => {
+    // Given: composeSoulBand(null) — this phase makes NO edits to soul.ts (plan §8 "Out of plan").
+    //        P-ONBOARD-CONVERSATIONAL-IDENTITY (2026-07-17) later legitimately added a conditional
+    //        first-contact onboarding directive (identity===null only) to composeSoulBand, raising
+    //        the cap from 8500→9600 — same "cap moves when a legitimate new phase needs it"
+    //        precedent as P-39 (6000→8000) and T-ICP-PRECISION (8000→8500) below.
     // When:  the rendered Soul band string is inspected
-    // Then:  composeSoulBand(null).length <= 8500 (P-AUTO-17 cap, unchanged)
+    // Then:  composeSoulBand(null).length <= 9600 (P-AUTO-17 cap, raised by P-ONBOARD-CONVERSATIONAL-IDENTITY)
     //        AND composeSoulBand(null).includes("operator's live intent") (T-ICP-PRECISION habit survives)
     const soul = composeSoulBand(null);
-    assert.ok(soul.length <= 8500, `composeSoulBand(null).length must stay <= 8500; got ${soul.length}`);
+    assert.ok(soul.length <= 9600, `composeSoulBand(null).length must stay <= 9600; got ${soul.length}`);
     assert.ok(
       soul.includes("operator's live intent"),
       'composeSoulBand(null) must still contain "operator\'s live intent" (pre-existing ICP-override habit, unedited by this phase)',

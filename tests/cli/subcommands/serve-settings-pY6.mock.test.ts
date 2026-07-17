@@ -344,6 +344,105 @@ describe("reloadAgentDeps — deps mutated; next turn would use new (G-PY6.4)", 
   });
 });
 
+// ─── P-ONBOARD-CONVERSATIONAL-IDENTITY: reload production-path integration (Step-3 ────────
+// Codex critic CONCERN-MR — "the reload scaffold proves only a mock is called, not that the
+// stale Soul band is actually retired") — drives the REAL reloadAgentDeps end-to-end from a
+// config.json identity change through to the composed Soul band, exactly what a tool-driven
+// `identity` write (via turn/runOne.ts's onStepFinish hook) causes on the NEXT turn. ────────
+
+describe("reloadAgentDeps — a config.json identity change is reflected in the recomposed Soul band (production path, no mocks)", () => {
+  // Given: config.json has NO identity (undefined) and no soul.override. When: reloadAgentDeps
+  //        runs. Then: deps.system contains the onboarding directive (the exact signal that
+  //        makes the agent treat this as first contact).
+  it("T-Onboard.ReloadSoul.1: with identity undefined, reloadAgentDeps composes a Soul band containing the onboarding directive", () => {
+    assert.ok(S, "builder 4b must export serve/settings.ts");
+    const prevEnv = process.env.DEEPSEEK_API_KEY;
+    withTempHome(() => {
+      seedConfig({ identity: undefined, soul: { override: null } });
+      seedSecrets("sk-key");
+      process.env.DEEPSEEK_API_KEY = "sk-key";
+      const deps = makeReloadDeps();
+      const r = S.reloadAgentDeps(deps);
+      assert.equal(r.restartRequired, false);
+      assert.ok(
+        (deps.system as string).includes("you have not met this operator yet"),
+        "deps.system must contain the onboarding directive when identity is unset",
+      );
+    });
+    if (prevEnv === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = prevEnv;
+  });
+
+  // Given: config.json starts with NO identity; reloadAgentDeps runs once (captures the
+  //        onboarding-directive state, mirrors turn 1 of a session). Then config.json is
+  //        updated with a real identity (simulating what the `identity` tool's writeIdentity
+  //        does mid-session) and reloadAgentDeps runs AGAIN (mirrors turn/runOne.ts's
+  //        onStepFinish hook firing after a successful identity-tool write).
+  // Then:  the SECOND deps.system no longer contains the onboarding directive, DOES contain
+  //        the new operator's name, and differs from the FIRST deps.system — proving a
+  //        tool-driven identity write really does retire the directive for the next turn.
+  it("T-Onboard.ReloadSoul.2: an identity write between two reloadAgentDeps calls retires the onboarding directive and reflects the new identity in the NEXT-turn Soul band", () => {
+    assert.ok(S, "builder 4b must export serve/settings.ts");
+    const prevEnv = process.env.DEEPSEEK_API_KEY;
+    withTempHome(() => {
+      seedConfig({ identity: undefined, soul: { override: null } });
+      seedSecrets("sk-key");
+      process.env.DEEPSEEK_API_KEY = "sk-key";
+      const deps = makeReloadDeps();
+      S.reloadAgentDeps(deps);
+      const firstSystem = deps.system as string;
+      assert.ok(firstSystem.includes("you have not met this operator yet"), "turn 1: onboarding directive present");
+
+      // Simulate the `identity` tool's write (writeIdentity merges into config.json.identity).
+      const cfg = readConfig(DEFAULT_CONFIG_PATH());
+      writeConfig(
+        {
+          ...cfg,
+          identity: { fullName: "New Operator", role: "AE", icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() },
+        },
+        DEFAULT_CONFIG_PATH(),
+      );
+
+      S.reloadAgentDeps(deps);
+      const secondSystem = deps.system as string;
+      assert.ok(
+        !secondSystem.includes("you have not met this operator yet"),
+        "turn 2 (post identity write): onboarding directive must be RETIRED",
+      );
+      assert.ok(secondSystem.includes("New Operator"), "turn 2: the new operator's name must appear in the Soul band");
+      assert.notEqual(secondSystem, firstSystem, "the recomposed system prompt must differ after the identity write");
+    });
+    if (prevEnv === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = prevEnv;
+  });
+
+  // Given: config.json has a non-empty soul.override AND no identity. When: reloadAgentDeps
+  //        runs. Then: deps.system contains BOTH the override text AND the onboarding
+  //        directive — the Step-3 Codex critic BLOCKER fix (resolveSoulBand), proven via the
+  //        REAL production path, not just a direct resolveSoulBand() unit call.
+  it("T-Onboard.ReloadSoul.3: with a soul.override set AND identity undefined, reloadAgentDeps composes a Soul band containing BOTH the override AND the onboarding directive (BLOCKER fix, production path)", () => {
+    assert.ok(S, "builder 4b must export serve/settings.ts");
+    const prevEnv = process.env.DEEPSEEK_API_KEY;
+    const overrideText = "You are a custom operator-authored soul band, verbatim.";
+    withTempHome(() => {
+      seedConfig({ identity: undefined, soul: { override: overrideText } });
+      seedSecrets("sk-key");
+      process.env.DEEPSEEK_API_KEY = "sk-key";
+      const deps = makeReloadDeps();
+      const r = S.reloadAgentDeps(deps);
+      assert.equal(r.restartRequired, false);
+      const system = deps.system as string;
+      assert.ok(system.includes(overrideText), "deps.system must contain the override verbatim");
+      assert.ok(
+        system.includes("you have not met this operator yet"),
+        "deps.system must ALSO contain the onboarding directive — override must not silently disable onboarding",
+      );
+    });
+    if (prevEnv === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = prevEnv;
+  });
+});
+
 describe("reloadAgentDeps — resolveModel throw → restartRequired, old deps intact (atomic) (G-PY6.4)", () => {
   // Given: deps + a temp HOME whose `default` names an unconfigured provider (resolveModel throws).
   // When: reloadAgentDeps(deps). Then: {restartRequired:true} AND deps.system + deps.model UNCHANGED.

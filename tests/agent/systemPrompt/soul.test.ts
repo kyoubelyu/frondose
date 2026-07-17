@@ -16,7 +16,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { composeSoulBand } from "../../../src/agent/systemPrompt/soul.js";
+import { composeSoulBand, resolveSoulBand } from "../../../src/agent/systemPrompt/soul.js";
 import type { IdentityRecord } from "../../../src/persistence/identity.js";
 
 /** Minimal identity record sufficient for `composeSoulBand` — drives Section 1's identity sentence. */
@@ -91,5 +91,76 @@ describe("composeSoulBand triggerHabits rewrite (G-P54.3)", () => {
       !soul.includes(OLD_TRIPLE_CALL),
       `Soul band must NOT contain the old pre-P-54 triple-call teaching; offending substring is still present: ${OLD_TRIPLE_CALL}`,
     );
+  });
+});
+
+// ─── T-Onboard.Soul.1/.2 (P-ONBOARD-CONVERSATIONAL-IDENTITY) ──────────────────
+
+describe("composeSoulBand conditional first-contact onboarding directive (P-ONBOARD-CONVERSATIONAL-IDENTITY)", () => {
+  it("T-Onboard.Soul.1: when composeSoulBand(null) runs (no identity on file), the Soul band contains the onboarding directive — own-profile-read cue, axes-defaults-offered cue, readback cue, and confirm-before-write cue (strengthened per Step-3 Codex critic CONCERN-MR: a single substring could survive deleting the real 'wait for confirmation' semantics)", () => {
+    // Given: identity === null (readIdentity() returned null — matches the FE gate's own check)
+    // When:  the returned Soul-band string is inspected
+    // Then:  it contains 4 independent semantic anchors: the LinkedIn own-profile-read cue, the
+    //        axes-defaults-offered cue (freeAxes IS an identity-tool param as of the operator's
+    //        additive/optional widening — the agent offers defaults and lets the operator
+    //        confirm/override, rather than making them choose blind), the readback cue, and the
+    //        wait-for-confirmation cue
+    const soul = composeSoulBand(null);
+    assert.ok(
+      soul.includes("https://www.linkedin.com/in/me/"),
+      "Soul band must instruct reading the operator's own LinkedIn profile on first contact",
+    );
+    assert.ok(
+      soul.includes("you're already running with sensible defaults"),
+      "Soul band must instruct offering the axis defaults conversationally, not making the operator choose blind",
+    );
+    assert.ok(
+      soul.includes("you read it back in plain language"),
+      "Soul band must instruct reading the merged identity back to the operator",
+    );
+    assert.ok(
+      soul.includes("wait for them to say it's right") && soul.includes("before you call `identity`"),
+      "Soul band must instruct waiting for operator confirmation before calling `identity`",
+    );
+    assert.ok(
+      soul.includes("confirmation comes first"),
+      "Soul band must state the write is gated on confirmation, not immediate",
+    );
+  });
+
+  it("T-Onboard.Soul.2: when composeSoulBand(identity) runs for a non-null identity, the Soul band does NOT contain the onboarding directive", () => {
+    // Given: a populated IdentityRecord (non-null) fed into composeSoulBand
+    // When:  the returned Soul-band string is inspected
+    // Then:  it does NOT contain the first-contact onboarding cues (the directive must retire
+    //        once identity is set, else the agent re-onboards forever)
+    const identity = makeMinimalIdentity();
+    const soul = composeSoulBand(identity);
+    assert.ok(
+      !soul.includes("you have not met this operator yet"),
+      "Soul band must NOT contain the onboarding directive once identity is set",
+    );
+  });
+
+  it("T-Onboard.Soul.3: when resolveSoulBand(override, null) runs with an operator soul.override AND no identity, the onboarding directive is still appended (Step-3 Codex critic BLOCKER fix — override must not silently disable onboarding)", () => {
+    // Given: a non-empty soul.override string AND identity === null
+    // When:  resolveSoulBand(override, null) is called
+    // Then:  the result starts with the override verbatim AND still contains the onboarding cue
+    const override = "You are a custom operator-authored soul band.";
+    const resolved = resolveSoulBand(override, null);
+    assert.ok(resolved.startsWith(override), "resolveSoulBand must return the override verbatim as a prefix");
+    assert.ok(
+      resolved.includes("you have not met this operator yet"),
+      "resolveSoulBand must still append the onboarding directive when identity is null, even with an override set",
+    );
+  });
+
+  it("T-Onboard.Soul.4: when resolveSoulBand(override, identity) runs with an operator soul.override AND a set identity, the result is the override verbatim with NO onboarding directive appended (regression pin — unchanged legacy behavior)", () => {
+    // Given: a non-empty soul.override string AND a populated (non-null) identity
+    // When:  resolveSoulBand(override, identity) is called
+    // Then:  the result is EXACTLY the override (no directive appended — nothing to onboard)
+    const override = "You are a custom operator-authored soul band.";
+    const identity = makeMinimalIdentity();
+    const resolved = resolveSoulBand(override, identity);
+    assert.equal(resolved, override, "resolveSoulBand must return the override verbatim when identity is already set");
   });
 });
