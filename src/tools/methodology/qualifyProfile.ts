@@ -3,7 +3,7 @@ import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
 import { deriveQualificationFromMatch, isOwnCompanyMatch, matchIcp } from "../../methodology/icpMatcher.js";
 import type { IcpEvidence, IcpMatchDetail, MatchResult, Qualification } from "../../methodology/types.js";
-import type { IcpCriteria, IdentityRecord } from "../../persistence/identity.js";
+import type { IcpCriteria } from "../../persistence/identity.js";
 import { icpSchema, readIdentity } from "../../persistence/identity.js";
 
 const qualifyProfileParams = z.object({
@@ -28,18 +28,15 @@ interface QualifyProfileOpts {
 
 /**
  * Build the qualify_profile Vercel tool. Reads operator's identity.json ICP
- * lazily on first invocation per process; caches in closure.
+ * fresh on every invocation (P-FIX-ICP-STALE-CACHE: a process-lifetime cache here
+ * meant a Settings save never took effect until sidecar restart — readIdentity is a
+ * cheap sync fs read + Zod parse over a small local file, so there's no cost to
+ * re-reading it per call instead of caching it once).
  *
  * The LLM extracts role/industry/region/companyName from inspect output and
  * feeds them into qualify_profile; missing evidence → "unknown" for that dim.
  */
 export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
-  let cachedIdentity: IdentityRecord | null | undefined;
-  const getIdentity = (): IdentityRecord | null => {
-    if (cachedIdentity === undefined) cachedIdentity = readIdentity(opts.identityPath);
-    return cachedIdentity;
-  };
-
   return tool({
     description:
       "Qualify a LinkedIn profile against the operator's ICP. Pass role/industry/region/companyName " +
@@ -49,7 +46,7 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
     parameters: qualifyProfileParams,
     execute: async (params) => {
       try {
-        const identity = getIdentity();
+        const identity = readIdentity(opts.identityPath);
         const evidence: IcpEvidence = {
           role: params.role ?? null,
           industry: params.industry ?? null,

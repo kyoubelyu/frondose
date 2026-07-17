@@ -111,6 +111,7 @@ export function createSettingsPanel(deps) {
             const patch = collectPatch();
             await deps.invoke("frondose_set_settings", { settings: patch });
             await load(); // re-GET → key re-masked, fields reflect saved state
+            deps.onSaved?.(); // P-FIX-ICP-STALE-CACHE: let the caller refresh home-page identity/ICP state
             // P-ZH-1: switch the UI chrome locale live (no restart) if the pref changed the effective locale.
             const nextLocale = prefToLocale(patch.language);
             if (nextLocale !== getLocale()) {
