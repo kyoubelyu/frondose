@@ -15,6 +15,10 @@ export interface SettingsDeps {
    * __TAURI__ access here, so non-Tauri construction (tests, degraded boot) stays safe and
    * every pre-existing {invoke, surfaceError} caller keeps working unchanged. */
   listen?: (event: string, handler: (e: { payload: unknown }) => void) => Promise<() => void>;
+  /** P-FIX-ICP-STALE-CACHE: OPTIONAL — fired after a successful save so the caller can
+   * refresh UI outside the settings panel that reflects identity/ICP (the home page).
+   * Optional so existing test doubles / non-Tauri construction keep compiling unchanged. */
+  onSaved?: () => void;
 }
 
 interface SettingsResp {
@@ -139,6 +143,7 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
       const patch = collectPatch();
       await deps.invoke("frondose_set_settings", { settings: patch });
       await load(); // re-GET → key re-masked, fields reflect saved state
+      deps.onSaved?.(); // P-FIX-ICP-STALE-CACHE: let the caller refresh home-page identity/ICP state
       // P-ZH-1: switch the UI chrome locale live (no restart) if the pref changed the effective locale.
       const nextLocale = prefToLocale(patch.language as "auto" | "en" | "zh");
       if (nextLocale !== getLocale()) {
