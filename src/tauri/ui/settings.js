@@ -5,6 +5,13 @@
 // (no DOM lib), so this module references ONLY the structural `*Like` interfaces below — never
 // HTMLInputElement/Document. The global `document` is reached through a typed cast on globalThis.
 import { getLocale, localizeDocument, prefToLocale, setLocale, t } from "./i18n.js";
+// P-ONBOARD-CONVERSATIONAL-IDENTITY: mirrors methodology/freeAxes.ts's FREE_AXIS_DEFAULTS — not imported (browser ES module, no bundler; stays within relative `./` sibling imports like the rest of this file).
+const AXIS_DEFAULTS = {
+    painchain: "cause-confirmed-then-up",
+    leadrole: "pain-owner first",
+    discovery: "ratio-disciplined",
+    story: "reference-story led",
+};
 export function createSettingsPanel(deps) {
     const doc = globalThis.document;
     const $ = (id) => doc.getElementById(id);
@@ -54,15 +61,38 @@ export function createSettingsPanel(deps) {
             braveKeyEl.value = "";
             braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? t("settings.noKeySet");
         }
-        for (const f of ["fullName", "company", "role", "headline"]) {
+        for (const f of ["fullName", "company", "role", "headline", "profileUrl", "persona", "style", "contact"]) {
             const el = $(`settings-${f.toLowerCase()}`);
             if (el)
                 el.value = String(r.identity[f] ?? "");
         }
-        const icp = r.identity.icp;
+        const icp = r.identity
+            .icp;
         const icpEl = $("settings-icp-roles");
         if (icpEl)
             icpEl.value = (icp?.targetRole ?? []).join(", ");
+        const icpIndustryEl = $("settings-icp-industry");
+        if (icpIndustryEl)
+            icpIndustryEl.value = (icp?.industry ?? []).join(", ");
+        const icpRegionEl = $("settings-icp-region");
+        if (icpRegionEl)
+            icpRegionEl.value = (icp?.region ?? []).join(", ");
+        const icpKeywordsEl = $("settings-icp-keywords");
+        if (icpKeywordsEl)
+            icpKeywordsEl.value = (icp?.companyNameKeywords ?? []).join(", ");
+        const freeAxes = r.identity.freeAxes;
+        const axisPainChainEl = $("settings-axis-painchain");
+        if (axisPainChainEl)
+            axisPainChainEl.value = freeAxes?.pain_chain_lean ?? AXIS_DEFAULTS.painchain;
+        const axisLeadRoleEl = $("settings-axis-leadrole");
+        if (axisLeadRoleEl)
+            axisLeadRoleEl.value = freeAxes?.lead_role ?? AXIS_DEFAULTS.leadrole;
+        const axisDiscoveryEl = $("settings-axis-discovery");
+        if (axisDiscoveryEl)
+            axisDiscoveryEl.value = freeAxes?.discovery_lean ?? AXIS_DEFAULTS.discovery;
+        const axisStoryEl = $("settings-axis-story");
+        if (axisStoryEl)
+            axisStoryEl.value = freeAxes?.story_shape ?? AXIS_DEFAULTS.story;
         const soulEl = $("settings-soul");
         if (soulEl)
             soulEl.value = r.soul.override ?? "";
@@ -75,10 +105,14 @@ export function createSettingsPanel(deps) {
     }
     function collectPatch() {
         const v = (id) => ($(id)?.value ?? "").trim();
-        const roles = v("settings-icp-roles")
+        const csv = (id) => v(id)
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean);
+        const roles = csv("settings-icp-roles");
+        const industry = csv("settings-icp-industry");
+        const region = csv("settings-icp-region");
+        const companyNameKeywords = csv("settings-icp-keywords");
         const key = v("settings-key"); // sent ONLY if the operator typed one
         const braveKey = v("settings-brave-key");
         const baseUrl = v("settings-baseurl");
@@ -87,6 +121,10 @@ export function createSettingsPanel(deps) {
         const company = v("settings-company");
         const role = v("settings-role");
         const headline = v("settings-headline");
+        const profileUrl = v("settings-profileurl");
+        const persona = v("settings-persona");
+        const style = v("settings-style");
+        const contact = v("settings-contact");
         return {
             llm: {
                 ...(baseUrl ? { baseUrl } : {}),
@@ -99,7 +137,30 @@ export function createSettingsPanel(deps) {
                 ...(company ? { company } : {}),
                 ...(role ? { role } : {}),
                 ...(headline ? { headline } : {}),
-                ...(roles.length ? { icp: { targetRole: roles } } : {}),
+                ...(profileUrl ? { profileUrl } : {}),
+                ...(persona ? { persona } : {}),
+                ...(style ? { style } : {}),
+                ...(contact ? { contact } : {}),
+                // icpSchema requires targetRole whenever icp is present at all — industry/region/
+                // companyNameKeywords only apply when target roles are also set.
+                ...(roles.length
+                    ? {
+                        icp: {
+                            targetRole: roles,
+                            ...(industry.length ? { industry } : {}),
+                            ...(region.length ? { region } : {}),
+                            ...(companyNameKeywords.length ? { companyNameKeywords } : {}),
+                        },
+                    }
+                    : {}),
+                // freeAxesSchema requires all 4 keys together when present; the 4 <select>s always
+                // carry a value (native select semantics), so this is always included.
+                freeAxes: {
+                    pain_chain_lean: v("settings-axis-painchain") || AXIS_DEFAULTS.painchain,
+                    lead_role: v("settings-axis-leadrole") || AXIS_DEFAULTS.leadrole,
+                    discovery_lean: v("settings-axis-discovery") || AXIS_DEFAULTS.discovery,
+                    story_shape: v("settings-axis-story") || AXIS_DEFAULTS.story,
+                },
             },
             soul: { override: v("settings-soul") || null },
             updateServerUrl: v("settings-update-url") || null, // P-58d.1-UI: empty=clear; serve .url()-validates

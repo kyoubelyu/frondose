@@ -11,6 +11,7 @@ import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../..
 import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
 import type { NextActionsPayload, ServeDeps, ServeState, SuggestionCardPayload } from "../context.js";
+import { reloadAgentDeps } from "../settings.js";
 import { hideEdgeRing, showEdgeRing } from "../takeover.js";
 import { emitAutoRunCompletedOnEndAutoRun } from "./emitAutoRunCompleted.js";
 import { reapExpiredAutoRun } from "./reaper.js";
@@ -182,6 +183,11 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         const toolResults =
           (step as unknown as { toolResults?: Array<{ toolName: string; result: unknown; args?: unknown }> })
             .toolResults ?? [];
+        // P-ONBOARD-CONVERSATIONAL-IDENTITY: reload at most once per step even if the agent
+        // fired multiple `identity` calls in one step (parallel tool calls) — reloadAgentDeps
+        // is idempotent but there's no reason to redo the readConfig/readIdentity/resolveModel
+        // work twice for the same step.
+        let identityReloaded = false;
         for (const tr of toolResults) {
           if (tr.toolName === "present_summary") {
             const summary = (tr.result as { ok?: boolean } | null | undefined) ?? {};
@@ -242,6 +248,27 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
                 ctxId,
                 `function() { window.__frondoseShowNextActions(${JSON.stringify(json)}); }`,
               );
+            }
+          }
+          if (tr.toolName === "identity" && !identityReloaded) {
+            // P-ONBOARD-CONVERSATIONAL-IDENTITY: mirror P-FIX-ICP-STALE-CACHE for the Soul band —
+            // a tool-driven identity write (onboarding, or any later correction) must not leave
+            // deps.system/deps.composeOperatorSystem showing the stale placeholder identity for
+            // the rest of the running session (see soul.ts's onboardingDirectiveFor, which
+            // otherwise keeps re-firing every turn). reloadAgentDeps is atomic — a failure (e.g.
+            // resolveModel throws on a malformed config) leaves the old deps fully intact; that's
+            // a safe degrade (Soul band stays as stale as it always was pre-fix, never worse), so
+            // it's only logged, not surfaced as a turn error.
+            const okResult =
+              typeof tr.result === "object" && tr.result !== null && (tr.result as { ok?: unknown }).ok === true;
+            if (okResult) {
+              identityReloaded = true;
+              const { restartRequired } = reloadAgentDeps(deps);
+              if (restartRequired) {
+                process.stderr.write(
+                  `[frondose] onStepFinish: reloadAgentDeps after a tool-driven identity write reported restartRequired — Soul band stays stale until the next Settings save or restart (turnId=${turnId}).\n`,
+                );
+              }
             }
           }
         }

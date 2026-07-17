@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { failFromError, ok } from "../../linkedin/envelope.js";
+import { freeAxesSchema } from "../../methodology/freeAxes.js";
 import {
   applyIdentityPatch,
   icpSchema,
@@ -23,6 +24,16 @@ const identityToolParams = z.object({
   icp: icpSchema
     .optional()
     .describe("ICP criteria — at least targetRole; industry/region/companyNameKeywords optional."),
+  // P-ONBOARD-CONVERSATIONAL-IDENTITY: additive/optional widening (operator-approved,
+  // 2026-07-17, per CLAUDE.md Hard Rule 8 — backward-compatible, no existing caller breaks)
+  // so the onboarding conversation can also set the 4 methodology habits, not just Settings.
+  freeAxes: freeAxesSchema
+    .optional()
+    .describe(
+      "The 4 methodology habits (all 4 required together if you set any): pain_chain_lean, lead_role, " +
+        "discovery_lean, story_shape. Each is an enum — use the exact option key you were told about, " +
+        "not a paraphrase. Optional; sensible defaults apply if omitted.",
+    ),
 });
 
 export function makeIdentityTool(identityPath: string) {

@@ -125,20 +125,22 @@ describe("T-F.SoulHabit.3 — soulModeFragment('magical') does NOT contain 'meet
 
 // ─── T-F.SoulBand.Regression ─────────────────────────────────────────────────────
 
-describe("T-F.SoulBand.Regression — composeSoulBand(null).length <= 8500 after Sketch F (G-PSPF.13)", () => {
-  it("T-F.SoulBand.Regression: composeSoulBand(null).length is at most 8500 (Sketch F edits soulModeFragment OUTSIDE composeSoulBand — ZERO cap impact per plan §5.6; T-ICP-PRECISION raised 8000→8500)", () => {
+describe("T-F.SoulBand.Regression — composeSoulBand(null).length <= 9600 after Sketch F (G-PSPF.13)", () => {
+  it("T-F.SoulBand.Regression: composeSoulBand(null).length is at most 9600 (Sketch F edits soulModeFragment OUTSIDE composeSoulBand — ZERO cap impact per plan §5.6; T-ICP-PRECISION raised 8000→8500; P-ONBOARD-CONVERSATIONAL-IDENTITY raised 8500→9600)", () => {
     // Given: soul.ts post-builder with Sketch F.6.1 + F.6.2 applied
     //        (soulModeFragment edits are OUTSIDE composeSoulBand — no change to SOUL band length)
     // When:  composeSoulBand(null) called (no identity override; all defaults)
-    // Then:  returned string length <= 8500 (checkpoint.ts cap; P-39 raised 6000→8000;
-    //        T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines, actual ~8380)
+    // Then:  returned string length <= 9600 (checkpoint.ts cap; P-39 raised 6000→8000;
+    //        T-ICP-PRECISION raised 8000→8500 for the own_company + icp-override habit lines;
+    //        P-ONBOARD-CONVERSATIONAL-IDENTITY raised 8500→9600 for the conditional
+    //        first-contact onboarding directive, identity===null-only, actual ~9472)
     //        Pre-Sketch-F measurement: composeSoulBand(null).length === 7987 (plan §5.6)
     //        Post-Sketch-F: identical length (soulModeFragment not used inside composeSoulBand)
     const band = composeSoulBand(null);
     assert.equal(typeof band, "string", "composeSoulBand(null) must return a string");
     assert.ok(
-      band.length <= 8500,
-      `composeSoulBand(null).length must be <= 8500 (checkpoint.ts cap, raised for T-ICP-PRECISION); got ${band.length}`,
+      band.length <= 9600,
+      `composeSoulBand(null).length must be <= 9600 (checkpoint.ts cap, raised for P-ONBOARD-CONVERSATIONAL-IDENTITY); got ${band.length}`,
     );
   });
 });
