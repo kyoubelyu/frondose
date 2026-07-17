@@ -104,7 +104,7 @@ const en = {
     "dock.keepPosted": "I'll keep you posted here. Inject a rule or ask a question anytime.",
     // settings panel
     "settings.title": "Settings",
-    "settings.close": "Close",
+    "settings.back": "Back",
     "settings.groupLanguage": "Language",
     "settings.langAuto": "Auto (system)",
     "settings.langEn": "English",
@@ -256,7 +256,7 @@ const zhCN = {
     "dock.keepPosted": "我会在这里向你汇报进展，你可以随时输入规则或提问。",
     // settings panel
     "settings.title": "设置",
-    "settings.close": "关闭",
+    "settings.back": "返回",
     "settings.groupLanguage": "语言",
     "settings.langAuto": "自动（跟随系统）",
     "settings.langEn": "English",
