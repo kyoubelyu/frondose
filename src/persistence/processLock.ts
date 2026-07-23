@@ -3,6 +3,7 @@
  * DO NOT import this from src/tools/** (Hard Rule 8 amendment: CLI-layer only).
  */
 import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export interface LockHandle {
   path: string;
@@ -81,7 +82,7 @@ interface LockMeta {
 function readLockMeta(filePath: string): LockMeta | null {
   if (!existsSync(filePath)) return null;
   try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as LockMeta;
+    return readJsonFileSync(filePath) as LockMeta;
   } catch {
     return null;
   }
