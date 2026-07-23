@@ -11,7 +11,7 @@
  * embedded-default field (P-EMBED-KEYS) still unset on the result is backfilled
  * per-field (never overwriting a configured field) and persisted if it changed.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
@@ -23,6 +23,7 @@ import {
 } from "./auth.js";
 import { readDefaultCredentials } from "./defaultCredentials.js";
 import { DEFAULT_GITHUB_CONFIG_PATH } from "./github.js";
+import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 import { DEFAULT_SEARCH_CONFIG_PATH } from "./search.js";
 
@@ -75,7 +76,7 @@ const EMPTY_SECRETS: SecretsJson = { schema_version: 1 };
 function tryReadJson<T>(path: string, schema: z.ZodType<T>, label: string): T | null {
   if (!existsSync(path)) return null;
   try {
-    return schema.parse(JSON.parse(readFileSync(path, "utf-8")));
+    return schema.parse(readJsonFileSync(path));
   } catch (e) {
     process.stderr.write(
       `[frondose] ${label} at ${path} corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n` +

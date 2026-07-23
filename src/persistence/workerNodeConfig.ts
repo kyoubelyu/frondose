@@ -1,9 +1,10 @@
 /** P-30: per-worker node config at ~/.frondose/server/workers/<id>.json — VNC port/
  *  password + optional SSH overrides. Operator-authored, chmod 600 (holds
  *  vnc_password). Reader returns null on missing/malformed (never throws). */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export const workerNodeConfigSchema = z.object({
   vnc_host: z.string().min(1).optional(),
@@ -19,7 +20,7 @@ export function readWorkerNodeConfig(dir: string, workerId: string): WorkerNodeC
   const path = join(dir, `${workerId}.json`);
   if (!existsSync(path)) return null;
   try {
-    return workerNodeConfigSchema.parse(JSON.parse(readFileSync(path, "utf-8")));
+    return workerNodeConfigSchema.parse(readJsonFileSync(path));
   } catch (e) {
     process.stderr.write(
       `[frondose] worker node config ${workerId}.json invalid: ${e instanceof Error ? e.message : String(e)}\n`,

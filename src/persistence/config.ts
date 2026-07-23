@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
+import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "config.json");
@@ -130,7 +131,7 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(path, "utf-8"));
+    raw = readJsonFileSync(path);
   } catch (e) {
     process.stderr.write(`[frondose] config.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
@@ -185,7 +186,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
   const identityPath = join(dir, "identity.json");
   if (existsSync(identityPath)) {
     try {
-      const parsed = identityRecordSchema.safeParse(JSON.parse(readFileSync(identityPath, "utf-8")));
+      const parsed = identityRecordSchema.safeParse(readJsonFileSync(identityPath));
       if (parsed.success) identity = parsed.data;
     } catch {
       // leave undefined — corrupt legacy identity.json
@@ -246,7 +247,7 @@ export function migrateTelegramIntoConfig(
 ): ConfigJsonV2 {
   if (!existsSync(tcPath)) return DEFAULT_CONFIG_V2;
   try {
-    const raw = JSON.parse(readFileSync(tcPath, "utf-8")) as Record<string, unknown>;
+    const raw = readJsonFileSync(tcPath) as Record<string, unknown>;
     return {
       ...DEFAULT_CONFIG_V2,
       telegram: {

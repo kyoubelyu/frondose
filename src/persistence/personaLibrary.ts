@@ -1,7 +1,8 @@
 /** P-27: persona templates at ~/.frondose/server/personas/<id>.json. Filesystem CRUD. */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export const personaTemplateSchema = z.object({
   fullName: z.string().trim().min(1),
@@ -34,7 +35,7 @@ export function readPersonaTemplate(personasDir: string, personaId: string): Per
   const path = join(personasDir, `${personaId}.json`);
   if (!existsSync(path)) return null;
   try {
-    return personaTemplateSchema.parse(JSON.parse(readFileSync(path, "utf-8")));
+    return personaTemplateSchema.parse(readJsonFileSync(path));
   } catch (e) {
     process.stderr.write(
       `[frondose] persona template ${personaId}.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,

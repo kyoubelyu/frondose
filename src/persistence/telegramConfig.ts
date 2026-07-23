@@ -16,9 +16,10 @@
  * internal usage; no external imports). The replacement export is
  * `telegramRuntimeSchema`.
  */
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "./config.js";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export const telegramRuntimeSchema = z.object({
   lastUpdateOffset: z.number().int().min(0),
@@ -55,7 +56,7 @@ export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
 function readRuntime(tcPath: string): TelegramRuntime {
   if (!existsSync(tcPath)) return { ...DEFAULT_RUNTIME };
   try {
-    return telegramRuntimeSchema.parse(JSON.parse(readFileSync(tcPath, "utf-8")));
+    return telegramRuntimeSchema.parse(readJsonFileSync(tcPath));
   } catch (e) {
     process.stderr.write(
       `[frondose] telegram.json (runtime) invalid at ${tcPath}: ${e instanceof Error ? e.message : String(e)}; using defaults.\n`,

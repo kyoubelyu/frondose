@@ -10,9 +10,10 @@
  * Real values are injected ONLY at the operator's release build; the generated file is never
  * committed (see .gitignore) and no key material lives in this source file.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export interface DefaultCredentials {
   llmBaseUrl: string | null;
@@ -36,7 +37,7 @@ function asNonEmptyString(v: unknown): string | null {
 export function readDefaultCredentials(path: string = DEFAULT_CREDENTIALS_PATH()): DefaultCredentials {
   if (!existsSync(path)) return EMPTY_DEFAULTS;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    const raw = readJsonFileSync(path) as Record<string, unknown>;
     return {
       llmBaseUrl: asNonEmptyString(raw.llmBaseUrl),
       llmModel: asNonEmptyString(raw.llmModel),

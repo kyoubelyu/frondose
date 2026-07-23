@@ -1,7 +1,8 @@
 /** P-25: server identity persistence — orchestrator persona schema + read/write helpers. */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { readJsonFileSync } from "./jsonFile.js";
 
 export const serverIdentitySchema = z.object({
   /** Operator's real name — required; auto-suggested from worker identity on first init. */
@@ -28,7 +29,7 @@ export type ServerIdentity = z.infer<typeof serverIdentitySchema>;
 export function readServerIdentity(path: string): ServerIdentity | null {
   if (!existsSync(path)) return null;
   try {
-    return serverIdentitySchema.parse(JSON.parse(readFileSync(path, "utf-8")));
+    return serverIdentitySchema.parse(readJsonFileSync(path));
   } catch (e) {
     process.stderr.write(
       `[frondose] server identity.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`,
