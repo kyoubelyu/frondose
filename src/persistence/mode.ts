@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export type AgentMode = "manual" | "auto";
@@ -8,7 +9,7 @@ export const DEFAULT_MODE_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME
 
 export function readMode(path: string = DEFAULT_MODE_PATH()): AgentMode {
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as { mode?: unknown };
+    const raw = readJsonFileSync(path) as { mode?: unknown };
     return raw.mode === "auto" ? "auto" : "manual";
   } catch {
     return "manual";
