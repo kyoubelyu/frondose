@@ -28,6 +28,14 @@ export const SHELL_JS = `
   // true to re-enable.
   var OVERLAY_CHAT_CONTROLS_ENABLED = false;
 
+  // ISSUE-OVERLAY-HIDE (2026-07-23, operator scope A): feature-hide the frondose-branded
+  // 浮窗 (the collapsed pill + the expandable panel) on agent-driven pages, KEEPING the
+  // takeover layer (TAKEOVER_JS — agent cursor/highlight/ring/label) fully working; the
+  // takeover layer appends to the same shadow root independently of pill/panelRoot and is
+  // untouched by this flag. Feature-hide only — DOM/listeners stay intact, flip to true to
+  // re-enable (same idiom as OVERLAY_CHAT_CONTROLS_ENABLED above).
+  var OVERLAY_WIDGET_ENABLED = false;
+
   // ---- frondose collapsed pill (inline leaf + wordmark) ----
   var pill = document.createElement('div');
   pill.className = 'frondose-pill';
@@ -36,6 +44,7 @@ export const SHELL_JS = `
   pillLabel.textContent = 'Frondose';
   pill.appendChild(pillLabel);
   shadow.appendChild(pill);
+  if (!OVERLAY_WIDGET_ENABLED) { pill.style.setProperty('display', 'none', 'important'); }
 
   // ---- id-bearing skeleton (ports index.html body; ids match render.ts getElementById targets) ----
   function el(tag, cls, id){ var e = document.createElement(tag); if (cls) e.className = cls; if (id) e.id = id; return e; }
@@ -213,7 +222,12 @@ export const SHELL_JS = `
 
   window.__frondoseSetMode = function(mode) {
     appMode = (mode === 'auto') ? 'auto' : (mode === 'magical' ? 'magical' : 'manual');
-    __frondoseShared.buildSwitcher(shadow.getElementById('mode-manual-tab'), shadow.getElementById('mode-auto-tab'), appMode);
+    // ISSUE-OVERLAY-HIDE (FM-1 CONCERN-MR-1 fix): when the panel is hidden (OVERLAY_WIDGET_ENABLED
+    // false), panelRoot is never appended to shadow, so these getElementById lookups return null;
+    // buildSwitcher dereferences its args without a null guard, so guard the call here instead.
+    var manualTabEl = shadow.getElementById('mode-manual-tab');
+    var autoTabEl = shadow.getElementById('mode-auto-tab');
+    if (manualTabEl && autoTabEl) { __frondoseShared.buildSwitcher(manualTabEl, autoTabEl, appMode); }
     host.classList.toggle('mode-auto', appMode === 'auto');
     host.classList.toggle('mode-magical', appMode === 'magical');
     var st = shadow.getElementById('status');
@@ -288,6 +302,9 @@ export const SHELL_JS = `
   window.__frondoseEndAgent = function() { activeAgentTextEl = null; };
 
   window.__frondoseExpandDialog = function() {
+    // ISSUE-OVERLAY-HIDE: single choke point for every auto-expand path (pill click, workflow
+    // update, show-card/next-actions/retry/summary-card, collapsed-card click) — see plan doc.
+    if (!OVERLAY_WIDGET_ENABLED) return;
     buildPanelSkeleton();
     if (!dialogExpanded) {
       pill.style.display = 'none';
