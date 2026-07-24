@@ -282,6 +282,13 @@ export const LEGACY_JS = `
   var cronBannerPulseInterval = null;
 
   window.__frondoseShowCronBanner = function(text) {
+    // ISSUE-OVERLAY-HIDE-RESIDUAL (2026-07-24, operator scope): feature-hide the cron banner
+    // on agent-driven pages, reusing OVERLAY_WIDGET_ENABLED from bootstrapShell.ts (in scope
+    // here — SHELL_JS is inlined into the same install() closure before LEGACY_JS, see
+    // bootstrap.ts). Guard first so the banner element/timer is never created at all —
+    // cheaper than build-then-hide, and there is nothing to self-clean-up (flip to true to
+    // re-enable; same idiom as __frondoseExpandDialog's guard in bootstrapShell.ts).
+    if (!OVERLAY_WIDGET_ENABLED) return;
     if (window.__frondoseHideCronBanner) window.__frondoseHideCronBanner();
 
     cronBannerEl = document.createElement('div');
@@ -339,6 +346,13 @@ export const LEGACY_JS = `
   var activeCardTimer = null;
 
   window.__frondoseShowCollapsedCard = function(payloadJson) {
+    // ISSUE-OVERLAY-HIDE-RESIDUAL (2026-07-24, operator scope): feature-hide the collapsed
+    // suggestion card on agent-driven pages, same OVERLAY_WIDGET_ENABLED flag as the cron
+    // banner above. Guarding first also kills the click dead-end for free — with the flag
+    // off, the panel is detached (__frondoseExpandDialog no-ops per bootstrapShell.ts), so
+    // clicking the card would render into a never-attached panelRoot and show nothing; never
+    // creating the card/listener removes that dead click entirely. Flip to true to re-enable.
+    if (!OVERLAY_WIDGET_ENABLED) return;
     var payload;
     try { payload = JSON.parse(payloadJson); } catch (e) { return; }
     if (!payload) return;
