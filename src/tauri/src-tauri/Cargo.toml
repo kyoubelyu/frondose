@@ -1,6 +1,6 @@
 [package]
 name = "frondose"
-version = "0.5.9"
+version = "0.5.10"
 description = "frondose v0.5 hover-pivot Tauri shell (M-1 demo skeleton)"
 edition = "2021"
 rust-version = "1.75"
