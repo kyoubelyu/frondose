@@ -179,6 +179,9 @@ export function createSettingsPanel(deps) {
                 setLocale(nextLocale);
                 localizeDocument(globalThis.document, { force: true });
             }
+            // ISSUE-SAVE-MODAL: AFTER the locale switch above, so an en→zh save's toast renders in
+            // the NEW locale, not the one being left. Success path only — never called from catch.
+            deps.surfaceToast?.(t("settings.saved"));
         }
         catch (e) {
             deps.surfaceError(t("action.saveSettings"), e);

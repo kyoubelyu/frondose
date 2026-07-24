@@ -152,6 +152,7 @@ const en = {
   "settings.updateUrl": "Update server URL",
   "settings.updateUrlPlaceholder": "http://192.168.x.x:8765 or http://host.local:8765",
   "settings.save": "Save",
+  "settings.saved": "✓ Saved", // ISSUE-SAVE-MODAL: transient save-success toast text
   "settings.noKeySet": "no key set",
   "settings.checking": "Checking…",
   "settings.updating": "Updating…",
@@ -307,6 +308,7 @@ const zhCN: Record<I18nKey, string> = {
   "settings.updateUrl": "更新服务器地址",
   "settings.updateUrlPlaceholder": "http://192.168.x.x:8765 或 http://host.local:8765",
   "settings.save": "保存",
+  "settings.saved": "✓ 已保存", // ISSUE-SAVE-MODAL: transient save-success toast text
   "settings.noKeySet": "未设置 key",
   "settings.checking": "检查中…",
   "settings.updating": "更新中…",
