@@ -1,5 +1,6 @@
 import { CdpClient } from "../cdp/client.js";
 import { resolveInputMode } from "../cdp/hardwareInput.js";
+import type { ChromeHandle } from "../cdp/index.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
 import { STEALTH_INIT_SCRIPT } from "../cdp/stealth.js";
 import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
@@ -27,6 +28,34 @@ declare module "./types.js" {
 const VISUAL_DWELL_MS = 500; // P-Y2.3 (OQ-Y2.3.6): pre-click cursor-travel dwell so the operator sees the
 // cursor land + highlight before the click. 400–600ms range; builder may tune
 // at the live gate. Applied ONLY when the driver actually painted (Auto mode).
+
+/**
+ * ISSUE-ENSURECHROME-ORPHAN: reap a THIS-CALL-spawned Chrome (handle.launched
+ * === true) after a post-spawn boot failure (CdpClient.connect / injectStealth
+ * / overlay install all reject). ensureChrome() itself never orphans — it
+ * returns the handle synchronously right after spawning — but the caller
+ * previously dropped that handle on the floor on any subsequent throw, so the
+ * spawned process was never killed.
+ *
+ * MUST NOT touch a reused Chrome (handle.launched === false, kill ===
+ * undefined) — that's the operator's already-running browser. Exported for
+ * direct unit testing: a real reused ChromeHandle always has kill ===
+ * undefined, so a guard regression is unobservable through the real
+ * ensureChrome() reuse path (a poisoned test handle is needed to pin it).
+ */
+export async function reapOnBootFailure(handle: ChromeHandle): Promise<void> {
+  if (!handle.launched) return;
+  if (!handle.kill) {
+    console.error("[frondose] ensureChrome orphan reap: launched:true but kill is undefined (broken handle)");
+    return;
+  }
+  try {
+    await handle.kill();
+  } catch (killErr) {
+    // A kill failure must never mask the original boot error — swallow + log.
+    console.error("[frondose] ensureChrome orphan reap: kill failed:", killErr);
+  }
+}
 
 export interface CreateLinkedinSessionOpts {
   port: number;
@@ -152,36 +181,44 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
       if (initPromise) return { ok: true, client: await initPromise };
       const bootPromise = (async (): Promise<CdpClient> => {
         const handle = await ensureChrome(opts);
-        // P-37 B7: a freshly-launched Chrome's new-tab page is still initializing
-        // its JS runtime — navigate() too soon → ERR_CONNECTION_CLOSED. A 300 ms
-        // settle absorbs it. Only on fresh launch (launched:false → Chrome already
-        // up → zero delay on every subsequent session).
-        if (handle.launched) {
-          await new Promise((r) => setTimeout(r, 300));
-        }
-        // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
-        const client = await CdpClient.connect(handle.port);
-        // [P-75 P-WEDGE-1] A client booted mid-turn inherits the current turn signal.
-        client.setTurnAbortSignal(turnSignal);
-        await injectStealth(client);
-        // [P-62 OQ-5] Auto-inject stealth on EVERY new page target (popups, OAuth windows, new
-        // tabs). Without this, addScriptToEvaluateOnNewDocument's per-target/per-session scope
-        // leaves new targets unprotected. Minimal: only `page`-type targets; iframes / workers
-        // are skipped (out of scope per source §6).
-        await registerTargetCreatedAutoInject(client);
-        // P-55 M-0 overlay spike — throwaway
-        await installOverlay(client.handle);
-        attachEventBus(client.handle, appendOverlayEventRow);
-        if (opts.onClientBooted) {
-          try {
-            await opts.onClientBooted(client);
-          } catch (err) {
-            // Best-effort overlay wiring: a subscribe failure must NOT break the browser
-            // tool that triggered this boot. POST /chrome/ensure remains a manual re-trigger.
-            console.error("[frondose] onClientBooted hook failed:", err);
+        try {
+          // P-37 B7: a freshly-launched Chrome's new-tab page is still initializing
+          // its JS runtime — navigate() too soon → ERR_CONNECTION_CLOSED. A 300 ms
+          // settle absorbs it. Only on fresh launch (launched:false → Chrome already
+          // up → zero delay on every subsequent session).
+          if (handle.launched) {
+            await new Promise((r) => setTimeout(r, 300));
           }
+          // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
+          const client = await CdpClient.connect(handle.port);
+          // [P-75 P-WEDGE-1] A client booted mid-turn inherits the current turn signal.
+          client.setTurnAbortSignal(turnSignal);
+          await injectStealth(client);
+          // [P-62 OQ-5] Auto-inject stealth on EVERY new page target (popups, OAuth windows, new
+          // tabs). Without this, addScriptToEvaluateOnNewDocument's per-target/per-session scope
+          // leaves new targets unprotected. Minimal: only `page`-type targets; iframes / workers
+          // are skipped (out of scope per source §6).
+          await registerTargetCreatedAutoInject(client);
+          // P-55 M-0 overlay spike — throwaway
+          await installOverlay(client.handle);
+          attachEventBus(client.handle, appendOverlayEventRow);
+          if (opts.onClientBooted) {
+            try {
+              await opts.onClientBooted(client);
+            } catch (err) {
+              // Best-effort overlay wiring: a subscribe failure must NOT break the browser
+              // tool that triggered this boot. POST /chrome/ensure remains a manual re-trigger.
+              console.error("[frondose] onClientBooted hook failed:", err);
+            }
+          }
+          return client;
+        } catch (err) {
+          // ISSUE-ENSURECHROME-ORPHAN: a THIS-CALL-spawned Chrome that fails post-spawn
+          // setup would otherwise leak — ensureChrome already returned, no other code
+          // path ever sees this handle again. Reap it, then propagate the ORIGINAL error.
+          await reapOnBootFailure(handle);
+          throw err;
         }
-        return client;
       })();
       // Cache-on-success + clear-pending-on-either, via the two-arm then() pattern.
       // NOT .finally — that would race with the cached = client assignment timing
