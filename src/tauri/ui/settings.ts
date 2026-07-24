@@ -27,6 +27,10 @@ export interface SettingsDeps {
    * refresh UI outside the settings panel that reflects identity/ICP (the home page).
    * Optional so existing test doubles / non-Tauri construction keep compiling unchanged. */
   onSaved?: () => void;
+  /** ISSUE-SAVE-MODAL: OPTIONAL — fired once on save() SUCCESS (never on error) with the
+   * already-localized toast message. Optional so existing test doubles / non-Tauri
+   * construction keep compiling unchanged, same rationale as onSaved above. */
+  surfaceToast?: (message: string) => void;
 }
 
 interface SettingsResp {
@@ -206,6 +210,9 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
         setLocale(nextLocale);
         localizeDocument((globalThis as unknown as { document: LocalizableDocumentLike }).document, { force: true });
       }
+      // ISSUE-SAVE-MODAL: AFTER the locale switch above, so an en→zh save's toast renders in
+      // the NEW locale, not the one being left. Success path only — never called from catch.
+      deps.surfaceToast?.(t("settings.saved"));
     } catch (e) {
       deps.surfaceError(t("action.saveSettings"), e);
     }
