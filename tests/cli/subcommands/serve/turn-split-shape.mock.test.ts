@@ -262,17 +262,18 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     assert.ok(loc <= 150, `turn.ts must be ≤ 150 LoC; got ${loc}`);
   });
 
-  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 390 LoC (relaxed from ≤370 per P-AUTO-ISOLATE Step 5a F3; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, P-THINK onReasoning emit, and P-AUTO-ISOLATE's overrideMessages field + envelope-gated stop_auto post-step hook, G-P72s7.2)", () => {
+  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 410 LoC (relaxed from ≤390 per P-ONBOARD-CONVERSATIONAL-IDENTITY d7f352a; prior 370→390 per P-AUTO-ISOLATE Step 5a F3; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, P-THINK onReasoning emit, P-AUTO-ISOLATE's overrideMessages field + envelope-gated stop_auto post-step hook, and P-ONBOARD's identity-write Soul-band recompose hook, G-P72s7.2)", () => {
     // Given: post-split turn/runOne.ts.
     // When:  LoC counted via split("\n").length (= wc -l + 1).
-    // Then:  ≤ 390 — P-AUTO-ISOLATE (D2/§6.4) added the `overrideMessages`
-    //        TurnArgs field + the `stop_auto` ok-gated hook (~14 LoC), pushing
-    //        the file to 380 LoC (locOf); 390 gives ~10 LoC headroom over the
-    //        approved additive contract growth.
+    // Then:  ≤ 410 — P-ONBOARD-CONVERSATIONAL-IDENTITY (d7f352a) added the
+    //        identity-tool-write Soul-band recompose hook in onStepFinish (the
+    //        onboarding corollary fix, ~18 LoC), pushing the file to 408 LoC
+    //        (locOf); 410 gives ~2 LoC headroom over the approved additive
+    //        feature growth. Well under the §Code&Test ≤800 hard cap.
     const loc = locOf(RUN_ONE_TS);
     assert.ok(
-      loc <= 390,
-      `turn/runOne.ts must be ≤ 390 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit + P-AUTO-ISOLATE overrideMessages/stop_auto hook); got ${loc}`,
+      loc <= 410,
+      `turn/runOne.ts must be ≤ 410 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit + P-AUTO-ISOLATE overrideMessages/stop_auto hook + P-ONBOARD identity-write recompose); got ${loc}`,
     );
   });
 
