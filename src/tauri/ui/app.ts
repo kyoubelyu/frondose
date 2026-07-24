@@ -13,6 +13,7 @@ import type {
 import { buildSwitcher, renderMarkdownInto } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
 import { createAppActions } from "./appActions.js";
+import { showToast } from "./toast.js";
 import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendButton.js";
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
@@ -125,6 +126,7 @@ const tickerEl = mustGet<TextElementLike>("ticker");
 const errorBannerEl = mustGet<TextElementLike>("error-banner");
 const retryBtnEl = mustGet<ButtonElementLike>("retry-btn");
 const cronTickBannerEl = mustGet<TextElementLike>("cron-tick-banner");
+const saveToastEl = mustGet<TextElementLike>("save-toast");
 const workflowCardEl = mustGet<ElementLike>("workflow-card");
 const workflowApproveBtnEl = mustGet<ButtonElementLike>("workflow-approve-btn");
 const workflowDeclineBtnEl = mustGet<ButtonElementLike>("workflow-decline-btn");
@@ -163,6 +165,13 @@ function surfaceError(label: string, e: unknown): void {
   console.error(`[frondose] ${label} failed:`, e);
   errorBannerEl.textContent = t("error.actionFailed", { label, msg });
   errorBannerEl.classList.remove("hidden");
+}
+
+// ISSUE-SAVE-MODAL: transient, non-blocking "saved" toast — additive, mirrors surfaceError
+// above without touching it. Timer/dismiss logic lives in ./toast.js (sibling, not an app/
+// leaf — see toast.ts's doc comment for why).
+function surfaceToast(message: string): void {
+  showToast(saveToastEl, message);
 }
 
 // P-UI-THINK-OVERLAY: isNearBottom/scrollToBottomIfPinned bodies extracted to ./app/scrolling.js
@@ -735,6 +744,7 @@ modeAutoTabEl.addEventListener("click", () => {
 const settings = createSettingsPanel({
   invoke,
   surfaceError,
+  surfaceToast,
   listen: (event, handler) => {
     if (!windowRef.__TAURI__) return Promise.resolve(() => {});
     return windowRef.__TAURI__.event.listen(event, handler);

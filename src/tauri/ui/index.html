@@ -309,6 +309,16 @@
     .cron-banner { margin: 8px 18px 12px; padding: 8px 10px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--accent-900); font-size: 12px; }
     body.mode-auto .cron-banner { color: var(--accent-500); }
 
+    /* ISSUE-SAVE-MODAL: transient, non-blocking save-success toast — fixed corner overlay so it
+       renders above the settings panel (z-index: 20) and never displaces layout. pointer-events:
+       none so it never intercepts clicks on controls beneath it during its ~2.5s lifetime. No
+       custom @keyframes here on purpose: index.html's whole <style> block is scraped verbatim
+       into the LinkedIn-facing overlay bundle (scripts/gen-overlay-assets.ts genCss()), and the
+       overlay's T-Overlay.11 guard pins its animation-name surface to a fixed allowlist — this
+       toast is Tauri-Settings-only and has no business shipping a new keyframe into that bundle. */
+    .toast-success { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 50; margin: 0; padding: 8px 14px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--accent-900); font-size: 12.5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); pointer-events: none; }
+    body.mode-auto .toast-success { color: var(--accent-500); }
+
     /* settings gear + panel (P-Y6) */
     .icon-btn { flex-shrink: 0; width: 28px; height: 28px; border: 0.5px solid var(--line); border-radius: var(--r-btn); background: var(--card-bg); color: var(--ink-soft); font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
     .icon-btn:hover { color: var(--ink); }
@@ -425,6 +435,7 @@
     <div id="error-banner" class="banner-error hidden" data-i18n="error.generic">error</div>
     <button id="retry-btn" class="btn-retry hidden" type="button" data-i18n="retry.button">Retry</button>
     <div id="cron-tick-banner" class="cron-banner hidden"></div>
+    <div id="save-toast" class="toast-success hidden" role="status" aria-live="polite"></div>
 
     <section id="settings-panel" class="settings-panel hidden">
       <header class="settings-head">
