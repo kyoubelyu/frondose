@@ -323,8 +323,8 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'q
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (base 25 + 11 browser + 8 persist + 9 control)", () => {
-  // 25 base + 11 browser + 8 persistence + 9 control = 53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (base 25 + 11 browser + 8 persist + 10 control)", () => {
+  // 25 base + 11 browser + 8 persistence + 10 control = 54 (P-ISSUE-BOARD: report_issue).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -379,6 +379,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (ba
     // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
     "escalate_for_capability",
     "gh_issue",
+    "report_issue",
     "present_summary",
     "sleep",
     "stop",
@@ -391,9 +392,9 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (ba
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 53 keys (P-REBASE-TOOL-COUNT: stop_auto); got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 54 keys (P-ISSUE-BOARD: report_issue); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 53, `T-M_p6.21: must have exactly 53 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
+  assert.equal(keys.length, 54, `T-M_p6.21: must have exactly 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -418,7 +419,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 53 keys (ba
   // Spot-check P-Y3 presentation tool
   assert.ok("present_summary" in t, "T-M_p6.21: present_summary must be registered (P-Y3)");
 
-  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 53 keys (P-REBASE-TOOL-COUNT: stop_auto)");
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 54 keys (P-ISSUE-BOARD: report_issue)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
@@ -497,8 +498,8 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
 
 // ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys (base 25 + browser 11 + control 9)", () => {
-  // 25 base + 11 browser + 9 control = 45 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 46 keys (base 25 + browser 11 + control 10)", () => {
+  // 25 base + 11 browser + 10 control = 46 (P-ISSUE-BOARD: report_issue added power-tier).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -537,10 +538,11 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys (base
     "scroll",
     "type",
     "upload",
-    // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
+    // control (10: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary + P-ISSUE-BOARD report_issue)
     "escalate_for_capability",
     "gh_issue",
     "present_summary",
+    "report_issue",
     "sleep",
     "stop",
     "telegram_notify",
@@ -552,9 +554,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 45 keys (base
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 45 keys (P-REBASE-TOOL-COUNT: stop_auto); got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 46 keys (P-ISSUE-BOARD: report_issue); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 45, `T-M_p6.23: must have exactly 45 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
+  assert.equal(keys.length, 46, `T-M_p6.23: must have exactly 46 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -611,13 +613,13 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
   console.log(`T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`);
 });
 
-// ─── T-F.Wire.2 — worker=53/51, server=26/24 count contract (P-73 + P-AUTO-ISOLATE) ─────
+// ─── T-F.Wire.2 — worker=54/51, server=27/24 count contract (P-ISSUE-BOARD) ─────
 // NOTE: P-73 rebaselines server counts from P-Y3 27/25 to 25/23 (suggest_card/suggest_next_actions worker-only);
-// P-AUTO-ISOLATE adds stop_auto ungated in both modes (+1 each → 53/51, 26/24).
+// P-AUTO-ISOLATE adds stop_auto ungated in both modes (+1 each → 54/51, 27/24).
 
-test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 53/51 and server 26/24 plus present_summary", () => {
+test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 54/51 and server 27/24 plus present_summary", () => {
   // Given: P-73 has shipped (suggest_card/suggest_next_actions gated out of server mode);
-  //        FULL worker power/consumer = 53/51 and server power/consumer = 26/24 (post stop_auto)
+  //        FULL worker power/consumer = 54/51 and server power/consumer = 27/24 (post P-ISSUE-BOARD)
   //        AND CLAUDE.md documents present_summary in the breakdown
   // When:  makeAllTools() key count checked (base set = no session / persist / control)
   //        AND CLAUDE.md source scanned for count strings
@@ -641,8 +643,8 @@ test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 53/51
   const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
   const roadmap = readFileSync(join(repoRoot, "ROADMAP.md"), "utf-8");
   assert.ok(
-    roadmap.includes("worker/server `53/26`"),
-    "T-F.Wire.2: ROADMAP.md must document worker/server 53/26 in the power-tier paragraph",
+    roadmap.includes("worker/server `54/27`"),
+    "T-F.Wire.2: ROADMAP.md must document worker/server 54/27 in the power-tier paragraph",
   );
   assert.ok(
     roadmap.includes("worker/server `51/24`"),

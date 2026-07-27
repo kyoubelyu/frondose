@@ -588,9 +588,9 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
       const serverPower = names("server", "power");
 
       assert.equal(workerConsumer.length, 51, `worker consumer inventory drifted: ${workerConsumer.join(", ")}`);
-      assert.equal(workerPower.length, 53, `worker power inventory drifted: ${workerPower.join(", ")}`);
+      assert.equal(workerPower.length, 54, `worker power inventory drifted: ${workerPower.join(", ")}`);
       assert.equal(serverConsumer.length, 24, `server consumer inventory drifted: ${serverConsumer.join(", ")}`);
-      assert.equal(serverPower.length, 26, `server power inventory drifted: ${serverPower.join(", ")}`);
+      assert.equal(serverPower.length, 27, `server power inventory drifted: ${serverPower.join(", ")}`);
 
       for (const [label, consumer, power] of [
         ["worker", workerConsumer, workerPower],
@@ -598,7 +598,7 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
       ] as const) {
         const consumerSet = new Set(consumer);
         const powerOnly = power.filter((name) => !consumerSet.has(name)).sort();
-        assert.deepEqual(powerOnly, ["gh_issue", "telegram_notify"], `${label} tier delta drifted`);
+        assert.deepEqual(powerOnly, ["gh_issue", "report_issue", "telegram_notify"], `${label} tier delta drifted`);
         assert.ok(consumer.includes("present_summary"), `${label} consumer inventory must expose present_summary`);
       }
     } finally {

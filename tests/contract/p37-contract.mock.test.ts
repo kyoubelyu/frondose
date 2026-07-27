@@ -89,6 +89,7 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "record_raw_candidate",
   "reload",
   "remember",
+  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -130,6 +131,7 @@ const FROZEN_SERVER_TOOL_KEYS_P37 = [
   "present_summary",
   "provision_worker",
   "remember",
+  "report_issue",
   "revoke_worker",
   "schedule_task",
   "search_memory",
@@ -179,11 +181,11 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 26 (rebaselined) (G-P37.12)", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 53 / server 26)", () => {
+describe("tool counts: worker 54 / server 27 (rebaselined) (G-P37.12)", () => {
+  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 54 / server 27)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 53; server count === 26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  worker count === 54; server count === 27 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -198,8 +200,8 @@ describe("tool counts: worker 53 / server 26 (rebaselined) (G-P37.12)", () => {
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `worker tool count must be 53; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
+        54,
+        `worker tool count must be 54; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P37, "worker tool name set must match P-37 P-Y3 snapshot");
 
@@ -213,8 +215,8 @@ describe("tool counts: worker 53 / server 26 (rebaselined) (G-P37.12)", () => {
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `server tool count must be 26; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
+        27,
+        `server tool count must be 27; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P37, "server tool name set must match P-37 P-Y3 snapshot");
     } finally {

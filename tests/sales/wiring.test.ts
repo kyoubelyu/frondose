@@ -53,10 +53,10 @@ const SALES_TOOL_NAMES = [
 
 describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier gating", () => {
   // ─── T-SP-A.Wiring.1 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.1: worker power tier returns 53 tools including all 17 sales-kernel tools", async () => {
+  it("T-SP-A.Wiring.1: worker power tier returns 54 tools including all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with a minimal mock session + :memory: salesDbPath + control + tier='power'
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 53; the 17 sales-kernel tool names all present;
+    // Then:  length === 54; the 17 sales-kernel tool names all present;
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
@@ -67,8 +67,8 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      53,
-      `worker+power must have 53 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      54,
+      `worker+power must have 54 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
@@ -94,7 +94,7 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
   it("T-SP-A.Wiring.2: server power tier does NOT register any sales-kernel tools", async () => {
     // Given: makeAllTools called with mode:'server', tier:'power', no session (server ignores session)
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 26; none of the 17 sales-kernel tool names appear in the set
+    // Then:  length === 27; none of the 17 sales-kernel tool names appear in the set
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(undefined, PERSISTENCE, CONTROL, undefined, {
@@ -105,8 +105,8 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
 
     assert.strictEqual(
       keys.length,
-      26,
-      `server+power must have 26 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      27,
+      `server+power must have 27 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
@@ -139,10 +139,10 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
   });
 
   // ─── T-SP-A.Wiring.3 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue, still includes all 17 sales-kernel tools", async () => {
+  it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue + report_issue, still includes all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with worker mode + tier:'consumer' + :memory: salesDbPath + mock session
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 51 (53 power − 2 operator-output);
+    // Then:  length === 51 (54 power − 3 operator-output);
     //        17 sales-kernel tool names all present; 'telegram_notify'/'gh_issue' absent
     closeSalesDatabase(":memory:");
 
@@ -166,5 +166,6 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
     // telegram_notify + gh_issue must be absent in consumer tier
     assert.ok(!keys.includes("telegram_notify"), "telegram_notify must be absent in consumer tier");
     assert.ok(!keys.includes("gh_issue"), "gh_issue must be absent in consumer tier");
+    assert.ok(!keys.includes("report_issue"), "report_issue must be absent in consumer tier");
   });
 });
