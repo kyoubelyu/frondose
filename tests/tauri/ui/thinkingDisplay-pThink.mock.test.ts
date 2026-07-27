@@ -117,13 +117,17 @@ describe("app.ts — the gray thinking block is built + streamed + removed (P-TH
   });
 
   it("T-Think.UI.5: endAgentBubble makes the thinking block disappear (hidden + cleared) on turn completion", () => {
-    // Given: endAgentBubble source. When: scanned. Then: it hides + clears the thinking block ("完成输出后消失").
+    // Given: endAgentBubble source. When: scanned. Then: it hides + clears the thinking block
+    // ("完成输出后消失") — P-THINK-OVERWRITE moved the hide+clear pair into the shared
+    // stepBoundary.ts helper (app.ts 800-LoC cap); the property is unchanged.
     const end = fnBody("function endAgentBubble(");
     assert.ok(
-      end.includes('activeAgentThinkingWrap.classList.add("hidden")'),
-      "the thinking block must be hidden when the turn's output completes",
+      end.includes("clearThinkingBlockImpl(activeAgentThinkingWrap, activeAgentThinkingEl)"),
+      "the thinking block must be hidden+cleared via the stepBoundary helper when the turn completes",
     );
-    assert.ok(end.includes('activeAgentThinkingEl.textContent = ""'), "the streamed thinking text must be cleared");
+    const helper = readFileSync(join(REPO, "src/tauri/ui/stepBoundary.ts"), "utf-8");
+    assert.ok(helper.includes('classList.add("hidden")'), "the helper must hide the thinking block");
+    assert.ok(helper.includes('textContent = ""'), "the helper must clear the streamed thinking text");
     assert.ok(end.includes("activeAgentThinkingWrap = null") && end.includes("activeAgentThinkingEl = null"), "sinks reset");
   });
 
