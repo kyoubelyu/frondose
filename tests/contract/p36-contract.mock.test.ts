@@ -84,6 +84,7 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "record_raw_candidate",
   "reload",
   "remember",
+  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -127,6 +128,7 @@ const FROZEN_SERVER_TOOL_KEYS_P36 = [
   "present_summary",
   "provision_worker",
   "remember",
+  "report_issue",
   "revoke_worker",
   "schedule_task",
   "search_memory",
@@ -175,11 +177,11 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 26 rebaselined (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 53 / server 26)", () => {
+describe("tool counts: worker 54 / server 27 rebaselined (G-P36.14)", () => {
+  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 54 / server 27)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  count the tool registrations returned
-    // Then:  worker count === 53; server count === 26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  worker count === 54; server count === 27 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
     const { dir, cleanup } = makeTmpDir();
     try {
       // Worker mode — 29 tools
@@ -194,8 +196,8 @@ describe("tool counts: worker 53 / server 26 rebaselined (G-P36.14)", () => {
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 53 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        54,
+        `T-CONTRACT.TOOLS: worker mode must have exactly 54 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
       );
       assert.deepEqual(
         workerKeys,
@@ -214,8 +216,8 @@ describe("tool counts: worker 53 / server 26 rebaselined (G-P36.14)", () => {
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `T-CONTRACT.TOOLS: server mode must have exactly 26 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
+        27,
+        `T-CONTRACT.TOOLS: server mode must have exactly 27 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
       );
       assert.deepEqual(
         serverKeys,

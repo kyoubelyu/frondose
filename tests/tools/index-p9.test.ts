@@ -5,12 +5,12 @@
  *
  * T-MakeAllTools.1 — 3-arg call still compiles and works (backward compat; G-P9.12)
  * T-MakeAllTools.2 — no-args call returns 24 tools (base + current sales kernel)
- * T-MakeAllTools.3 — full 4-arg call → exactly 53 tools
- * T-MakeAllTools.4 — all 53 expected tool names present
+ * T-MakeAllTools.3 — full 4-arg call → exactly 54 tools
+ * T-MakeAllTools.4 — all 54 expected tool names present
  * T-MakeAllTools.5 — IDEMPOTENT tools get retry wrapper (execute replaced); analyze_screenshot does NOT
  * T-MakeAllTools.6 — hook wrapping: with hookRunner, all tools get hook wrapper (outermost)
  * T-MakeAllTools.7 — without hookRunner, tools are NOT hook-wrapped
- * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 53 tools
+ * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 54 tools
  * T-MakeAllTools.9 — HookRunner with ENOENT hooks.json → makeAllTools still works (no-op hooks)
  *
  * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-SP-A rebaseline)
@@ -73,7 +73,7 @@ const SALES_TOOL_NAMES = [
   "update_lead_stage",
 ] as const;
 
-// Complete enumeration — 53 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+// Complete enumeration — 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
 const EXPECTED_52_TOOLS = [
   // P-1 (1)
   "echo",
@@ -107,6 +107,8 @@ const EXPECTED_52_TOOLS = [
   // P-6 operatorOutput (2)
   "telegram_notify",
   "gh_issue",
+  // P-ISSUE-BOARD (1)
+  "report_issue",
   // P-6 control (3)
   "stop",
   "sleep",
@@ -163,9 +165,9 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 25 tools (base + sales k
   assert.deepEqual(keys, expected, `makeAllTools() must return exactly 25 tools with no args; got: ${keys.join(", ")}`);
 });
 
-// ─── T-MakeAllTools.3: full 4-arg → exactly 53 tools ─────────────────────────
+// ─── T-MakeAllTools.3: full 4-arg → exactly 54 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 54 tools (G-P9.14; P-REBASE-TOOL-COUNT: stop_auto)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -173,17 +175,17 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 53 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      53,
-      `must have exactly 53 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      54,
+      `must have exactly 54 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     cleanupTmpDir(dir);
   }
 });
 
-// ─── T-MakeAllTools.4: all 53 expected tool names present ────────────────────
+// ─── T-MakeAllTools.4: all 54 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 53 expected tool names present (enumeration; P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.4: all 54 expected tool names present (enumeration; P-REBASE-TOOL-COUNT: stop_auto)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
@@ -309,12 +311,12 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
   assert.equal(result.echoed, "hello", "echo must return { echoed: message }");
 });
 
-// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 53 tools ─
+// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 54 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 53 tools (P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 54 tools (P-REBASE-TOOL-COUNT: stop_auto)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
-  assert.equal(count, 53, `3-arg makeAllTools must return 53 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${count}`);
+  assert.equal(count, 54, `3-arg makeAllTools must return 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${count}`);
 });
 
 // ─── T-MakeAllTools.9: HookRunner with ENOENT hooks.json → no-op, tools work ─

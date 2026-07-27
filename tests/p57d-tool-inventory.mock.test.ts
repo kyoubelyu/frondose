@@ -59,10 +59,10 @@ function makeMockSession() {
 
 describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 + P-58a MAI_TIER tiering)", () => {
   // P-Y3 RECONCILED: the worker tool count is tier-dependent. Assert BOTH the
-  // power count (full = 53, incl. telegram_notify + gh_issue) AND the consumer
-  // count (= power - 2 = 51). present_summary remains tier-neutral.
+  // power count (full = 54, incl. telegram_notify + gh_issue + report_issue) AND the consumer
+  // count (= power - 3 = 51). present_summary remains tier-neutral.
   // (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-  it("T-Inv.1: worker tier:'power' → 53 tools; tier:'consumer' → 51; only telegram_notify + gh_issue are gated out", () => {
+  it("T-Inv.1: worker tier:'power' → 54 tools; tier:'consumer' → 51; only telegram_notify + gh_issue + report_issue are gated out", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -92,16 +92,16 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
     // stop_auto (P-REBASE-TOOL-COUNT: added at P-AUTO-ISOLATE).
     assert.equal(
       powerNames.length,
-      53,
+      54,
       `power worker tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`,
     );
-    // CONSUMER = power − 2 (telegram_notify + gh_issue gated out — P-58a tier gate unchanged).
-    assert.equal(consumerNames.length, 51, `consumer = power−2; got ${consumerNames.length}`);
+    // CONSUMER = power − 3 (telegram_notify + gh_issue + report_issue gated out).
+    assert.equal(consumerNames.length, 51, `consumer = power−3; got ${consumerNames.length}`);
 
-    // the 2 operator-output tools: power-only
-    assert.ok("telegram_notify" in power && "gh_issue" in power, "power includes the operator-output tools");
+    // the 3 operator-output tools: power-only
+    assert.ok("telegram_notify" in power && "gh_issue" in power && "report_issue" in power, "power includes the operator-output tools");
     assert.ok(
-      !("telegram_notify" in consumer) && !("gh_issue" in consumer),
+      !("telegram_notify" in consumer) && !("gh_issue" in consumer) && !("report_issue" in consumer),
       "consumer gates out the operator-output tools",
     );
 

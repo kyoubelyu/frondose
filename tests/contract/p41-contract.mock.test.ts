@@ -24,16 +24,16 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // ─── T-C.1 ────────────────────────────────────────────────────────────────────
 
 describe("P-41 contract — makeAllTools server mode count (G-P41.7)", () => {
-  it("T-C.1: makeAllTools({ mode:'server', ... }) returns 26 tools including 'provision_worker' and 'present_summary'", () => {
+  it("T-C.1: makeAllTools({ mode:'server', ... }) provides 27 tools including 'provision_worker' and 'present_summary'", () => {
     // Given: src/tools/index.ts P-41 rewrite (E-9); makeAllTools called in server mode
     // When:  count keys in the returned ToolSet
-    // Then:  Object.keys(tools).length === 26; "provision_worker" and "present_summary" are in the key set
+    // Then:  Object.keys(tools).length === 27; "provision_worker" and "present_summary" are in the key set
     //
-    // Server mode tool list (26 total; P-73 rebaseline: removed suggest_card/suggest_next_actions):
+    // Server mode tool list (27 total; P-73 rebaseline: removed suggest_card/suggest_next_actions):
     //   echo (1) + memory x5 + identity x2 + operator-output x2 + control x3 (stop/sleep/escalate)
     //   + web x3 + server-specific x6 (list_workers/send_worker_message/provision_worker/
     //     revoke_worker/list_personas/dispatch_google_login) + schedule_task + stop_auto (2, P-REBASE-TOOL-COUNT: cron
-    //     tools added at P-AUTO-ISOLATE) + todo_write [P-Y1] + present_summary [P-Y3] = 26
+    //     tools added at P-AUTO-ISOLATE) + todo_write [P-Y1] + present_summary [P-Y3] = 27 (P-ISSUE-BOARD report_issue)
     //     (suggest_card/suggest_next_actions worker-only per P-73)
     const tools = makeAllTools(
       undefined, // no session (server mode ignores it)
@@ -48,8 +48,8 @@ describe("P-41 contract — makeAllTools server mode count (G-P41.7)", () => {
     const keys = Object.keys(tools);
     assert.equal(
       keys.length,
-      26,
-      `T-C.1: server mode must have 26 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      27,
+      `T-C.1: server mode must have 27 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
     assert.ok(keys.includes("provision_worker"), "T-C.1: 'provision_worker' must be in server tool set");
     assert.ok(keys.includes("present_summary"), "T-C.1: 'present_summary' must be in server tool set");
