@@ -82,6 +82,7 @@ const FROZEN_WORKER_TOOL_KEYS_P38 = [
   "record_raw_candidate",
   "reload",
   "remember",
+  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -123,6 +124,7 @@ const FROZEN_SERVER_TOOL_KEYS_P38 = [
   "present_summary",
   "provision_worker",
   "remember",
+  "report_issue",
   "revoke_worker",
   "schedule_task",
   "search_memory",
@@ -231,11 +233,11 @@ describe("no child_process in P-38's edited .ts files (G-P38.7/.11)", () => {
 
 // ─── T-CONTRACT.TOOLS ────────────────────────────────────────────────────────
 
-describe("tool counts: worker 53 / server 26 (G-P38.8/.11, rebaselined)", () => {
-  it("T-CONTRACT.TOOLS: tool set is worker 53 / server 26 (P-REBASE-TOOL-COUNT: stop_auto)", () => {
+describe("tool counts: worker 54 / server 27 (G-P38.8/.11, rebaselined)", () => {
+  it("T-CONTRACT.TOOLS: tool set is worker 54 / server 27 (P-REBASE-TOOL-COUNT: stop_auto)", () => {
     // Given: makeAllTools called in worker mode and server mode with fake deps
     // When:  tool registrations counted and key-sets compared to frozen snapshots
-    // Then:  worker 53 / server 26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  worker 54 / server 27 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -250,8 +252,8 @@ describe("tool counts: worker 53 / server 26 (G-P38.8/.11, rebaselined)", () => 
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        53,
-        `worker tool count must be 53; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        54,
+        `worker tool count must be 54; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
       assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P38, "worker tool set must match frozen P-Y3 snapshot");
 
@@ -265,8 +267,8 @@ describe("tool counts: worker 53 / server 26 (G-P38.8/.11, rebaselined)", () => 
       const serverKeys = Object.keys(serverTools).sort();
       assert.equal(
         serverKeys.length,
-        26,
-        `server tool count must be 26; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
+        27,
+        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
       );
       assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P38, "server tool set must match frozen snapshot");
     } finally {

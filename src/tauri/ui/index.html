@@ -312,10 +312,10 @@
     /* ISSUE-SAVE-MODAL: transient, non-blocking save-success toast — fixed corner overlay so it
        renders above the settings panel (z-index: 20) and never displaces layout. pointer-events:
        none so it never intercepts clicks on controls beneath it during its ~2.5s lifetime. No
-       custom @keyframes here on purpose: index.html's whole <style> block is scraped verbatim
-       into the LinkedIn-facing overlay bundle (scripts/gen-overlay-assets.ts genCss()), and the
-       overlay's T-Overlay.11 guard pins its animation-name surface to a fixed allowlist — this
-       toast is Tauri-Settings-only and has no business shipping a new keyframe into that bundle. */
+       custom key-frame animation here on purpose: index.html's whole <style> block is scraped
+       verbatim into the LinkedIn-facing overlay bundle (scripts/gen-overlay-assets.ts genCss()),
+       and the overlay's T-Overlay.11 guard pins its animation-name surface to a fixed allowlist —
+       this toast is Tauri-Settings-only and has no business shipping a new keyframe into that bundle. */
     .toast-success { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 50; margin: 0; padding: 8px 14px; border: 0.5px solid var(--accent-500); border-radius: var(--r-btn); background: var(--chip-accent-bg); color: var(--accent-900); font-size: 12.5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); pointer-events: none; }
     body.mode-auto .toast-success { color: var(--accent-500); }
 

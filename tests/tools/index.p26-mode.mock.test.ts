@@ -38,7 +38,7 @@ const mockSession: LinkedinSession = {
 const mockControl: ControlSignals = { requestStop: () => {} };
 
 describe("makeAllTools tool-count contract (G-P26.26)", () => {
-  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 53 tools", () => {
+  it("T-CONTRACT.WORKER.TOOLS: worker mode with session + persistence + control → exactly 54 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:"worker"})
     // When:  Object.keys(tools).length computed
     // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -52,15 +52,15 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.WORKER.TOOLS: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        54,
+        `T-CONTRACT.WORKER.TOOLS: expected 54 worker tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 26 tools", () => {
+  it("T-CONTRACT.SERVER.TOOLS: server mode with persistence + control (no session) → exactly 27 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:"server"})
     // When:  Object.keys(tools).length computed
     // Then:  26 (P-73: suggest_card/suggest_next_actions removed from server mode; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -74,8 +74,8 @@ describe("makeAllTools tool-count contract (G-P26.26)", () => {
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.SERVER.TOOLS: expected 26 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        27,
+        `T-CONTRACT.SERVER.TOOLS: expected 27 server tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
