@@ -75,9 +75,10 @@ export interface PersistencePaths {
 
 /**
  * Build the full tool inventory. P-26 surface:
- *   - worker mode: 53 tools in power tier, 51 in consumer tier (P-Y3)
- *   - server  mode: 26 tools in power tier, 24 in consumer tier (P-73: suggest_card/suggest_next_actions worker-only)
- *   (P-AUTO-ISOLATE added stop_auto, registered ungated in both modes — counts +1 each.)
+ *   - worker mode: 54 tools in power tier, 51 in consumer tier (P-Y3)
+ *   - server  mode: 27 tools in power tier, 24 in consumer tier (P-73: suggest_card/suggest_next_actions worker-only)
+ *   (P-AUTO-ISOLATE added stop_auto, registered ungated in both modes — counts +1 each;
+ *    P-ISSUE-BOARD added report_issue, power-tier operator-output — power counts +1 each.)
  *
  * Layer order applied across BOTH modes (outermost → innermost):
  *   hookWrapper → safeModeWrap → retryWrap → original execute

@@ -43,7 +43,7 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 53 tools", () => {
+  it("T-CONTRACT.P28.WORKER: worker mode → exactly 54 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
     // When:  Object.keys(tools).length
     // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -60,8 +60,8 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.P28.WORKER: expected 53 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        54,
+        `T-CONTRACT.P28.WORKER: expected 54 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
@@ -72,7 +72,7 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
 // ─── T-CONTRACT.P28.SERVER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.SERVER: server mode → exactly 26 tools", () => {
+  it("T-CONTRACT.P28.SERVER: server mode → exactly 27 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
     // When:  Object.keys(tools).length
     // Then:  26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -88,8 +88,8 @@ describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () 
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.P28.SERVER: expected 26 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        27,
+        `T-CONTRACT.P28.SERVER: expected 27 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();

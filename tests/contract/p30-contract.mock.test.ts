@@ -76,7 +76,7 @@ describe("no-bash boundary — P-30 new/edited files (G-P30.17)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 53 tools", () => {
+  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 54 tools", () => {
     // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'})
     // When:  Object.keys(tools).length
     // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -91,15 +91,15 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        53,
-        `T-CONTRACT.TOOLS worker: expected 53 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        54,
+        `T-CONTRACT.TOOLS worker: expected 54 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 26 tools", () => {
+  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 27 tools", () => {
     // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
     // When:  Object.keys(tools).length
     // Then:  26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
@@ -114,8 +114,8 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        26,
-        `T-CONTRACT.TOOLS server: expected 26 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        27,
+        `T-CONTRACT.TOOLS server: expected 27 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
