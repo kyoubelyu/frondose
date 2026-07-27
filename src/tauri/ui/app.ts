@@ -21,6 +21,7 @@ import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStag
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 import { scrollToBottomIfPinned as scrollToBottomIfPinnedImpl } from "./app/scrolling.js";
 import { buildAgentBubble as buildAgentBubbleImpl } from "./app/agentBubble.js";
+import { clearThinkingBlock as clearThinkingBlockImpl, rawTextWithBreak as rawTextWithBreakImpl } from "./stepBoundary.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
 import { localizeDocument, t } from "./i18n.js";
 
@@ -148,6 +149,7 @@ let agentRenderScheduled = false;
 // wrapper is removed from the DOM when the turn's output completes ("完成输出后消失").
 let activeAgentThinkingWrap: ElementLike | null = null;
 let activeAgentThinkingEl: ElementLike | null = null;
+let pendingTextBreak = false; // [P-THINK-OVERWRITE] armed by a current-turn step-done; next text chunk gets a paragraph break
 const AUTOSCROLL_PX = 100;
 const scrollAreaEl = mustGet<ElementLike>("scroll-area");
 const conversationListEl = mustGet<ElementLike>("conversation-list");
@@ -222,6 +224,8 @@ function appendAgentChunk(chunk: string): void {
   // cron/profile-activate/card-action paths; this auto-open is the Manual fallback.
   if (activeAgentTextEl === null) beginAgentBubble();
   if (activeAgentTextEl === null) return; // defensive — beginAgentBubble couldn't allocate (DOM missing)
+  // [P-THINK-OVERWRITE] paragraph break between steps' answers (consumed once, never leading).
+  if (pendingTextBreak) { pendingTextBreak = false; activeAgentRawText = rawTextWithBreakImpl(activeAgentRawText); }
   activeAgentRawText += chunk;
   scheduleAgentTextRender();
 }
@@ -239,16 +243,13 @@ function appendReasoningChunk(chunk: string): void {
 
 function endAgentBubble(): void {
   if (activeAgentTextEl !== null) renderMarkdownInto(windowRef.document, activeAgentTextEl, activeAgentRawText); // P-FE-MD-HISTORY: flush the pending rAF render BEFORE detach, else the bubble freezes on a stale partial parse
-  // [P-THINK] "完成输出后消失": once the turn's output completes, hide the whole thinking block
-  // (gray reasoning + "thinking…" line) and clear its text, leaving only the final answer. Hidden
-  // (display:none) via the existing ClassListLike API — ElementLike exposes no remove()/removeChild,
-  // and display:none is visually equivalent to removal for this requirement.
-  if (activeAgentThinkingWrap !== null) activeAgentThinkingWrap.classList.add("hidden");
-  if (activeAgentThinkingEl !== null) activeAgentThinkingEl.textContent = "";
+  // [P-THINK] "完成输出后消失" (display:none — ElementLike has no remove(); visually equivalent).
+  clearThinkingBlockImpl(activeAgentThinkingWrap, activeAgentThinkingEl);
   activeAgentThinkingWrap = null;
   activeAgentThinkingEl = null;
   activeAgentTextEl = null;
   activeAgentRawText = "";
+  pendingTextBreak = false; // [P-THINK-OVERWRITE] reset — no separator leaks into the next bubble
 }
 
 function transition(next: AppState): void {
@@ -555,6 +556,11 @@ function handleEvent(payload: SseFrame): void {
       transition("running");
       break;
     case "step-done":
+      // [P-THINK-OVERWRITE] step boundary: clear thinking (next segment OVERWRITES) + arm break. turnId-gated (FM-1 CMR-1).
+      if (payload.turnId === currentTurnId) {
+        clearThinkingBlockImpl(activeAgentThinkingWrap, activeAgentThinkingEl);
+        pendingTextBreak = true;
+      }
       break;
     case "done":
       if (payload.turnId === currentTurnId) {
