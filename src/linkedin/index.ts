@@ -14,8 +14,8 @@ export {
   INPUT_ROLES,
   TEXT_ROLES,
 } from "./inspectSummary.js";
-export type { LabelResolveOpts } from "./labelResolver.js";
-export { resolveByLabel } from "./labelResolver.js";
+export type { LabelResolveOpts, RankedResolution } from "./labelResolver.js";
+export { CHOICE_ROLES, rankAmbiguousMatches, resolveByLabel, resolveByLabelRanked, resolveByLabelWithRetryRanked } from "./labelResolver.js";
 export { applyPacing } from "./pacing.js";
 export { inferSurface, isLinkedInLoginUrl, LINKEDIN_APP_HOSTS } from "./scopeResolver.js";
 export { createLinkedinSession } from "./session.js";
