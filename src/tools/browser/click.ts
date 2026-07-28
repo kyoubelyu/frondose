@@ -4,7 +4,7 @@ import type { CdpClient } from "../../cdp/client.js";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
 import { failWithReason } from "../../linkedin/envelope.js";
 import { applyPacing, captureCurrentSurfaceContext, fail, failFromError, ok, withHint } from "../../linkedin/index.js";
-import { resolveByLabelWithRetry } from "../../linkedin/labelResolver.js";
+import { resolveByLabelWithRetryRanked, type RankedResolution } from "../../linkedin/labelResolver.js";
 import type { OutwardActionAdvice } from "../../linkedin/logic/outwardAction.js";
 import { hasProfileConnectPromptOverlay } from "../../linkedin/logic/predicates/feedProfile.js";
 import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
@@ -46,16 +46,30 @@ async function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<vo
   });
 }
 
-function sameRoleName(entry: SnapshotEntry, expected: { role: string; name?: string }): boolean {
-  if (entry.role !== expected.role) return false;
-  const expectedName = (expected.name ?? "").trim().toLowerCase();
-  const actualName = (entry.name ?? "").trim().toLowerCase();
+// [P-FIX-TYPEAHEAD-TARGETING] The ONLY evidenced AX-role churn on re-rendered listboxes
+// (LinkedIn typeahead / recipient picker): menuitem <-> option. Deliberately NOT widened
+// to listitem/treeitem/radio — re-identification of a dead ref must stay conservative.
+const REF_CHURN_ROLES: ReadonlySet<string> = new Set(["option", "menuitem"]);
+
+function normalizeName(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function sameRoleName(entry: SnapshotEntry, expected: { role: string; name?: string; region?: string }): boolean {
+  const roleMatch = entry.role === expected.role || (REF_CHURN_ROLES.has(entry.role) && REF_CHURN_ROLES.has(expected.role));
+  if (!roleMatch) return false;
+  // Identity continuity bound: when BOTH sides carry a region it must match — a same-name
+  // element in another region is a different element. Synthesized/hand-built entries may
+  // lack a region; the check is skipped (NOT failed) when either side is unknown.
+  if (expected.region !== undefined && entry.region !== undefined && entry.region !== expected.region) return false;
+  const expectedName = normalizeName(expected.name ?? "");
+  const actualName = normalizeName(entry.name ?? "");
   return expectedName.length > 0 ? actualName === expectedName : true;
 }
 
 function findFreshRefByRoleName(
   entries: SnapshotEntry[],
-  expected: { role: string; name?: string },
+  expected: { role: string; name?: string; region?: string },
 ): SnapshotEntry | undefined {
   const matches = entries.filter((entry) => sameRoleName(entry, expected));
   return matches.length === 1 ? matches[0] : undefined;
@@ -64,7 +78,7 @@ function findFreshRefByRoleName(
 async function recaptureFreshRefByRoleName(
   session: LinkedinSession,
   client: CdpClient,
-  expected: { role: string; name?: string },
+  expected: { role: string; name?: string; region?: string; layer?: "page" | "overlay" },
   opts: { timeoutMs?: number; stepMs?: number; maxRetries?: number; abortSignal?: AbortSignal } = {},
 ): Promise<SnapshotEntry | undefined> {
   const deadline = Date.now() + (opts.timeoutMs ?? REF_STALE_RETRY_TIMEOUT_MS);
@@ -75,6 +89,10 @@ async function recaptureFreshRefByRoleName(
     throwIfAborted(opts.abortSignal);
     try {
       const fresh = await captureCurrentSurfaceContext(client);
+      // [P-FIX-TYPEAHEAD-TARGETING] activeLayer continuity: a capture on a DIFFERENT layer
+      // cannot re-identify the dead ref — skip it (keeps the retry budget for a same-layer
+      // capture; a layer that never flips back exhausts into the ref_stale failure).
+      if (expected.layer && fresh.activeLayer && fresh.activeLayer !== expected.layer) continue;
       session.setLastContext(fresh);
       const entry = findFreshRefByRoleName(fresh.entries, expected);
       if (entry) return entry;
@@ -130,6 +148,9 @@ export function makeClickTool(session: LinkedinSession) {
         // resolved target was selector-only (ref absent) so the outbound guard can fail closed.
         let scopedAdvice: OutwardActionAdvice[] = [];
         let scopedSelectorOnly = false;
+        // [P-FIX-TYPEAHEAD-TARGETING] set when the winning pick was tie-broken out of an
+        // ambiguous candidate pool (ranked label path OR the scoped ambiguous fallback).
+        let rankedMeta: RankedResolution | null = null;
         if (ref) {
           target = ref.startsWith("@") ? ref : `@${ref}`;
         } else if (scopedResolveEnabled()) {
@@ -139,6 +160,14 @@ export function makeClickTool(session: LinkedinSession) {
           target = scoped.target;
           targetEntry = scoped.targetEntry;
           scopedSelectorOnly = scoped.selectorOnly;
+          if (scoped.disambiguated && scoped.method) {
+            rankedMeta = {
+              entry: scoped.targetEntry,
+              disambiguated: true,
+              candidateCount: scoped.candidatesCount ?? 2,
+              method: scoped.method,
+            };
+          }
           // Refresh runtime lastContext so the outbound guard + ref-stale re-validation classify on
           // the SAME surface + entries the resolver used (runtime inferSurface, resolver's entries).
           session.setLastContext(scoped.runtimeContext);
@@ -146,7 +175,7 @@ export function makeClickTool(session: LinkedinSession) {
         } else {
           // biome-ignore lint/style/noNonNullAssertion: refine guarantees ref OR label is set; ref is undefined here so label is non-null.
           const resolveLabel = label!;
-          const entry = await resolveByLabelWithRetry(
+          const ranked = await resolveByLabelWithRetryRanked(
             session,
             resolveLabel,
             scope,
@@ -157,21 +186,13 @@ export function makeClickTool(session: LinkedinSession) {
             },
             { abortSignal },
           );
-          target = entry.ref;
-          targetEntry = entry;
+          target = ranked.entry.ref;
+          targetEntry = ranked.entry;
+          if (ranked.disambiguated) rankedMeta = ranked;
         }
-        // P-Y2.3: paint the agent cursor + highlight on the resolved target before acting. Best-effort,
-        // visual-only (a getBox/overlay failure must NEVER block the click); the injected driver Auto-gates
-        // (no paint + no dwell in Manual/headless/REPL). Same getBox the click resolves → highlight box ==
-        // clickAt landing (live cross-check). The click dispatch is OUTSIDE this try (unaffected on failure).
-        try {
-          const box = await client.getBox(target);
-          await session.showAgentTarget?.(box, label ?? target);
-        } catch {
-          // visual-only; ignore
-        }
-        // Outbound guard — checked before any CDP dispatch
-        const clickContext = session.getLastContext();
+        // Outbound guard — resolution prerequisites (fail-closed) run BEFORE revalidation;
+        // classification + the guard chain run AFTER it (P-FIX-TYPEAHEAD-TARGETING).
+        let clickContext = session.getLastContext();
         targetEntry ??= clickContext?.entries?.find((e) => e.ref === target);
         let clickSurface = clickContext?.surface ?? "";
         if (ref && target.startsWith("@") && !targetEntry) {
@@ -213,7 +234,65 @@ export function makeClickTool(session: LinkedinSession) {
             "unresolvable_ref_on_outbound_surface",
           );
         }
+        // [P-75 D-17] Re-validate the ref BEFORE classification/dispatch. LinkedIn re-uses
+        // the same DOM input across modal states (Connect overlay, New Message dialog,
+        // comment composer) — backendNodeId is unchanged but the aria-label flips. Without
+        // this check, a click on a stale ref silently hits the wrong-purpose element.
+        // Skip when the agent passed a label (resolveByLabel already used CURRENT entries)
+        // OR when the entry wasn't in lastContext (selector fallback OR ad-hoc ref) OR the
+        // client does not support ref verification (minimal test doubles).
+        // [P-FIX-TYPEAHEAD-TARGETING] moved AHEAD of classification so the guard chain
+        // classifies the FINAL retargeted entry; expected is bound by region + activeLayer.
+        if (target.startsWith("@") && targetEntry && typeof client.verifyRef === "function") {
+          const currentRef = client.currentRefMap?.[target.slice(1)];
+          const expected = {
+            role: targetEntry.role,
+            name: targetEntry.name || currentRef?.name,
+            region: targetEntry.region,
+            layer: clickContext?.activeLayer,
+          };
+          let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
+          for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
+            throwIfAborted(abortSignal);
+            latestVerify = await client.verifyRef(target.slice(1), expected);
+            if (latestVerify.matches) break;
+            if (attempt >= REF_STALE_MAX_RETRIES) {
+              return refStaleFailure(target, targetEntry, latestVerify);
+            }
+            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
+            if (!freshEntry) {
+              return refStaleFailure(target, targetEntry, latestVerify);
+            }
+            target = freshEntry.ref;
+            targetEntry = freshEntry;
+          }
+        }
+        // [P-FIX-TYPEAHEAD-TARGETING] Re-derive the classification context AFTER revalidation —
+        // the recapture inside D-17 REPLACES session.lastContext. clickSurface / clickLabel /
+        // connectDialogActive MUST come from the final context, not the pre-D-17 cache.
+        clickContext = session.getLastContext();
+        clickSurface = clickContext?.surface ?? clickSurface;
         const clickLabel = (targetEntry?.name ?? "").trim();
+        // P-AUTO-1+2 (CONCERN-1/3 + B-2): shared classifier replaces the legacy per-check regex.
+        // The hard daily/cooldown gate + the deterministic connect_sent ledger write fire on
+        // `connect_send` ONLY (the final invite-send button) — counting the `connect_open` modal-
+        // open click would overcount. The existing per-run cap stays attached to BOTH connect_open
+        // and connect_send so the agent's first `Connect` click is still blocked when sent>=max.
+        const connectDialogActive = clickContext
+          ? hasProfileConnectPromptOverlay(clickContext.pageUrl ?? "", clickSurface, clickContext.entries)
+          : false;
+        const outboundClass = classifyOutboundEntry(targetEntry, clickSurface, { connectDialogActive });
+        // [P-FIX-TYPEAHEAD-TARGETING] a tie-broken pick must NEVER drive an outbound-classified
+        // click — disambiguation exists for navigation/selection, not for choosing outbound targets.
+        if (rankedMeta?.disambiguated && outboundClass !== "benign") {
+          return fail(
+            "click",
+            "ambiguous_target",
+            `Ambiguous target '${label ?? target}' tie-broken to "${clickLabel}" (${rankedMeta.candidateCount} candidates, method=${rankedMeta.method}), ` +
+              "but the picked entry classifies as an outbound action. Refusing to dispatch a disambiguated outbound click. " +
+              "Use a more specific label or an exact ref.",
+          );
+        }
         if (!LINKEDIN_OUTBOUND_SURFACES.has(clickSurface)) {
           // P-33 general-web carve-out: not a LinkedIn outbound surface -> skip guard
         } else if (session.canClickOutbound && requiresApproval(clickLabel, clickSurface)) {
@@ -228,15 +307,6 @@ export function makeClickTool(session: LinkedinSession) {
             );
           }
         }
-        // P-AUTO-1+2 (CONCERN-1/3 + B-2): shared classifier replaces the legacy per-check regex.
-        // The hard daily/cooldown gate + the deterministic connect_sent ledger write fire on
-        // `connect_send` ONLY (the final invite-send button) — counting the `connect_open` modal-
-        // open click would overcount. The existing per-run cap stays attached to BOTH connect_open
-        // and connect_send so the agent's first `Connect` click is still blocked when sent>=max.
-        const connectDialogActive = clickContext
-          ? hasProfileConnectPromptOverlay(clickContext.pageUrl ?? "", clickSurface, clickContext.entries)
-          : false;
-        const outboundClass = classifyOutboundEntry(targetEntry, clickSurface, { connectDialogActive });
         if (outboundClass === "message_send" && session.resolvedMode?.() === "auto") {
           return failWithReason(
             "click",
@@ -338,33 +408,16 @@ export function makeClickTool(session: LinkedinSession) {
             );
           }
         }
-        // [P-75 D-17] Re-validate the ref before dispatching the click. LinkedIn re-uses
-        // the same DOM input across modal states (Connect overlay, New Message dialog,
-        // comment composer) — backendNodeId is unchanged but the aria-label flips. Without
-        // this check, a click on a stale ref silently hits the wrong-purpose element.
-        // Skip when the agent passed a label (resolveByLabel already used CURRENT entries)
-        // OR when the entry wasn't in lastContext (selector fallback OR ad-hoc ref).
-        if (target.startsWith("@") && targetEntry) {
-          const currentRef = client.currentRefMap?.[target.slice(1)];
-          const expected = {
-            role: targetEntry.role,
-            name: targetEntry.name || currentRef?.name,
-          };
-          let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
-          for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
-            throwIfAborted(abortSignal);
-            latestVerify = await client.verifyRef(target.slice(1), expected);
-            if (latestVerify.matches) break;
-            if (attempt >= REF_STALE_MAX_RETRIES) {
-              return refStaleFailure(target, targetEntry, latestVerify);
-            }
-            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
-            if (!freshEntry) {
-              return refStaleFailure(target, targetEntry, latestVerify);
-            }
-            target = freshEntry.ref;
-            targetEntry = freshEntry;
-          }
+        // P-Y2.3: paint the agent cursor + highlight on the FINAL resolved target before acting
+        // (moved after D-17 retargeting — the painted box must be the dispatched ref, not the
+        // stale one). Best-effort, visual-only (a getBox/overlay failure must NEVER block the
+        // click); the injected driver Auto-gates (no paint + no dwell in Manual/headless/REPL).
+        // Same getBox the click resolves → highlight box == clickAt landing (live cross-check).
+        try {
+          const box = await client.getBox(target);
+          await session.showAgentTarget?.(box, label ?? target);
+        } catch {
+          // visual-only; ignore
         }
         // P-32: hardware-path input branch; CDP arm unchanged.
         if (session.inputMode === "hardware") await hardwareClickAt(client, target);
@@ -431,6 +484,15 @@ export function makeClickTool(session: LinkedinSession) {
         // outbound-classified (additive — envelope + schema unchanged when empty / flag-off).
         const clickData: Record<string, unknown> = { target, pacing };
         if (scopedAdvice.length > 0) clickData.advice = scopedAdvice;
+        // [P-FIX-TYPEAHEAD-TARGETING] echo the tie-broken pick so the agent can verify + abort
+        // on a wrong selection (post-click telemetry; prevention is the fail-closed rule above).
+        if (rankedMeta?.disambiguated && rankedMeta.method) {
+          clickData.resolution = {
+            candidates: rankedMeta.candidateCount,
+            picked: (targetEntry?.name ?? "").trim(),
+            method: rankedMeta.method,
+          };
+        }
         return withHint(ok("click", clickData));
       } catch (e) {
         return failFromError("click", e);

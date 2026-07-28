@@ -7,13 +7,14 @@
 
 import type { CdpClient } from "../../cdp/client.js";
 import { frondoseEnv } from "../../env.js";
+import { rankAmbiguousMatches } from "../../linkedin/labelResolver.js";
 import {
   buildOutwardActionAdvice,
   classifyClickDescriptor,
   classifyTypeDescriptor,
   type OutwardActionAdvice,
 } from "../../linkedin/logic/outwardAction.js";
-import type { ResolvedTarget } from "../../linkedin/logic/scopeResolver/shared.js";
+import { CommandAmbiguousTargetError, type ResolvedTarget } from "../../linkedin/logic/scopeResolver/shared.js";
 import { resolveScopedTarget } from "../../linkedin/logic/scopeResolver/targetResolution.js";
 import { captureCurrentSurfaceContext as captureLogicSurfaceContext } from "../../linkedin/logic/surface/currentSurface.js";
 import type { CurrentSurfaceContext as LogicSurfaceContext } from "../../linkedin/logic/surface/currentSurfaceTypes.js";
@@ -47,10 +48,88 @@ export interface ScopedToolResolution {
   logicContext: LogicSurfaceContext;
   /** The raw resolved target (label / role / scope / selector / ref). */
   resolvedTarget: ResolvedTarget;
+  /** [P-FIX-TYPEAHEAD-TARGETING] set when the pick was tie-broken out of the scoped resolver's
+   *  ambiguous candidate set by the fallback below (undefined on a direct resolution). */
+  disambiguated?: boolean;
+  candidatesCount?: number;
+  method?: "startsWith" | "roleFamily";
 }
 
 function normalizeRef(ref: string): string {
   return ref.startsWith("@") ? ref : `@${ref}`;
+}
+
+/** [P-FIX-TYPEAHEAD-TARGETING] Ambiguous-scoped-resolution fallback. The scoped resolver's
+ *  CommandAmbiguousTargetError already carries the SCOPE-FILTERED candidate set — rank ONLY
+ *  those (never a fresh full-surface re-resolve, which could escape the requested scope).
+ *  Candidate→entry mapping is unique + scope-bound or the candidate is dropped; anything
+ *  other than exactly one ranked survivor rethrows the ORIGINAL error. */
+async function resolveFromAmbiguousCandidates(
+  client: CdpClient,
+  kind: "button" | "input",
+  label: string | undefined,
+  scope: string | undefined,
+  err: CommandAmbiguousTargetError,
+): Promise<ScopedToolResolution> {
+  const candidates = err.candidates ?? [];
+  if (!label || candidates.length === 0) throw err;
+  // Mapping-only capture: the throw path carries no context, so capture fresh — candidate
+  // refs may have churned, and unmatched candidates are simply excluded (fail-closed).
+  const ctx = await captureLogicSurfaceContext(client);
+  const needle = label.toLowerCase();
+  const inScope = (entry: { ref?: string; selector?: string }): boolean => {
+    if (!scope) return true;
+    const vsi = ctx.visibleScopeInspections?.find((v) => v.scope.handle === scope);
+    if (!vsi) return true; // scope not covered by inspections → entries are the scope
+    return vsi.controls.some(
+      (c) =>
+        (c.ref && entry.ref && c.ref === entry.ref) || // ref-to-ref
+        (c.selectorRef && entry.selector && c.selectorRef === entry.selector), // selector-to-selector
+    );
+  };
+  const mapped: Array<{ cand: { label?: string; scope?: string; ref?: string }; entry: LogicSurfaceContext["entries"][number] }> = [];
+  for (const cand of candidates) {
+    const ref = cand.ref ? normalizeRef(cand.ref) : undefined;
+    let entry: LogicSurfaceContext["entries"][number] | undefined;
+    if (ref) {
+      // Ref-present candidates map by EXACT ref only — never a label fallback.
+      entry = ctx.entries.find((en) => en.ref === ref);
+    } else {
+      // Ref-less candidates: capture-wide UNIQUE exact-label match, selector-bearing, in-scope.
+      const byLabel = ctx.entries.filter((en) => en.name === cand.label);
+      const only = byLabel.length === 1 ? byLabel[0] : undefined;
+      if (only?.selector && inScope(only)) entry = only;
+    }
+    if (entry) mapped.push({ cand: { ...cand, ref }, entry });
+  }
+  const ranked = rankAmbiguousMatches(
+    mapped.map((m) => m.entry),
+    needle,
+  );
+  if (!ranked.entry || !ranked.method) throw err;
+  const winner = mapped.find((m) => m.entry === ranked.entry);
+  if (!winner) throw err;
+  const { cand, entry } = winner;
+  const target = cand.ref ?? entry.selector;
+  if (!target) throw err; // string-guaranteed target — never dispatch a missing one
+  return {
+    target,
+    selectorOnly: !cand.ref,
+    targetEntry: { ref: target, role: entry.role, name: cand.label ?? entry.name },
+    runtimeContext: logicToRuntimeContext(ctx),
+    logicContext: ctx,
+    resolvedTarget: {
+      kind,
+      selector: entry.selector ?? "",
+      ...(cand.ref ? { ref: cand.ref } : {}),
+      label: cand.label ?? "",
+      role: entry.role,
+      ...(cand.scope ? { scope: cand.scope } : {}),
+    },
+    disambiguated: true,
+    candidatesCount: candidates.length,
+    method: ranked.method,
+  };
 }
 
 /** Adapt a logic-layer context into the runtime `CurrentSurfaceContext` the session stores.
@@ -76,14 +155,24 @@ export async function resolveScopedForTool(
   label: string | undefined,
   scope: string | undefined,
 ): Promise<ScopedToolResolution> {
-  const resolved = await resolveScopedTarget(
-    { kind, ...(label ? { label } : {}), ...(scope ? { scope } : {}) },
-    {
-      captureCurrentSurfaceContext: () => captureLogicSurfaceContext(client),
-      scopeReadyAttempts: SCOPE_READY_ATTEMPTS,
-      scopeReadyRetryMs: SCOPE_READY_RETRY_MS,
-    },
-  );
+  let resolved: Awaited<ReturnType<typeof resolveScopedTarget>>;
+  try {
+    resolved = await resolveScopedTarget(
+      { kind, ...(label ? { label } : {}), ...(scope ? { scope } : {}) },
+      {
+        captureCurrentSurfaceContext: () => captureLogicSurfaceContext(client),
+        scopeReadyAttempts: SCOPE_READY_ATTEMPTS,
+        scopeReadyRetryMs: SCOPE_READY_RETRY_MS,
+      },
+    );
+  } catch (e) {
+    // [P-FIX-TYPEAHEAD-TARGETING] ambiguous scoped resolution → rank ONLY the caught
+    // already-scoped candidates; anything else (and any fallback miss) rethrows as-is.
+    if (e instanceof CommandAmbiguousTargetError) {
+      return resolveFromAmbiguousCandidates(client, kind, label, scope, e);
+    }
+    throw e;
+  }
   const rt = resolved.target;
   const hasRef = typeof rt.ref === "string" && rt.ref.trim().length > 0;
   // Prefer the `@e{N}` ref so the existing getBox/clickAt/outbound-guard chain is unchanged;
