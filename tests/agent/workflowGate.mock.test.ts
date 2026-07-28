@@ -19,7 +19,8 @@
  *   D-P59-WF-1 (safety gate bypass) ↦ T-WF.1m, T-WF.2, T-WF.3, T-WF.5
  *   D-P59-5 (non-regression: genuine continuation) ↦ T-WF.4
  *   R-2 (approvalMode inheritance — new parallel safety hole) ↦ T-WF.2
- *   [3b] F-L2-1 BLOCKER (same-title + different-step-set residual) ↦ T-WF.5
+ *   [3b] F-L2-1 BLOCKER (same-title + different-step-set residual) ↦ T-WF.5 (rewritten post-P-75-D-10:
+ *        fresh-id/proposed assertions kept; the re-gate expectation superseded by D-10 title-carry — see test body)
  *   [3b-2] KNOWN RESIDUAL (same-title + same-step-set accepted residual) ↦ T-WF.6
  *   §6.4(A): A1 sameStepTitles + isContinuation, A2 wf.id/approvalMode/createdAt, A3 proposed branch, cancel() terminal-add
  *
@@ -437,14 +438,22 @@ describe("T-WF.4 — D-P59-5 non-regression: genuine continuation (same title, s
   });
 });
 
-// ─── T-WF.5 — [3b BLOCKER F-L2-1] same title + DIFFERENT step set → isContinuation=false ─────────────
+// ─── T-WF.5 — [3b BLOCKER F-L2-1, post-P-75-D-10 contract] same title + DIFFERENT step set ────────
+// F-L2-1's core fix stands: different step set → isContinuation=false → FRESH workflow (fresh wf.id,
+// fresh step ids, workflow-proposed emitted — no silent id/approval inheritance).
+// The pre-D-10 expectation "gate MUST re-fire for the same-titled step" was DELIBERATELY superseded
+// by P-75 D-10 (commit 7abb587, operator-authorized dogfood fix): on a same-title non-terminal
+// re-plan, approvals carry forward BY STEP TITLE (DeepSeek re-plans on resume; without the carry
+// every resume needs a second approval cycle). D-10's safety invariant: TRULY-NEW requiresApproval
+// steps still gate. This test pins both halves of the current contract.
 
-describe("T-WF.5 — BLOCKER F-L2-1: same title + different step count/titles → isContinuation=false → gate fires", () => {
-  it.skip("T-WF.5: given prior workflow A (title='LinkedIn outreach', 2 steps, step2 approved, ACTIVE non-terminal), when a different-prospect todo_write arrives with SAME title but DIFFERENT step set (1 step, sameStepTitles=false), then isContinuation=false → new wf.id != A.id, new step id != A's approved step id, workflow-approval-pending fires for new step (FAILS pre-builder: priorByTitle finds same-title step → inherits approved id → gate bypassed)", () => {
+describe("T-WF.5 — F-L2-1 post-D-10: same title + different step set → fresh ids + proposed; title-carry approves same-titled step; truly-new step still gates", () => {
+  it("T-WF.5: given prior workflow A (title='LinkedIn outreach', 2 steps, step2 approved, ACTIVE non-terminal), when a same-title todo_write arrives with a DIFFERENT step set (1 step, same step title), then isContinuation=false → fresh wf.id + fresh step id + workflow-proposed emitted, AND per P-75 D-10 the approval carries by title so NO approval-pending fires for the same-titled step; when a further same-title re-plan then contains a TRULY-NEW requiresApproval in_progress step, workflow-approval-pending fires for THAT step (abort=true)", () => {
     // Given: A active (2 steps), step "Send connection request" (id s5_send) approved
-    // When:  new todo_write: same title "LinkedIn outreach", 1 step "Send connection request"
-    //        (sameStepTitles=false: 2 steps → 1 step)
-    // Then:  isContinuation=false → fresh wf.id, fresh step id, approvedStepIds cleared, gate fires
+    // When:  re-plan #1: same title, 1 step "Send connection request" (different step count → new wf)
+    // Then:  fresh wf.id / fresh step id / workflow-proposed; D-10 title-carry → no re-gate
+    // When:  re-plan #2: same title, steps reordered with a truly-new "Send follow-up InMail" in_progress
+    // Then:  gate fires for the InMail step only (D-10: truly-new requiresApproval steps still gate)
 
     const { c, frames } = freshController();
 
@@ -472,9 +481,8 @@ describe("T-WF.5 — BLOCKER F-L2-1: same title + different step count/titles �
 
     const framesBefore5 = frames.length;
 
-    // Different-prospect todo_write: SAME title, DIFFERENT step count (1 step vs 2 steps)
-    // sameStepTitles = false (lengths differ) → isContinuation=false (post-builder)
-    drive(
+    // Re-plan #1: SAME title, DIFFERENT step count (1 step vs 2) → prefix match fails → new workflow
+    const ret5 = drive(
       c,
       {
         title: "LinkedIn outreach",
@@ -486,49 +494,54 @@ describe("T-WF.5 — BLOCKER F-L2-1: same title + different step count/titles �
     const newWf5 = c.getState().current!;
     const newSendStep5 = newWf5.steps.find((s) => s.title === "Send connection request")!;
 
-    // ── Assertion 1: new wf.id is fresh (NOT A.id) ──────────────────────────────────────────────
+    // ── F-L2-1 half: fresh workflow identity ─────────────────────────────────────────────────
     assert.notEqual(
       newWf5.id,
       aId5,
-      "T-WF.5 BLOCKER: new wf.id must differ from A.id (different step count → sameStepTitles=false → isContinuation=false). " +
-        "Pre-builder: wf.id = prior?.id → A.id inherited. FAILS pre-builder.",
+      "T-WF.5: new wf.id must differ from A.id (different step count → prefix match fails → isContinuation=false).",
     );
-
-    // ── Assertion 2: new step id is fresh (NOT s5_send / the approved id) ──────────────────────
     assert.notEqual(
       newSendStep5.id,
       approvedStep5Id,
-      "T-WF.5 BLOCKER: new step must NOT inherit A's approved step id 's5_send'. " +
-        "Pre-builder: priorByTitle['Send connection request'] → s5_send → step inherits 's5_send'. FAILS pre-builder.",
+      "T-WF.5: new step must NOT inherit A's approved step id 's5_send' (fresh ids on a new workflow).",
     );
-
-    // ── Assertion 3: gate fires for the new step (approval-pending emitted) ─────────────────────
-    const pendingFrames5 = frames.slice(framesBefore5).filter((f) => f.type === "workflow-approval-pending");
-    assert.equal(
-      pendingFrames5.length,
-      1,
-      "T-WF.5 BLOCKER: workflow-approval-pending must fire for the new step " +
-        "(approvedStepIds cleared → new step not approved). " +
-        "Pre-builder: approvedStepIds retains 's5_send'; new step inherits 's5_send' → gate bypassed. FAILS pre-builder.",
-    );
-
-    // ── Assertion 4: the pending frame references the new step id (not the old one) ────────────
-    const pendingFrame5 = pendingFrames5[0] as { stepId?: string; workflowId?: string };
-    assert.notEqual(
-      pendingFrame5.stepId,
-      approvedStep5Id,
-      "T-WF.5 BLOCKER: workflow-approval-pending.stepId must be the NEW step's id, NOT the old 's5_send'. " +
-        "Pre-builder: stepId = 's5_send' (inherited). FAILS pre-builder.",
-    );
-
-    // ── Assertion 5: workflow-proposed emitted for the new workflow ──────────────────────────────
     const proposed5 = frames.slice(framesBefore5).filter((f) => f.type === "workflow-proposed");
+    assert.equal(proposed5.length, 1, "T-WF.5: workflow-proposed must be emitted for the new workflow (isContinuation=false).");
+
+    // ── P-75 D-10 half: same-title re-plan carries the approval BY TITLE → no re-gate ───────
+    const pendingAfterCarry = frames.slice(framesBefore5).filter((f) => f.type === "workflow-approval-pending");
     assert.equal(
-      proposed5.length,
-      1,
-      "T-WF.5 BLOCKER: workflow-proposed must be emitted for the new workflow (isContinuation=false). " +
-        "Pre-builder: prior !== null → else branch → no workflow-proposed. FAILS pre-builder.",
+      pendingAfterCarry.length,
+      0,
+      "T-WF.5 (D-10): same-titled previously-approved step keeps approval on a same-title re-plan → no approval-pending.",
     );
+    assert.equal(ret5.abort, false, "T-WF.5 (D-10): carried approval → turn not aborted.");
+
+    // ── D-10 safety invariant: a TRULY-NEW requiresApproval step still gates ────────────────
+    // Re-plan #2: same title, reordered steps with a truly-new InMail step in_progress → new workflow,
+    // title-carry approves "Send connection request" again, but the InMail step must gate.
+    const framesBefore6 = frames.length;
+    const ret6 = drive(
+      c,
+      {
+        title: "LinkedIn outreach",
+        steps: [
+          { id: "s5c_inmail", title: "Send follow-up InMail", requiresApproval: true, state: "in_progress" },
+          { id: "s5c_send", title: "Send connection request", requiresApproval: true, state: "pending" },
+        ],
+      },
+      "t5_2",
+    );
+
+    const pendingNew = frames.slice(framesBefore6).filter((f) => f.type === "workflow-approval-pending");
+    assert.equal(pendingNew.length, 1, "T-WF.5 (D-10 invariant): truly-new requiresApproval in_progress step must fire approval-pending.");
+    const pendingFrame6 = pendingNew[0] as { stepId?: string };
+    assert.equal(
+      pendingFrame6.stepId,
+      "s5c_inmail",
+      "T-WF.5 (D-10 invariant): the gate must reference the truly-new step's id, not a carried one.",
+    );
+    assert.equal(ret6.abort, true, "T-WF.5 (D-10 invariant): gate aborts the turn for the truly-new step.");
   });
 });
 
