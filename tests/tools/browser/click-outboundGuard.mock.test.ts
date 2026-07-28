@@ -75,6 +75,12 @@ function makeFakeSession(opts: FakeSessionOpts = {}) {
     Accessibility: {
       enable: async () => {},
       getFullAXTree: async (_args?: unknown) => ({ nodes }),
+      // D-17 revalidation (click.ts) verifies the mapped ref against a partial AX read —
+      // serve the same node so an UNCHANGED element verifies clean and the guard chain runs.
+      getPartialAXTree: async (args?: unknown) => {
+        const id = (args as { backendNodeId?: number } | undefined)?.backendNodeId;
+        return { nodes: nodes.filter((n) => n.backendDOMNodeId === id) };
+      },
     },
     DOM: {
       getDocument: async (_args: unknown) => ({ root: { nodeId: 1 } }),
@@ -96,6 +102,11 @@ function makeFakeSession(opts: FakeSessionOpts = {}) {
   };
 
   const client = CdpClient.fromHandle(fakeHandle);
+  // Populate the refMap synchronously (mirrors what snapshot() does in the allow tests) so
+  // the D-17 revalidation has mapped state to verify against in BOTH allow and deny cases.
+  client.mergeRefs(
+    Object.fromEntries(entries.map((e, idx) => [e.ref.slice(1), { backendNodeId: 100 + idx, role: e.role, name: e.name }])),
+  );
 
   const defaultUrl =
     surface === "unknown"

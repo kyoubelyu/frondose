@@ -48,19 +48,92 @@ export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: La
     );
   }
   if (matches.length > 1) {
-    const preview = matches
-      .slice(0, 5)
-      .map((m) => `${m.ref}="${m.name}"`)
-      .join(", ");
-    throw new Error(
-      `resolveByLabel: ambiguous ${opts.kind} target '${label}' (${matches.length} matches). ` +
-        `Candidates: ${preview}. Use a more specific label or use ref directly.`,
-    );
+    throw ambiguousError(opts, label, matches);
   }
   // matches.length === 1; non-null per length check above, but appease tsc:
   const only = matches[0];
   if (!only) throw new Error("unreachable: matches.length === 1");
   return only;
+}
+
+function ambiguousError(opts: LabelResolveOpts, label: string, matches: SnapshotEntry[]): Error {
+  const preview = matches
+    .slice(0, 5)
+    .map((m) => `${m.ref}="${m.name}"`)
+    .join(", ");
+  return new Error(
+    `resolveByLabel: ambiguous ${opts.kind} target '${label}' (${matches.length} matches). ` +
+      `Candidates: ${preview}. Use a more specific label or use ref directly.`,
+  );
+}
+
+// ─── P-FIX-TYPEAHEAD-TARGETING: ranked label resolution (additive) ────────────────────────────────
+
+export type RankedResolution = {
+  entry: SnapshotEntry;
+  disambiguated: boolean;
+  candidateCount: number;
+  method?: "startsWith" | "roleFamily";
+};
+
+/** Roles that mark an entry as a listbox/choice option — preferred over auxiliary
+ *  buttons/links when disambiguating dynamic-listbox candidates (typeahead pickers). */
+export const CHOICE_ROLES: ReadonlySet<string> = new Set(["option", "menuitem", "listitem", "treeitem", "radio"]);
+
+/** Evidence-based tie-breaks over an ambiguous candidate pool. Each step is kept ONLY
+ *  when it reduces the pool to exactly one entry — otherwise the next step runs, and a
+ *  still-ambiguous pool returns no pick (the caller rethrows the ambiguous error).
+ *  NO top-of-list silent pick by design (wrong-recipient risk on pickers). */
+export function rankAmbiguousMatches(
+  matches: SnapshotEntry[],
+  needle: string,
+): { entry?: SnapshotEntry; method?: "startsWith" | "roleFamily" } {
+  const byStartsWith = matches.filter((e) => e.name.toLowerCase().startsWith(needle));
+  if (byStartsWith.length === 1) return { entry: byStartsWith[0], method: "startsWith" };
+  const pool = byStartsWith.length > 1 ? byStartsWith : matches;
+  const byChoiceRole = pool.filter((e) => CHOICE_ROLES.has(e.role));
+  if (byChoiceRole.length === 1) return { entry: byChoiceRole[0], method: "roleFamily" };
+  return {};
+}
+
+/** Ranked variant of resolveByLabel: identical match pipeline, but instead of throwing
+ *  on ambiguity it applies rankAmbiguousMatches and reports HOW the pick was made.
+ *  Still throws (same messages) on no-match and on tie-break-resistant ambiguity. */
+export function resolveByLabelRanked(entries: SnapshotEntry[], label: string, opts: LabelResolveOpts): RankedResolution {
+  const roles = opts.kind === "click" ? CLICKABLE_ROLES : INPUT_ROLES;
+  const stripped = label.replace(OUTBOUND_DISPLAY_PREFIX_RE, "");
+  const usable = stripped.trim().length > 0 ? stripped : label;
+  const needle = usable.toLowerCase();
+  const roleFiltered = entries.filter((e) => roles.has(e.role));
+  const exact = roleFiltered.filter((e) => e.name.toLowerCase() === needle);
+  const substr = roleFiltered.filter((e) => e.name.toLowerCase().includes(needle));
+  let matches = exact.length > 0 ? exact : substr;
+
+  if (matches.length > 1) {
+    const nonAside = matches.filter((e) => e.region !== "aside");
+    if (nonAside.length > 0) matches = nonAside;
+  }
+
+  if (opts.activeLayer === "overlay") {
+    const overlayOnly = matches.filter((e) => e.ref.startsWith("@ov"));
+    if (overlayOnly.length > 0) matches = overlayOnly;
+  }
+
+  if (matches.length === 0) {
+    throw new Error(
+      `resolveByLabel: no ${opts.kind} target matches '${label}'. ` +
+        `Did you call inspect first? Run inspect to see available buttons/inputs.`,
+    );
+  }
+  if (matches.length === 1) {
+    const only = matches[0];
+    if (!only) throw new Error("unreachable: matches.length === 1");
+    return { entry: only, disambiguated: false, candidateCount: 1 };
+  }
+  const candidateCount = matches.length;
+  const ranked = rankAmbiguousMatches(matches, needle);
+  if (!ranked.entry || !ranked.method) throw ambiguousError(opts, label, matches);
+  return { entry: ranked.entry, disambiguated: true, candidateCount, method: ranked.method };
 }
 
 function makeAbortError(): Error {
@@ -132,6 +205,52 @@ export async function resolveByLabelWithRetry(
     }
     try {
       return resolveByLabel(fresh.entries, label, { kind: "click", scope, activeLayer: fresh.activeLayer });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+/** [P-FIX-TYPEAHEAD-TARGETING] Ranked twin of resolveByLabelWithRetry — identical retry
+ *  semantics, but resolves through resolveByLabelRanked so the caller learns whether the
+ *  pick was tie-broken (disambiguated/method/candidateCount), including when the FRESH
+ *  capture (not the cached context) produced the resolution. */
+export async function resolveByLabelWithRetryRanked(
+  session: { getLastContext: () => CurrentSurfaceContext | undefined },
+  label: string,
+  scope: string | undefined,
+  capture: () => Promise<{ entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" }>,
+  opts: { timeoutMs?: number; stepMs?: number; abortSignal?: AbortSignal } = {},
+): Promise<RankedResolution> {
+  throwIfAborted(opts.abortSignal);
+  const ctx0 = session.getLastContext();
+  if (ctx0) {
+    try {
+      return resolveByLabelRanked(ctx0.entries, label, { kind: "click", scope, activeLayer: ctx0.activeLayer });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
+    }
+  }
+  const deadline = Date.now() + (opts.timeoutMs ?? 3000);
+  const stepMs = opts.stepMs ?? 300;
+  let lastErr: unknown = new Error(`click: no label '${label}' visible`);
+  while (Date.now() < deadline) {
+    await sleepWithAbort(stepMs, opts.abortSignal);
+    throwIfAborted(opts.abortSignal);
+    let fresh: { entries: SnapshotEntry[]; activeLayer?: "page" | "overlay" };
+    try {
+      fresh = await capture();
+    } catch (e) {
+      // Transient CDP/AX failure mid-retry — keep trying. The deadline acts as the backstop.
+      lastErr = e;
+      continue;
+    }
+    try {
+      return resolveByLabelRanked(fresh.entries, label, { kind: "click", scope, activeLayer: fresh.activeLayer });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/no\s+click\s+target\s+matches/i.test(msg)) throw e;
