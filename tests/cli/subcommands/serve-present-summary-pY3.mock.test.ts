@@ -1,12 +1,9 @@
 /**
- * P-Y3 Step 4a scaffold — createTurnRunner present_summary routing.
+ * P-Y3 regression coverage — createTurnRunner present_summary routing.
  *
- * C-Y3-1 handling: this test mocks runAgentLoop and callInOverlay, then
+ * C-Y3-1 handling: this test mocks runAgentLoopPi and callInOverlay, then
  * dynamically imports createTurnRunner directly. It avoids runServeSubcommand,
  * UDS bootstrapping, and createLinkedinSession mocking.
- *
- * Expected-red before Step 4b: turn.ts does not route present_summary to
- * window.__frondoseShowSummaryCard(...).
  *
  * Run:
  *   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
@@ -46,11 +43,11 @@ let createTurnRunner:
   | null = null;
 
 before(async () => {
-  const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
-  mock.module(loopUrl, {
+  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  mock.module(piLoopUrl, {
     namedExports: {
-      // biome-ignore lint/suspicious/noExplicitAny: mock runAgentLoop captures only the callback contract.
-      runAgentLoop: async (opts: any) => {
+      // biome-ignore lint/suspicious/noExplicitAny: mock runAgentLoopPi captures only the callback contract.
+      runAgentLoopPi: async (opts: any) => {
         await opts.onStepFinish({
           toolCalls: [
             { toolCallId: "tc-present", toolName: "present_summary" },
@@ -64,12 +61,6 @@ before(async () => {
           ],
         });
       },
-      // [P-PI-followup] Pi loop transitive imports from loop.js — see _loopMockHelper.ts.
-      STALL_STEP_THRESHOLD: 4,
-      lastAssistantMessageHasNoToolCalls: () => false,
-      lastAssistantMessageMissedExecute: () => false,
-      narrationContinueMessage: () => ({ role: "user" as const, content: "" }),
-      stalledContinueMessage: () => ({ role: "user" as const, content: "" }),
     },
   });
 
@@ -114,10 +105,15 @@ function makeDeps(frames: unknown[]): ServeDeps {
     model: {},
     system: "system",
     systemResume: "system resume",
+    composeOperatorSystem: () => "system",
     tools: {},
     maxSteps: 5,
     auditWriter: async () => undefined,
-    session: { getClient: () => fakeClient },
+    session: {
+      getClient: () => fakeClient,
+      setTurnAbortSignal: () => undefined,
+      clearTurnAbortSignal: () => undefined,
+    },
     schedulePath: "/dev/null",
     salesDbPath: "/dev/null",
     auditPath: "/dev/null",
@@ -140,7 +136,7 @@ function parseJsonArgument(call: CallInOverlayCall, fnName: string): unknown {
 }
 
 describe("createTurnRunner — present_summary routes directly to overlay summary card", () => {
-  it.skip("T-PY3.Turn.1: synthetic present_summary tool result calls __frondoseShowSummaryCard once, emits no new SSE frame, and leaves existing card/action routing intact", async () => {
+  it("T-PY3.Turn.1: synthetic present_summary tool result calls __frondoseShowSummaryCard once, emits no new SSE frame, and leaves existing card/action routing intact", async () => {
     // Given: createTurnRunner loaded after runAgentLoop/callInOverlay mocks and an active overlay context.
     // When: runAgentLoop reports present_summary, suggest_card, and suggest_next_actions results in one step.
     // Then: exactly one summary-card overlay push occurs; no present-summary SSE frame is emitted;
@@ -164,8 +160,14 @@ describe("createTurnRunner — present_summary routes directly to overlay summar
     assert.equal(frameTypes.includes("present-summary"), false, "overlay-only P-Y3 must not emit present-summary SSE");
     assert.equal(frameTypes.includes("summary-card"), false, "overlay-only P-Y3 must not emit summary-card SSE");
 
-    assert.ok(frameTypes.includes("suggestion-card"), "existing suggest_card SSE routing must remain");
-    assert.ok(frameTypes.includes("next-actions"), "existing suggest_next_actions SSE routing must remain");
+    assert.ok(
+      frameTypes.includes("suggestion-card"),
+      `existing suggest_card SSE routing must remain; got ${JSON.stringify(frames)}`,
+    );
+    assert.ok(
+      frameTypes.includes("next-actions"),
+      `existing suggest_next_actions SSE routing must remain; got ${JSON.stringify(frameTypes)}`,
+    );
     assert.equal(
       overlayCalls.some((call) => call.functionDeclaration.includes("__frondoseShowCard")),
       true,

@@ -1,5 +1,5 @@
 /**
- * P-76.1 Step 3a — T-Tray.* / T-Belt.1 / T-Ver.1 — source-structural scaffold
+ * P-76.1 — T-Tray.* / T-Belt.1 / T-Ver.1 source-structural regression coverage
  *
  * Verifies the tray wiring + close-arm rewrite for the hide-to-tray slice.
  * Model: tests/tauri/adhocSign.mock.test.ts (read source + assert patterns; no build required).
@@ -8,14 +8,6 @@
  *   - These tests verify SOURCE WIRING only (grep patterns in Rust/config).
  *   - The ACTUAL tray/hide OS behavior needs a universal rebuild + dogfood (§5c S-Live.*).
  *     T-Belt.1 + T-Ver.1 do not require a rebuild.
- *
- * Expected Step-3a state (before builder Step 3b):
- *   RED:  T-Tray.1  (no tray-icon feature, no TrayIconBuilder, no _tray outer binding)
- *   RED:  T-Tray.2  (CloseRequested arm still calls shutdown_sidecar + exit — not hide)
- *   RED:  T-Tray.3  (no on_menu_event, no show/quit item ids)
- *   RED:  T-Tray.4  (on_menu_event quit arm doesn't exist yet; ExitRequested shutdown ok)
- *   GREEN: T-Belt.1 (routes.ts belt already in place; no cron flip in close arm)
- *   RED:  T-Ver.1   (versions still alpha.42; RED even after 3b — owned by Step 6 quad-bump)
  *
  * C-1 guard (plan §9): _tray MUST be at outer scope (not dropped in an inner block).
  * C-2 guard (plan §9): tauri.conf.json MUST NOT add a `trayIcon` entry (double-icon bug).
@@ -307,26 +299,17 @@ describe("P-76.1 E4: serve belt unchanged + hide does not flip cron (G-P76.1-Bel
 // ─── T-Ver.1 ─────────────────────────────────────────────────────────────────
 
 describe("P-76.1 version quad-sync (G-P76.1-Ver.1)", () => {
-  it.skip("T-Ver.1: package.json + tauri.conf.json + Cargo.toml all read 0.5.0-alpha.43 (will be RED until Step 6 quad-bump)", () => {
-    // Given: package.json, tauri.conf.json, Cargo.toml after the Step-6 version quad-bump.
+  it("T-Ver.1: package.json + tauri.conf.json + Cargo.toml report the same current version", () => {
+    // Given: package.json, tauri.conf.json, and Cargo.toml from the current release state.
     // When:  version fields are read.
-    // Then:  all three sources report 0.5.0-alpha.43 (drift guard — any single-file bump is caught).
-    //
-    // NOTE: This test is RED at Step 3a AND after Step 3b (builder bumps Cargo.toml + tauri.conf.json
-    // but package.json is the orchestrator's Step 6 responsibility). Goes fully GREEN only at Step 6.
-
-    const TARGET_VERSION = "0.5.0-alpha.43";
-
-    assert.equal(
-      packageJson.version,
-      TARGET_VERSION,
-      `T-Ver.1: package.json version must be ${TARGET_VERSION} (Step 6 quad-bump)`,
-    );
+    // Then:  both app manifests and the Rust package report package.json's current version.
+    const targetVersion = packageJson.version;
+    assert.ok(targetVersion, "T-Ver.1: package.json must declare a non-empty version");
 
     assert.equal(
       tauriConf.version,
-      TARGET_VERSION,
-      `T-Ver.1: tauri.conf.json version must be ${TARGET_VERSION} (builder Step 3b bump)`,
+      targetVersion,
+      `T-Ver.1: tauri.conf.json version must match package.json (${targetVersion})`,
     );
 
     // Cargo.toml: parse the version line
@@ -334,8 +317,8 @@ describe("P-76.1 version quad-sync (G-P76.1-Ver.1)", () => {
     const cargoVersion = cargoVersionMatch?.[1] ?? "(not found)";
     assert.equal(
       cargoVersion,
-      TARGET_VERSION,
-      `T-Ver.1: Cargo.toml [package] version must be ${TARGET_VERSION}; got ${cargoVersion} (builder Step 3b bump)`,
+      targetVersion,
+      `T-Ver.1: Cargo.toml [package] version must match package.json (${targetVersion}); got ${cargoVersion}`,
     );
   });
 });
