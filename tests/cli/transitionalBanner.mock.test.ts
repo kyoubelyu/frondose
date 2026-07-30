@@ -6,39 +6,63 @@
  * operator interaction) or suppressed (Tauri sidecar spawn / commander
  * internal / legit operator-launched admin server).
  *
- * No Chrome, no LLM, no filesystem. Spawns `node dist/cli/main.js <argv>` as a
- * child and inspects stderr for the banner sentinel string. Each spawn is
- * bounded by a hard timeout so a hung subcommand can't hold the suite.
+ * No Chrome or LLM. Spawns `node dist/cli/main.js <argv>` against a sandboxed
+ * home and inspects stderr for the banner sentinel string. Each spawn is bounded
+ * by a hard timeout so a hung subcommand can't hold the suite.
  */
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { describe, it } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
 const CLI = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
 const SENTINEL = "transitional CLI surface";
+const SANDBOX_HOME = mkdtempSync(join(tmpdir(), "frondose-transitional-banner-"));
+
+after(() => {
+  rmSync(SANDBOX_HOME, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
 
 interface RunResult {
   stderr: string;
 }
 
-async function run(argv: string[]): Promise<RunResult> {
+interface ChildFailure extends Error {
+  code?: number | string | null;
+  killed?: boolean;
+  signal?: NodeJS.Signals | null;
+  stderr?: string | Buffer;
+}
+
+async function run(argv: string[], timeout = 15_000): Promise<RunResult> {
   try {
     const r = await execFileP("node", [CLI, ...argv], {
-      timeout: 8_000,
-      env: { ...process.env, MAI_AUTOUPDATE: "skip", MAI_TIER: "power" },
+      timeout,
+      env: {
+        HOME: SANDBOX_HOME,
+        USER: process.env.USER ?? "",
+        PATH: process.env.PATH ?? "",
+        FRONDOSE_HOME_BASE: SANDBOX_HOME,
+        FRONDOSE_AUTOUPDATE: "skip",
+        FRONDOSE_DOTENV: "skip",
+        FRONDOSE_TIER: "power",
+      },
     });
     return { stderr: r.stderr ?? "" };
   } catch (e) {
-    // Many subcommands exit non-zero (missing config, expected error paths). The
-    // banner is printed BEFORE any subcommand body runs, so we still want the
-    // stderr captured even on non-zero exit. execFile attaches stderr to the err.
-    // biome-ignore lint/suspicious/noExplicitAny: error shape
-    const stderr = String((e as any).stderr ?? "");
-    return { stderr };
+    const failure = e as ChildFailure;
+    if (failure.killed === true || failure.signal != null || typeof failure.code !== "number") {
+      throw e;
+    }
+    // Numeric non-zero exits are expected for some missing-config command
+    // paths. The banner is printed before the command body, so inspect stderr.
+    return { stderr: String(failure.stderr ?? "") };
   }
 }
 
@@ -86,5 +110,15 @@ describe("Phase 15: transitional-CLI banner (P-APP-11 slice 2)", () => {
   it("SUPPRESSED on `--version` (commander internal short-circuit)", async () => {
     const { stderr } = await run(["--version"]);
     assert.ok(!stderr.includes(SENTINEL), `banner must NOT appear on --version; stderr: ${stderr.slice(0, 200)}`);
+  });
+
+  // Given: an intentionally impossible child deadline
+  // When: the spawned CLI is terminated by the hard timeout
+  // Then: the helper rejects instead of treating partial stderr as valid banner evidence
+  it("fails closed when the CLI child exceeds its hard timeout", async () => {
+    await assert.rejects(run(["status"], 1), (error: unknown) => {
+      const failure = error as ChildFailure;
+      return failure.killed === true && failure.signal != null;
+    });
   });
 });
