@@ -109,6 +109,12 @@ before(async () => {
       return new MockCdpClient();
     }
 
+    setTurnAbortSignal(_signal?: AbortSignal): void {}
+
+    raceHandle<T>(promise: Promise<T>, _label: string): Promise<T> {
+      return promise;
+    }
+
     markStealthInjected(): void {
       this._stealthInjected = true;
     }
@@ -252,7 +258,7 @@ describe("T-Stealth: F-1 navigation invariant (mock)", () => {
   //    Do NOT classify as a 5a defect. The assertion is: ≥1 injectStealth
   //    call on the NEW target's sub-session, not EXACTLY 1 on all targets."
 
-  it.skip("T-Stealth.3: when Target.targetCreated fires with type='page' for a new targetId, handler calls attachToTarget + Page.addScriptToEvaluateOnNewDocument on sub-session", async () => {
+  it("T-Stealth.3: when Target.targetCreated fires with type='page' for a new targetId, handler calls attachToTarget + Page.addScriptToEvaluateOnNewDocument on sub-session", async () => {
     // Given: session is booted (primary client has stealth injected) and
     //        setDiscoverTargets is registered; a 'Target.targetCreated' event
     //        fires with targetInfo: {type:'page', targetId:'T2', url:'about:blank'}
@@ -410,7 +416,7 @@ describe("T-Stealth: F-1 navigation invariant (mock)", () => {
 //    not counted as a defect. Do NOT classify as a 5a defect."
 
 describe("T-Target: OQ-5 Target.targetCreated wiring (mock)", () => {
-  it.skip("T-Target.1: when registerTargetCreatedAutoInject runs, Target.setDiscoverTargets({discover:true}) is called BEFORE the targetCreated listener is attached", () => {
+  it("T-Target.1: when registerTargetCreatedAutoInject runs, Target.setDiscoverTargets({discover:true}) is called BEFORE the targetCreated listener is attached", () => {
     // Given: a fake CdpHandle with a Target domain and an .on() event emitter
     // When:  registerTargetCreatedAutoInject(client) is invoked (via the session boot path)
     // Then:  Target.setDiscoverTargets({discover:true}) call is recorded BEFORE
@@ -428,7 +434,7 @@ describe("T-Target: OQ-5 Target.targetCreated wiring (mock)", () => {
     );
 
     const discoverIdx = sessionCallLog.findIndex((e) => e.startsWith("setDiscoverTargets:"));
-    const onIdx = sessionCallLog.findIndex((e) => e === "on:Target.targetCreated");
+    const onIdx = sessionCallLog.indexOf("on:Target.targetCreated");
 
     assert.ok(
       discoverIdx !== -1,
@@ -717,7 +723,7 @@ describe("T-M7-ext: F-1 injectStealth new signature (mock)", () => {
 
 describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
   // ─── T-P65.1 ──────────────────────────────────────────────────────────────────
-  it.skip("T-P65.1: when Target.targetCreated fires with a Campaign Manager URL, Target.closeTarget is called and Target.attachToTarget is NOT called (G-P65.1)", async () => {
+  it("T-P65.1: when Target.targetCreated fires with a Campaign Manager URL, Target.closeTarget is called and Target.attachToTarget is NOT called (G-P65.1)", async () => {
     // Given: captured Target.targetCreated handler (from module-level before() session boot);
     //        a closeTarget spy wired on the fake handle (added at Step 5).
     // When:  handler invoked with targetInfo {type:'page', targetId:'CM-1',
@@ -775,7 +781,7 @@ describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
   });
 
   // ─── T-P65.2 ──────────────────────────────────────────────────────────────────
-  it.skip("T-P65.2: when Target.targetCreated fires with a non-CM LinkedIn URL, existing stealth injection path runs and Target.closeTarget is NOT called (G-P65.2)", async () => {
+  it("T-P65.2: when Target.targetCreated fires with a non-CM LinkedIn URL, existing stealth injection path runs and Target.closeTarget is NOT called (G-P65.2)", async () => {
     // Given: captured Target.targetCreated handler (from module-level before()); non-CM URL.
     // When:  handler invoked with targetInfo {type:'page', targetId:'LI-1',
     //        url:'https://www.linkedin.com/in/some-person/'}
@@ -825,7 +831,7 @@ describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
   });
 
   // ─── T-P65.3 ──────────────────────────────────────────────────────────────────
-  it.skip("T-P65.3: when Target.targetCreated fires with empty URL (about:blank), Target.closeTarget is NOT called and the stealth injection path runs normally (G-P65.3)", async () => {
+  it("T-P65.3: when Target.targetCreated fires with empty URL (about:blank), Target.closeTarget is NOT called and the stealth injection path runs normally (G-P65.3)", async () => {
     // Given: captured Target.targetCreated handler (from module-level before()); url=''.
     // When:  handler invoked with targetInfo {type:'page', targetId:'BLANK-1', url:''}
     // Then:  Target.closeTarget NOT called;
@@ -877,7 +883,7 @@ describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
   });
 
   // ─── T-P65.4 ──────────────────────────────────────────────────────────────────
-  it.skip("T-P65.4: when Target.targetInfoChanged fires with a Campaign Manager URL, Target.closeTarget is called (about:blank→CM URL race — Sketch A.3) (G-P65.4)", async () => {
+  it("T-P65.4: when Target.targetInfoChanged fires with a Campaign Manager URL, Target.closeTarget is called (about:blank→CM URL race — Sketch A.3) (G-P65.4)", async () => {
     // Given: captured Target.targetInfoChanged handler (from module-level before() — present only
     //        post-builder per Sketch A.3); closeTarget spy wired on the fake handle (Step 5).
     // When:  handler invoked with targetInfo {type:'page', targetId:'CM-2',
@@ -976,7 +982,7 @@ describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
   });
 
   // ─── T-P65.6 ──────────────────────────────────────────────────────────────────
-  it.skip("T-P65.6: when registerTargetCreatedAutoInject runs, Target.setDiscoverTargets is called BEFORE both the targetCreated listener AND the targetInfoChanged listener are attached (sequencing regression — G-P65.6)", () => {
+  it("T-P65.6: when registerTargetCreatedAutoInject runs, Target.setDiscoverTargets is called BEFORE both the targetCreated listener AND the targetInfoChanged listener are attached (sequencing regression — G-P65.6)", () => {
     // Given: sessionCallLog populated by the module-level before() session boot path;
     //        post-builder: both 'on:Target.targetCreated' AND 'on:Target.targetInfoChanged'
     //        are registered after setDiscoverTargets (Sketch A ordering invariant).
@@ -993,8 +999,8 @@ describe("T-P65: P-65 Campaign Manager tab auto-close (mock)", () => {
     );
 
     const discoverIdx = sessionCallLog.findIndex((e) => e.startsWith("setDiscoverTargets:"));
-    const targetCreatedOnIdx = sessionCallLog.findIndex((e) => e === "on:Target.targetCreated");
-    const targetInfoChangedOnIdx = sessionCallLog.findIndex((e) => e === "on:Target.targetInfoChanged");
+    const targetCreatedOnIdx = sessionCallLog.indexOf("on:Target.targetCreated");
+    const targetInfoChangedOnIdx = sessionCallLog.indexOf("on:Target.targetInfoChanged");
 
     // setDiscoverTargets must be in the log
     assert.ok(
