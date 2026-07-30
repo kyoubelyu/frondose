@@ -2,62 +2,40 @@
  * P-26 Step 5 — T-WINBOX.1..4 (orchestrator — CLI layer)
  *
  * Tests for src/cli/workerInbox.ts — drainWorkerInbox orchestrator.
- * Verifies mark-consumed-BEFORE-inject invariant + runAgentLoop delegation.
+ * Verifies delete-batch-BEFORE-inject invariant + current Pi-loop delegation.
  * Gate coverage: G-P26.14
  *
- * Uses MockLanguageModelV1 (from ai/test) so runAgentLoop gets a real model
- * object that immediately ends the stream — the test focuses on the drain
- * invariant, not LLM output.
+ * Uses the fail-closed controlled Pi helper; configured providers and ambient
+ * network are unreachable.
  */
 
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
-import { describe, it } from "node:test";
-import { MockLanguageModelV1 } from "ai/test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import type { RunCronTurnDeps } from "../../src/cli/replCron.js";
 import { drainWorkerInbox } from "../../src/cli/workerInbox.js";
+import { loadMessages } from "../../src/persistence/session.js";
 import { enqueueWorkerInbox, openWorkerInboxDb } from "../../src/persistence/workerInbox.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-wibdrain-"));
   return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
-/** A mock model that immediately returns an empty text response stream. */
-function makeImmediateModel(): MockLanguageModelV1 {
-  return new MockLanguageModelV1({
-    provider: "openai",
-    modelId: "test-drain",
-    doStream: async () => ({
-      rawCall: { rawPrompt: null as unknown, rawSettings: {} as Record<string, unknown> },
-      stream: Readable.toWeb(
-        Readable.from([{ type: "finish", finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } }]),
-        // biome-ignore lint/suspicious/noExplicitAny: cast for stream type
-      ) as unknown as ReadableStream<any>,
-    }),
-  });
-}
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
-/** A mock model that throws on doStream. */
-function makeThrowingModel(): MockLanguageModelV1 {
-  return new MockLanguageModelV1({
-    provider: "openai",
-    modelId: "test-throw",
-    doStream: async () => {
-      throw new Error("mock-runAgentLoop-throw");
-    },
-  });
-}
-
-function makeDeps(dir: string, model: MockLanguageModelV1): RunCronTurnDeps {
+function makeDeps(dir: string): RunCronTurnDeps {
   const sessionFile = join(dir, "session.jsonl");
   writeFileSync(sessionFile, "", "utf-8");
   return {
-    model,
+    model: {} as RunCronTurnDeps["model"],
     system: "test",
     messages: [],
     tools: {},
@@ -66,61 +44,91 @@ function makeDeps(dir: string, model: MockLanguageModelV1): RunCronTurnDeps {
   };
 }
 
-describe.skip("drainWorkerInbox orchestrator (G-P26.14)", () => {
-  it("T-WINBOX.1: with 2 pending rows, drainWorkerInbox marks consumed FIRST then injects each as user-role message; runAgentLoop called once per row", async () => {
-    // Given: worker_inbox.sqlite has 2 pending rows ("MSG1", "MSG2"); runAgentLoop mocked via immediate model
+describe("drainWorkerInbox orchestrator (G-P26.14)", () => {
+  it("T-WINBOX.1: with 2 pending rows, drainWorkerInbox deletes the full batch FIRST then injects each row through one Pi call", async () => {
+    // Given: worker_inbox.sqlite has MSG1 then MSG2 and two controlled Pi scripts
     // When:  drainWorkerInbox(dbPath, undefined, deps)
-    // Then:  both rows have status='consumed' BEFORE runAgentLoop returns; deps.messages pushed
-    //        with {role:"user", content:"MSG1"} then {role:"user", content:"MSG2"}
+    // Then: the DB is empty before Pi call 1; exact user/assistant pairs reach memory and session in order
     const { dir, cleanup } = makeTmpDir();
     try {
       const dbPath = join(dir, "inbox.sqlite");
       const db = openWorkerInboxDb(dbPath);
       enqueueWorkerInbox(db, "MSG1", 1000);
       enqueueWorkerInbox(db, "MSG2", 2000);
-      const deps = makeDeps(dir, makeImmediateModel());
+      const deps = makeDeps(dir);
+      piLoop.queue(
+        async (opts) => {
+          const rowCount = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
+          assert.equal(rowCount, 0, "entire inbox batch must be deleted before the first loop call");
+          assert.equal(opts.messages.at(-1)?.content, "MSG1");
+          appendAssistant(opts, "ACK1");
+        },
+        async (opts) => {
+          assert.equal(opts.messages.at(-1)?.content, "MSG2");
+          appendAssistant(opts, "ACK2");
+        },
+      );
       await drainWorkerInbox(dbPath, undefined, deps);
-      // Verify both rows consumed
+      piLoop.assertDrained(2);
+      // Verify the pending snapshot was deleted before loop execution.
       const pending = (
         db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE status='pending'").get() as { c: number }
       ).c;
-      assert.equal(pending, 0, "T-WINBOX.1: 0 pending rows after drain");
-      // P-28.5 D-6: rows DELETEd after drain (not flagged consumed)
+      assert.equal(pending, 0, "T-WINBOX.1: 0 pending rows after delete-before-loop drain");
+      // P-28.5 D-6: the full batch is deleted before the first Pi call.
       const allRows = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
-      assert.equal(allRows, 0, "T-WINBOX.1: all rows DELETEd after drain (D-6)");
+      assert.equal(allRows, 0, "T-WINBOX.1: all rows deleted by the batch snapshot (D-6)");
       // Verify messages were injected (deps.messages has user messages + possible assistant responses)
       const userMessages = deps.messages.filter((m) => m.role === "user");
       assert.equal(userMessages.length, 2, "T-WINBOX.1: 2 user messages pushed to deps.messages");
       assert.equal((userMessages[0] as { content: string }).content, "MSG1", "T-WINBOX.1: first message is MSG1");
       assert.equal((userMessages[1] as { content: string }).content, "MSG2", "T-WINBOX.1: second message is MSG2");
+      assert.deepEqual(
+        deps.messages.filter((message) => message.role === "assistant").map((message) => message.content),
+        ["ACK1", "ACK2"],
+      );
+      assert.deepEqual(loadMessages(deps.sessionFile), [
+        { role: "user", content: "MSG1" },
+        { role: "assistant", content: "ACK1" },
+        { role: "user", content: "MSG2" },
+        { role: "assistant", content: "ACK2" },
+      ]);
     } finally {
       cleanup();
     }
   });
 
-  it("T-WINBOX.2: mark-consumed-BEFORE-inject invariant — second drain on same DB is a no-op; no double-inject", async () => {
-    // Given: 1 pending row; first drain runs successfully (immediate model)
+  it("T-WINBOX.2: delete-before-inject invariant — a second drain on the same DB makes no additional Pi call or session append", async () => {
+    // Given: one pending row and one controlled successful Pi script
     // When:  drainWorkerInbox called twice on same DB
-    // Then:  row consumed after first drain (mark-before-loop); second call is no-op (0 pending);
-    //        throwing model in second call never fires (early-return path), proving no double-inject
+    // Then: the first drain deletes/injects/persists once; the second changes neither calls, messages, nor session
     const { dir, cleanup } = makeTmpDir();
     try {
       const dbPath = join(dir, "inbox.sqlite");
       const db = openWorkerInboxDb(dbPath);
       enqueueWorkerInbox(db, "ONCE_ONLY", 1000);
-      // First drain — row consumed + message injected
-      const deps1 = makeDeps(dir, makeImmediateModel());
+      // First drain — row deleted before one controlled Pi injection.
+      const deps1 = makeDeps(dir);
+      piLoop.queue(async (opts) => appendAssistant(opts, "done"));
       await drainWorkerInbox(dbPath, undefined, deps1);
+      piLoop.assertDrained(1);
       const userMsgs = deps1.messages.filter((m) => m.role === "user");
       assert.equal(userMsgs.length, 1, "T-WINBOX.2: first drain injects 1 user message");
-      // P-28.5 D-6: row DELETEd after drain (not flagged consumed); restructured per §11 C-3
+      // P-28.5 D-6: row was deleted before the controlled Pi call.
       const c = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox WHERE content='ONCE_ONLY'").get() as { c: number })
         .c;
       assert.equal(c, 0, "T-WINBOX.2: row DELETEd after first drain (D-6)");
-      // Second drain — DB is empty (all consumed); throwing model would fail IF it was called
-      const deps2 = makeDeps(dir, makeThrowingModel());
-      await drainWorkerInbox(dbPath, undefined, deps2);
-      assert.equal(deps2.messages.length, 0, "T-WINBOX.2: no double-inject on second drain (row already consumed)");
+      // Second drain — DB is empty; the controlled Pi call count must not grow.
+      const persistedAfterFirst = loadMessages(deps1.sessionFile);
+      const messageCountAfterFirst = deps1.messages.length;
+      await drainWorkerInbox(dbPath, undefined, deps1);
+      piLoop.assertDrained(1);
+      assert.equal(deps1.messages.length, messageCountAfterFirst, "second drain must not mutate messages");
+      assert.deepEqual(
+        loadMessages(deps1.sessionFile),
+        persistedAfterFirst,
+        "second drain must not append session rows",
+      );
     } finally {
       cleanup();
     }
@@ -134,19 +142,20 @@ describe.skip("drainWorkerInbox orchestrator (G-P26.14)", () => {
     try {
       const dbPath = join(dir, "inbox.sqlite");
       openWorkerInboxDb(dbPath); // initialize schema
-      // Use a throwing model to prove runAgentLoop is never called (if it were, the test would throw)
-      const deps = makeDeps(dir, makeThrowingModel());
+      const deps = makeDeps(dir);
       await drainWorkerInbox(dbPath, undefined, deps);
+      piLoop.assertDrained(0);
       assert.equal(deps.messages.length, 0, "T-WINBOX.3: no messages pushed for empty inbox");
+      assert.deepEqual(loadMessages(deps.sessionFile), [], "T-WINBOX.3: empty inbox must not append session rows");
     } finally {
       cleanup();
     }
   });
 
-  it("T-WINBOX.4: when abortSignal is aborted, drainWorkerInbox stops iteration after current row", async () => {
+  it("T-WINBOX.4: when abortSignal is already aborted, drainWorkerInbox deletes the batch but executes zero rows", async () => {
     // Given: 3 pending rows; abortController.signal already aborted
     // When:  drainWorkerInbox called with aborted signal
-    // Then:  stops after consuming all rows (mark-consumed is atomic), no runAgentLoop call
+    // Then: the full batch is deleted before iteration; zero messages, Pi calls, and session rows
     const { dir, cleanup } = makeTmpDir();
     try {
       const dbPath = join(dir, "inbox.sqlite");
@@ -156,14 +165,16 @@ describe.skip("drainWorkerInbox orchestrator (G-P26.14)", () => {
       enqueueWorkerInbox(db, "R3", 3000);
       const ac = new AbortController();
       ac.abort(); // aborted BEFORE the call
-      const deps = makeDeps(dir, makeThrowingModel()); // model would throw if called
+      const deps = makeDeps(dir);
       // With aborted signal, loop body checks abortSignal?.aborted before runAgentLoop
       await drainWorkerInbox(dbPath, ac.signal, deps);
+      piLoop.assertDrained(0);
       // P-28.5 D-6: all rows DELETEd upfront (delete-BEFORE-iterate is batch)
       const allRows = (db.prepare("SELECT COUNT(*) AS c FROM worker_inbox").get() as { c: number }).c;
       assert.equal(allRows, 0, "T-WINBOX.4: rows DELETEd (delete-before-iterate, D-6)");
       // No messages pushed because abort check fires before push
       assert.equal(deps.messages.length, 0, "T-WINBOX.4: no messages pushed when signal aborted");
+      assert.deepEqual(loadMessages(deps.sessionFile), [], "T-WINBOX.4: pre-abort must not append session rows");
     } finally {
       cleanup();
     }
