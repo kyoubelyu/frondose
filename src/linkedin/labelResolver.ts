@@ -15,21 +15,30 @@ export interface LabelResolveOpts {
 // messages still cite the ORIGINAL `label` (pre-strip) for operator clarity.
 const OUTBOUND_DISPLAY_PREFIX_RE = /^\[OUTBOUND\]\s+/;
 
-/** Resolve a label-based target. Throws on no match or ambiguity. */
-export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: LabelResolveOpts): SnapshotEntry {
-  const roles = opts.kind === "click" ? CLICKABLE_ROLES : INPUT_ROLES;
-  // P-AUTO-16 OUT-6: strip a single leading "[OUTBOUND] " display prefix; fall back to
-  // the ORIGINAL label if the strip leaves nothing (label was literally "[OUTBOUND] "),
-  // otherwise JS's "".includes(needle) semantics — every string includes "" — would
-  // degrade to wrong-target / ambiguity. With the fallback, the original "[OUTBOUND] "
-  // gets a clean zero-match throw against unprefixed AX names.
+function usableLabel(label: string): string {
   const stripped = label.replace(OUTBOUND_DISPLAY_PREFIX_RE, "");
-  const usable = stripped.trim().length > 0 ? stripped : label;
-  const needle = usable.toLowerCase();
+  return stripped.trim().length > 0 ? stripped : label;
+}
+
+function normalizeWs(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** P-FIX-PICKER-MATCHING: one tiered match pool shared by the plain + ranked
+ * legacy resolvers. Raw exact keeps priority; whitespace normalization only
+ * participates after that tier misses. An empty normalized needle fails closed. */
+function matchLabelCandidates(entries: SnapshotEntry[], label: string, opts: LabelResolveOpts): SnapshotEntry[] {
+  const roles = opts.kind === "click" ? CLICKABLE_ROLES : INPUT_ROLES;
+  const usable = usableLabel(label);
+  const rawNeedle = usable.toLowerCase();
+  const normalizedNeedle = normalizeWs(usable);
+  if (normalizedNeedle.length === 0) return [];
+
   const roleFiltered = entries.filter((e) => roles.has(e.role));
-  const exact = roleFiltered.filter((e) => e.name.toLowerCase() === needle);
-  const substr = roleFiltered.filter((e) => e.name.toLowerCase().includes(needle));
-  let matches = exact.length > 0 ? exact : substr;
+  const rawExact = roleFiltered.filter((e) => e.name.toLowerCase() === rawNeedle);
+  const normalizedExact = roleFiltered.filter((e) => normalizeWs(e.name) === normalizedNeedle);
+  const normalizedSubstring = roleFiltered.filter((e) => normalizeWs(e.name).includes(normalizedNeedle));
+  let matches = rawExact.length > 0 ? rawExact : normalizedExact.length > 0 ? normalizedExact : normalizedSubstring;
 
   if (matches.length > 1) {
     const nonAside = matches.filter((e) => e.region !== "aside");
@@ -40,6 +49,13 @@ export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: La
     const overlayOnly = matches.filter((e) => e.ref.startsWith("@ov"));
     if (overlayOnly.length > 0) matches = overlayOnly;
   }
+
+  return matches;
+}
+
+/** Resolve a label-based target. Throws on no match or ambiguity. */
+export function resolveByLabel(entries: SnapshotEntry[], label: string, opts: LabelResolveOpts): SnapshotEntry {
+  const matches = matchLabelCandidates(entries, label, opts);
 
   if (matches.length === 0) {
     throw new Error(
@@ -80,6 +96,20 @@ export type RankedResolution = {
  *  buttons/links when disambiguating dynamic-listbox candidates (typeahead pickers). */
 export const CHOICE_ROLES: ReadonlySet<string> = new Set(["option", "menuitem", "listitem", "treeitem", "radio"]);
 
+function rankAmbiguousMatchesBy(
+  matches: SnapshotEntry[],
+  needle: string,
+  normalize: (value: string) => string,
+): { entry?: SnapshotEntry; method?: "startsWith" | "roleFamily" } {
+  const normalizedNeedle = normalize(needle);
+  const byStartsWith = matches.filter((e) => normalize(e.name).startsWith(normalizedNeedle));
+  if (byStartsWith.length === 1) return { entry: byStartsWith[0], method: "startsWith" };
+  const pool = byStartsWith.length > 1 ? byStartsWith : matches;
+  const byChoiceRole = pool.filter((e) => CHOICE_ROLES.has(e.role));
+  if (byChoiceRole.length === 1) return { entry: byChoiceRole[0], method: "roleFamily" };
+  return {};
+}
+
 /** Evidence-based tie-breaks over an ambiguous candidate pool. Each step is kept ONLY
  *  when it reduces the pool to exactly one entry — otherwise the next step runs, and a
  *  still-ambiguous pool returns no pick (the caller rethrows the ambiguous error).
@@ -88,36 +118,18 @@ export function rankAmbiguousMatches(
   matches: SnapshotEntry[],
   needle: string,
 ): { entry?: SnapshotEntry; method?: "startsWith" | "roleFamily" } {
-  const byStartsWith = matches.filter((e) => e.name.toLowerCase().startsWith(needle));
-  if (byStartsWith.length === 1) return { entry: byStartsWith[0], method: "startsWith" };
-  const pool = byStartsWith.length > 1 ? byStartsWith : matches;
-  const byChoiceRole = pool.filter((e) => CHOICE_ROLES.has(e.role));
-  if (byChoiceRole.length === 1) return { entry: byChoiceRole[0], method: "roleFamily" };
-  return {};
+  return rankAmbiguousMatchesBy(matches, needle, (value) => value.toLowerCase());
 }
 
 /** Ranked variant of resolveByLabel: identical match pipeline, but instead of throwing
  *  on ambiguity it applies rankAmbiguousMatches and reports HOW the pick was made.
  *  Still throws (same messages) on no-match and on tie-break-resistant ambiguity. */
-export function resolveByLabelRanked(entries: SnapshotEntry[], label: string, opts: LabelResolveOpts): RankedResolution {
-  const roles = opts.kind === "click" ? CLICKABLE_ROLES : INPUT_ROLES;
-  const stripped = label.replace(OUTBOUND_DISPLAY_PREFIX_RE, "");
-  const usable = stripped.trim().length > 0 ? stripped : label;
-  const needle = usable.toLowerCase();
-  const roleFiltered = entries.filter((e) => roles.has(e.role));
-  const exact = roleFiltered.filter((e) => e.name.toLowerCase() === needle);
-  const substr = roleFiltered.filter((e) => e.name.toLowerCase().includes(needle));
-  let matches = exact.length > 0 ? exact : substr;
-
-  if (matches.length > 1) {
-    const nonAside = matches.filter((e) => e.region !== "aside");
-    if (nonAside.length > 0) matches = nonAside;
-  }
-
-  if (opts.activeLayer === "overlay") {
-    const overlayOnly = matches.filter((e) => e.ref.startsWith("@ov"));
-    if (overlayOnly.length > 0) matches = overlayOnly;
-  }
+export function resolveByLabelRanked(
+  entries: SnapshotEntry[],
+  label: string,
+  opts: LabelResolveOpts,
+): RankedResolution {
+  const matches = matchLabelCandidates(entries, label, opts);
 
   if (matches.length === 0) {
     throw new Error(
@@ -131,7 +143,7 @@ export function resolveByLabelRanked(entries: SnapshotEntry[], label: string, op
     return { entry: only, disambiguated: false, candidateCount: 1 };
   }
   const candidateCount = matches.length;
-  const ranked = rankAmbiguousMatches(matches, needle);
+  const ranked = rankAmbiguousMatchesBy(matches, usableLabel(label), normalizeWs);
   if (!ranked.entry || !ranked.method) throw ambiguousError(opts, label, matches);
   return { entry: ranked.entry, disambiguated: true, candidateCount, method: ranked.method };
 }
