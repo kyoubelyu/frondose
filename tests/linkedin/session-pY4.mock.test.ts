@@ -1,5 +1,5 @@
 /**
- * P-Y4 Step 4a — T-Rehome.2, T-Rehome.3 — SCAFFOLD (assertion bodies = TODO; intentionally RED).
+ * P-Y4 — T-Rehome.2, T-Rehome.3 regression coverage.
  *
  * Unit-tests the new `onClientBooted` post-boot hook on createLinkedinSession (plan §6.1 / §6.4.1).
  * Mocks every CDP/overlay dependency session.ts imports so getOrInitClient() can boot a FAKE client without
@@ -11,12 +11,6 @@
  *   - ../cdp/hardwareInput.js→ resolveInputMode (→ "cdp")
  * A shared `bootOrder` array records the boot sequence so a test can assert onClientBooted fires AFTER
  * overlay install.
- *
- * STATUS at Step 4a: this file RUNS now (createLinkedinSession exists; onClientBooted is passed as an extra
- * runtime property which tsx strips). It FAILS now because the current session.ts does NOT invoke the hook —
- * the assertion bodies are filled at Step 5 once builder's 4b wires Edit 2 (§6.4.1). It will not typecheck in
- * an editor until the opt is added to CreateLinkedinSessionOpts (tsconfig excludes tests/ → npm run check is
- * unaffected).
  *
  * Covers ask d, behavior (v): an agent-driven lazy boot must run the overlay-subscription hook exactly once.
  *
@@ -31,8 +25,19 @@ import { pathToFileURL } from "node:url";
 
 // ─── Mock state ──────────────────────────────────────────────────────────────
 
-const FAKE_HANDLE = { __h: "fake-handle" };
-const FAKE_CLIENT = { isConnected: () => true, handle: FAKE_HANDLE };
+const FAKE_HANDLE = {
+  __h: "fake-handle",
+  Target: {
+    setDiscoverTargets: async () => {},
+  },
+  on: () => {},
+};
+const FAKE_CLIENT = {
+  isConnected: () => true,
+  setTurnAbortSignal: (_signal?: AbortSignal) => {},
+  raceHandle: async <T>(promise: Promise<T>, _label: string) => promise,
+  handle: FAKE_HANDLE,
+};
 let bootOrder: string[] = [];
 
 // biome-ignore lint/suspicious/noExplicitAny: dynamic factory import.
@@ -109,7 +114,7 @@ before(async () => {
 // ─── T-Rehome.2 — boot fires the hook exactly once, after overlay install ─────
 
 describe("createLinkedinSession — onClientBooted fires once at boot, after overlay install (ask d, behavior v)", () => {
-  it.skip("T-Rehome.2: when getOrInitClient() boots the client, onClientBooted is called exactly once with the booted CdpClient (after overlay install) and a cached re-call does NOT re-fire it", async () => {
+  it("T-Rehome.2: when getOrInitClient() boots the client, onClientBooted is called exactly once with the booted CdpClient (after overlay install) and a cached re-call does NOT re-fire it", async () => {
     // Given: createLinkedinSession({…, onClientBooted: spy}) with stubbed ensureChrome/connect/installOverlay
     // When:  getOrInitClient() is awaited (first boot), then awaited a SECOND time (cached client)
     // Then:  the spy fired exactly ONCE, with FAKE_CLIENT, AFTER "installOverlay" in bootOrder; both calls
@@ -145,7 +150,7 @@ describe("createLinkedinSession — onClientBooted fires once at boot, after ove
 // ─── T-Rehome.3 — hook failure is swallowed (boot still succeeds) ─────────────
 
 describe("createLinkedinSession — onClientBooted failure is best-effort swallowed (robustness)", () => {
-  it.skip("T-Rehome.3: when onClientBooted throws/rejects, getOrInitClient() still resolves { ok:true, client } and the error is logged via console.error (not silently dropped)", async () => {
+  it("T-Rehome.3: when onClientBooted throws/rejects, getOrInitClient() still resolves { ok:true, client } and the error is logged via console.error (not silently dropped)", async () => {
     // Given: createLinkedinSession({…, onClientBooted: () => { throw … }}) with a console.error spy
     // When:  getOrInitClient() is awaited
     // Then:  it resolves { ok:true, client: FAKE_CLIENT } (boot NOT rejected) and console.error was called
@@ -177,5 +182,4 @@ describe("createLinkedinSession — onClientBooted failure is best-effort swallo
   });
 });
 
-// Step 4a: the factory is invoked when the assertion bodies are filled at Step 5.
 void createLinkedinSession;
