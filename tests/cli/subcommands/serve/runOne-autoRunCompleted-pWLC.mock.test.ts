@@ -107,7 +107,7 @@ function makeDeps(frames: unknown[], salesDbPath: string): ServeDeps {
     tools: {},
     maxSteps: 5,
     auditWriter: async () => undefined,
-    session: { setTurnAbortSignal: () => undefined, getClient: () => null },
+    session: { setTurnAbortSignal: () => undefined, clearTurnAbortSignal: () => undefined, getClient: () => null },
     schedulePath: "/dev/null",
     salesDbPath,
     auditPath: "/dev/null",

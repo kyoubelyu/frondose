@@ -6,7 +6,7 @@ import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
 import { setCronMode } from "../../../../persistence/mode.js";
-import { DATA_DIR_NAME, bumpTurnHeartbeat, removeTurnHeartbeat, writeTurnHeartbeat } from "../../../../persistence/paths.js";
+import { bumpTurnHeartbeat, DATA_DIR_NAME, removeTurnHeartbeat, writeTurnHeartbeat } from "../../../../persistence/paths.js";
 import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
@@ -371,7 +371,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
   } finally {
     clearInterval(capWatcher); clearInterval(silentHangWatcher); clearInterval(toolProgressWatcher); // [P-75 D-16/D-27] stop turn watchers
     removeTurnHeartbeat();
-    deps.session.setTurnAbortSignal(undefined); // [P-75 P-WEDGE-1] clear so next turn doesn't inherit a stale aborted signal
+    deps.session.clearTurnAbortSignal(abortController.signal); // P-FIX-STOP-INTENT: late T1 teardown cannot clear T2
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
     try {
       const db = getSalesDb(deps.salesDbPath);

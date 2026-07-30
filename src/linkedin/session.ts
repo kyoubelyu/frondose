@@ -3,6 +3,7 @@ import { resolveInputMode } from "../cdp/hardwareInput.js";
 import type { ChromeHandle } from "../cdp/index.js";
 import { ensureChrome, injectStealth } from "../cdp/index.js";
 import { STEALTH_INIT_SCRIPT } from "../cdp/stealth.js";
+import { createTurnAbortSignalOwner } from "../cdp/turnAbortSignalOwner.js";
 import { appendOverlayEventRow, attachEventBus } from "../overlay/eventBus.js";
 import { installOverlay } from "../overlay/inject.js";
 import type { ClientOrUnavailable, CurrentSurfaceContext, LinkedinSession } from "./types.js";
@@ -158,7 +159,7 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
   let visualDriver: ((fnDeclaration: string) => boolean) | undefined;
   // [P-75 P-WEDGE-1] Turn abort signal, stored on the session so a client booted
   // mid-turn inherits it (the cached client may be undefined at turn start).
-  let turnSignal: AbortSignal | undefined;
+  const turnSignalOwner = createTurnAbortSignalOwner();
 
   // P-32: resolve the effective input mode ONCE at session creation
   // (graceful downgrade to "cdp" — D-4).
@@ -192,7 +193,7 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
           // CdpClient.connect uses waitForPageTarget under the hood (v0.3-fix1 B1 fix).
           const client = await CdpClient.connect(handle.port);
           // [P-75 P-WEDGE-1] A client booted mid-turn inherits the current turn signal.
-          client.setTurnAbortSignal(turnSignal);
+          client.setTurnAbortSignal(turnSignalOwner.get());
           await injectStealth(client);
           // [P-62 OQ-5] Auto-inject stealth on EVERY new page target (popups, OAuth windows, new
           // tabs). Without this, addScriptToEvaluateOnNewDocument's per-target/per-session scope
@@ -244,8 +245,13 @@ export function createLinkedinSession(opts: CreateLinkedinSessionOpts): Linkedin
 
     setTurnAbortSignal(signal?: AbortSignal): void {
       // [P-75 P-WEDGE-1] store for mid-turn boots + apply to the live client now.
-      turnSignal = signal;
+      turnSignalOwner.set(signal);
       cached?.setTurnAbortSignal(signal);
+    },
+
+    clearTurnAbortSignal(owner: AbortSignal): void {
+      turnSignalOwner.clear(owner);
+      cached?.clearTurnAbortSignal(owner);
     },
 
     setLastContext(ctx: CurrentSurfaceContext): void {

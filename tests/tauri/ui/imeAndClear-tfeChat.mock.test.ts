@@ -106,8 +106,8 @@ describe("app.ts — clear-after-success / preserve-on-failure (T-FE-CHAT bug 2)
     assert.ok(clearIdx < runningIdx, "the clear must happen before transition(\"running\")");
   });
 
-  it("T-Clear.3: sendCommand's steer branch does not itself clear or touch commandEl.value (delegated entirely to performSteer)", () => {
-    // Given: sendCommand's running-branch (steer dispatch) body
+  it("T-Clear.3: sendCommand's running branch delegates without clearing commandEl.value", () => {
+    // Given: sendCommand's running-composer dispatch body
     // When:  scanned
     // Then:  it reads commandEl.value (to build `text`) but never assigns to it directly
     const body = fnBody("async function sendCommand(");
@@ -117,7 +117,10 @@ describe("app.ts — clear-after-success / preserve-on-failure (T-FE-CHAT bug 2)
       0,
       body.indexOf('if (appState !== "idle" && appState !== "identity-missing") return;'),
     );
-    assert.ok(steerBranch.includes("void performSteer(text)"), "must dispatch performSteer with the captured text");
+    assert.ok(
+      steerBranch.includes("await runningComposerController.dispatch(text)"),
+      "must dispatch the captured text through the running-composer controller",
+    );
     assert.ok(!/commandEl\.value\s*=/.test(steerBranch), "sendCommand's steer branch must not assign commandEl.value itself");
   });
 });
