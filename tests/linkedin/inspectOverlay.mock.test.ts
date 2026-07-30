@@ -14,7 +14,7 @@
  * backendNodeIds, register them in client.refMap via `client.mergeRefs()`, and inject them
  * into the inspect snapshot so the agent can `click {label:"Connect"}` when the dropdown is open.
  *
- * All assertions FAIL against the pre-builder source.
+ * The original Step-4a skips were removed after the implementation landed.
  *
  * ════════════════════════════════════════════════════════════════════════════════════
  * Gate/defect coverage:
@@ -53,7 +53,7 @@ const TYPES_SRC = readFileSync(join(REPO, "src/linkedin/types.ts"), "utf-8");
 // ─── T-Inspect.1.1 — snapshotCapture.ts defines synthesizeOverlayEntries ────────────────────────────
 
 describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-structural)", () => {
-  it.skip("T-Inspect.1.1: snapshotCapture.ts must define 'synthesizeOverlayEntries' (§6.4(H) — RC-1 DOM-query overlay synth) — FAILS pre-builder: function does not exist; only synthesizeProfileEntries is present", () => {
+  it("T-Inspect.1.1: snapshotCapture.ts defines the overlay DOM-query synthesizer", () => {
     // Given: src/linkedin/snapshotCapture.ts source
     // When:  the source is searched for the synthesizeOverlayEntries function definition
     // Then:  the function is present (async function synthesizeOverlayEntries or equivalent)
@@ -65,7 +65,7 @@ describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-str
     );
   });
 
-  it.skip("T-Inspect.1.2: snapshotCapture.ts captureCurrentSurfaceContext must call synthesizeOverlayEntries AND call client.mergeRefs with the returned refs — FAILS pre-builder: neither call present", () => {
+  it("T-Inspect.1.2: surface capture merges synthesized overlay refs and marks the overlay active", () => {
     // Given: src/linkedin/snapshotCapture.ts source
     // When:  captureCurrentSurfaceContext's return block is inspected
     // Then:  synthesizeOverlayEntries is CALLED (not just defined) + mergeRefs is called with its refs
@@ -94,7 +94,7 @@ describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-str
     );
   });
 
-  it.skip("T-Inspect.1.3: snapshot.ts must wrap getFullAXTree in try/catch with a retry after a settle delay (RC-2) — FAILS pre-builder: L23 is a direct call with no error handling", () => {
+  it("T-Inspect.1.3: AX capture retries exactly once after a settle delay", () => {
     // Given: src/cdp/snapshot.ts source
     // When:  the getFullAXTree call is inspected
     // Then:  it is wrapped in try/catch (RC-2: handles animating/transitioning AX tree throws)
@@ -103,11 +103,15 @@ describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-str
     // ── Assertion 1: try/catch wraps the getFullAXTree call ─────────────────────────────────────
     // We verify the source has BOTH getFullAXTree AND try/catch in the same function body.
     // The pre-builder L23 is a bare `const { nodes } = (await client.Accessibility.getFullAXTree(...))`.
-    const getFullAXTreeIdx = SNAPSHOT_SRC.indexOf("getFullAXTree");
-    assert.notEqual(getFullAXTreeIdx, -1, "T-Inspect.1.3: snapshot.ts must contain getFullAXTree call");
-
-    // Check for try/catch within 300 chars of getFullAXTree (the sketch puts try on the line above)
-    const surrounding = SNAPSHOT_SRC.slice(Math.max(0, getFullAXTreeIdx - 50), getFullAXTreeIdx + 300);
+    const getSnapshotStart = SNAPSHOT_SRC.indexOf("export async function getSnapshot");
+    const refsStart = SNAPSHOT_SRC.indexOf("const refs:", getSnapshotStart);
+    assert.notEqual(getSnapshotStart, -1, "T-Inspect.1.3: snapshot.ts must define getSnapshot");
+    assert.notEqual(refsStart, -1, "T-Inspect.1.3: getSnapshot must initialize refs after AX capture");
+    const surrounding = SNAPSHOT_SRC.slice(getSnapshotStart, refsStart);
+    assert.ok(
+      surrounding.match(/Accessibility\.getFullAXTree\(\{\}\)/g)?.length === 2,
+      "T-Inspect.1.3: getSnapshot AX-capture block must contain the first getFullAXTree call and exactly one retry",
+    );
     assert.ok(
       surrounding.includes("try") && surrounding.includes("catch"),
       "T-Inspect.1.3a: getFullAXTree must be wrapped in try/catch (§6.4(I) RC-2). " +
@@ -116,13 +120,13 @@ describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-str
 
     // ── Assertion 2: retry with a settle delay is present ────────────────────────────────────────
     assert.ok(
-      SNAPSHOT_SRC.includes("setTimeout") || SNAPSHOT_SRC.includes("settle"),
+      surrounding.includes("setTimeout") || surrounding.includes("settle"),
       "T-Inspect.1.3b: snapshot.ts must include a retry delay (setTimeout) after the first getFullAXTree throw " +
         "(§6.4(I) RC-2 — settle 100ms before retry). Pre-builder: not present. FAILS pre-builder.",
     );
   });
 
-  it.skip("T-Inspect.1.4: client.ts must define a 'mergeRefs' method (§6.4(K) — clickability lynchpin: synthesized overlay refs MUST be in refMap or clickAt throws) — FAILS pre-builder: mergeRefs method does not exist", () => {
+  it("T-Inspect.1.4: the CDP client merges synthesized refs into its clickable ref map", () => {
     // Given: src/cdp/client.ts source
     // When:  the client class body is searched for mergeRefs
     // Then:  a mergeRefs method is defined (the §6.4(K) additive method)
@@ -144,7 +148,7 @@ describe("T-Inspect.1 — D-P59-INSPECT-1: overlay-aware inspect fix (source-str
     );
   });
 
-  it.skip("T-Inspect.1.5: types.ts activeLayer must include 'overlay' (widened from literal 'page' to union 'page'|'overlay') — FAILS pre-builder: L32 is activeLayer:'page' literal; L43 is z.literal('page')", () => {
+  it("T-Inspect.1.5: the inspect contract accepts overlay as an active layer", () => {
     // Given: src/linkedin/types.ts source
     // When:  the activeLayer field and its Zod schema are inspected
     // Then:  the type allows "overlay" (union type or z.enum with "overlay" member)
