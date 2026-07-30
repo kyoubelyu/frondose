@@ -17,14 +17,20 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import type { CoreMessage } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { handleTelegramTurn, type TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import { drainServerInbox, enqueueServerInbox, openServerInboxDb } from "../../src/persistence/serverInbox.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p26-sinbox-int-"));
@@ -101,7 +107,7 @@ function makeTurnDeps(
 
 // ─── T-SINBOX.INT ─────────────────────────────────────────────────────────────
 
-describe.skip("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
+describe("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
   it(
     "T-SINBOX.INT.1: with 3 pending server_inbox rows + inboxPrefix hook, user message contains prefix + separator + operator input; rows marked drained",
     async () => {
@@ -127,10 +133,12 @@ describe.skip("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
         enqueueServerInbox(serverInboxDb, "worker_A", "message_sent", { p: "https://linkedin.com/in/carol/" });
 
         const { deps, messages } = makeTurnDeps(dir, makeImmediateModel(), () => drainServerInbox(serverInboxDb));
+        piLoop.queue(async (opts) => appendAssistant(opts, "ok"));
 
         // biome-ignore lint/suspicious/noExplicitAny: TelegramUpdate interface not exported
         const update = { update_id: 1, message: { text: "hello", from: { id: 99, username: "testuser" } } } as any;
         await handleTelegramTurn(update, deps);
+        piLoop.assertDrained(1);
 
         // 1a — at least one message pushed
         const userMsg = messages.find((m) => m.role === "user") as { role: "user"; content: string } | undefined;
@@ -204,10 +212,12 @@ describe.skip("handleTelegramTurn inboxPrefix integration (G-P26.15)", () => {
 
         // No inboxPrefix (worker daemon path)
         const { deps, messages } = makeTurnDeps(dir, makeImmediateModel(), undefined);
+        piLoop.queue(async (opts) => appendAssistant(opts, "ok"));
 
         // biome-ignore lint/suspicious/noExplicitAny: TelegramUpdate interface not exported
         const update = { update_id: 2, message: { text: "hello", from: { id: 99, username: "testuser" } } } as any;
         await handleTelegramTurn(update, deps);
+        piLoop.assertDrained(1);
 
         const userMsg = messages.find((m) => m.role === "user") as { role: "user"; content: string } | undefined;
         assert.ok(userMsg, "T-SINBOX.INT.2: a user-role message must be pushed");
