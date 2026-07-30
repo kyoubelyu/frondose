@@ -14,8 +14,12 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { CommandCandidate } from "../../../src/linkedin/types.js";
-import type { CurrentSurfaceContext, LinkedinSession, SnapshotEntry } from "../../../src/linkedin/types.js";
+import type {
+  CommandCandidate,
+  CurrentSurfaceContext,
+  LinkedinSession,
+  SnapshotEntry,
+} from "../../../src/linkedin/types.js";
 
 type ClickResult = {
   ok: boolean;
@@ -29,15 +33,32 @@ type ClickTool = {
   ) => Promise<ClickResult>;
 };
 type MakeClickTool = (session: LinkedinSession) => ClickTool;
+type TypeResult = { ok: boolean; error?: { message?: string; kind?: string } };
+type TypeTool = {
+  execute: (
+    args: { text: string; ref?: string; label?: string; scope?: string },
+    opts: { toolCallId: string; messages: unknown[]; abortSignal?: AbortSignal },
+  ) => Promise<TypeResult>;
+};
+type MakeTypeTool = (session: LinkedinSession) => TypeTool;
 
 process.env.FRONDOSE_PACE_MIN_MS = "0";
 process.env.FRONDOSE_PACE_MAX_MS = "0";
 
 let makeClickTool: MakeClickTool | null = null;
-let resolveScopedForTool: ((client: unknown, kind: "button" | "input", label?: string, scope?: string) => Promise<unknown>) | null = null;
+let makeTypeTool: MakeTypeTool | null = null;
+let resolveScopedForTool:
+  | ((client: unknown, kind: "button" | "input", label?: string, scope?: string) => Promise<unknown>)
+  | null = null;
 let CommandAmbiguousTargetErrorCls: (new (message: string, candidates?: CommandCandidate[]) => Error) | null = null;
 let nextCapture: CurrentSurfaceContext | null = null;
-let nextLogicCapture: { pageUrl: string; surface: string; activeLayer: string; entries: SnapshotEntry[]; visibleScopeInspections?: unknown[] } | null = null;
+let nextLogicCapture: {
+  pageUrl: string;
+  surface: string;
+  activeLayer: string;
+  entries: SnapshotEntry[];
+  visibleScopeInspections?: unknown[];
+} | null = null;
 let scopedThrow: Error | null = null;
 
 before(async () => {
@@ -53,7 +74,9 @@ before(async () => {
     },
   });
 
-  const targetResolutionUrl = pathToFileURL(resolve(process.cwd(), "src/linkedin/logic/scopeResolver/targetResolution.js")).href;
+  const targetResolutionUrl = pathToFileURL(
+    resolve(process.cwd(), "src/linkedin/logic/scopeResolver/targetResolution.js"),
+  ).href;
   const realTargetResolution = await import(targetResolutionUrl);
   mock.module(targetResolutionUrl, {
     namedExports: {
@@ -79,6 +102,8 @@ before(async () => {
 
   const clickMod = await import("../../../src/tools/browser/click.js");
   makeClickTool = clickMod.makeClickTool as MakeClickTool;
+  const typeMod = await import("../../../src/tools/browser/type.js");
+  makeTypeTool = typeMod.makeTypeTool as MakeTypeTool;
   const scopedMod = await import("../../../src/tools/browser/scopedResolve.js");
   resolveScopedForTool = scopedMod.resolveScopedForTool as typeof resolveScopedForTool;
   const sharedMod = await import("../../../src/linkedin/logic/scopeResolver/shared.js");
@@ -86,6 +111,7 @@ before(async () => {
 });
 
 beforeEach(() => {
+  delete process.env.FRONDOSE_SCOPED_RESOLVE;
   nextCapture = null;
   nextLogicCapture = null;
   scopedThrow = null;
@@ -114,10 +140,16 @@ function makeSession(opts: {
   pageUrl?: string;
   verifyResults?: VerifyResult[];
   clickCalls: string[];
+  inputCalls?: string[];
   boxCalls?: string[];
   resolvedMode?: () => "manual" | "auto";
 }): LinkedinSession {
-  let context = makeContext(opts.initialEntries, opts.surface ?? "messaging-thread", opts.activeLayer ?? "overlay", opts.pageUrl);
+  let context = makeContext(
+    opts.initialEntries,
+    opts.surface ?? "messaging-thread",
+    opts.activeLayer ?? "overlay",
+    opts.pageUrl,
+  );
   const client = {
     currentRefMap: { e0: { backendNodeId: 0, role: "button", name: "dummy" } },
     getBox: async (t: string) => {
@@ -127,6 +159,17 @@ function makeSession(opts: {
     verifyRef: async () => opts.verifyResults?.shift() ?? { matches: true },
     clickAt: async (t: string) => {
       opts.clickCalls.push(t);
+    },
+    evaluate: async () => false,
+    handle: {
+      Input: {
+        dispatchKeyEvent: async () => {
+          opts.inputCalls?.push("key");
+        },
+        insertText: async ({ text }: { text: string }) => {
+          opts.inputCalls?.push(`text:${text}`);
+        },
+      },
     },
   };
   return {
@@ -203,10 +246,7 @@ describe("T-TYPE.6 — ref-stale recapture retargets across the evidenced menuit
       assert.ok(makeClickTool);
       const session = makeSession({
         initialEntries: initial,
-        verifyResults: [
-          { matches: false, currentRole: "option", currentName: "Photo of Joyce HE" },
-          { matches: true },
-        ],
+        verifyResults: [{ matches: false, currentRole: "option", currentName: "Photo of Joyce HE" }, { matches: true }],
         clickCalls,
       });
 
@@ -233,11 +273,7 @@ describe("T-TYPE.7 — recapture ambiguity keeps the safe ref_stale surrender", 
       assert.ok(makeClickTool);
       const session = makeSession({
         initialEntries: initial,
-        verifyResults: [
-          { matches: false },
-          { matches: false },
-          { matches: false },
-        ],
+        verifyResults: [{ matches: false }, { matches: false }, { matches: false }],
         clickCalls,
       });
 
@@ -412,6 +448,110 @@ describe("T-TYPE.12 — fresh-capture retry returns the ranked resolution metada
   });
 });
 
+// ─── P-FIX-PICKER-MATCHING tool + recapture carriers ─────────────────────────────────────────────
+describe("P-FIX-PICKER-MATCHING — real tool seams and recapture surrender", () => {
+  // Given a compound newline AX entry on the flag-off path, when click uses a spaced label, then normalized substring dispatches once.
+  it("T-PICK.5: compound-name plus newline mismatch reaches one real click dispatch", async () => {
+    const clickCalls: string[] = [];
+    const entries: SnapshotEntry[] = [
+      { ref: "@ov1", role: "menuitem", name: "Photo of Joyce HE Joyce HE · 1st\n普通职业" },
+      { ref: "@ov2", role: "menuitem", name: "Photo of Joyce Han" },
+    ];
+    assert.ok(makeClickTool);
+    const session = makeSession({ initialEntries: entries, clickCalls });
+
+    const result = await makeClickTool(session).execute(
+      { label: "Joyce HE · 1st 普通职业" },
+      { toolCallId: "pick5", messages: [] },
+    );
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(clickCalls, ["@ov1"]);
+  });
+
+  // Given the exact 06 picker churn, when a normalized full label resolves the old entry, then D-17 safely retargets the fresh option.
+  it("T-PICK.6: U+2022 picker photo-envelope churn retargets and dispatches once", async () => {
+    const clickCalls: string[] = [];
+    nextCapture = makeContext([{ ref: "@ov2", role: "option", name: "Photo of Joyce HE Joyce HE • 1st 普通职业" }]);
+    assert.ok(makeClickTool);
+    const session = makeSession({
+      initialEntries: [{ ref: "@ov1", role: "menuitem", name: "Joyce HE • 1st\n普通职业" }],
+      verifyResults: [
+        {
+          matches: false,
+          currentRole: "option",
+          currentName: "Photo of Joyce HE Joyce HE • 1st 普通职业",
+        },
+        { matches: true, currentRole: "option", currentName: "Photo of Joyce HE Joyce HE • 1st 普通职业" },
+      ],
+      clickCalls,
+    });
+
+    const result = await makeClickTool(session).execute(
+      { label: "Joyce HE • 1st 普通职业" },
+      { toolCallId: "pick6", messages: [] },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data?.target, "@ov2");
+    assert.deepEqual(clickCalls, ["@ov2"]);
+  });
+
+  // Given a stale Delete Account ref and prefixed fresh option, when recapture runs, then suffix collision cannot retarget.
+  it("T-PICK.7: Delete Account suffix collision remains ref_stale", async () => {
+    const clickCalls: string[] = [];
+    nextCapture = makeContext([{ ref: "@ov2", role: "menuitem", name: "Permanently Delete Account" }]);
+    assert.ok(makeClickTool);
+    const session = makeSession({
+      initialEntries: [{ ref: "@ov1", role: "menuitem", name: "Delete Account" }],
+      verifyResults: [{ matches: false }, { matches: false }, { matches: false }],
+      clickCalls,
+    });
+
+    const result = await makeClickTool(session).execute({ ref: "@ov1" }, { toolCallId: "pick7", messages: [] });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error?.message ?? "", /ref_stale/);
+    assert.deepEqual(clickCalls, []);
+  });
+
+  // Given eligible click and input targets with the scoped flag off, when labels normalize empty, then neither tool dispatches.
+  it("T-PICK.9: real click and type tools fail closed with zero dispatch", async () => {
+    const clickCalls: string[] = [];
+    const inputCalls: string[] = [];
+    const entries: SnapshotEntry[] = [
+      { ref: "@e1", role: "button", name: "Start a post" },
+      { ref: "@e2", role: "textbox", name: "Search people" },
+    ];
+    nextCapture = makeContext(entries, "search", "page", "https://www.linkedin.com/search/results/people/");
+    const session = makeSession({
+      initialEntries: entries,
+      surface: "search",
+      activeLayer: "page",
+      pageUrl: "https://www.linkedin.com/search/results/people/",
+      clickCalls,
+      inputCalls,
+    });
+    assert.ok(makeClickTool && makeTypeTool);
+
+    const clickResult = await makeClickTool(session).execute(
+      { label: "   " },
+      { toolCallId: "pick9-click", messages: [] },
+    );
+    const typeResult = await makeTypeTool(session).execute(
+      { text: "must-not-dispatch", label: "\u00A0" },
+      { toolCallId: "pick9-type", messages: [] },
+    );
+
+    assert.equal(clickResult.ok, false);
+    assert.match(clickResult.error?.message ?? "", /no click target matches/i);
+    assert.equal(typeResult.ok, false);
+    assert.match(typeResult.error?.message ?? "", /no type target matches/i);
+    assert.deepEqual(clickCalls, []);
+    assert.deepEqual(inputCalls, []);
+  });
+});
+
 // ─── T-TYPE.8 — scoped-resolver ambiguous fallback ───────────────────────────────────────────────
 
 function logicCtx(entries: SnapshotEntry[], vsi?: unknown[]) {
@@ -458,7 +598,10 @@ describe("T-TYPE.8 — scoped ambiguous fallback ranks ONLY the caught candidate
       ]);
 
       const r = (await resolveScopedForTool!({}, "button", "Joyce HE", undefined)) as {
-        target: string; selectorOnly: boolean; disambiguated?: boolean; method?: string;
+        target: string;
+        selectorOnly: boolean;
+        disambiguated?: boolean;
+        method?: string;
         resolvedTarget: { selector: string; role: string; label: string };
       };
 
@@ -484,7 +627,10 @@ describe("T-TYPE.8 — scoped ambiguous fallback ranks ONLY the caught candidate
         { ref: "@e6", role: "menuitem", name: "Photo of Joyce HE" },
       ]);
 
-      const r = (await resolveScopedForTool!({}, "button", "Joyce HE", undefined)) as { target: string; selectorOnly: boolean };
+      const r = (await resolveScopedForTool!({}, "button", "Joyce HE", undefined)) as {
+        target: string;
+        selectorOnly: boolean;
+      };
 
       assert.equal(r.target, "@e5");
       assert.equal(r.selectorOnly, false);
@@ -524,7 +670,9 @@ describe("T-TYPE.8 — scoped ambiguous fallback ranks ONLY the caught candidate
     return (async () => {
       assert.ok(resolveScopedForTool && CommandAmbiguousTargetErrorCls);
       scopedThrow = new CommandAmbiguousTargetErrorCls("ambiguous", [{ label: "Joyce HE", ref: "e404" }]);
-      nextLogicCapture = logicCtx([{ ref: "@e50", role: "menuitem", name: "Joyce HE", selector: ".joyce" } as SnapshotEntry]);
+      nextLogicCapture = logicCtx([
+        { ref: "@e50", role: "menuitem", name: "Joyce HE", selector: ".joyce" } as SnapshotEntry,
+      ]);
 
       await assert.rejects(
         () => resolveScopedForTool!({}, "button", "Joyce HE", undefined),

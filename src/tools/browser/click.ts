@@ -4,10 +4,10 @@ import type { CdpClient } from "../../cdp/client.js";
 import { hardwareClickAt } from "../../cdp/hardwareInput.js";
 import { failWithReason } from "../../linkedin/envelope.js";
 import { applyPacing, captureCurrentSurfaceContext, fail, failFromError, ok, withHint } from "../../linkedin/index.js";
-import { resolveByLabelWithRetryRanked, type RankedResolution } from "../../linkedin/labelResolver.js";
+import { type RankedResolution, resolveByLabelWithRetryRanked } from "../../linkedin/labelResolver.js";
 import type { OutwardActionAdvice } from "../../linkedin/logic/outwardAction.js";
 import { hasProfileConnectPromptOverlay } from "../../linkedin/logic/predicates/feedProfile.js";
-import type { LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
+import type { CurrentSurfaceContext, LinkedinSession, SnapshotEntry } from "../../linkedin/types.js";
 import { appendAutoLedger, updateAutoRunStatus } from "../../persistence/sales/auto-run.js";
 import { getSalesDb } from "../sales/_dbHandle.js";
 import { classifyOutboundEntry, LINKEDIN_OUTBOUND_SURFACES, requiresApproval } from "./outboundGuard.js";
@@ -55,30 +55,100 @@ function normalizeName(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function sameRoleName(entry: SnapshotEntry, expected: { role: string; name?: string; region?: string }): boolean {
-  const roleMatch = entry.role === expected.role || (REF_CHURN_ROLES.has(entry.role) && REF_CHURN_ROLES.has(expected.role));
-  if (!roleMatch) return false;
-  // Identity continuity bound: when BOTH sides carry a region it must match — a same-name
-  // element in another region is a different element. Synthesized/hand-built entries may
-  // lack a region; the check is skipped (NOT failed) when either side is unknown.
-  if (expected.region !== undefined && entry.region !== undefined && entry.region !== expected.region) return false;
-  const expectedName = normalizeName(expected.name ?? "");
-  const actualName = normalizeName(entry.name ?? "");
-  return expectedName.length > 0 ? actualName === expectedName : true;
+type RecaptureIdentity = {
+  ref: string;
+  role: string;
+  name?: string;
+  region?: SnapshotEntry["region"];
+  layer?: "page" | "overlay";
+  pickerLineage: boolean;
+};
+
+function isExactNewMessagePickerContext(ctx: CurrentSurfaceContext | null | undefined): boolean {
+  if (!ctx || ctx.surface !== "messaging-thread" || ctx.activeLayer !== "overlay") return false;
+  try {
+    return new URL(ctx.pageUrl).pathname === "/messaging/thread/new/";
+  } catch {
+    return false;
+  }
 }
 
-function findFreshRefByRoleName(
-  entries: SnapshotEntry[],
-  expected: { role: string; name?: string; region?: string },
-): SnapshotEntry | undefined {
-  const matches = entries.filter((entry) => sameRoleName(entry, expected));
+function startsPickerLineage(
+  ref: string,
+  entry: SnapshotEntry,
+  ctx: CurrentSurfaceContext | null | undefined,
+): boolean {
+  return (
+    isExactNewMessagePickerContext(ctx) &&
+    ref.startsWith("@ov") &&
+    entry.role === "menuitem" &&
+    /^.+ • 1st(?: .+)?$/u.test(normalizeName(entry.name)) &&
+    classifyOutboundEntry(entry, "messaging-thread", { connectDialogActive: false }) === "benign"
+  );
+}
+
+function isPickerPhotoEnvelope(entry: SnapshotEntry, expected: RecaptureIdentity): boolean {
+  if (!expected.pickerLineage) return false;
+  if (!expected.ref.startsWith("@ov") || !entry.ref.startsWith("@ov")) return false;
+  if (expected.role !== "menuitem" || entry.role !== "option") return false;
+  if (entry.region !== expected.region) return false;
+  const expectedName = normalizeName(expected.name ?? "");
+  const actualName = normalizeName(entry.name);
+  const candidate = expectedName.match(/^(.+) • 1st(?: .+)?$/u);
+  const subject = candidate?.[1];
+  if (!subject || actualName !== `photo of ${subject} ${expectedName}`) return false;
+  const expectedEntry: SnapshotEntry = {
+    ref: expected.ref,
+    role: expected.role,
+    name: expected.name ?? "",
+    ...(expected.region === undefined ? {} : { region: expected.region }),
+  };
+  return (
+    classifyOutboundEntry(expectedEntry, "messaging-thread", { connectDialogActive: false }) === "benign" &&
+    classifyOutboundEntry(entry, "messaging-thread", { connectDialogActive: false }) === "benign"
+  );
+}
+
+function matchesRecaptureIdentity(entry: SnapshotEntry, expected: RecaptureIdentity): boolean {
+  const roleMatch =
+    entry.role === expected.role || (REF_CHURN_ROLES.has(entry.role) && REF_CHURN_ROLES.has(expected.role));
+  if (!roleMatch) return false;
+  const expectedName = normalizeName(expected.name ?? "");
+  const actualName = normalizeName(entry.name);
+  if (expectedName.length === 0 || actualName === expectedName) {
+    // Preserve the legacy exact-name rule: region only rejects when BOTH sides know it.
+    return !(expected.region !== undefined && entry.region !== undefined && entry.region !== expected.region);
+  }
+  return isPickerPhotoEnvelope(entry, expected);
+}
+
+function findFreshRefByIdentity(entries: SnapshotEntry[], expected: RecaptureIdentity): SnapshotEntry | undefined {
+  const matches = entries.filter((entry) => matchesRecaptureIdentity(entry, expected));
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-async function recaptureFreshRefByRoleName(
+function findVerifiedPickerTransition(
+  entries: SnapshotEntry[],
+  expected: RecaptureIdentity,
+  verified: { currentRole?: string; currentName?: string },
+): SnapshotEntry | undefined {
+  if (!expected.pickerLineage || !verified.currentRole || !verified.currentName) return undefined;
+  const sameRef = entries.filter((entry) => entry.ref === expected.ref);
+  if (sameRef.length !== 1) return undefined;
+  const candidate: SnapshotEntry = {
+    ref: expected.ref,
+    role: verified.currentRole,
+    name: verified.currentName,
+    ...(sameRef[0]?.region === undefined ? {} : { region: sameRef[0].region }),
+  };
+  return isPickerPhotoEnvelope(candidate, expected) ? candidate : undefined;
+}
+
+async function recaptureFreshRefByIdentity(
   session: LinkedinSession,
   client: CdpClient,
-  expected: { role: string; name?: string; region?: string; layer?: "page" | "overlay" },
+  expected: RecaptureIdentity,
+  verified: { currentRole?: string; currentName?: string },
   opts: { timeoutMs?: number; stepMs?: number; maxRetries?: number; abortSignal?: AbortSignal } = {},
 ): Promise<SnapshotEntry | undefined> {
   const deadline = Date.now() + (opts.timeoutMs ?? REF_STALE_RETRY_TIMEOUT_MS);
@@ -89,12 +159,27 @@ async function recaptureFreshRefByRoleName(
     throwIfAborted(opts.abortSignal);
     try {
       const fresh = await captureCurrentSurfaceContext(client);
+      // Once D-17 starts from the exact new-message candidate shape, every later
+      // capture stays in that picker lineage — including later exact-name retries.
+      if (expected.pickerLineage && !isExactNewMessagePickerContext(fresh)) continue;
       // [P-FIX-TYPEAHEAD-TARGETING] activeLayer continuity: a capture on a DIFFERENT layer
       // cannot re-identify the dead ref — skip it (keeps the retry budget for a same-layer
       // capture; a layer that never flips back exhausts into the ref_stale failure).
       if (expected.layer && fresh.activeLayer && fresh.activeLayer !== expected.layer) continue;
+      const verifiedEntry = findVerifiedPickerTransition(fresh.entries, expected, verified);
+      if (verifiedEntry) {
+        session.setLastContext({
+          ...fresh,
+          entries: fresh.entries.map((entry) => (entry.ref === verifiedEntry.ref ? verifiedEntry : entry)),
+        });
+        return verifiedEntry;
+      }
       session.setLastContext(fresh);
-      const entry = findFreshRefByRoleName(fresh.entries, expected);
+      const snapshotCandidates =
+        expected.pickerLineage && verified.currentRole && verified.currentName
+          ? fresh.entries.filter((entry) => entry.ref !== expected.ref)
+          : fresh.entries;
+      const entry = findFreshRefByIdentity(snapshotCandidates, expected);
       if (entry) return entry;
     } catch (e) {
       if (opts.abortSignal?.aborted) throw e;
@@ -245,11 +330,13 @@ export function makeClickTool(session: LinkedinSession) {
         // classifies the FINAL retargeted entry; expected is bound by region + activeLayer.
         if (target.startsWith("@") && targetEntry && typeof client.verifyRef === "function") {
           const currentRef = client.currentRefMap?.[target.slice(1)];
-          const expected = {
+          let expected: RecaptureIdentity = {
+            ref: target,
             role: targetEntry.role,
             name: targetEntry.name || currentRef?.name,
             region: targetEntry.region,
             layer: clickContext?.activeLayer,
+            pickerLineage: startsPickerLineage(target, targetEntry, clickContext),
           };
           let latestVerify: { matches: boolean; currentRole?: string; currentName?: string } | null = null;
           for (let attempt = 0; attempt <= REF_STALE_MAX_RETRIES; attempt++) {
@@ -259,12 +346,23 @@ export function makeClickTool(session: LinkedinSession) {
             if (attempt >= REF_STALE_MAX_RETRIES) {
               return refStaleFailure(target, targetEntry, latestVerify);
             }
-            const freshEntry = await recaptureFreshRefByRoleName(session, client, expected, { abortSignal });
+            const freshEntry = await recaptureFreshRefByIdentity(session, client, expected, latestVerify, {
+              abortSignal,
+            });
             if (!freshEntry) {
               return refStaleFailure(target, targetEntry, latestVerify);
             }
             target = freshEntry.ref;
             targetEntry = freshEntry;
+            clickContext = session.getLastContext();
+            expected = {
+              ref: target,
+              role: freshEntry.role,
+              name: freshEntry.name,
+              region: freshEntry.region,
+              layer: clickContext?.activeLayer,
+              pickerLineage: expected.pickerLineage,
+            };
           }
         }
         // [P-FIX-TYPEAHEAD-TARGETING] Re-derive the classification context AFTER revalidation —
