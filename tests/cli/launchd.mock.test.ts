@@ -10,10 +10,18 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -27,6 +35,7 @@ import {
 } from "../../src/cli/subcommands/launchd.js";
 import { createLinkedinSession } from "../../src/linkedin/index.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { findChildProcessImports } from "../_helpers/childProcessAst.js";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
 
@@ -210,15 +219,36 @@ describe("launchd: installLaunchAgent + uninstallLaunchAgent", () => {
 describe("P-23 contract: Hard Rule 8 + tool count", () => {
   it("T-CONTRACT.R8: no child_process import under src/tools/**", () => {
     // Given:  the frondose source tree post-Step-4b
-    // When:   all TypeScript files under src/tools/ are scanned for 'child_process'
-    // Then:   zero matches (launchd.ts is under src/cli/subcommands/, not src/tools/)
-    // NOTE:   CI biome lint enforces this rule; this test provides a deterministic signal.
+    // When:   all TypeScript files under src/tools/ are AST-scanned for runtime child_process access
+    // Then:   comments/type-only imports are benign; a real runtime import is detected
     const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
-    const result = execSync("grep -rl 'child_process' src/tools/ 2>/dev/null || true", {
-      cwd: projectRoot,
-      encoding: "utf-8",
-    });
-    assert.strictEqual(result.trim(), "", `child_process found in src/tools/: ${result.trim()}`);
+    const toolsRoot = join(projectRoot, "src", "tools");
+    const files: string[] = [];
+    const visit = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) visit(path);
+        else if (entry.isFile() && path.endsWith(".ts")) files.push(path);
+      }
+    };
+    visit(toolsRoot);
+    const hits = files.flatMap((file) =>
+      findChildProcessImports(relative(projectRoot, file), readFileSync(file, "utf-8")),
+    );
+    assert.deepStrictEqual(hits, [], `runtime child_process access found in src/tools/**: ${JSON.stringify(hits)}`);
+    assert.deepStrictEqual(
+      findChildProcessImports(
+        "fixture.ts",
+        '// child_process is forbidden at runtime\nimport type { HookRunner } from "../agent/hooks.js";\n',
+      ),
+      [],
+      "a comment mentioning child_process and an unrelated type-only import must not create false positives",
+    );
+    assert.notDeepStrictEqual(
+      findChildProcessImports("fixture.ts", 'import { spawn } from "node:child_process";\n'),
+      [],
+      "a real runtime child_process import must remain an independently red positive control",
+    );
   });
 
   it("T-CONTRACT.TC: makeAllTools(session, persistence, control) returns exactly 54 tools (default tier=power worker)", () => {
