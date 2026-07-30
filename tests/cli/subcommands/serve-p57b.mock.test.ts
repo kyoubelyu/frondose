@@ -41,6 +41,9 @@ let mockCapturedMessages: any[] | null = null;
 
 /** Counts mockRunAgentLoop invocations (test bodies snapshot + assert deltas). */
 let mockRunAgentLoopCallCount = 0;
+let mockPiCallCount = 0;
+let mockPiResolveCount = 0;
+let installedTurnSignal: AbortSignal | null = null;
 
 /** Controls the mockRunAgentLoop sleep duration (ms). Used by T-Serve.13 to overlap. */
 let mockRunAgentLoopSleepMs = 20;
@@ -63,6 +66,12 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       createLinkedinSession: (_opts: any) => ({
         inputMode: "cdp",
+        setTurnAbortSignal(signal: AbortSignal) {
+          installedTurnSignal = signal;
+        },
+        clearTurnAbortSignal(signal: AbortSignal) {
+          if (installedTurnSignal === signal) installedTurnSignal = null;
+        },
         async getOrInitClient() {
           const handle = {
             Runtime: {
@@ -91,7 +100,33 @@ before(async () => {
     },
   });
 
-  // 2. Mock runAgentLoop — captures opts + counts invocations
+  const piModelUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => {
+        mockPiResolveCount++;
+        return { model: "mock", apiKey: "mock" };
+      },
+    },
+  });
+
+  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  mock.module(piLoopUrl, {
+    namedExports: {
+      // biome-ignore lint/suspicious/noExplicitAny: controlled Pi seam
+      runAgentLoopPi: async (opts: any) => {
+        mockCapturedMessages = opts?.messages ?? null;
+        mockPiCallCount++;
+        await new Promise<void>((done) => {
+          if (opts?.abortSignal?.aborted) return done();
+          opts?.abortSignal?.addEventListener("abort", () => done(), { once: true });
+          setTimeout(done, mockRunAgentLoopSleepMs);
+        });
+      },
+    },
+  });
+
+  // 2. Mock passive delegate — captures opts + counts invocations
   const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
   mock.module(loopUrl, {
     namedExports: {
@@ -387,10 +422,13 @@ describe("handlePassiveProfileNav — rate-limit exhausted → passive-skipped S
 // ─── T-Passive.3 — passiveMessages[] isolation ──────────────────────────────
 
 describe("triggerPassiveAnalysis — isolated passiveMessages[]; operator messages[] UNCHANGED (G-P57b.4, OQ-passive-5)", () => {
-  it.skip("T-Passive.3: given serve.ts harness + operator messages[] seeded via POST /agent/turn, WHEN profile-nav overlay event fires triggerPassiveAnalysis, THEN passive runAgentLoop receives a FRESH messages[] of length 1 (just the passive prompt) — NOT the operator's prior array; operator messages[] reference unchanged", async () => {
+  it("T-Passive.3: Pi operator history stays isolated from the fresh passive delegate message array", async () => {
     const h = await spinHarness("t3", { icpRoles: ["VP Sales"] });
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
+      mockPiCallCount = 0;
+      mockPiResolveCount = 0;
+      mockRunAgentLoopCallCount = 0;
 
       // (1) Operator POST /agent/turn → captures operator messages[]
       await udsReq({
@@ -414,6 +452,8 @@ describe("triggerPassiveAnalysis — isolated passiveMessages[]; operator messag
         typeof firstOpContent === "string" && firstOpContent.includes("operator first turn"),
         "operator messages[0] must contain 'operator first turn'",
       );
+      assert.equal(mockPiCallCount, 1, "operator turn must enter Pi");
+      assert.equal(mockPiResolveCount, 1, "operator turn must resolve Pi");
 
       // (2) Trigger profile-nav passive observation
       mockCapturedMessages = null;
@@ -429,6 +469,7 @@ describe("triggerPassiveAnalysis — isolated passiveMessages[]; operator messag
       // biome-ignore lint/suspicious/noExplicitAny: snapshot to escape narrowing
       const passiveMessagesRef: any[] | null = mockCapturedMessages;
       assert.ok(passiveMessagesRef !== null, "passive runAgentLoop must have been invoked");
+      assert.equal(mockRunAgentLoopCallCount, 1, "passive event must enter only the delegate");
       // biome-ignore lint/suspicious/noExplicitAny: cast after assert
       const passiveMsgs = passiveMessagesRef as any[];
       assert.notStrictEqual(
@@ -591,12 +632,15 @@ describe("handlePassiveObservation — click → fire (no ICP pre-filter; rate-l
 // ─── T-Serve.13 — Silent skip on currentTurn busy ───────────────────────────
 
 describe("handlePassiveObservation — silent skip on currentTurn !== null (G-P57b.7)", () => {
-  it.skip("T-Serve.13: given serve.ts harness with an in-flight operator turn (sleeping mockRunAgentLoop), WHEN dispatch click observe event with ICP-matching ctx, THEN SSE emits {type:'passive-skipped', reason:'busy'}; the passive event does NOT fire runAgentLoop (callCount stays at 1 — only the operator turn)", async () => {
+  it("T-Serve.13: an in-flight Pi turn emits passive-skipped busy without entering the passive delegate", async () => {
     const h = await spinHarness("t13", { icpRoles: ["VP Sales"] });
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       // Long sleep so the operator turn is still in flight when we dispatch the passive event
       mockRunAgentLoopSleepMs = 1500;
+      mockPiCallCount = 0;
+      mockPiResolveCount = 0;
+      mockRunAgentLoopCallCount = 0;
 
       const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 1200 });
       await new Promise((r) => setTimeout(r, 100));
@@ -610,7 +654,9 @@ describe("handlePassiveObservation — silent skip on currentTurn !== null (G-P5
         body: { prompt: "operator busy" },
       });
       await new Promise((r) => setTimeout(r, 80));
-      assert.equal(mockRunAgentLoopCallCount, 1, "operator runAgentLoop should be invoked (count=1)");
+      assert.equal(mockPiCallCount, 1, "operator turn must enter Pi");
+      assert.equal(mockPiResolveCount, 1, "operator turn must resolve Pi");
+      assert.equal(mockRunAgentLoopCallCount, 0, "operator turn must not enter passive delegate");
 
       // Dispatch passive click with ICP-matching ctx WHILE operator turn is still sleeping
       dispatchOverlayBindingEvent({
@@ -624,8 +670,8 @@ describe("handlePassiveObservation — silent skip on currentTurn !== null (G-P5
       // currentTurn is busy → passive observation should be silent-skipped with reason busy
       assert.equal(
         mockRunAgentLoopCallCount,
-        1,
-        `passive click should NOT fire runAgentLoop while operator turn in progress; got count=${mockRunAgentLoopCallCount}`,
+        0,
+        `passive click should NOT fire delegate while operator turn is active; got ${mockRunAgentLoopCallCount}`,
       );
 
       const sse = await ssePromise;
