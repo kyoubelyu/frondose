@@ -1,5 +1,5 @@
 /**
- * P-11 Step 5 — T-Poller.1..5 (startTelegramPoller long-poll loop) — QUARANTINED (describe.skip).
+ * P-11 Step 5 — T-Poller.1..5 (startTelegramPoller long-poll loop), activated by P-TELEGRAM-SKIP-CLOSURE.
  *
  * QUARANTINED 2026-05-23: telegram deprioritized per operator ("短时间内不再考虑"); the T-Poller suite
  * has a cumulative test-infra hang — production telegramFetch (transport.ts:83) creates a fresh undici
@@ -24,12 +24,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, mock } from "node:test";
+import { after, before, beforeEach, describe, it, mock } from "node:test";
 import { MockLanguageModelV1 } from "ai/test";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import type { PollerHandle, TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
+import { unexpectedTelegramRoute, waitForPollerStopped } from "./_helpers/telegramTest.js";
 
 // P-Z3 (D-Z3-02 option c): module-mock telegramFetch to a no-Agent passthrough → zero undici Agents.
 // real telegramFetch (transport.ts:81-88) takes the caller abort via the 3rd `opts.signal` arg (NOT
@@ -43,6 +45,11 @@ mock.module("../../src/tools/telegram/transport.js", {
   },
 });
 const { startTelegramPoller } = await import("../../src/cli/replTelegram.js");
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,9 +94,7 @@ function writeCfg(path: string, cfg: Record<string, unknown>): void {
 // P-Z3 (D-Z3-02): drain a fire-and-forget poller to a full stop (bounded ≤3s) while its fetch mock is
 // still installed, so it can never escape to the real globalThis.fetch after withFetchSpy restores it.
 async function drainPoller(handle: PollerHandle): Promise<void> {
-  for (let i = 0; i < 150 && handle.running; i++) {
-    await new Promise<void>((r) => setTimeout(r, 20));
-  }
+  await waitForPollerStopped(handle, "Telegram poller");
 }
 
 function makeMockModel(responseText = "Hi back"): MockLanguageModelV1 {
@@ -161,7 +166,7 @@ function makeDeps(opts: {
 
 // ─── T-Poller: long-poll loop ─────────────────────────────────────────────────
 
-describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARANTINED (telegram deprioritized; cumulative test-infra hang, D-Z3-04)", () => {
+describe("T-Poller: startTelegramPoller loop behavior (G-P11.19)", () => {
   it("T-Poller.1: when getUpdates returns 2 updates then [], poller handles both via turnLock, advances offset to last+1, writes cfg, exits on abort", async () => {
     // Given: getUpdates mock returns [{update_id:5,...},{update_id:6,...}] then []; abort fired after empty poll
     // When: startTelegramPoller(cfg, deps, turnLock, abort) called
@@ -182,6 +187,10 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
         const deps = makeDeps({ cfgPath, dir, out: stream });
         const abort = new AbortController();
         const turnLock = new TurnLock();
+        piLoop.queue(
+          async (opts) => appendAssistant(opts, "reply-1"),
+          async (opts) => appendAssistant(opts, "reply-2"),
+        );
 
         let pollCount = 0;
         await withFetchSpy(
@@ -190,16 +199,16 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
               pollCount++;
               if (pollCount === 1) {
                 return makeGetUpdatesResponse([
-                  { update_id: 5, message: { text: "msg1", from: { username: "u", id: 1 } } },
-                  { update_id: 6, message: { text: "msg2", from: { username: "u", id: 1 } } },
+                  { update_id: 5, message: { text: "msg1", from: { username: "u", id: 999 } } },
+                  { update_id: 6, message: { text: "msg2", from: { username: "u", id: 999 } } },
                 ]);
               }
               // Second poll: empty → abort
               abort.abort();
               return makeGetUpdatesResponse([]);
             }
-            // sendMessage auto-reply
-            return makeOkTgResponse();
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             const handle = await startTelegramPoller(
@@ -220,6 +229,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
             await drainPoller(handle);
           },
         );
+        piLoop.assertDrained(2);
 
         // offset should be advanced to 7 (update_id 6 + 1)
         const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { lastUpdateOffset: number };
@@ -269,7 +279,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
               abort.abort();
               return makeGetUpdatesResponse([]);
             }
-            return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             const cfg = {
@@ -289,11 +299,9 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
 
         // 3 error lines must appear
         const output = lines.join("");
-        assert.ok(
-          output.includes("poll error") || output.includes("network error"),
-          `out must log poll errors; got: "${output}"`,
-        );
-        assert.ok(errorCount >= 3, `must have attempted ≥3 retries; got ${errorCount}`);
+        const errorLines = output.match(/\[telegram\] poll error: network error #\d/g) ?? [];
+        assert.equal(errorLines.length, 3, `must log exactly three scripted poll errors; got: "${output}"`);
+        assert.equal(errorCount, 4, "three failures must be followed by exactly one aborting poll");
       } finally {
         delete process.env.TELEGRAM_TOKEN;
       }
@@ -331,7 +339,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
               abort.abort(); // abort after first poll
               return makeGetUpdatesResponse([]);
             }
-            return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             const cfg = {
@@ -402,11 +410,10 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
                 initWithSignal.signal?.addEventListener("abort", () => {
                   reject(new DOMException("AbortError", "AbortError"));
                 });
-                // Fire abort externally after a short delay
-                setTimeout(() => abort.abort(), 50);
+                queueMicrotask(() => abort.abort());
               });
             }
-            return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             const cfg = {
@@ -420,10 +427,8 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
             };
             const deps = makeDeps({ cfgPath, dir, out: stream });
             const handle = await startTelegramPoller(cfg, deps, turnLock, abort);
-            // Wait for loop to exit cleanly
             await drainPoller(handle);
-            // Poller must have stopped running after abort
-            assert.ok(!handle.running || abort.signal.aborted, "poller must not be running after abort");
+            assert.equal(handle.running, false, "poller must stop after abort");
           },
         );
 
@@ -458,6 +463,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
         const turnLock = new TurnLock();
         const { stream } = makeOut();
         let pollCount = 0;
+        piLoop.queue(async (opts) => appendAssistant(opts, "ack"));
 
         await withFetchSpy(
           async (url) => {
@@ -466,7 +472,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
               if (pollCount === 1) {
                 // Return 1 update; the model's turn will fire abort
                 return makeGetUpdatesResponse([
-                  { update_id: 10, message: { text: "trigger abort", from: { username: "u", id: 1 } } },
+                  { update_id: 10, message: { text: "trigger abort", from: { username: "u", id: 999 } } },
                 ]);
               }
               return makeGetUpdatesResponse([]);
@@ -475,7 +481,7 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
             if (url.includes("/sendMessage")) {
               abort.abort();
             }
-            return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             // Use a short model response so the turn completes quickly
@@ -493,20 +499,17 @@ describe.skip("T-Poller: startTelegramPoller loop behavior (G-P11.19) — QUARAN
             await drainPoller(handle);
           },
         );
+        piLoop.assertDrained(1);
 
         // BLOCKER-1 fix: abort guard prevents offset write after abort fires
         // The on-disk lastUpdateOffset must NOT have been advanced to 11 (update_id=10 + 1)
         // because abort fired between lock release and writeTelegramConfig
         const onDisk = JSON.parse(readFileSync(cfgPath, "utf-8")) as { lastUpdateOffset: number };
-        // The offset might stay at 5 (if abort fired before write) OR advance to 11 (if abort fired after write)
-        // BLOCKER-1 guarantees it stays at 5 when abort fires before writeTelegramConfig
-        // With real timing, we can't guarantee exact order in 100% of cases,
-        // but we verify the abort signal is indeed checked (mechanism wired).
         assert.ok(abort.signal.aborted, "abort must have fired during the loop");
-        // Key check: the value should not be some unexpected mid-update value
-        assert.ok(
-          onDisk.lastUpdateOffset === 5 || onDisk.lastUpdateOffset === 11,
-          `offset must be either pre-existing (5) or correctly advanced (11); got: ${onDisk.lastUpdateOffset}`,
+        assert.equal(
+          onDisk.lastUpdateOffset,
+          5,
+          "abort before offset persistence must leave the prior value unchanged",
         );
       } finally {
         delete process.env.TELEGRAM_TOKEN;

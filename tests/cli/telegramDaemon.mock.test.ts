@@ -1,25 +1,22 @@
-/**
- * P-23 Step 4a scaffold — T-DAEMON.1..6
- *
- * `mai telegram poll` daemon entry-point behavior: PID mutex, REPL-pause gate (C1 BLOCKER),
- * cross-process turn-lock ordering (C2 CONCERN-MR), SIGTERM cleanup.
- * (src/cli/subcommands/telegramDaemon.ts — NEW at builder Step 4b per plan §6.3 + §6.4.)
- *
- * Gate coverage: G-P23.3, G-P23.4, G-P23.6
- *
- * All assertion bodies are TODO. Builder must make scaffolds reach assert.fail at Step 4b.
- */
+/** Telegram daemon PID, REPL-pause, cross-process lock, and modelled cleanup coverage. */
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { runTelegramDaemon } from "../../src/cli/subcommands/telegramDaemon.js";
-import { acquireTurnLock, isPidAlive, LockBusy, releaseTurnLock, writePid } from "../../src/persistence/processLock.js";
+import { acquireTurnLock, LockBusy, writePid } from "../../src/persistence/processLock.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
+import { unexpectedTelegramRoute, waitForPollerStopped } from "./_helpers/telegramTest.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-daemon-"));
@@ -153,7 +150,7 @@ describe("telegramDaemon: PID mutex on boot", () => {
 
 // ─── REPL-pause gate (C1 BLOCKER fix) ─────────────────────────────────────────
 
-describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", () => {
+describe("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes)", () => {
   it("T-DAEMON.4: when repl.pid alive at poll iteration, daemon defers updates + does NOT advance lastUpdateOffset", async () => {
     // Given:  repl.pid file contains process.pid (live); Telegram getUpdates returns 2 updates K and K+1;
     //         telegram.json has lastUpdateOffset = K
@@ -230,7 +227,8 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
 
       let callCount = 0;
       // biome-ignore lint/suspicious/noExplicitAny: globalThis.fetch mock
-      (globalThis as any).fetch = async (_url: string): Promise<Response> => {
+      (globalThis as any).fetch = async (url: string): Promise<Response> => {
+        if (!url.includes("getUpdates")) return unexpectedTelegramRoute(url);
         callCount++;
         if (callCount === 1) {
           // First call: return 2 updates. Do NOT abort here — let the for-loop
@@ -253,8 +251,7 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
       };
 
       const handle = await startDaemonPoller(cfg, deps, turnLock, abort);
-      // Give the fire-and-forget loop time to complete first poll cycle + start 2nd
-      await new Promise<void>((r) => setTimeout(r, 300));
+      await waitForPollerStopped(handle, "T-DAEMON.4");
 
       // Assertions: Gate 1 fired for both updates → deferred
       assert.ok(
@@ -346,6 +343,10 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
       };
       const turnLock = new TurnLock();
       const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
+      piLoop.queue(async (opts) => {
+        assert.ok(existsSync(turnLockPath), "daemon must hold turn.lock while the real turn executes");
+        appendAssistant(opts, "answer");
+      });
 
       let getUpdatesCallCount = 0;
       // biome-ignore lint/suspicious/noExplicitAny: fetch mock
@@ -370,12 +371,12 @@ describe.skip("telegramDaemon: REPL-pause gate + offset invariant (C1 + C2 fixes
         if (url.includes("sendMessage")) {
           return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
         }
-        return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+        return unexpectedTelegramRoute(url);
       };
 
       const handle = await startDaemonPoller(cfg, deps, turnLock, abort);
-      // Wait for turn + second poll cycle + abort
-      await new Promise<void>((r) => setTimeout(r, 800));
+      await waitForPollerStopped(handle, "T-DAEMON.5");
+      piLoop.assertDrained(1);
 
       const cfgAfter = readTelegramConfig(cfgPath);
       assert.strictEqual(
