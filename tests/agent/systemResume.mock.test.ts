@@ -63,7 +63,6 @@ const TURN_SELECT_SYSTEM_TS = readFileSync(join(REPO, "src/cli/subcommands/serve
 const TURN_STEER_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/steer.ts"), "utf-8");
 const CONTEXT_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/context.ts"), "utf-8");
 const SERVE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf-8");
-const LOOP_TS = readFileSync(join(REPO, "src/agent/loop.ts"), "utf-8");
 
 // ── Ritual-phrase golden anchors (from current source — EXACT substrings per §9.5 T-Resume.4b) ────
 // boundary.ts L27 and checkpoint.ts L22 are template literals — inside a TS template literal,
@@ -278,82 +277,49 @@ describe("systemResume golden — BOUNDARY and CHECKPOINT byte-identical after f
 
 // ─── T-Resume.7 ─── deterministic interceptor: experimental_activeTools deny-list on resume turn ─────
 
-describe("runOneTurn — RESUME_EXCLUDED_TOOLS deny-list blocks search_memory+getMemory+get_memory_note on resume; todo_write/remember/browser tools included; normal turn activeTools undefined (FIX-1 v3.1 §10 V5-ext+V8)", () => {
-  it.skip("T-Resume.7: turn.ts declares RESUME_EXCLUDED_TOOLS Set with all 3 lookup tools excluded; filter uses !RESUME_EXCLUDED_TOOLS.has; todo_write/remember/navigate_to_url NOT in deny-list; loop.ts AgentLoopOpts has activeTools?: string[]; streamText passes experimental_activeTools (v3.1 strengthen — GREEN against built v3.1 code)", () => {
-    // Given: src/cli/subcommands/serve/turn.ts and src/agent/loop.ts sources (v3.1 built)
-    // When: scanned for RESUME_EXCLUDED_TOOLS deny-list, Set-based filter, and loop.ts wiring
-    // Then: Set const with all 3 excluded tools + keep-set membership + AgentLoopOpts + streamText option
+describe("runOneTurn — workflow-resume tools are removed from the registry before the Pi loop", () => {
+  it("T-Resume.7: runOne.ts keeps the exact 14-tool resume deny-list and passes the filtered registry to runAgentLoopPi", () => {
+    // Given: the current post-P72 split runOne.ts implementation
+    // When:  its resume deny-list and Pi-loop call are inspected
+    // Then:  the exact safety list is filtered from deps.tools itself, while memory writes and browser tools remain
 
-    // (1) turn.ts V5-ext: RESUME_EXCLUDED_TOOLS Set const declared
+    // P-72 slice 7 moved the implementation from turn.ts to turn/runOne.ts.
+    assert.ok(TURN_RUN_ONE_TS.includes("RESUME_EXCLUDED_TOOLS"), "turn/runOne.ts must declare RESUME_EXCLUDED_TOOLS");
+
     assert.ok(
-      TURN_TS.includes("RESUME_EXCLUDED_TOOLS"),
-      `turn.ts must declare RESUME_EXCLUDED_TOOLS (v3.1 deny-list: new Set([...3 tools...])) — ` +
-        `V5-ext §10 v3.1. Must be present in built v3.1 code.`,
+      TURN_RUN_ONE_TS.includes("RESUME_EXCLUDED_TOOLS.has"),
+      "turn/runOne.ts must filter resume tools with Set membership",
     );
 
-    // (2) turn.ts: Set-based filter uses .has() — NOT the old !== "search_memory" literal predicate
-    assert.ok(
-      TURN_TS.includes("RESUME_EXCLUDED_TOOLS.has"),
-      `turn.ts filter must use RESUME_EXCLUDED_TOOLS.has(n) (Set-membership test) — ` +
-        `v3.1 replaced the single !== "search_memory" predicate with a Set deny-list.`,
-    );
-
-    // (3) turn.ts: all 3 read-only memory lookup tools are in the deny-list
-    //     Parse the Set literal to verify exact membership
-    const setLiteralMatch = TURN_TS.match(/RESUME_EXCLUDED_TOOLS\s*=\s*new Set\(\[([^\]]*)\]\)/);
+    const setLiteralMatch = TURN_RUN_ONE_TS.match(/RESUME_EXCLUDED_TOOLS\s*=\s*new Set\(\[([^\]]*)\]\)/);
     const setLiteral = setLiteralMatch ? setLiteralMatch[1] : "";
-
+    const excluded = [...setLiteral.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+    assert.deepStrictEqual(excluded, [
+      "search_memory",
+      "getMemory",
+      "get_memory_note",
+      "suggest_card",
+      "todo_write",
+      "record_raw_candidate",
+      "score_lead",
+      "score_account",
+      "promote_candidate_to_lead",
+      "get_lead_context",
+      "get_account_context",
+      "save_message_draft",
+      "list_due_followups",
+      "get_sales_report",
+    ]);
+    for (const retained of ["remember", "set_memory_note", "navigate_to_url"]) {
+      assert.ok(!excluded.includes(retained), `${retained} must remain available on workflow resume`);
+    }
     assert.ok(
-      setLiteral.includes('"search_memory"'),
-      `RESUME_EXCLUDED_TOOLS must include "search_memory" (primary semantic lookup, Dn-1 root). ` +
-        `Set literal parsed: "${setLiteral}".`,
+      TURN_RUN_ONE_TS.includes("Object.entries(deps.tools).filter(([n]) => !RESUME_EXCLUDED_TOOLS.has(n))"),
+      "resume filtering must subset the tool registry itself, not rely on provider activeTools support",
     );
     assert.ok(
-      setLiteral.includes('"getMemory"'),
-      `RESUME_EXCLUDED_TOOLS must include "getMemory" (person-specific lookup, Dn-3 root). ` +
-        `Set literal parsed: "${setLiteral}".`,
-    );
-    assert.ok(
-      setLiteral.includes('"get_memory_note"'),
-      `RESUME_EXCLUDED_TOOLS must include "get_memory_note" (note lookup, Dn-3 coverage). ` +
-        `Set literal parsed: "${setLiteral}".`,
-    );
-
-    // (4) turn.ts: write tools and browser tools are NOT in the deny-list
-    //     (they remain available to the agent on resume — the filter is lookup-only)
-    assert.ok(
-      !setLiteral.includes('"todo_write"'),
-      `RESUME_EXCLUDED_TOOLS must NOT contain "todo_write" — workflow writes kept on resume.`,
-    );
-    assert.ok(
-      !setLiteral.includes('"remember"'),
-      `RESUME_EXCLUDED_TOOLS must NOT contain "remember" — memory writes kept on resume.`,
-    );
-    assert.ok(
-      !setLiteral.includes('"set_memory_note"'),
-      `RESUME_EXCLUDED_TOOLS must NOT contain "set_memory_note" — note writes kept on resume.`,
-    );
-    assert.ok(
-      !setLiteral.includes('"navigate_to_url"'),
-      `RESUME_EXCLUDED_TOOLS must NOT contain "navigate_to_url" — browser tools kept on resume.`,
-    );
-
-    // (5) turn.ts: activeTools variable still exists (ternary: resume → filtered, else → undefined)
-    assert.ok(
-      TURN_TS.includes("activeTools"),
-      `turn.ts must compute activeTools (const activeTools = args.isWorkflowResume ? ... : undefined) — V5-ext §10.`,
-    );
-
-    // (6) loop.ts V8: AgentLoopOpts interface has activeTools?: string[]
-    assert.ok(
-      LOOP_TS.includes("activeTools"),
-      `src/agent/loop.ts AgentLoopOpts must declare activeTools?: string[] (V8 §10).`,
-    );
-
-    // (7) loop.ts V8: streamText receives experimental_activeTools (ai@4.3.19 spelling)
-    assert.ok(
-      LOOP_TS.includes("experimental_activeTools"),
-      `src/agent/loop.ts streamText call must pass experimental_activeTools (V8 §10 — ai@4.3.19 spelling).`,
+      TURN_RUN_ONE_TS.includes("tools: filteredTools"),
+      "runAgentLoopPi must receive the filtered tool registry",
     );
   });
 });
