@@ -82,11 +82,16 @@ function makeFakeClient(opts: { emitError?: string; streamDataChunks?: Buffer[] 
   ctor: FakeClientCtor;
   readonly connectOpts: Record<string, unknown> | null;
   fakeStream: FakeStream;
+  shellReady: Promise<void>;
 } {
   const writeCalls: Array<Buffer | string> = [];
   const setWindowCalls: Array<{ rows: number; cols: number }> = [];
   // Use a standalone let so the class closure can write to it.
   let capturedConnectOpts: Record<string, unknown> | null = null;
+  let resolveShellReady!: () => void;
+  const shellReady = new Promise<void>((resolveReady) => {
+    resolveShellReady = resolveReady;
+  });
 
   const fakeStream: FakeStream = Object.assign(new EventEmitter(), {
     writeCalls,
@@ -107,16 +112,17 @@ function makeFakeClient(opts: { emitError?: string; streamDataChunks?: Buffer[] 
       } else {
         setImmediate(() => {
           this.emit("ready");
-          if (opts.streamDataChunks) {
-            for (const c of opts.streamDataChunks!) {
-              setImmediate(() => fakeStream.emit("data", c));
-            }
-          }
         });
       }
     }
     shell(_ptyOpts: unknown, cb: (err: null, stream: FakeStream) => void) {
-      setImmediate(() => cb(null, fakeStream));
+      setImmediate(() => {
+        cb(null, fakeStream);
+        for (const chunk of opts.streamDataChunks ?? []) {
+          fakeStream.emit("data", chunk);
+        }
+        resolveShellReady();
+      });
     }
     end() {}
   }
@@ -128,6 +134,7 @@ function makeFakeClient(opts: { emitError?: string; streamDataChunks?: Buffer[] 
       return capturedConnectOpts;
     },
     fakeStream,
+    shellReady,
   };
 }
 
@@ -147,7 +154,7 @@ describe("T-SSH: serverSsh WebSocket bridge (G-P30.8, G-P30.9, G-P30.10)", () =>
     const deps: SshWsDeps = { ClientCtor: fakeC1.ctor };
 
     handleSshWs(ws as unknown as import("ws").WebSocket, target, deps);
-    await new Promise((r) => setTimeout(r, 80));
+    await fakeC1.shellReady;
 
     // connect was called — read connectOpts after async so closure has been populated
     const opts1 = fakeC1.connectOpts;
