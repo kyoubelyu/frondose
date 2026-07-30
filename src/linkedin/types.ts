@@ -93,6 +93,7 @@ export interface LinkedinSession {
    *  booted MID-turn also inherits it; applied to the cached client immediately.
    *  Pass undefined at turn end to clear. */
   setTurnAbortSignal(signal?: AbortSignal): void;
+  clearTurnAbortSignal(owner: AbortSignal): void;
   /** P-18 D-2: probe cached CDP connection health via Runtime.evaluate("1").
    *  Returns true if healthy (or no cached client to check).
    *  On failure, clears the stale cache so next tool call triggers reconnect. */

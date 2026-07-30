@@ -20,6 +20,7 @@ import { getSalesDb } from "../../../tools/sales/_dbHandle.js";
 import type { ServeDeps, ServeState } from "./context.js";
 import { cronProgressHighWaterMark } from "./cronProgress.js";
 import type { createTurnRunner } from "./turn.js";
+import { clearCurrentTurnIfOwned } from "./turnOwnership.js";
 
 export function createCronDriver(
   state: ServeState,
@@ -320,7 +321,7 @@ export function createCronDriver(
         retryable: false,
       });
     } finally {
-      state.currentTurn = null;
+      clearCurrentTurnIfOwned(state, turnId);
       deps.emitFrame({ type: "cron-done", cronRunId, ts: Date.now() });
       const doneCtxId = state.overlayContextId;
       const doneClient = deps.session.getClient();

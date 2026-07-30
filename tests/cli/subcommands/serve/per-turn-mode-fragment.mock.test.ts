@@ -278,6 +278,7 @@ function makeSplitDeps(
     auditWriter: async () => undefined,
     session: {
       setTurnAbortSignal: () => undefined,
+      clearTurnAbortSignal: () => undefined,
       getClient: () => null,
     } as unknown as ServeDeps["session"],
     schedulePath: "/dev/null",

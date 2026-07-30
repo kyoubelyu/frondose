@@ -136,6 +136,7 @@ function makeDeps(frames: unknown[], salesDbPath = join(tmpdir(), `l3f8-empty-${
     auditWriter: async () => undefined,
     session: {
       setTurnAbortSignal: () => undefined,
+      clearTurnAbortSignal: () => undefined,
       getClient: () => null,
     },
     schedulePath: "/dev/null",

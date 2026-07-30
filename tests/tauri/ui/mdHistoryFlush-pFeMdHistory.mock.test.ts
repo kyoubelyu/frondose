@@ -210,7 +210,7 @@ describe("P-FE-MD-HISTORY source-structural — endAgentBubble flushes before de
     const errorStart = APP_TS.indexOf('case "error":');
     assert.ok(doneStart >= 0 && errorStart >= 0, "handleEvent must have done + error cases");
     const doneArm = APP_TS.slice(doneStart, errorStart);
-    const errorArm = APP_TS.slice(errorStart, APP_TS.indexOf("break;", errorStart));
+    const errorArm = APP_TS.slice(errorStart, APP_TS.indexOf('case "overlay-reconnected":', errorStart));
     assert.ok(doneArm.includes("endAgentBubble()"), 'case "done" must call endAgentBubble()');
     assert.ok(errorArm.includes("endAgentBubble()"), 'case "error" must call endAgentBubble()');
   });
