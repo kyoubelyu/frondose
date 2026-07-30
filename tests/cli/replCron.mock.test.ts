@@ -1,48 +1,11 @@
-/**
- * P-10 mock tests — T-Slash.cron.1..15 + T-CronTurn.1..7
- *
- * Tests for src/cli/replCron.ts — /cron slash command parsing + runCronTurn helper.
- *
- * T-Slash.cron.1  — parseCronSlashLine '/cron schedule "task" --cron "0 9 * * *"' → correct object
- * T-Slash.cron.2  — parseCronSlashLine '/cron schedule "task" --at "09:00"' → oneShot path
- * T-Slash.cron.3  — parseCronSlashLine '/cron schedule "Foo" --at "2026-05-11T09:00Z"' → ISO oneShot
- * T-Slash.cron.4  — parseCronSlashLine with both --cron + --at → throws "mutually exclusive"
- * T-Slash.cron.5  — parseCronSlashLine with neither --cron nor --at → throws "--cron or --at required"
- * T-Slash.cron.6  — parseCronSlashLine '/cron list' → { verb:"list" }
- * T-Slash.cron.7  — parseCronSlashLine '/cron remove abc12345' → { verb:"remove", id:"abc12345" }
- * T-Slash.cron.8  — parseCronSlashLine '/cron remove' (no id) → throws "id required"
- * T-Slash.cron.9  — parseCronSlashLine '/cron foo' (unknown verb) → throws "unknown /cron verb" + "foo"
- * T-Slash.cron.10 — handleCronSlash schedule: empty schedule.jsonl → 1 record written, correct shape
- * T-Slash.cron.11 — handleCronSlash list: 2 records → output contains both IDs, tasks, cronExprs; createdAt-asc order
- * T-Slash.cron.12 — handleCronSlash remove (id match): record removed; stdout contains "removed" + id
- * T-Slash.cron.13 — handleCronSlash remove (id miss): file unchanged; stdout contains "no schedule with id"
- * T-Slash.cron.14 — dispatchSlash("/cron list", ctx): handled=true; ctx.out receives list output (replSlash wiring)
- * T-Slash.cron.15 — dispatchSlash("/cron", ctx) (no verb): handled=true; output mentions schedule/list/remove
- *
- * T-CronTurn.1 — runCronTurn injects "[CRON_RUN_ID=...]\n<task>" as user message (D-14)
- * T-CronTurn.2 — runCronTurn calls appendMessages with the tail from turnStart onward
- * T-CronTurn.3 — runCronTurn: abort mid-loop → returns early, does NOT call appendMessages
- * T-CronTurn.4 — runCronTurn: composedStepFinish hook receives every agent step
- * T-CronTurn.5 — runCronTurn: recurring record → writeSchedule called with markRan result (lastRunAt+nextRunAt updated)
- * T-CronTurn.6 — runCronTurn: oneshot record → writeSchedule called with record filtered out (markRan=null)
- * T-CronTurn.7 — crash-stable cron_run_id (BLOCKER-1 cascade): computeCronRunId(record, new Date(record.nextRunAt)) is identical when called twice at different wall-clock instants
- *
- * Gate coverage:
- *   G-P10.8 (T-Slash.cron.1..15), G-P10.9 (T-Slash.cron.11), G-P10.10 (T-Slash.cron.12..13),
- *   G-P10.11 (T-CronTurn.1..6), G-P10.6 crash-stability dimension (T-CronTurn.7), G-P10.5 (T-CronTurn.5..6)
- *
- * Uses MockLanguageModelV1 from ai/test for runCronTurn tests.
- * Uses mkdtempSync + cleanup for schedule.jsonl I/O.
- * No Chrome, no real LLM calls, no SQLite.
- */
+/** P-10 /cron parsing and controlled-Pi runCronTurn contracts. */
 
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import type { CoreMessage } from "ai";
-import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { TokenBudget } from "../../src/agent/tokenBudget.js";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
@@ -59,6 +22,7 @@ import { dispatchSlash, type SlashCtx } from "../../src/cli/replSlash.js";
 // computeCronRunId lives in schedule.ts (not replCron.ts) — imported here for T-CronTurn.7.
 import { computeCronRunId, readSchedule, type ScheduleRecord, writeSchedule } from "../../src/persistence/schedule.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,26 +42,21 @@ function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
   return { lines, stream };
 }
 
-/** Minimal echo-model that immediately returns a single text chunk. */
-function makeEchoModel(): MockLanguageModelV1 {
+/** Fail-closed legacy model: current runAgentLoop must never invoke it. */
+function makeInertModel(): MockLanguageModelV1 {
   return new MockLanguageModelV1({
-    provider: "openai",
-    modelId: "test-echo",
-    doStream: async () => ({
-      stream: simulateReadableStream({
-        chunks: [
-          { type: "text-delta" as const, textDelta: "cron task done" },
-          {
-            type: "finish" as const,
-            finishReason: "stop" as const,
-            usage: { promptTokens: 10, completionTokens: 5 },
-          },
-        ],
-      }),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-    }),
+    provider: "controlled-test",
+    modelId: "unreachable",
+    doStream: async () => {
+      throw new Error("legacy Vercel model path must remain unreachable");
+    },
   });
 }
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 function makeRecord(overrides: Partial<ScheduleRecord> = {}): ScheduleRecord {
   return {
@@ -412,7 +371,7 @@ describe("dispatchSlash /cron wiring — replSlash.ts integration", () => {
       writeSchedule(schedulePath, []); // empty schedule → "(no scheduled jobs)\n"
 
       const { lines, stream } = makeOut();
-      const model = makeEchoModel();
+      const model = makeInertModel();
       const budget = new TokenBudget(model);
       const ctx: SlashCtx = {
         messages: [],
@@ -447,7 +406,7 @@ describe("dispatchSlash /cron wiring — replSlash.ts integration", () => {
     try {
       const schedulePath = join(dir, "schedule.jsonl");
       const { lines, stream } = makeOut();
-      const model = makeEchoModel();
+      const model = makeInertModel();
       const budget = new TokenBudget(model);
       const ctx: SlashCtx = {
         messages: [],
@@ -492,8 +451,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => appendAssistant(opts, "cron task done"));
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -517,6 +477,7 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
         `content must include [CRON_RUN_ID=${expectedCronRunId}]; got: "${content}"`,
       );
       assert.ok(content.includes(record.task), `content must include task "${record.task}"; got: "${content}"`);
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
@@ -533,10 +494,12 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
       const record = makeRecord();
       writeSchedule(schedulePath, [record]);
 
-      const messages: CoreMessage[] = [];
+      const prior: CoreMessage = { role: "user", content: "prior persisted elsewhere" };
+      const messages: CoreMessage[] = [prior];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => appendAssistant(opts, "cron task done"));
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -548,18 +511,19 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       // appendMessages uses appendFileSync which creates the file
       assert.ok(existsSync(sessionFile), "session file must exist after runCronTurn (appendMessages was called)");
-      const content = readFileSync(sessionFile, "utf-8");
-      // User message with CRON_RUN_ID and assistant response must be in the file
-      assert.ok(
-        content.includes("CRON_RUN_ID"),
-        `session file must contain CRON_RUN_ID; got: "${content.slice(0, 200)}"`,
-      );
+      const persisted = readFileSync(sessionFile, "utf-8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as CoreMessage);
+      assert.deepEqual(persisted, messages.slice(1), "only the exact cron user+assistant tail is appended");
+      assert.ok(!persisted.includes(prior), "the pre-existing message must not be appended again");
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
   });
 
-  it.skip("T-CronTurn.3: when runCronTurn is called and abortController.signal is aborted mid-loop, the function returns early and does NOT call appendMessages for messages added after the abort point (D-16)", async () => {
+  it("T-CronTurn.3: when runCronTurn is called and abortController.signal is aborted mid-loop, the function returns early and does NOT call appendMessages for messages added after the abort point (D-16)", async () => {
     // Given: AbortController that fires during runAgentLoop execution
     // When: runCronTurn(record, fireDate, schedulePath, deps) with abortSignal
     // Then: function returns early; appendMessages not called for partial cron turn; schedule not updated
@@ -570,32 +534,17 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
       const record = makeRecord();
       writeSchedule(schedulePath, [record]);
 
+      const scheduleBefore = readFileSync(schedulePath, "utf-8");
       const abortController = new AbortController();
-      // Model that aborts the controller during doStream, then returns a finish stream
-      const abortingModel = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-abort",
-        doStream: async () => {
-          abortController.abort();
-          return {
-            stream: simulateReadableStream({
-              chunks: [
-                {
-                  type: "finish" as const,
-                  finishReason: "stop" as const,
-                  usage: { promptTokens: 1, completionTokens: 0 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
-        },
+      piLoop.queue(async (opts) => {
+        appendAssistant(opts, "partial response");
+        abortController.abort();
       });
 
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
       const deps: RunCronTurnDeps = {
-        model: abortingModel,
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -612,6 +561,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
         !existsSync(sessionFile),
         "session file must NOT exist after aborted runCronTurn (appendMessages was skipped per D-16)",
       );
+      assert.equal(readFileSync(schedulePath, "utf-8"), scheduleBefore, "abort must leave schedule bytes unchanged");
+      assert.equal(messages.at(-1)?.content, "partial response", "the controlled abort occurs after a partial reply");
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
@@ -628,10 +580,15 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
       writeSchedule(schedulePath, [record]);
 
       const stepFinishCalls: unknown[] = [];
+      const syntheticStep = { toolCalls: [], toolResults: [] };
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => {
+        appendAssistant(opts, "cron task done");
+        await opts.onStepFinish?.(syntheticStep as never);
+      });
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -645,10 +602,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
       const fireDate = new Date(record.nextRunAt);
       await runCronTurn(record, fireDate, schedulePath, deps);
 
-      assert.ok(
-        stepFinishCalls.length >= 1,
-        `onStepFinish must be called at least once; called ${stepFinishCalls.length} times`,
-      );
+      assert.equal(stepFinishCalls.length, 1, "onStepFinish must be called exactly once");
+      assert.equal(stepFinishCalls[0], syntheticStep, "the exact synthetic step identity must reach the hook");
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
@@ -666,8 +622,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => appendAssistant(opts, "cron task done"));
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -688,6 +645,7 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
         new Date(r.nextRunAt).getTime() > fireDate.getTime(),
         `nextRunAt must be advanced past fireDate; got nextRunAt=${r.nextRunAt}, fireDate=${fireDate.toISOString()}`,
       );
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
@@ -709,8 +667,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => appendAssistant(opts, "cron task done"));
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -727,6 +686,7 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
         0,
         "one-shot record must be removed from schedule.jsonl after firing (markRan=null → D-7)",
       );
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }
@@ -745,8 +705,9 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       const messages: CoreMessage[] = [];
       const { stream } = makeOut();
+      piLoop.queue(async (opts) => appendAssistant(opts, "cron task done"));
       const deps: RunCronTurnDeps = {
-        model: makeEchoModel(),
+        model: makeInertModel(),
         system: "test system",
         messages,
         tools: {},
@@ -785,6 +746,7 @@ describe("runCronTurn — cron-turn injection + agent loop execution", () => {
 
       // Contains the task text (in the secondary "(scheduled task: …)" line)
       assert.ok(content.includes("search VP Sales"), `content must include task "search VP Sales"; got: "${content}"`);
+      piLoop.assertDrained(1);
     } finally {
       cleanup();
     }

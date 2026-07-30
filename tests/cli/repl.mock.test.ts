@@ -8,49 +8,50 @@
  *  (2) cron / telegram / worker callers do NOT touch `isInteractive` (no `control`
  *      field on RunCronTurnDeps / TelegramTurnDeps / worker-inbox deps).
  *
- * Black-box approach for T-Wiring.1: a `MockLanguageModelV1` whose `doStream`
- * PEEKS at `opts.control.isInteractive` while the real `runAgentLoop` is
- * mid-execution — no `mock.module` / static-import stubbing (Step-3 CONCERN-1,
- * Step-3b orchestrator override).
+ * Black-box approach for T-Wiring.1: the current dynamic Pi loop is controlled
+ * while the real runRepl locks, operator callback, and finally blocks execute.
  *
  * Structural approach for T-Wiring.2: compile-time `keyof` check + source-text
  * grep verifies cron / telegram / worker don't carry or read `control`.
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path, { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { CoreMessage } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
+import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import { runRepl } from "../../src/cli/repl.js";
 import type { RunCronTurnDeps } from "../../src/cli/replCron.js";
 import type { TelegramTurnDeps } from "../../src/cli/replTelegram.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * HOME shim — create a tmp dir, mkdir `<tmp>/.mai/agent`, set HOME to tmp.
- * `os.homedir()` resolves from `process.env.HOME` on Unix, so `runRepl`'s hardcoded
- * `path.join(os.homedir(), ".frondose", "agent", "turn.lock")` lands in the tmp tree.
- * Returns a cleanup that restores HOME + removes the tmp dir.
+ * Home shim: isolate both os.homedir() and the product HOME_BASE override.
  */
 function withTmpHome(): { tmpHome: string; cleanup: () => void } {
   const tmpHome = mkdtempSync(join(os.tmpdir(), "mai-p54-repl-"));
   mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
   const priorHome = process.env.HOME;
+  const priorHomeBase = process.env.MAI_HOME_BASE;
   process.env.HOME = tmpHome;
+  process.env.MAI_HOME_BASE = tmpHome;
   return {
     tmpHome,
     cleanup: () => {
       if (priorHome === undefined) delete process.env.HOME;
       else process.env.HOME = priorHome;
+      if (priorHomeBase === undefined) delete process.env.MAI_HOME_BASE;
+      else process.env.MAI_HOME_BASE = priorHomeBase;
       try {
         cleanupTmpDir(tmpHome);
       } catch {
@@ -69,166 +70,175 @@ function makeNullOut(): NodeJS.WritableStream {
   } as unknown as NodeJS.WritableStream;
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolvePromise = () => {};
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
+async function waitUntil(predicate: () => boolean, message: string): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (predicate()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail(message);
+}
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
+
 // ─── T-Wiring.1 ──────────────────────────────────────────────────────────────
 
 describe("interactive operator-turn flips isInteractive=true INSIDE turnLock + restores in finally (G-P54.6)", () => {
-  it.skip("T-Wiring.1 (success path): when runRepl runs one operator turn, MockLanguageModelV1.doStream peeks opts.control.isInteractive===true, AND after runRepl settles opts.control.isInteractive is restored to its prior value (undefined)", async () => {
-    // Given: runRepl invoked with opts.control = { requestStop: ()=>{}, isInteractive: undefined }
-    //        and a MockLanguageModelV1 whose doStream callback PEEKS
-    //        opts.control.isInteractive into a closure variable while the real
-    //        runAgentLoop is mid-execution.
-    // When:  synthetic stdin feeds the operator a single line "hello\n" then EOF;
-    //        runRepl settles after processing that single turn.
-    // Then:  (a) the peeked value === true (flip is visible INSIDE the turnLock.run
-    //            callback, around runAgentLoop);
-    //        (b) post-settle, opts.control.isInteractive === undefined (restored
-    //            by the inner finally — see plan §6.3(b) BLOCKER-1 fix).
+  it("T-Wiring.1 (success path): when an operator turn queues behind TurnLock, isInteractive stays prior until lock entry, becomes true inside Pi, and restores after settlement", async () => {
+    // Given: boot reaches the first prompt, then a real injected TurnLock is held
+    // When: operator input queues and the cross-process lock proves it reached the lock wait
+    // Then: control remains prior while queued, is true in Pi, and restores after success
     const { tmpHome, cleanup } = withTmpHome();
+    const input = new PassThrough();
     try {
       let peekedValue: unknown = "NEVER_PEEKED";
       const control: ControlSignals = {
         requestStop: () => {},
         isInteractive: undefined,
       };
-
       const model = new MockLanguageModelV1({
         provider: "openai",
-        modelId: "deepseek-v4-flash",
+        modelId: "unused-input-model",
         doStream: async () => {
-          // PEEK while runAgentLoop is mid-execution — production should have
-          // flipped isInteractive=true inside turnLock.run by the time the model
-          // is consulted (between the flip on line 306 and the inner finally on 319).
-          peekedValue = control.isInteractive;
-          return {
-            stream: simulateReadableStream({
-              chunks: [
-                { type: "text-delta" as const, textDelta: "ok" },
-                {
-                  type: "finish" as const,
-                  finishReason: "stop" as const,
-                  usage: { promptTokens: 5, completionTokens: 2 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+          throw new Error("legacy model path must remain unreachable");
         },
       });
-
       const messages: CoreMessage[] = [];
       const sessionFile = join(tmpHome, "session.jsonl");
-      const input = new PassThrough();
-      input.write("hello\n");
-      input.end();
+      const lockPath = join(tmpHome, ".frondose", "agent", "turn.lock");
+      const turnLock = new TurnLock();
+      const ready = deferred();
+      const nextPrompt = deferred();
+      let promptCount = 0;
+      const out = {
+        write(chunk: string | Buffer): boolean {
+          const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+          const matches = text.match(/> /g)?.length ?? 0;
+          promptCount += matches;
+          if (promptCount >= 1) ready.resolve();
+          if (promptCount >= 2) nextPrompt.resolve();
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      piLoop.queue(async (opts) => {
+        peekedValue = control.isInteractive;
+        assert.equal(existsSync(lockPath), true, "cross-process turn.lock must exist during the operator loop");
+        appendAssistant(opts, "ok");
+      });
 
-      await runRepl({
+      const replPromise = runRepl({
         model,
         system: "test system",
         messages,
         tools: {},
         sessionFile,
-        out: makeNullOut(),
+        out,
         in_: input,
         control,
+        turnLock,
       });
+      await ready.promise;
 
-      assert.equal(
-        peekedValue,
-        true,
-        "MockLanguageModelV1.doStream must observe opts.control.isInteractive===true while runAgentLoop is mid-execution (the flip is visible inside turnLock.run)",
+      const holderEntered = deferred();
+      const releaseHolder = deferred();
+      const holder = turnLock.run(async () => {
+        holderEntered.resolve();
+        await releaseHolder.promise;
+      });
+      await holderEntered.promise;
+      input.write("hello\n");
+      await waitUntil(
+        () => existsSync(lockPath),
+        "operator turn must acquire cross-process lock before queueing behind TurnLock",
       );
       assert.equal(
         control.isInteractive,
         undefined,
-        "after runRepl settles, opts.control.isInteractive must be restored to its prior value (undefined) by the inner finally",
+        "queued operator turn must not flip control before TurnLock entry",
       );
+      releaseHolder.resolve();
+      await holder;
+      await nextPrompt.promise;
+      input.end();
+      await replPromise;
+
+      assert.equal(peekedValue, true, "controlled Pi must observe true only after the queued lock enters");
+      assert.equal(control.isInteractive, undefined, "success path must restore the prior control value");
+      assert.equal(existsSync(lockPath), false, "cross-process turn.lock must be released after success");
+      assert.equal(promptCount, 2, "REPL must emit exactly the initial and next prompt");
+      piLoop.assertDrained(1);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
-  it.skip("T-Wiring.1 (throw path): when runAgentLoop throws while runRepl is mid-operator-turn (an aborted-but-not-handled-as-clean rejection), the inner finally restores opts.control.isInteractive to its prior value (undefined) BEFORE the rejection propagates out of turnLock.run", async () => {
-    // Given: opts.control = { requestStop:()=>{}, isInteractive: undefined } and a
-    //        MockLanguageModelV1 whose doStream PEEKS isInteractive (must observe
-    //        the flipped `true` value mid-execution) and then returns a stream
-    //        that emits an "error" chunk so streamText surfaces an exception. The
-    //        post-throw `opts.control.isInteractive` value is what carries the
-    //        load-bearing assertion of plan §6.3(b) BLOCKER-1.
-    // When:  synthetic stdin feeds one line; runRepl runs that turn.
-    // Then:  (a) the peek captured isInteractive===true (flip happened);
-    //        (b) post-runRepl, opts.control.isInteractive === undefined (the
-    //            inner finally restored on the throw path — not just the success path).
-    //
-    // VALIDATOR NOTE: an error-chunk in the stream is the Vercel AI SDK idiomatic
-    // way to surface a model-level error; a thrown doStream callback gets buffered
-    // weirdly by streamText (the rejection surfaces as a no-op chunk and the loop
-    // continues to drain stdin → hang in non-TTY mode). The error chunk forces the
-    // SDK to emit the error through its standard error path and reaches runAgentLoop.
+  it("T-Wiring.1 (throw path): when controlled Pi throws inside the operator TurnLock, the exact error propagates after control and cross-process lock restore", async () => {
+    // Given: controlled Pi observes the operator callback and throws one sentinel
+    // When: runRepl executes one operator turn
+    // Then: exact sentinel propagates after isInteractive and turn.lock restore
     const { tmpHome, cleanup } = withTmpHome();
+    const input = new PassThrough();
     try {
       let peekedValue: unknown = "NEVER_PEEKED";
       const control: ControlSignals = {
         requestStop: () => {},
         isInteractive: undefined,
       };
-
+      const sentinel = new Error("controlled repl loop failure");
       const model = new MockLanguageModelV1({
         provider: "openai",
-        modelId: "deepseek-v4-flash",
+        modelId: "unused-input-model",
         doStream: async () => {
-          // Peek BEFORE returning the error stream.
-          peekedValue = control.isInteractive;
-          return {
-            stream: simulateReadableStream({
-              chunks: [{ type: "error" as const, error: new Error("test throw") }],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+          throw new Error("legacy model path must remain unreachable");
         },
       });
-
       const messages: CoreMessage[] = [];
       const sessionFile = join(tmpHome, "session.jsonl");
-      const input = new PassThrough();
+      const lockPath = join(tmpHome, ".frondose", "agent", "turn.lock");
+      const ready = deferred();
+      const out = {
+        write(chunk: string | Buffer): boolean {
+          if ((typeof chunk === "string" ? chunk : chunk.toString("utf8")).includes("frondose ready")) ready.resolve();
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      piLoop.queue(async () => {
+        peekedValue = control.isInteractive;
+        assert.equal(existsSync(lockPath), true, "turn.lock must exist while controlled Pi runs");
+        throw sentinel;
+      });
+
+      const replPromise = runRepl({
+        model,
+        system: "test system",
+        messages,
+        tools: {},
+        sessionFile,
+        out,
+        in_: input,
+        control,
+      });
+      await ready.promise;
       input.write("hello\n");
-      input.end();
+      await assert.rejects(replPromise, (error) => error === sentinel);
 
-      // The error-chunk in the stream causes streamText to surface the error via
-      // its normal error path; runAgentLoop's try/catch sees it and (since
-      // abortSignal is not aborted) rethrows. The throw escapes turnLock.run via
-      // the inner `try { runAgentLoop() } finally { restore }` — finally MUST run
-      // before the throw bubbles out.
-      let caught: unknown = "NOT_THROWN";
-      try {
-        await runRepl({
-          model,
-          system: "test system",
-          messages,
-          tools: {},
-          sessionFile,
-          out: makeNullOut(),
-          in_: input,
-          control,
-        });
-      } catch (e) {
-        caught = e;
-      }
-
-      assert.equal(
-        peekedValue,
-        true,
-        "MockLanguageModelV1.doStream must observe opts.control.isInteractive===true (the flip happened before the error chunk surfaced)",
-      );
-      assert.equal(
-        control.isInteractive,
-        undefined,
-        "post-throw, opts.control.isInteractive must be restored to undefined (the inner finally in repl.ts:319 must run on the throw path too — load-bearing for Step-3b BLOCKER-1 fix)",
-      );
-      // Diagnostic: prefer that the throw escaped, but do not strictly require
-      // a specific error shape — if the SDK normalizes the error chunk, the
-      // restoration assertion above still proves the inner finally fired.
-      void caught;
+      assert.equal(peekedValue, true, "controlled Pi must observe isInteractive=true");
+      assert.equal(control.isInteractive, undefined, "throw path must restore the prior control value");
+      assert.equal(existsSync(lockPath), false, "throw path must release the cross-process turn.lock");
+      piLoop.assertDrained(1);
     } finally {
+      input.end();
       cleanup();
     }
   });

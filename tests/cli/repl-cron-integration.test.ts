@@ -1,85 +1,99 @@
-// P-10 mock tests — T-Drain.1..4 + T-Poll.1..4
-//
-// Tests for REPL boot-time drain + after-turn poll wiring (src/cli/repl.ts + replCron.ts).
-//
-// T-Drain.1 — 2 due records at boot: runCronTurn called twice BEFORE first prompt (createdAt-asc order)
-// T-Drain.2 — 0 records at boot: runCronTurn NOT called; standard "ready" greeting unchanged
-// T-Drain.3 — abort between cron turns: only 1st turn fires, 2nd is skipped (D-16)
-// T-Drain.4 — schedule.jsonl path does not exist at boot: runRepl does NOT throw; drains as []
-//
-// T-Poll.1 — mid-turn schedule mutation: after turn completes, poll fires new due record
-//            AFTER appendMessages for operator turn AND BEFORE next "> " prompt
-// T-Poll.2 — no schedule mutation during turn: poll does NOT call runCronTurn; next prompt appears
-// T-Poll.3 — abort between cron turns in poll: poll exits early; REPL breaks for-await loop (D-16)
-// T-Poll.4 — due oneshot record written during operator turn: after-turn poll fires it exactly once;
-//            schedule.jsonl is empty after firing (record removed for oneshot).
-//            NOTE: Implementation uses oneshot records to avoid the infinite-drain-loop problem:
-//            a recurring record at nextRunAt="2020-01-01" with "0 9 * * *" fires thousands of times
-//            before nextRunAt advances past the current date. T-CronTurn.5 (replCron.mock.test.ts)
-//            covers markRan behavior for recurring records; T-Poll.4 tests REPL plumbing.
-//
-// Gate coverage: G-P10.12 (all T-Drain + T-Poll), D-16 (T-Drain.3 + T-Poll.3)
-//
-// ── PassThrough EOF timing note ────────────────────────────────────────────────
-// Node.js readline async iterators hang when the stream is ended BEFORE `for await`
-// attaches its 'close' listener (the iterator never receives the already-fired 'close').
-// Fix: end the PassThrough AFTER readline's event listeners are set up, which happens
-// when `for await` starts. We do this by calling inputPT.end() from inside the model's
-// doStream callback (fires AFTER all async work from that turn completes, giving the
-// REPL time to reach the next for-await iteration). Tests with no model calls use
-// setImmediate() after starting runRepl.
-//
-// Uses MockLanguageModelV1 + PassThrough streams (pattern mirrors repl-multiline.test.ts).
-// Uses mkdtempSync for schedule.jsonl and session files.
-// No Chrome, no real LLM, no SQLite.
+// P-10 REPL/cron integration contracts: boot drain and after-operator-turn polling.
+// Controlled Pi scripts make ordering, persistence, abort, and schedule state observable.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { describe, it } from "node:test";
-import { simulateReadableStream } from "ai";
+import { after, before, beforeEach, describe, it } from "node:test";
+import type { CoreMessage } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { runRepl } from "../../src/cli/repl.js";
 import { readSchedule, type ScheduleRecord, writeSchedule } from "../../src/persistence/schedule.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
-function makeTempDir(): { dir: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "mai-p10-repl-cron-"));
-  return { dir, cleanup: () => cleanupTmpDir(dir) };
+function makeInertModel(): MockLanguageModelV1 {
+  return new MockLanguageModelV1({
+    provider: "controlled-test",
+    modelId: "unreachable",
+    doStream: async () => {
+      throw new Error("legacy Vercel model path must remain unreachable");
+    },
+  });
 }
 
-function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
+function makeTempDir(): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "frondose-repl-cron-"));
+  const prior = process.env.MAI_HOME_BASE;
+  process.env.MAI_HOME_BASE = dir;
+  mkdirSync(join(dir, ".frondose", "agent"), { recursive: true });
+  return {
+    dir,
+    cleanup: () => {
+      if (prior === undefined) delete process.env.MAI_HOME_BASE;
+      else process.env.MAI_HOME_BASE = prior;
+      cleanupTmpDir(dir);
+    },
+  };
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function makeObservedOut(): {
+  lines: string[];
+  stream: NodeJS.WritableStream;
+  firstPrompt: Promise<void>;
+  nextPrompt: Promise<void>;
+  promptCount: () => number;
+} {
   const lines: string[] = [];
+  const initialPrompt = deferred();
+  const secondPrompt = deferred();
+  let prompts = 0;
   const stream = {
     write(chunk: string | Buffer): boolean {
-      lines.push(typeof chunk === "string" ? chunk : chunk.toString("utf-8"));
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf-8");
+      lines.push(text);
+      prompts += text.split("> ").length - 1;
+      if (prompts >= 1) initialPrompt.resolve();
+      if (prompts >= 2) secondPrompt.resolve();
       return true;
     },
   } as unknown as NodeJS.WritableStream;
-  return { lines, stream };
+  return {
+    lines,
+    stream,
+    firstPrompt: initialPrompt.promise,
+    nextPrompt: secondPrompt.promise,
+    promptCount: () => prompts,
+  };
 }
 
-/** Finish chunks for mock model streams. */
-function finishChunks(text = "done") {
-  return [
-    { type: "text-delta" as const, textDelta: text },
-    { type: "finish" as const, finishReason: "stop" as const, usage: { promptTokens: 5, completionTokens: 2 } },
-  ];
+function parseSession(path: string): CoreMessage[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as CoreMessage);
 }
 
-/**
- * Create a due ONESHOT record. Using oneshot avoids the infinite-drain-loop problem:
- * recurring records with permanently-past nextRunAt fire thousands of times before
- * nextRunAt advances past the current date. Oneshot records fire exactly once (then removed).
- */
-function makeDueRecord(id: string, createdAt: string, task?: string): ScheduleRecord {
+function makeDueRecord(id: string, createdAt: string, task: string): ScheduleRecord {
   return {
     id,
-    task: task ?? `Task ${id.slice(0, 8)}`,
+    task,
     cronExpr: "at:2020-01-01T00:00:00.000Z",
     type: "oneshot",
     enabled: true,
@@ -89,496 +103,344 @@ function makeDueRecord(id: string, createdAt: string, task?: string): ScheduleRe
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// T-Drain — REPL boot-time drain
-// ════════════════════════════════════════════════════════════════════════════════
+async function runOneOperatorTurn(opts: {
+  schedulePath: string;
+  sessionFile: string;
+  input: PassThrough;
+  output: ReturnType<typeof makeObservedOut>;
+  abortController?: AbortController;
+}): Promise<void> {
+  const repl = runRepl({
+    model: makeInertModel(),
+    system: "test system",
+    messages: [],
+    tools: {},
+    sessionFile: opts.sessionFile,
+    schedulePath: opts.schedulePath,
+    in_: opts.input,
+    out: opts.output.stream,
+    abortController: opts.abortController,
+    abortSignal: opts.abortController?.signal,
+  });
+  await opts.output.firstPrompt;
+  opts.input.write("hello\n");
+  if (!opts.abortController) {
+    await opts.output.nextPrompt;
+    opts.input.end();
+  }
+  await repl;
+}
 
-describe("REPL boot-time drain — drainDueJobs fires before first prompt", () => {
-  it.skip("T-Drain.1: given schedule.jsonl with 2 due oneshot records at REPL boot, runCronTurn is called exactly twice BEFORE first '> ' prompt, in createdAt-ascending order", async () => {
-    // Given: 2 due oneshot records; abortController is aborted inside the 2nd doStream call
-    // When: runRepl starts; boot drain fires both records; abort exits REPL before "frondose ready"
-    // Then: output contains exactly 2 "[cron-fired]" lines; A fires before B (createdAt-asc);
-    //       "frondose ready" does NOT appear (abort exits before greeting → confirms boot-drain timing)
-    //
-    // ─── Timing note ─────────────────────────────────────────────────────────────
-    // setImmediate() inside doStream fires DURING boot-drain stream processing
-    // (before for-await even starts), making the "end input" pattern unreliable here.
-    // The abort approach avoids the timing issue: abort is synchronous, not event-phase
-    // dependent. [cron-fired] strings are written BEFORE runAgentLoop is called, so
-    // both appear even when the 2nd doStream immediately aborts the controller.
-    // ─────────────────────────────────────────────────────────────────────────────
+describe("REPL boot-time drain", () => {
+  it("T-Drain.1: given schedule.jsonl with 2 due oneshot records at REPL boot, runCronTurn is called exactly twice BEFORE first '> ' prompt, in createdAt-ascending order", async () => {
+    // Given: reverse-written A/B due jobs; A succeeds and B aborts
+    // When: boot drain runs
+    // Then: A then B execute, A is removed, B is retained, and no greeting is written
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
       const sessionFile = join(dir, "session.jsonl");
-
-      const rA = makeDueRecord("aaaa0001-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Task A");
-      const rB = makeDueRecord("bbbb0002-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Task B");
-      writeSchedule(schedulePath, [rB, rA]); // written in reverse; drain must sort by createdAt
-
+      const a = makeDueRecord("aaaa0001-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Task A");
+      const b = makeDueRecord("bbbb0002-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Task B");
+      writeSchedule(schedulePath, [b, a]);
       const abortController = new AbortController();
-      let doStreamCount = 0;
-      const model = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-drain1",
-        doStream: async () => {
-          doStreamCount++;
-          if (doStreamCount === 2) {
-            // 2nd boot-cron turn: [cron-fired] for B already written before this call.
-            // Abort so REPL exits cleanly without needing input stream termination.
-            abortController.abort();
-          }
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+      const prompts: string[] = [];
+      piLoop.queue(
+        async (opts) => {
+          prompts.push(String(opts.messages.at(-1)?.content));
+          appendAssistant(opts, "A done");
         },
-      });
-
-      const { lines, stream } = makeOut();
-      const inputPT = new PassThrough();
-      // No need to end inputPT: REPL aborts before reaching for-await
-
+        async (opts) => {
+          prompts.push(String(opts.messages.at(-1)?.content));
+          appendAssistant(opts, "B partial");
+          abortController.abort();
+        },
+      );
+      const output = makeObservedOut();
       await runRepl({
-        model,
+        model: makeInertModel(),
         system: "test system",
         messages: [],
         tools: {},
         sessionFile,
         schedulePath,
-        in_: inputPT,
-        out: stream,
+        in_: input,
+        out: output.stream,
         abortController,
         abortSignal: abortController.signal,
       });
-
-      // Clean up stream after runRepl returns
-      inputPT.end();
-
-      const output = lines.join("");
-      const cronFiredMatches = output.match(/\[cron-fired\]/g) ?? [];
-      assert.equal(
-        cronFiredMatches.length,
-        2,
-        `exactly 2 cron turns must fire at boot; got ${cronFiredMatches.length}`,
+      assert.deepEqual(
+        prompts.map((text) => text.includes("Task A")),
+        [true, false],
       );
-
-      // A fires before B (createdAt-asc sort is the contract)
-      const idxA = output.indexOf("aaaa0001");
-      const idxB = output.indexOf("bbbb0002");
-      assert.ok(idxA >= 0, "record A id must appear in output");
-      assert.ok(idxB >= 0, "record B id must appear in output");
-      assert.ok(idxA < idxB, "record A (earlier createdAt) must fire before record B");
-
-      // Abort exits before "frondose ready" — confirms both turns were in the boot drain
-      // (if they'd happened after the greeting, the greeting would appear first)
-      assert.ok(
-        !output.includes("frondose ready"),
-        "abort exits before greeting; confirms both cron turns were in boot drain (pre-prompt)",
+      assert.deepEqual(
+        prompts.map((text) => text.includes("Task B")),
+        [false, true],
       );
+      assert.deepEqual(readSchedule(schedulePath), [b], "A is removed while aborted B remains byte-for-byte");
+      assert.equal(output.lines.join("").includes("frondose ready"), false);
+      piLoop.assertDrained(2);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
   it("T-Drain.2: given schedule.jsonl with 0 records at REPL boot, runCronTurn is NOT called; standard greeting appears unchanged", async () => {
-    // Given: empty or missing schedule.jsonl
-    // When: runRepl starts
-    // Then: output contains "frondose ready" greeting; no "[cron-fired]" lines
+    // Given: an empty schedule and EOF input
+    // When: the REPL boots
+    // Then: the greeting appears and no Pi turn or cron frame occurs
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
-      const sessionFile = join(dir, "session.jsonl");
       writeSchedule(schedulePath, []);
-
-      const { lines, stream } = makeOut();
-      const inputPT = new PassThrough();
-
-      // No cron turns fire (empty schedule). Use setImmediate after starting runRepl
-      // to end input AFTER readline's event handlers are attached.
-      const replPromise = runRepl({
-        model: new MockLanguageModelV1({
-          provider: "openai",
-          modelId: "test-drain2",
-          doStream: async () => ({
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+      const output = makeObservedOut();
+      const repl = runRepl({
+        model: makeInertModel(),
         system: "test system",
         messages: [],
         tools: {},
-        sessionFile,
+        sessionFile: join(dir, "session.jsonl"),
         schedulePath,
-        in_: inputPT,
-        out: stream,
+        in_: input,
+        out: output.stream,
       });
-
-      // End input after runRepl's boot drain (instant for empty schedule) has completed
-      // and the for-await loop is ready. setImmediate fires after microtask chain.
-      setImmediate(() => inputPT.end());
-      await replPromise;
-
-      const output = lines.join("");
-      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear when schedule is empty');
-      assert.ok(!output.includes("[cron-fired]"), 'no "[cron-fired]" must appear when schedule is empty');
+      input.end();
+      await repl;
+      assert.match(output.lines.join(""), /frondose ready/);
+      assert.doesNotMatch(output.lines.join(""), /\[cron-fired\]/);
+      piLoop.assertDrained(0);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
-  it.skip("T-Drain.3: given 2 due records and abortController is aborted during cron turn 1, only 1 cron turn fires; REPL exits before 'frondose ready' (D-16 abort propagation)", async () => {
-    // Given: 2 due oneshot records; model aborts AbortController during first doStream call
-    // When: runRepl boot-drain processes first record then detects abort
-    // Then: output contains exactly 1 "[cron-fired]" line; "frondose ready" does NOT appear
+  it("T-Drain.3: given 2 due records and abortController is aborted during cron turn 1, only 1 cron turn fires; REPL exits before 'frondose ready' (D-16 abort propagation)", async () => {
+    // Given: two due records and an abort in A
+    // When: boot drain begins
+    // Then: only A starts, schedule bytes remain identical, and greeting/B are absent
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
-      const sessionFile = join(dir, "session.jsonl");
-
-      const rA = makeDueRecord("aaaa0001-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Task A");
-      const rB = makeDueRecord("bbbb0002-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Task B");
-      writeSchedule(schedulePath, [rA, rB]);
-
+      const a = makeDueRecord("aaaa0001-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Task A");
+      const b = makeDueRecord("bbbb0002-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Task B");
+      writeSchedule(schedulePath, [a, b]);
+      const before = readFileSync(schedulePath, "utf-8");
       const abortController = new AbortController();
-      // Model aborts on first call. REPL will detect abort after first cron turn and exit
-      // before reaching the for-await loop. No need to end inputPT.
-      const abortingModel = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-drain3",
-        doStream: async () => {
-          abortController.abort();
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
-        },
+      piLoop.queue(async (opts) => {
+        appendAssistant(opts, "A partial");
+        abortController.abort();
       });
-
-      const { lines, stream } = makeOut();
-      const inputPT = new PassThrough();
-      // No need to end inputPT: REPL aborts before for-await
-
+      const output = makeObservedOut();
       await runRepl({
-        model: abortingModel,
+        model: makeInertModel(),
         system: "test system",
         messages: [],
         tools: {},
-        sessionFile,
+        sessionFile: join(dir, "session.jsonl"),
         schedulePath,
-        in_: inputPT,
-        out: stream,
+        in_: input,
+        out: output.stream,
         abortController,
         abortSignal: abortController.signal,
       });
-
-      // Clean up: end the PassThrough after runRepl returns (harmless)
-      inputPT.end();
-
-      const output = lines.join("");
-      const cronFiredMatches = output.match(/\[cron-fired\]/g) ?? [];
-      assert.equal(
-        cronFiredMatches.length,
-        1,
-        `exactly 1 cron turn must fire before abort; got ${cronFiredMatches.length}`,
-      );
-      assert.ok(
-        !output.includes("frondose ready"),
-        '"frondose ready" must NOT appear when REPL aborted before greeting',
-      );
+      const text = output.lines.join("");
+      assert.equal((text.match(/\[cron-fired\]/g) ?? []).length, 1);
+      assert.equal(text.includes("bbbb0002"), false);
+      assert.equal(text.includes("frondose ready"), false);
+      assert.equal(readFileSync(schedulePath, "utf-8"), before);
+      piLoop.assertDrained(1);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
   it("T-Drain.4: given the schedulePath does not exist on disk, runRepl does NOT throw; drain proceeds as if schedule is empty", async () => {
-    // Given: schedulePath points to a non-existent file
-    // When: runRepl starts (boot-drain calls readSchedule which returns [] for missing file)
-    // Then: runRepl completes normally; no exception; standard greeting appears
+    // Given: a missing schedule file and EOF input
+    // When: the REPL boots
+    // Then: it greets normally without a Pi or cron turn
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
-      const schedulePath = join(dir, "nonexistent-schedule.jsonl");
-      const sessionFile = join(dir, "session.jsonl");
-
-      assert.ok(!existsSync(schedulePath), "pre-condition: schedulePath must not exist");
-
-      const { lines, stream } = makeOut();
-      const inputPT = new PassThrough();
-
-      const replPromise = runRepl({
-        model: new MockLanguageModelV1({
-          provider: "openai",
-          modelId: "test-drain4",
-          doStream: async () => ({
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+      const schedulePath = join(dir, "missing.jsonl");
+      const output = makeObservedOut();
+      const repl = runRepl({
+        model: makeInertModel(),
         system: "test system",
         messages: [],
         tools: {},
-        sessionFile,
+        sessionFile: join(dir, "session.jsonl"),
         schedulePath,
-        in_: inputPT,
-        out: stream,
+        in_: input,
+        out: output.stream,
       });
-
-      setImmediate(() => inputPT.end());
-      await replPromise;
-
-      const output = lines.join("");
-      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear when schedule file is missing');
-      assert.ok(!output.includes("[cron-fired]"), 'no "[cron-fired]" when schedule file is missing');
+      input.end();
+      await repl;
+      assert.equal(existsSync(schedulePath), false);
+      assert.match(output.lines.join(""), /frondose ready/);
+      assert.doesNotMatch(output.lines.join(""), /\[cron-fired\]/);
+      piLoop.assertDrained(0);
     } finally {
+      input.end();
       cleanup();
     }
   });
 });
 
-// ════════════════════════════════════════════════════════════════════════════════
-// T-Poll — REPL after-turn poll
-// ════════════════════════════════════════════════════════════════════════════════
-
-describe("REPL after-turn poll — drainDueJobs fires after appendMessages, before next prompt", () => {
-  it.skip("T-Poll.1: given a due oneshot record is written to schedule.jsonl during the operator turn, after the turn completes, poll fires runCronTurn AND [cron-fired] appears before the next '> ' prompt", async () => {
-    // Given: empty schedule at boot; operator types a turn; model writes 1 due record as side-effect
-    // When: operator turn completes → after-turn poll fires
-    // Then: "[cron-fired]" appears in output; schedule.jsonl empty after poll (oneshot removed)
+describe("REPL after-turn cron poll", () => {
+  it("T-Poll.1: given a due oneshot record is written to schedule.jsonl during the operator turn, after the turn completes, poll fires runCronTurn AND [cron-fired] appears before the next '> ' prompt", async () => {
+    // Given: the operator turn creates one due job
+    // When: after-turn polling runs
+    // Then: operator state is persisted before cron, final tail is exact, and schedule empties
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
       const sessionFile = join(dir, "session.jsonl");
       writeSchedule(schedulePath, []);
-
-      const dueRecord = makeDueRecord("poll1111-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Poll task");
-
-      let callCount = 0;
-      const inputPT = new PassThrough();
-
-      const model = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-poll1",
-        doStream: async () => {
-          callCount++;
-          if (callCount === 1) {
-            // Operator turn: write due record to schedule
-            writeSchedule(schedulePath, [dueRecord]);
-          } else if (callCount === 2) {
-            // Cron turn (poll): end input after this completes
-            setImmediate(() => inputPT.end());
-          }
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+      const due = makeDueRecord("poll1111-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Poll task");
+      piLoop.queue(
+        async (opts) => {
+          writeSchedule(schedulePath, [due]);
+          appendAssistant(opts, "operator done");
         },
-      });
-
-      const { lines, stream } = makeOut();
-      inputPT.write("hello\n"); // operator turn input
-
-      await runRepl({
-        model,
-        system: "test system",
-        messages: [],
-        tools: {},
-        sessionFile,
-        schedulePath,
-        in_: inputPT,
-        out: stream,
-      });
-
-      const output = lines.join("");
-      assert.ok(
-        output.includes("[cron-fired]"),
-        `[cron-fired] must appear in output after after-turn poll fires; got: "${output.slice(0, 400)}"`,
+        async (opts) => {
+          assert.deepEqual(parseSession(sessionFile), [
+            { role: "user", content: "hello" },
+            { role: "assistant", content: "operator done" },
+          ]);
+          appendAssistant(opts, "cron done");
+        },
       );
-      assert.ok(callCount >= 2, `model called at least 2 times (1 operator + 1 cron); got ${callCount}`);
+      const output = makeObservedOut();
+      await runOneOperatorTurn({ schedulePath, sessionFile, input, output });
+      const final = parseSession(sessionFile);
+      assert.deepEqual(final.slice(0, 2), [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "operator done" },
+      ]);
+      assert.equal(final.length, 4);
+      assert.match(String(final[2]?.content), /CRON_RUN_ID=.*Poll task/s);
+      assert.deepEqual(final[3], { role: "assistant", content: "cron done" });
+      assert.deepEqual(readSchedule(schedulePath), []);
+      assert.equal((output.lines.join("").match(/poll1111/g) ?? []).length, 1);
+      piLoop.assertDrained(2);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
-  it.skip("T-Poll.2: given schedule.jsonl is empty and no mutation occurs during the turn, after-turn poll does NOT call runCronTurn; next prompt appears normally", async () => {
-    // Given: empty schedule.jsonl; operator types a normal turn; no schedule mutations during turn
-    // When: operator turn completes; after-turn poll runs
-    // Then: no "[cron-fired]" output
+  it("T-Poll.2: given schedule.jsonl is empty and no mutation occurs during the turn, after-turn poll does NOT call runCronTurn; next prompt appears normally", async () => {
+    // Given: an empty schedule
+    // When: one operator turn completes
+    // Then: exactly one Pi call and two prompts occur with no cron output
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
-      const sessionFile = join(dir, "session.jsonl");
       writeSchedule(schedulePath, []);
-
-      const inputPT = new PassThrough();
-
-      const model = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-poll2",
-        doStream: async () => {
-          // End input after operator turn completes + poll runs (2 setImmediate cycles)
-          setImmediate(() => setImmediate(() => inputPT.end()));
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
-        },
-      });
-
-      const { lines, stream } = makeOut();
-      inputPT.write("hello\n");
-
-      await runRepl({
-        model,
-        system: "test system",
-        messages: [],
-        tools: {},
-        sessionFile,
-        schedulePath,
-        in_: inputPT,
-        out: stream,
-      });
-
-      const output = lines.join("");
-      assert.ok(!output.includes("[cron-fired]"), "no [cron-fired] must appear when schedule is empty during poll");
-      assert.ok(output.includes("frondose ready"), '"frondose ready" must appear normally');
+      piLoop.queue(async (opts) => appendAssistant(opts, "operator done"));
+      const output = makeObservedOut();
+      await runOneOperatorTurn({ schedulePath, sessionFile: join(dir, "session.jsonl"), input, output });
+      assert.equal(output.promptCount(), 2);
+      assert.doesNotMatch(output.lines.join(""), /\[cron-fired\]|CRON_RUN_ID/);
+      piLoop.assertDrained(1);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
-  it.skip("T-Poll.3: given 2 due oneshot records appear mid-turn and abortController is aborted during cron turn 1 in poll, poll exits early and REPL breaks for-await loop (D-16)", async () => {
-    // Given: empty schedule at boot; operator turn writes 2 due records; model aborts on cron turn 1
-    // When: after-turn poll fires cron turn 1 → abort → poll exits
-    // Then: exactly 1 [cron-fired] during poll; REPL exits
+  it("T-Poll.3: given 2 due oneshot records appear mid-turn and abortController is aborted during cron turn 1 in poll, poll exits early and REPL breaks for-await loop (D-16)", async () => {
+    // Given: the operator creates A/B and A aborts during polling
+    // When: after-turn polling runs
+    // Then: operator tail persists, both schedule records remain byte-identical, and B never starts
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
       const sessionFile = join(dir, "session.jsonl");
       writeSchedule(schedulePath, []);
-
-      const rA = makeDueRecord("poll3aaa-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Poll3 A");
-      const rB = makeDueRecord("poll3bbb-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Poll3 B");
-
+      const a = makeDueRecord("poll3aaa-0000-0000-0000-000000000000", "2026-05-10T08:00:00.000Z", "Poll3 A");
+      const b = makeDueRecord("poll3bbb-0000-0000-0000-000000000000", "2026-05-10T09:00:00.000Z", "Poll3 B");
       const abortController = new AbortController();
-      const inputPT = new PassThrough();
-      let callCount = 0;
-
-      const model = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-poll3",
-        doStream: async () => {
-          callCount++;
-          if (callCount === 1) {
-            // Operator turn: write 2 due records
-            writeSchedule(schedulePath, [rA, rB]);
-          } else if (callCount === 2) {
-            // Cron turn 1 (poll): abort controller
-            // REPL will break for-await without needing inputPT.end()
-            abortController.abort();
-          }
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+      let dueBytes = "";
+      piLoop.queue(
+        async (opts) => {
+          writeSchedule(schedulePath, [a, b]);
+          dueBytes = readFileSync(schedulePath, "utf-8");
+          appendAssistant(opts, "operator done");
         },
-      });
-
-      const { lines, stream } = makeOut();
-      inputPT.write("hello\n");
-
-      await runRepl({
-        model,
+        async (opts) => {
+          assert.deepEqual(parseSession(sessionFile), [
+            { role: "user", content: "hello" },
+            { role: "assistant", content: "operator done" },
+          ]);
+          appendAssistant(opts, "A partial");
+          abortController.abort();
+        },
+      );
+      const output = makeObservedOut();
+      const repl = runRepl({
+        model: makeInertModel(),
         system: "test system",
         messages: [],
         tools: {},
         sessionFile,
         schedulePath,
-        in_: inputPT,
-        out: stream,
+        in_: input,
+        out: output.stream,
         abortController,
         abortSignal: abortController.signal,
       });
-
-      // Clean up
-      inputPT.end();
-
-      const output = lines.join("");
-      const cronFiredMatches = output.match(/\[cron-fired\]/g) ?? [];
-      assert.equal(
-        cronFiredMatches.length,
-        1,
-        `exactly 1 cron turn must fire in poll before abort; got ${cronFiredMatches.length}`,
-      );
+      await output.firstPrompt;
+      input.write("hello\n");
+      await repl;
+      assert.deepEqual(parseSession(sessionFile), [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "operator done" },
+      ]);
+      assert.equal(readFileSync(schedulePath, "utf-8"), dueBytes);
+      assert.equal((output.lines.join("").match(/\[cron-fired\]/g) ?? []).length, 1);
+      assert.equal(output.lines.join("").includes("poll3bbb"), false);
+      piLoop.assertDrained(2);
     } finally {
+      input.end();
       cleanup();
     }
   });
 
-  it.skip("T-Poll.4: given a due oneshot record is written during operator turn, after-turn poll fires it exactly once; schedule.jsonl empty after (record removed, writeSchedule called)", async () => {
-    // NOTE: oneshot records used to avoid infinite-drain-loop. T-CronTurn.5 covers markRan for recurring.
-    //
-    // Given: empty schedule at boot; operator turn writes 1 permanently-past oneshot record
-    // When: operator turn completes → after-turn poll fires record once
-    // Then: exactly 1 "[cron-fired]"; schedule.jsonl empty (oneshot removed); callCount=2
+  it("T-Poll.4: given a due oneshot record is written during operator turn, after-turn poll fires it exactly once; schedule.jsonl empty after (record removed, writeSchedule called)", async () => {
+    // Given: the operator creates one overdue one-shot job
+    // When: after-turn polling completes
+    // Then: exactly one target cron frame fires, exactly two Pi calls occur, and schedule empties
     const { dir, cleanup } = makeTempDir();
+    const input = new PassThrough();
     try {
       const schedulePath = join(dir, "schedule.jsonl");
-      const sessionFile = join(dir, "session.jsonl");
       writeSchedule(schedulePath, []);
-
-      const dueRecord = makeDueRecord(
-        "poll4444-0000-0000-0000-000000000000",
-        "2020-01-01T00:00:00.000Z",
-        "Poll4 overdue task",
-      );
-
-      const inputPT = new PassThrough();
-      let callCount = 0;
-
-      const model = new MockLanguageModelV1({
-        provider: "openai",
-        modelId: "test-poll4",
-        doStream: async () => {
-          callCount++;
-          if (callCount === 1) {
-            writeSchedule(schedulePath, [dueRecord]);
-          } else if (callCount === 2) {
-            // Cron turn fired: end input after completes
-            setImmediate(() => inputPT.end());
-          }
-          return {
-            stream: simulateReadableStream({ chunks: finishChunks() }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          };
+      const due = makeDueRecord("poll4444-0000-0000-0000-000000000000", "2020-01-01T00:00:00.000Z", "Poll4 task");
+      piLoop.queue(
+        async (opts) => {
+          writeSchedule(schedulePath, [due]);
+          appendAssistant(opts, "operator done");
         },
-      });
-
-      const { lines, stream } = makeOut();
-      inputPT.write("hello\n");
-
-      await runRepl({
-        model,
-        system: "test system",
-        messages: [],
-        tools: {},
-        sessionFile,
-        schedulePath,
-        in_: inputPT,
-        out: stream,
-      });
-
-      const output = lines.join("");
-      const cronFiredMatches = output.match(/\[cron-fired\]/g) ?? [];
-      assert.equal(
-        cronFiredMatches.length,
-        1,
-        `exactly 1 cron turn must fire during poll; got ${cronFiredMatches.length}`,
+        async (opts) => appendAssistant(opts, "cron done"),
       );
-
-      const remaining = readSchedule(schedulePath);
-      assert.equal(remaining.length, 0, "schedule.jsonl must be empty after oneshot fires (writeSchedule was called)");
-      assert.equal(callCount, 2, `model called 2 times (1 operator + 1 cron); got ${callCount}`);
+      const output = makeObservedOut();
+      await runOneOperatorTurn({ schedulePath, sessionFile: join(dir, "session.jsonl"), input, output });
+      assert.equal((output.lines.join("").match(/poll4444/g) ?? []).length, 1);
+      assert.equal((output.lines.join("").match(/\[cron-fired\]/g) ?? []).length, 1);
+      assert.deepEqual(readSchedule(schedulePath), []);
+      piLoop.assertDrained(2);
     } finally {
+      input.end();
       cleanup();
     }
   });
