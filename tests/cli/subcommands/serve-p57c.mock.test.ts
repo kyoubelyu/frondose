@@ -147,7 +147,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -259,7 +259,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient read errors */
@@ -585,12 +585,17 @@ describe("Cron driver — emits cron-tick BEFORE runAgentLoop + cron-done in fin
       lastRunAt: null,
       nextRunAt: dueAt,
     });
-    const h = await spinHarness("tc1", { writeScheduleJsonl: `${scheduleEntry}\n` });
+    // Arm the SSE listener before making the record due. Writing it before boot
+    // lets the accelerated interval consume it before the collector attaches.
+    const h = await spinHarness("tc1");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       mockMode = "succeed";
 
       const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2000 });
+      await new Promise((r) => setTimeout(r, 100));
+      const schedulePath = join(h.tmpDir, ".frondose", "agent", "schedule.jsonl");
+      writeFileSync(schedulePath, `${scheduleEntry}\n`, "utf-8");
       await new Promise((r) => setTimeout(r, 1500)); // wait for accelerated cron to fire
 
       const sse = await ssePromise;
@@ -605,6 +610,18 @@ describe("Cron driver — emits cron-tick BEFORE runAgentLoop + cron-done in fin
       assert.ok(tickMatch && doneMatch, "cron-tick + cron-done must both have cronRunId");
       assert.equal(tickMatch[1], doneMatch[1], "cron-tick + cron-done cronRunId must be the SAME (paired)");
       assert.ok(sse.text.includes("test-cron-task"), "cron-tick taskHint must include the schedule task name");
+      const persisted = readFileSync(schedulePath, "utf-8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      assert.equal(persisted.length, 1, "recurring cron tick must update exactly one schedule record");
+      assert.equal(persisted[0]?.id, "cron-t1");
+      assert.equal(typeof persisted[0]?.lastRunAt, "string", "the single processed record must persist lastRunAt");
+      assert.ok(
+        new Date(String(persisted[0]?.nextRunAt)).getTime() > new Date(dueAt).getTime(),
+        "the single processed recurring record must advance nextRunAt",
+      );
     } finally {
       setIntervalAccelerator = { active: false, factor: 1 };
       h.restoreEnv();

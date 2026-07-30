@@ -183,7 +183,9 @@ export function makeAllTools(
       try {
         credentialsDb = openCredentialsDb(persistence.credentialsDbPath);
       } catch (e) {
-        process.stderr.write(`[frondose] cannot open credentials.sqlite: ${e instanceof Error ? e.message : String(e)}\n`);
+        process.stderr.write(
+          `[frondose] cannot open credentials.sqlite: ${e instanceof Error ? e.message : String(e)}\n`,
+        );
       }
     }
     Object.assign(out, {
@@ -221,7 +223,8 @@ export function makeAllTools(
       publish_event: makePublishEventTool(serverCoords),
     });
     // P-31: schedule_task — worker self-scheduling.
-    const workerSchedulePath = persistence?.schedulePath ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
+    const workerSchedulePath =
+      persistence?.schedulePath ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
     Object.assign(out, makeCronTools(workerSchedulePath));
   }
 

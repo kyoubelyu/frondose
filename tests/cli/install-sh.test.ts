@@ -73,7 +73,7 @@ describe("install.sh post-install message advises Frondose Settings (G-P52.4)", 
 //   T-InstallFlag.1 — `bash -n install.sh` passes (syntax valid after the new blocks)
 //   T-InstallFlag.2 — `--version` with no operand errors (MR1 fix)
 //   T-InstallFlag.3 — the resolved `$TAG` reaches the download command (B1 fix)
-//   T-InstallFlag.4 — the chosen channel is persisted to ~/.mai/agent/channel
+//   T-InstallFlag.4 — the chosen channel is persisted to ~/.frondose/agent/channel
 
 describe("install.sh — P-58b --prerelease/--version flags + channel persist (§6.2)", () => {
   it("T-InstallFlag.1: `bash -n install.sh` exits 0 (the new arg-parse + 3-branch TAG block is syntactically valid)", () => {
@@ -140,14 +140,17 @@ describe("install.sh — P-58b --prerelease/--version flags + channel persist (�
     );
   });
 
-  it("T-InstallFlag.4: the chosen channel is persisted to ~/.mai/agent/channel (plain text, install.sh ↔ channel.ts agree)", () => {
+  it("T-InstallFlag.4: the chosen channel is persisted to ~/.frondose/agent/channel (plain text, install.sh ↔ channel.ts agree)", () => {
     // Given: install.sh content read from disk
     // When:  the channel-persist block is inspected
-    // Then:  it writes `$CHANNEL` (stable|prerelease) to "$HOME_BASE/.mai/agent/channel"
+    // Then:  it writes `$CHANNEL` (stable|prerelease) to "$HOME_BASE/.frondose/agent/channel"
     //        via `printf '%s\n'` (matches readUpdateChannel's trim-tolerant format)
     //
     const text = readFileSync(INSTALL_SH_PATH, "utf8");
-    assert.ok(text.includes(".mai/agent/channel"), "install.sh must write the channel to ~/.mai/agent/channel");
+    assert.ok(
+      text.includes(".frondose/agent/channel"),
+      "install.sh must write the channel to ~/.frondose/agent/channel",
+    );
     assert.ok(
       text.includes(`printf '%s\\n' "$CHANNEL"`),
       "install.sh must persist $CHANNEL via `printf '%s\\n'` (plain-text format readUpdateChannel reads)",

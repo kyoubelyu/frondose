@@ -37,6 +37,7 @@ const PORT = 8781;
 const SPY_STUB = `
   window.__mai_invokes = [];
   window.__mai_eventCb = null;
+  window.__mai_autoStartResponse = { ok: true, sessionId: "auto-1" };
   window.__TAURI__ = {
     core: { invoke: (cmd, args) => {
       window.__mai_invokes.push({ cmd, args: args ?? null });
@@ -44,6 +45,7 @@ const SPY_STUB = `
       if (cmd === "frondose_identity") res = { ok: true, fullName: "Test Operator" };
       else if (cmd === "frondose_set_cron_mode") res = { ok: true, cronEnabled: !!(args && args.enabled) };
       else if (cmd === "frondose_set_passive_mode") res = { ok: true, passiveEnabled: !!(args && args.enabled) };
+      else if (cmd === "frondose_agent_auto_start") res = window.__mai_autoStartResponse;
       else if (cmd === "frondose_chrome_ensure") res = { ok: true, connected: true };
       else if (cmd === "frondose_agent_turn") res = { ok: true, turnId: "t1" };
       else if (cmd === "frondose_agent_retry") res = { ok: true, turnId: "t2" };
@@ -137,20 +139,76 @@ describe("button click-through — boot wiring (G-PY2.1.9)", () => {
 });
 
 describe("button click-through — switcher tabs (G-PY2.1.9, G-PY2.1.3)", () => {
-  it("T-Click.1: clicking #mode-auto-tab fires frondose_set_cron_mode{enabled:true} + frondose_set_passive_mode{enabled:false}", async () => {
-    // Given: booted app in Manual
+  it("T-Click.1a: clicking Auto with an empty prompt starts nothing and preserves Manual", async () => {
+    // Given: booted app in Manual with an empty composer
     // When:  the Auto switcher tab is clicked
-    // Then:  applyMode('auto') fires cron-mode enabled:true (Auto ⇒ cron ON) + passive enabled:false
-    const inv = await clickAndRecord("mode-auto-tab");
-    const cron = inv.find((i) => i.cmd === "frondose_set_cron_mode");
-    const passive = inv.find((i) => i.cmd === "frondose_set_passive_mode");
-    assert.ok(cron, "Auto tab must fire frondose_set_cron_mode");
-    assert.deepEqual(cron.args, { enabled: true }, "Auto ⇒ cron enabled:true");
-    assert.deepEqual(passive?.args, { enabled: false }, "Auto ⇒ passive enabled:false");
+    // Then:  prompt gating rejects the start without invoking any mode-changing command
+    const inv = await clickAndRecord("mode-auto-tab", `document.getElementById('command-input').value = '';`);
+    assert.ok(
+      !inv.some((i) => i.cmd === "frondose_agent_auto_start"),
+      "empty-prompt Auto click must not start an autonomous session",
+    );
+    assert.ok(
+      !inv.some((i) => i.cmd === "frondose_set_cron_mode" || i.cmd === "frondose_set_passive_mode"),
+      "empty-prompt Auto click must not bypass the start gate with direct toggles",
+    );
+    assert.equal(await evalIn("document.getElementById('mode-manual-tab').classList.contains('active')"), true);
+  });
+
+  it("T-Click.1b: clicking Auto with a prompt fires exactly one frondose_agent_auto_start and no direct toggles", async () => {
+    // Given: booted app in Manual with a concrete autonomous task
+    // When:  the Auto switcher tab is clicked
+    // Then:  the prompt-gated app command owns the transition
+    const inv = await clickAndRecord(
+      "mode-auto-tab",
+      `document.getElementById('command-input').value = 'research one lead';`,
+    );
+    assert.deepEqual(
+      inv.filter((i) => i.cmd === "frondose_agent_auto_start"),
+      [
+        {
+          cmd: "frondose_agent_auto_start",
+          args: { prompt: "research one lead", intervalMinutes: null },
+        },
+      ],
+    );
+    assert.ok(
+      !inv.some((i) => i.cmd === "frondose_set_cron_mode" || i.cmd === "frondose_set_passive_mode"),
+      "Auto-tab path must not invoke direct cron/passive routes",
+    );
+    assert.equal(await evalIn("document.getElementById('mode-auto-tab').classList.contains('active')"), true);
+  });
+
+  it("T-Click.1c: when auto_start rejects a non-empty prompt, Manual remains active and no direct toggles fire", async () => {
+    // Given: the app is back in Manual and the injected auto_start response rejects a concrete task
+    // When:  the Auto switcher tab is clicked
+    // Then:  one start request is attempted, direct toggles stay unused, and the UI remains in Manual
+    await clickAndRecord("mode-manual-tab");
+    assert.equal(await evalIn("document.getElementById('mode-manual-tab').classList.contains('active')"), true);
+    const inv = await clickAndRecord(
+      "mode-auto-tab",
+      `window.__mai_autoStartResponse = { ok: false, reason: 'rejected_by_test' };
+       document.getElementById('command-input').value = 'research one rejected lead';`,
+    );
+    assert.deepEqual(
+      inv.filter((i) => i.cmd === "frondose_agent_auto_start"),
+      [
+        {
+          cmd: "frondose_agent_auto_start",
+          args: { prompt: "research one rejected lead", intervalMinutes: null },
+        },
+      ],
+    );
+    assert.ok(
+      !inv.some((i) => i.cmd === "frondose_set_cron_mode" || i.cmd === "frondose_set_passive_mode"),
+      "rejected Auto start must not bypass the command with direct cron/passive routes",
+    );
+    assert.equal(await evalIn("document.getElementById('mode-manual-tab').classList.contains('active')"), true);
+    assert.equal(await evalIn("document.getElementById('mode-auto-tab').classList.contains('active')"), false);
   });
 
   it("T-Click.2: clicking #mode-manual-tab fires frondose_set_cron_mode{enabled:false} + frondose_set_passive_mode{enabled:false}", async () => {
-    // Given: booted app (now in Auto from T-Click.1)
+    // Given: booted app in Manual after the rejected Auto start
     // When:  the Manual switcher tab is clicked
     // Then:  applyMode('manual') fires cron-mode enabled:false (Manual ⇒ cron OFF) + passive enabled:false
     const inv = await clickAndRecord("mode-manual-tab");

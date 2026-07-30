@@ -1,7 +1,7 @@
 import {
-  classifyActionName,
   CONNECT_OPEN_RE,
   CONNECT_SEND_RE,
+  classifyActionName,
   FOLLOW_RE,
   personNameFromActionLabel,
 } from "../../linkedin/logic/actionClassifier.js";
