@@ -59,13 +59,17 @@ function makeCtrl(deps: Partial<WorkflowControllerDeps>) {
   return { ctrl, frames, audits };
 }
 
-/** Replays the LIVE incident's exact tool order (soul habit): save_message_draft lands first
- *  (synthesizes a workflow, capturing the draftId THERE), then the agent's todo_write re-plans
- *  under a DIFFERENT title — the new gating step has NO draftId (verified live: step_68ccba17
- *  had draftId===undefined). decline() must fall back to semantic correlation. Returns the
- *  pending stepId. */
+/** Replays the post-D14 safe order: save_message_draft now gates its synthesized captured-id step;
+ *  after that exact step is approved, the agent may still re-plan under a DIFFERENT title. The
+ *  replacement gating step has NO draftId, so decline() must fall back to semantic correlation.
+ *  Returns the replacement pending stepId. */
 function driveLiveOrder(ctrl: ReturnType<typeof createWorkflowController>, draftId: string, leadId: string): string {
-  ctrl.onToolResults([saveDraftResult(draftId, leadId)], ctx);
+  const syntheticGate = ctrl.onToolResults([saveDraftResult(draftId, leadId)], ctx);
+  assert.equal(syntheticGate.abort, true, "the direct save's synthetic approval gate must fire");
+  const syntheticStepId = ctrl.getState().awaitingApprovalStepId;
+  assert.ok(syntheticStepId, "the direct save must create a pending synthetic approval step");
+  const approved = ctrl.handleEndpoint("/workflow/approve", { stepId: syntheticStepId }) as AnyObj;
+  assert.equal(approved.response?.ok, true, "the synthetic captured-id step must approve before the re-plan");
   const gate = ctrl.onToolResults(
     [
       {
@@ -100,9 +104,9 @@ function driveLiveOrder(ctrl: ReturnType<typeof createWorkflowController>, draft
 }
 
 describe("T-DeclineDraft — decline() retires the declined step's draft (captured id, else semantic correlation)", () => {
-  it("T-DeclineDraft.1: LIVE order (save → different-title re-plan, no captured draftId) → decline consults findDraftForDeclinedStep(step.title) and retires ITS result", () => {
-    // Given: the live tool order — the gating step has NO draftId; a finder spy resolves the
-    //        step title to the pending draft; a retire spy records calls.
+  it("T-DeclineDraft.1: approved synthetic save → different-title re-plan without captured draftId → decline consults semantic correlation", () => {
+    // Given: the synthetic saved-draft step was approved, then a different-title re-plan produced
+    //        a new gate with no draftId; a finder resolves the pending draft and a retire spy records calls.
     // When:  /workflow/decline for the pending step.
     // Then:  finder called once with the step title; markDraftDeclined called exactly once with
     //        the finder's id; decline resolves normally with the declined audit event.
@@ -132,8 +136,8 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
     assert.equal(r.response?.ok, true, "decline must resolve ok");
     assert.equal(ctrl.getState().awaitingApprovalStepId, null, "gate must be cleared after a successful decline");
     assert.equal(
-      audits.find((e) => e.kind === "approval_resolved")?.decision,
-      "declined",
+      audits.some((e) => e.kind === "approval_resolved" && e.decision === "declined"),
+      true,
       "audit records the declined resolution",
     );
   });
@@ -219,6 +223,8 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
       },
     });
     const stepId = driveLiveOrder(ctrl, draftId, randomUUID());
+    const resolvedFramesBefore = frames.filter((f) => f.type === "workflow-approval-resolved").length;
+    const resolvedAuditsBefore = audits.filter((e) => e.kind === "approval_resolved").length;
 
     const first = ctrl.handleEndpoint("/workflow/decline", { stepId }) as AnyObj;
 
@@ -228,14 +234,14 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
     const step = ctrl.getState().current?.steps.find((s) => s.id === stepId);
     assert.equal(step?.state, "in_progress", "step must NOT be failed after the aborted decline");
     assert.equal(
-      frames.some((f) => f.type === "workflow-approval-resolved"),
-      false,
-      "no approval-resolved frame may be emitted on the aborted decline",
+      frames.filter((f) => f.type === "workflow-approval-resolved").length,
+      resolvedFramesBefore,
+      "no additional approval-resolved frame may be emitted on the aborted decline",
     );
     assert.equal(
-      audits.some((e) => e.kind === "approval_resolved"),
-      false,
-      "no approval_resolved audit event may be written on the aborted decline",
+      audits.filter((e) => e.kind === "approval_resolved").length,
+      resolvedAuditsBefore,
+      "no additional approval_resolved audit event may be written on the aborted decline",
     );
 
     const second = ctrl.handleEndpoint("/workflow/decline", { stepId }) as AnyObj;
@@ -244,8 +250,8 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
     assert.deepEqual(retired, [draftId], "the successful retry must retire the resolved draft");
     assert.equal(ctrl.getState().awaitingApprovalStepId, null, "gate cleared after the successful retry");
     assert.equal(
-      audits.find((e) => e.kind === "approval_resolved")?.decision,
-      "declined",
+      audits.some((e) => e.kind === "approval_resolved" && e.decision === "declined"),
+      true,
       "the retry must write the declined audit event",
     );
   });
@@ -274,17 +280,18 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
     assert.ok(warnAudit, "a DraftLineageAmbiguous commit_warning audit event must be written");
     assert.equal(r.response?.ok, true, "the decline itself must still resolve");
     assert.equal(
-      audits.find((e) => e.kind === "approval_resolved")?.decision,
-      "declined",
+      audits.some((e) => e.kind === "approval_resolved" && e.decision === "declined"),
+      true,
       "declined resolution recorded",
     );
   });
 
-  it("T-DeclineDraft.6 (composed, real tmp DB): live-order decline retires the REAL sqlite row via semantic correlation; the follow-on bare-connect decline retires nothing (status filter)", async () => {
+  it("T-DeclineDraft.6 (composed, real tmp DB): post-approval re-plan decline retires the REAL sqlite row via semantic correlation; the follow-on bare-connect decline retires nothing (status filter)", async () => {
     // Given: a real tmp sales DB seeded with a lead named 'Wilfred Fixture'; the REAL
     //        save_message_draft tool creates the draft; production-shape wiring
     //        (findDraftForDeclinedStep + markDraftRejected against the same DB).
-    // When:  live order → /workflow/decline; then a bare-connect re-plan → second decline.
+    // When:  synthetic gate approval → different-title re-plan → decline; then a bare-connect
+    //        re-plan → second decline.
     // Then:  the actual row transitions draft → rejected on the FIRST decline (whole seam, no
     //        spies); the SECOND decline finds nothing (row no longer status='draft') — no
     //        double-retirement, replaying the live incident end-to-end.
@@ -332,9 +339,18 @@ describe("T-DeclineDraft — decline() retires the declined step's draft (captur
         markDraftRejected(db, id);
       },
     });
-    ctrl.onToolResults(
+    const syntheticGate = ctrl.onToolResults(
       [{ toolName: "save_message_draft", result: saved, args: { leadId, kind: "connect_note" } }],
       ctx,
+    );
+    assert.equal(syntheticGate.abort, true, "the direct save's synthetic approval gate must fire");
+    const syntheticStepId = ctrl.getState().awaitingApprovalStepId;
+    assert.ok(syntheticStepId, "the direct save must create a pending synthetic approval step");
+    const syntheticApproval = ctrl.handleEndpoint("/workflow/approve", { stepId: syntheticStepId }) as AnyObj;
+    assert.equal(
+      syntheticApproval.response?.ok,
+      true,
+      "the synthetic captured-id step must approve before the different-title re-plan",
     );
     const gate = ctrl.onToolResults(
       [

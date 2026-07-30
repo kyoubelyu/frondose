@@ -154,7 +154,7 @@ export function ensureWorkflowForSaveDraft(state: WorkflowState, deps: WorkflowC
   const leadId = typeof args.leadId === "string" ? args.leadId : "";
   const nowIso = new Date().toISOString();
   // biome-ignore format: file LoC budget per controller-split-shape <= 250
-  const step: TodoStep = { id: `step_${randomUUID()}`, title: `Send the saved ${kind} draft${leadId ? ` (lead ${leadId.slice(0, 8)})` : ""}`, requiresApproval: true, state: "in_progress", startedAt: nowIso };
+  const step: TodoStep = { id: `step_${randomUUID()}`, title: `Send the saved ${kind} draft${leadId ? ` (lead ${leadId.slice(0, 8)})` : ""}`, requiresApproval: true, state: ctx.resolvedMode === "auto" ? "in_progress" : "pending", startedAt: nowIso };
   captureDraftId(step, tr);
   const wf: Workflow = {
     id: `wf_${randomUUID()}`,
