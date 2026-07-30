@@ -200,8 +200,7 @@ export function makeRecordRawCandidateTool(salesDbPath: string, session?: Linked
         // `${name} — ${headline}` profileCard entry is present. A blank/whitespace-only
         // supplied value falls through to the headline default (CONCERN-MR-1).
         const suppliedTrim = parsed.evidenceSummary?.trim();
-        let evidenceSummary: string | undefined =
-          suppliedTrim && suppliedTrim.length > 0 ? suppliedTrim : undefined;
+        let evidenceSummary: string | undefined = suppliedTrim && suppliedTrim.length > 0 ? suppliedTrim : undefined;
         if (!evidenceSummary && ctxEntries && ctxPageUrl) {
           const pageSlug = canonicalProfileSlug(ctxPageUrl);
           if (pageSlug === slug) {

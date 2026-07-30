@@ -87,7 +87,10 @@ async function resolveFromAmbiguousCandidates(
         (c.selectorRef && entry.selector && c.selectorRef === entry.selector), // selector-to-selector
     );
   };
-  const mapped: Array<{ cand: { label?: string; scope?: string; ref?: string }; entry: LogicSurfaceContext["entries"][number] }> = [];
+  const mapped: Array<{
+    cand: { label?: string; scope?: string; ref?: string };
+    entry: LogicSurfaceContext["entries"][number];
+  }> = [];
   for (const cand of candidates) {
     const ref = cand.ref ? normalizeRef(cand.ref) : undefined;
     let entry: LogicSurfaceContext["entries"][number] | undefined;

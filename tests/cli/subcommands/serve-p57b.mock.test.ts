@@ -129,7 +129,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -235,7 +235,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient read errors */
@@ -282,7 +282,11 @@ async function spinHarness(
       updatedAt: new Date().toISOString(),
       ...opts.identityOverride,
     };
-    writeFileSync(join(tmpDir, ".frondose", "agent", "identity.json"), JSON.stringify(identityRecord, null, 2), "utf-8");
+    writeFileSync(
+      join(tmpDir, ".frondose", "agent", "identity.json"),
+      JSON.stringify(identityRecord, null, 2),
+      "utf-8",
+    );
   }
 
   // Reset per-test mock state

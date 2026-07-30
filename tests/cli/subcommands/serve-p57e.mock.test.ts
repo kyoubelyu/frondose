@@ -101,7 +101,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -171,7 +171,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient read errors */
@@ -274,7 +274,7 @@ describe("handlePassiveObservation click branch — tier-2 ICP filter dropped; a
 
       // Source-level proof that matchIcp is no longer imported/called (OQ-4 — import orphan removed).
       const { readFileSync } = await import("node:fs");
-      const serveSrc = readFileSync(resolve(process.cwd(), "src/cli/subcommands/serve.ts"), "utf-8");
+      const serveSrc = readFileSync(resolve(process.cwd(), "src/cli/subcommands/serve/passive.ts"), "utf-8");
       assert.ok(
         !/import\s+\{[^}]*\bmatchIcp\b[^}]*\}\s+from/.test(serveSrc),
         "serve.ts must have NO matchIcp import (tier-2 removed + orphan cleaned per OQ-4)",
