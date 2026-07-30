@@ -18,6 +18,7 @@ import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendBu
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
+import { createRunningComposerController } from "./app/runningComposer.js";
 import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 import { scrollToBottomIfPinned as scrollToBottomIfPinnedImpl } from "./app/scrolling.js";
 import { buildAgentBubble as buildAgentBubbleImpl } from "./app/agentBubble.js";
@@ -394,39 +395,30 @@ const appActions = createAppActions({
 });
 
 const loadIdentity = (): Promise<void> => appActions.loadIdentity();
-
 async function abortTurn(): Promise<void> {
-  // P-WLC: with a live turn, abort it. With NO live turn (e.g. the Auto stage still
-  // showing after the run's `done` already cleared currentTurnId), Pause must still
-  // stop the whole auto-run via /workflow/cancel instead of silently no-op'ing —
-  // that closes any active run + emits auto-run-completed so the stage resets.
+  // P-WLC: abort a live turn; otherwise Pause cancels the workflow/Auto run.
   const live = appState === "running" && currentTurnId !== null;
   try {
     if (live) await invoke("frondose_agent_abort");
     else await invoke("frondose_workflow_cancel", { workflowId: workflowView?.workflowId ?? "" });
   } catch (e) {
-    // SSE error/done event owns UI recovery, but surface the failure too.
     surfaceError(t("action.pauseAbort"), e);
   }
 }
-
 async function sendCommand(): Promise<void> {
-  // P-AUTO-ISOLATE §3.2 T-FE.SteerBypassBlocked: defense-in-depth on top of the DOM
-  // `disabled` attribute — an Auto-locked composer cannot dispatch a manual turn or a
-  // steer even if the Enter handler somehow still fires.
+  // P-AUTO-ISOLATE: an Auto-locked composer cannot dispatch even if Enter still fires.
   if (commandEl.disabled) return;
   if (appState === "running" && currentTurnId !== null) {
     const text = commandEl.value.trim();
     if (text.length > 0) {
-      void performSteer(text);
+      await runningComposerController.dispatch(text);
       return;
     }
     await abortTurn();
     return;
   }
 
-  // P-ONBOARD-CONVERSATIONAL-IDENTITY: a first-contact turn dispatches from "identity-missing"
-  // too — sendCommand's guard used to only permit "idle".
+  // P-ONBOARD: first-contact turns also dispatch from identity-missing.
   if (appState !== "idle" && appState !== "identity-missing") return;
   const prompt = commandEl.value.trim();
   if (!prompt) return;
@@ -441,7 +433,6 @@ async function sendCommand(): Promise<void> {
     }
     currentTurnId = r.turnId;
     lastTurnPrompt = prompt;
-    // P-Y2-MA G1+G2: append user bubble immediately; agent bubble lands on turn-started.
     appendUserBubble(prompt);
     tickerEl.textContent = t("ticker.starting");
     commandEl.value = ""; // T-FE-CHAT bug 2: clear only on success — preserves input on failure above
@@ -451,11 +442,6 @@ async function sendCommand(): Promise<void> {
     transition("error");
   }
 }
-
-async function waitForDoneSse(targetTurnId: string, timeoutMs = 3000, intervalMs = 50): Promise<boolean> {
-  return waitForDoneSseImpl(() => currentTurnId, targetTurnId, timeoutMs, intervalMs);
-}
-
 async function performSteer(newPrompt: string): Promise<void> {
   if (steerInFlight) return;
   if (appState !== "running" || currentTurnId === null) return;
@@ -464,15 +450,11 @@ async function performSteer(newPrompt: string): Promise<void> {
   try {
     try {
       await invoke("frondose_agent_abort");
-    } catch {
-      // The follow-up turn response owns the visible error if abort fails.
-    }
-    const completed = await waitForDoneSse(previousTurnId, 3000, 50);
+    } catch {}
+    const completed = await waitForDoneSseImpl(() => currentTurnId, previousTurnId, 3000, 50);
     if (!completed) {
       errorBannerEl.textContent = t("error.steerTimeout");
-      // P-UI-THINK-OVERLAY CMR-2: the abandoned turn will never get a trusted `done` — close its
-      // bubble (hides the gray thinking block, mirrors the done/error handlers) and drop the stale
-      // turnId so a late `reasoning`/`text` frame for it cannot reopen/reveal a new bubble.
+      // Close the abandoned bubble and reject late frames by dropping its turn id.
       currentTurnId = null;
       endAgentBubble();
       transition("error");
@@ -486,7 +468,6 @@ async function performSteer(newPrompt: string): Promise<void> {
     }
     currentTurnId = r.turnId;
     lastTurnPrompt = newPrompt;
-    // P-Y2-MA: steer sends a NEW user bubble; prior agent bubble stays as history.
     appendUserBubble(newPrompt);
     tickerEl.textContent = t("ticker.starting");
     commandEl.value = ""; // T-FE-CHAT bug 2: clear only once the steer turn is accepted
@@ -498,6 +479,22 @@ async function performSteer(newPrompt: string): Promise<void> {
     steerInFlight = false;
   }
 }
+
+const runningComposerController = createRunningComposerController({
+  invoke,
+  steer: (text) => performSteer(text),
+  settleStopped: (text) => {
+    appendUserBubble(text);
+    currentTurnId = null;
+    endAgentBubble();
+    tickerEl.textContent = t("ticker.done", { reason: "aborted" });
+    commandEl.value = "";
+    transition("idle");
+  },
+  reportStopFailure: (error) => {
+    surfaceError(t("action.pauseAbort"), error);
+  },
+});
 
 function bindAutoStageButtons(): void {
   bindAutoStageButtonsImpl(windowRef.document, () => {
@@ -577,6 +574,7 @@ function handleEvent(payload: SseFrame): void {
       }
       break;
     case "error":
+      if (payload.turnId !== undefined && payload.turnId !== currentTurnId) break;
       errorBannerEl.textContent = t("error.agent", { msg: payload.message });
       currentTurnId = null;
       endAgentBubble();

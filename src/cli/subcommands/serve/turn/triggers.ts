@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { ServeDeps, ServeState } from "../context.js";
+import { clearCurrentTurnIfOwned } from "../turnOwnership.js";
 import type { TurnArgs } from "./runOne.js";
 
 type RunOneFn = (args: TurnArgs) => Promise<void>;
@@ -78,6 +79,6 @@ export async function triggerCardActionTurn(
       message: e instanceof Error ? e.message : String(e),
     });
   } finally {
-    state.currentTurn = null;
+    clearCurrentTurnIfOwned(state, turnId);
   }
 }

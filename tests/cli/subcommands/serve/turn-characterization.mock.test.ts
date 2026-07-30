@@ -232,6 +232,7 @@ function makeDeps(frames: unknown[], workflowOnToolResultsOverride?: () => { abo
     auditWriter: async () => undefined,
     session: {
       setTurnAbortSignal: () => undefined,
+      clearTurnAbortSignal: () => undefined,
       getClient: () => null,
     },
     schedulePath: "/dev/null",

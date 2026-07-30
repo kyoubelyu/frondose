@@ -4,6 +4,7 @@ import { waitForPageTarget } from "./launcher.js";
 import { jitter, mouseCurve } from "./mouseRealism.js";
 import { raceCdp } from "./raced.js";
 import { getSnapshot } from "./snapshot.js";
+import { createTurnAbortSignalOwner } from "./turnAbortSignalOwner.js";
 import type {
   CdpHandle,
   RefMap,
@@ -54,7 +55,7 @@ export class CdpClient {
   /** [P-75 P-WEDGE-1] Turn-scoped abort signal. Set by the session at turn start
    *  (and applied to a client booted mid-turn), cleared at turn end. When present,
    *  raced CDP calls reject immediately on abort instead of waiting out the deadline. */
-  private turnSignal?: AbortSignal;
+  private readonly turnSignalOwner = createTurnAbortSignalOwner();
   /** [P-AUTO-11 M4] Last screen point the synthetic pointer landed on. Initialized
    *  to (0,0); updated to the JITTERED landing after each completed clickAt (never
    *  on abort — the race rejects before the assignment). NOT reset on navigate(). */
@@ -67,7 +68,11 @@ export class CdpClient {
   /** [P-75 P-WEDGE-1] Wire/clear the current turn's abort signal. Idempotent; pass
    *  undefined to clear at turn end. */
   setTurnAbortSignal(signal?: AbortSignal): void {
-    this.turnSignal = signal;
+    this.turnSignalOwner.set(signal);
+  }
+
+  clearTurnAbortSignal(owner: AbortSignal): void {
+    this.turnSignalOwner.clear(owner);
   }
 
   /** [P-75 P-WEDGE-1] Race a raw CDP promise against the per-call deadline + the
@@ -78,7 +83,7 @@ export class CdpClient {
    *  break every call site's property access. */
   // biome-ignore lint/suspicious/noExplicitAny: mirrors CdpHandle=any (types.ts:8); generic would force unknown at every call site.
   private race(p: Promise<any>, label: string): Promise<any> {
-    return raceCdp(p, { label, deadlineMs: CDP_CALL_DEADLINE_MS, signal: this.turnSignal });
+    return raceCdp(p, { label, deadlineMs: CDP_CALL_DEADLINE_MS, signal: this.turnSignalOwner.get() });
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: mirrors CdpHandle=any (types.ts:8), like the private race().

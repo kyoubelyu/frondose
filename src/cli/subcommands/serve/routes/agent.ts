@@ -6,6 +6,8 @@ import { buildAutoSessionRecord, disableAutoSessionRecords, findActiveAutoSessio
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "../context.js";
 import { readJsonBody, sendJson } from "../http.js";
 import type { createTurnRunner } from "../turn.js";
+import { writeTurnLifecycle } from "../turnLifecycle.js";
+import { clearCurrentTurnIfOwned } from "../turnOwnership.js";
 
 export async function handlePostAgentTurn(state: ServeState, deps: ServeDeps, turn: ReturnType<typeof createTurnRunner>, req: IncomingMessage, res: ServerResponse): Promise<void> {
   // [P-75 D-21] Force-release stuck prior turn before accepting a new one.
@@ -39,6 +41,7 @@ export async function handlePostAgentTurn(state: ServeState, deps: ServeDeps, tu
   const turnId = randomBytes(4).toString("hex");
   const abortController = new AbortController();
   state.currentTurn = { turnId, abortController };
+  writeTurnLifecycle("accepted", turnId);
 
   // [P-75 D-18] Clear stale workflow state on every fresh top-level operator
   // prompt. Observed in the comment-on-feed-post scenario (2026-06-04): a prior
@@ -73,7 +76,7 @@ export async function handlePostAgentTurn(state: ServeState, deps: ServeDeps, tu
       });
     })
     .finally(() => {
-      state.currentTurn = null;
+      clearCurrentTurnIfOwned(state, turnId);
     });
 }
 
@@ -93,7 +96,7 @@ export async function handlePostAgentActivate(state: ServeState, turn: ReturnTyp
   state.currentTurn = { turnId, abortController };
   sendJson(res, 200, { ok: true, turnId, status: "queued" });
   void turn.triggerAnalyzeProfile(pageUrl, turnId, abortController).finally(() => {
-    state.currentTurn = null;
+    clearCurrentTurnIfOwned(state, turnId);
   });
 }
 
@@ -110,6 +113,7 @@ export function handlePostAgentAbort(state: ServeState, res: ServerResponse): vo
   const stuck = state.currentTurn;
   stuck.abortController.abort();
   state.currentTurn = null;
+  writeTurnLifecycle("aborted", stuck.turnId);
   sendJson(res, 200, { ok: true, turnId: stuck.turnId, released: true });
 }
 
@@ -144,7 +148,7 @@ export function handlePostAgentRetry(state: ServeState, turn: ReturnType<typeof 
       isCronTurn: false,
     })
     .finally(() => {
-      state.currentTurn = null;
+      clearCurrentTurnIfOwned(state, turnId);
     });
 }
 
