@@ -1,32 +1,25 @@
-/**
- * P-23 Step 4a scaffold — T-REPL.1..6
- *
- * REPL daemon-handshake behaviors: daemon-detect on boot, repl.pid lifecycle,
- * shared-session JSONL selection, cross-process turn.lock acquisition (G-P23.6).
- *
- * Tests the NEW P-23 behavior added to src/cli/repl.ts (§6.7) + src/cli/main.ts (§6.7).
- * Tests T-REPL.1..5 cover G-P23.5; T-REPL.6 (guardian NIT-NEW-3) covers G-P23.6.
- *
- * Gate coverage: G-P23.4, G-P23.5, G-P23.6
- *
- * All assertion bodies are TODO. Builder must make scaffolds reach assert.fail at Step 4b.
- */
+/** REPL daemon handshake, PID lifecycle, shared session, and reciprocal turn-lock coverage. */
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { MockLanguageModelV1 } from "ai/test";
-import type { ReplOpts } from "../../src/cli/repl.js";
 import { runRepl } from "../../src/cli/repl.js";
-import { isPidAlive, writePid } from "../../src/persistence/processLock.js";
+import { writePid } from "../../src/persistence/processLock.js";
 import { loadMessagesShared } from "../../src/persistence/sharedSession.js";
 import { DEFAULT_TELEGRAM_CONFIG } from "../../src/persistence/telegramConfig.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 function makeTmpHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), "mai-p23-repl-"));
@@ -265,7 +258,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
     }
   });
 
-  it.skip("T-REPL.5: when cfg.enabled=true + telegram.pid alive, turn messages are written to session file via appendMessagesShared", async () => {
+  it("T-REPL.5: when cfg.enabled=true + telegram.pid alive, turn messages are written to session file via appendMessagesShared", async () => {
     // Given:  telegram.pid alive; cfg.enabled=true; session file path = sharedSessionPath()
     // When:   runRepl processes one user turn
     // Then:   messages appended via appendMessagesShared; loadMessagesShared returns the turn messages
@@ -284,6 +277,16 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       // The shared session path (matches what main.ts would pick when enabled=true)
       const { sharedSessionPath } = await import("../../src/persistence/sharedSession.js");
       const sharedPath = sharedSessionPath(); // creates dir, returns path
+      const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
+      let markTurnEntered: (() => void) | undefined;
+      const turnEntered = new Promise<void>((resolve) => {
+        markTurnEntered = resolve;
+      });
+      piLoop.queue(async (opts) => {
+        markTurnEntered?.();
+        assert.ok(existsSync(turnLockPath), "REPL must hold turn.lock while the Pi loop executes");
+        appendAssistant(opts, "stub");
+      });
 
       const inStream = new PassThrough();
       await new Promise<void>((r) => setImmediate(r)); // yield before sending input
@@ -303,10 +306,10 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
       // Yield until readline loop is ready, then send a message
       await new Promise<void>((r) => setImmediate(r));
       inStream.write("hello\n");
-      // Yield for turn processing
-      await new Promise<void>((r) => setTimeout(r, 200));
+      await turnEntered;
       inStream.end();
       await replPromise;
+      piLoop.assertDrained(1);
 
       // Verify messages are in shared session
       const loaded = loadMessagesShared(sharedPath);
@@ -326,7 +329,7 @@ describe("repl: repl.pid write on boot + remove on exit", () => {
 // ─── Cross-process turn.lock acquisition (guardian NIT-NEW-3) ──────────────────
 
 describe("repl: cross-process turn.lock acquired before runAgentLoop (C2 reciprocal)", () => {
-  it.skip("T-REPL.6: when REPL processes an operator turn, turn.lock acquired and released; session file has content after turn", async () => {
+  it("T-REPL.6: when REPL processes an operator turn, turn.lock acquired and released; session file has content after turn", async () => {
     // Given:  daemon absent (no telegram.pid); operator types a single message; model returns immediately
     // When:   REPL turn body executes via runRepl
     // Then:   after turn completes: turn.lock gone (released in finally);
@@ -342,6 +345,15 @@ describe("repl: cross-process turn.lock acquired before runAgentLoop (C2 recipro
       const cfgPath = writeTelegramCfg(home, { enabled: false });
       const sessionPath = join(home, "session.jsonl");
       const turnLockPath = join(home, ".frondose", "agent", "turn.lock");
+      let markTurnEntered: (() => void) | undefined;
+      const turnEntered = new Promise<void>((resolve) => {
+        markTurnEntered = resolve;
+      });
+      piLoop.queue(async (opts) => {
+        markTurnEntered?.();
+        assert.ok(existsSync(turnLockPath), "turn.lock must exist while the agent loop runs");
+        appendAssistant(opts, "stub");
+      });
 
       const inStream = new PassThrough();
       const replPromise = runRepl({
@@ -359,10 +371,10 @@ describe("repl: cross-process turn.lock acquired before runAgentLoop (C2 recipro
       // Yield until REPL readline loop is ready
       await new Promise<void>((r) => setImmediate(r));
       inStream.write("hello world\n");
-      // Wait for turn processing
-      await new Promise<void>((r) => setTimeout(r, 300));
+      await turnEntered;
       inStream.end();
       await replPromise;
+      piLoop.assertDrained(1);
 
       // turn.lock must be released (not left dangling)
       assert.ok(!existsSync(turnLockPath), "turn.lock must be released after turn");
