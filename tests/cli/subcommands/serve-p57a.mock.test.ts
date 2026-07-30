@@ -63,6 +63,15 @@ let mockOnStepFinish: ((step: any) => void | Promise<void>) | null = null;
 /** Controls how long the mocked runAgentLoop sleeps (ms). Default short — most
  *  tests want fast resolution. T-Serve.9 sleeps long (1500ms) to verify 409. */
 let mockTurnSleepMs = 50;
+let mockPiMode: "sleep" | "abort-latched" | "hold" = "sleep";
+let mockPiCallCount = 0;
+let mockPiResolveCount = 0;
+let mockPiSignals: AbortSignal[] = [];
+let installedTurnSignal: AbortSignal | null = null;
+let sessionClearCalls: AbortSignal[] = [];
+let abortObservedResolve: (() => void) | null = null;
+let maySettle: Promise<void> = Promise.resolve();
+let secondEnteredResolve: (() => void) | null = null;
 
 // ─── runServeSubcommand handle (loaded after mocks are wired) ─────────────────
 
@@ -78,6 +87,13 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub — type does not need to match LinkedinSession exactly
       createLinkedinSession: (_opts: any) => ({
         inputMode: "cdp",
+        setTurnAbortSignal(signal: AbortSignal) {
+          installedTurnSignal = signal;
+        },
+        clearTurnAbortSignal(signal: AbortSignal) {
+          sessionClearCalls.push(signal);
+          if (installedTurnSignal === signal) installedTurnSignal = null;
+        },
         async getOrInitClient() {
           return { ok: true as const, client: { isConnected: () => true, handle: {} } };
         },
@@ -88,7 +104,49 @@ before(async () => {
     },
   });
 
-  // 2. Mock runAgentLoop — captures messages + onStepFinish for assertion in test bodies
+  const piModelUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => {
+        mockPiResolveCount++;
+        return { model: "mock", apiKey: "mock" };
+      },
+    },
+  });
+
+  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  mock.module(piLoopUrl, {
+    namedExports: {
+      // biome-ignore lint/suspicious/noExplicitAny: controlled Pi seam
+      runAgentLoopPi: async (opts: any) => {
+        mockCapturedMessages = opts?.messages ?? null;
+        mockOnStepFinish = opts?.onStepFinish ?? null;
+        mockPiCallCount++;
+        mockPiSignals.push(opts.abortSignal);
+        const mode = mockPiMode;
+        if (mode === "abort-latched") {
+          await new Promise<void>((done) => {
+            if (opts.abortSignal.aborted) return done();
+            opts.abortSignal.addEventListener("abort", () => done(), { once: true });
+          });
+          abortObservedResolve?.();
+          await maySettle;
+          return;
+        }
+        if (mode === "hold") {
+          secondEnteredResolve?.();
+          await new Promise<void>((done) => {
+            if (opts.abortSignal.aborted) return done();
+            opts.abortSignal.addEventListener("abort", () => done(), { once: true });
+          });
+          return;
+        }
+        await new Promise<void>((done) => setTimeout(done, mockTurnSleepMs));
+      },
+    },
+  });
+
+  // 2. Keep the passive delegate mock importable.
   const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
   mock.module(loopUrl, {
     namedExports: {
@@ -126,7 +184,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal LanguageModel stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -217,7 +275,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore */
@@ -227,14 +285,13 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
   return null;
 }
 
-// ─── T-Serve.9 — currentTurn 409 guard preserved from P-56b ────────────────
+// ─── T-Serve.9 — D-21 delayed cleanup ownership ────────────────────────────
 
-describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged from P-56b (G-P57a.3)", () => {
-  it.skip("T-Serve.9: given tmp UDS sock + bearer 'tok' + mocked runAgentLoop sleeping 1500ms, WHEN POST /agent/turn fires twice back-to-back, THEN first → 200 + turnId, second → 409 turn_in_progress with same turnId (P-56b regression preserved across P-57a additions)", async () => {
-    // Given: tmp dir sock + bearer + mocked runAgentLoop sleeps 1500ms
-    // When:  POST /agent/turn {prompt:"first"} immediately followed by {prompt:"second"}
-    // Then:  r1=200+turnId8hex; r2=409 turn_in_progress with same turnId
-
+describe("runServeSubcommand — D-21 delayed cleanup preserves replacement ownership", () => {
+  it("T-Serve.9: D-21 late T1 cleanup cannot clear T2's HTTP or session owner", async () => {
+    // Given: T1 observes abort but cannot settle until T2 owns both domains
+    // When:  T1 settles late and /agent/abort runs
+    // Then:  the response and exact aborted signal still belong to T2
     const tmpDir = mkdtempSync(join(tmpdir(), "mai-p57a-t9-"));
     const portFile = join(tmpDir, "frondose.port");
     const bearer = "tok";
@@ -242,14 +299,28 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
     process.env.FRONDOSE_HOME_BASE = tmpDir;
     mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
 
-    mockTurnSleepMs = 1500;
+    mockPiCallCount = 0;
+    mockPiResolveCount = 0;
+    mockPiSignals = [];
+    installedTurnSignal = null;
+    sessionClearCalls = [];
+    let releaseFirst!: () => void;
+    maySettle = new Promise<void>((resolveP) => {
+      releaseFirst = resolveP;
+    });
+    const abortObserved = new Promise<void>((resolveP) => {
+      abortObservedResolve = resolveP;
+    });
+    const secondEntered = new Promise<void>((resolveP) => {
+      secondEnteredResolve = resolveP;
+    });
     void runServeSubcommand({ portFile, bearerToken: bearer });
     const port = await pollForPort(portFile, 5000);
     assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
 
-    // First POST → 200 + turnId
+    mockPiMode = "abort-latched";
     const r1 = await udsReq({
       port,
       method: "POST",
@@ -257,15 +328,9 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
       headers: authHeader,
       body: { prompt: "first" },
     });
-    assert.equal(r1.status, 200, `(r1) expected 200 got ${r1.status}: ${JSON.stringify(r1.body)}`);
-    assert.equal(r1.body.ok, true, "(r1) ok must be true");
-    const turnId1: string = r1.body.turnId;
-    assert.ok(
-      typeof turnId1 === "string" && /^[0-9a-f]{8}$/.test(turnId1),
-      `(r1) turnId must be 8-char hex; got: ${String(turnId1)}`,
-    );
-
-    // Second POST while #1 sleeping → 409 same turnId
+    while (mockPiCallCount < 1) await new Promise((r) => setTimeout(r, 10));
+    const firstSignal = mockPiSignals[0];
+    mockPiMode = "hold";
     const r2 = await udsReq({
       port,
       method: "POST",
@@ -273,10 +338,27 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
       headers: authHeader,
       body: { prompt: "second" },
     });
-    assert.equal(r2.status, 409, `(r2) expected 409 got ${r2.status}: ${JSON.stringify(r2.body)}`);
-    assert.equal(r2.body.ok, false, "(r2) ok must be false");
-    assert.equal(r2.body.reason, "turn_in_progress", "(r2) reason must be turn_in_progress");
-    assert.equal(r2.body.turnId, turnId1, `(r2) 409 turnId must match running turn; got ${String(r2.body.turnId)}`);
+    await Promise.all([abortObserved, secondEntered]);
+    const secondSignal = mockPiSignals[1];
+    assert.equal(r2.status, 200, "replacement must be accepted");
+    assert.notEqual(r2.body.turnId, r1.body.turnId, "replacement must get a new id");
+    assert.equal(firstSignal?.aborted, true, "T1's exact signal must abort");
+    assert.equal(installedTurnSignal, secondSignal, "T2 must install the session signal");
+
+    releaseFirst();
+    const deadline = Date.now() + 1000;
+    while (!sessionClearCalls.includes(firstSignal) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.ok(sessionClearCalls.includes(firstSignal), "T1's late finally must execute");
+    assert.equal(installedTurnSignal, secondSignal, "late T1 clear must not erase T2");
+
+    const abortSecond = await udsReq({ port, method: "POST", path: "/agent/abort", headers: authHeader });
+    assert.equal(abortSecond.body.turnId, r2.body.turnId, "HTTP owner must still be T2");
+    assert.equal(abortSecond.body.released, true, "T2 must release");
+    assert.equal(secondSignal?.aborted, true, "abort must target T2's exact signal");
+    assert.equal(mockPiCallCount, 2, "both turns must enter Pi");
+    assert.equal(mockPiResolveCount, 2, "both turns must resolve Pi");
 
     process.env.FRONDOSE_HOME_BASE = origHome;
   });
@@ -285,7 +367,7 @@ describe("runServeSubcommand — POST /agent/turn: currentTurn 409 unchanged fro
 // ─── T-Serve.10 — suggest_card / suggest_next_actions tool result → SSE + overlay ──
 
 describe("runServeSubcommand — suggest_card / suggest_next_actions tool result → SSE + overlay callInOverlay (G-P57a.4)", () => {
-  it.skip("T-Serve.10: given mocked runAgentLoop that calls onStepFinish with a synthetic step.toolResults=[{toolName:'suggest_card',result:<payload>}], WHEN turn fires, THEN SSE stream receives {type:'suggestion-card', card:<payload>} AND a follow-up step with toolName:'suggest_next_actions' produces {type:'next-actions', nextActions:<payload>}", async () => {
+  it("T-Serve.10: Pi onStepFinish composition emits suggestion-card and next-actions SSE", async () => {
     // Given: tmp UDS pattern; mockRunAgentLoop captures opts.onStepFinish into mockOnStepFinish;
     //        SSE listener opened BEFORE POST /agent/turn.
     // When:  POST /agent/turn → server invokes mocked runAgentLoop → mockOnStepFinish captured;
@@ -304,6 +386,7 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
     // mockRunAgentLoop captures onStepFinish + then resolves after 500ms (so we have
     // a window to invoke the captured callback before the server cleans up currentTurn).
     mockTurnSleepMs = 1000;
+    mockPiMode = "sleep";
     mockOnStepFinish = null;
 
     void runServeSubcommand({ portFile, bearerToken: bearer });
@@ -384,7 +467,7 @@ describe("runServeSubcommand — suggest_card / suggest_next_actions tool result
 // ─── T-Serve.11 — POST /agent/activate → triggerAnalyzeProfile prompt ─────────
 
 describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile with locked prompt (G-P57a.5)", () => {
-  it.skip("T-Serve.11: given mocked runAgentLoop capturing messages[], WHEN POST /agent/activate {url:'https://www.linkedin.com/in/williamhgates/'} with valid bearer, THEN response 200 {ok:true, turnId:<hex>, status:'queued'} AND captured messages[].last.content contains substring \"Analyze this profile against the operator's ICP\"", async () => {
+  it("T-Serve.11: POST /agent/activate queues the locked analyze-profile prompt into Pi", async () => {
     // Given: tmp UDS pattern; mockRunAgentLoop captures opts.messages
     // When:  (1) POST /agent/activate {} (no url) → 400 missing_url
     //        (2) POST /agent/activate {url:'https://www.linkedin.com/in/williamhgates/'} → 200+turnId
@@ -401,6 +484,7 @@ describe("runServeSubcommand — POST /agent/activate triggers analyzeProfile wi
 
     // 500ms sleep gives time for #2→#3 overlap
     mockTurnSleepMs = 500;
+    mockPiMode = "sleep";
     mockCapturedMessages = null;
 
     void runServeSubcommand({ portFile, bearerToken: bearer });

@@ -43,6 +43,10 @@ let mockTurnSleepMs = 2000;
 /** If set, mockRunAgentLoop resolves immediately when abortSignal fires.
  *  Reassigned in T-Serve.7 test body; keep as let. */
 let mockTurnRespectAbort = false;
+let mockPiCallCount = 0;
+let mockPiResolveCount = 0;
+let mockPiSignals: AbortSignal[] = [];
+let installedTurnSignal: AbortSignal | null = null;
 
 // ─── runServeSubcommand handle (loaded after mocks are wired) ─────────────────
 
@@ -58,6 +62,12 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub — type does not need to match LinkedinSession exactly
       createLinkedinSession: (_opts: any) => ({
         inputMode: "cdp",
+        setTurnAbortSignal(signal: AbortSignal) {
+          installedTurnSignal = signal;
+        },
+        clearTurnAbortSignal(signal: AbortSignal) {
+          if (installedTurnSignal === signal) installedTurnSignal = null;
+        },
         async getOrInitClient() {
           return { ok: true as const, client: { isConnected: () => true, handle: {} } };
         },
@@ -70,7 +80,38 @@ before(async () => {
     },
   });
 
-  // 2. Mock runAgentLoop (needed because serve.ts P-56b uses it in POST /agent/turn).
+  const piModelUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => {
+        mockPiResolveCount++;
+        return { model: "mock", apiKey: "mock" };
+      },
+    },
+  });
+
+  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  mock.module(piLoopUrl, {
+    namedExports: {
+      // biome-ignore lint/suspicious/noExplicitAny: controlled Pi seam
+      runAgentLoopPi: async (opts: any) => {
+        mockPiCallCount++;
+        mockPiSignals.push(opts.abortSignal);
+        const sleepMs = mockTurnSleepMs;
+        if (mockTurnRespectAbort && opts?.abortSignal) {
+          await new Promise<void>((done) => {
+            if (opts.abortSignal.aborted) return done();
+            opts.abortSignal.addEventListener("abort", () => done(), { once: true });
+            setTimeout(done, sleepMs);
+          });
+        } else {
+          await new Promise<void>((done) => setTimeout(done, sleepMs));
+        }
+      },
+    },
+  });
+
+  // 2. Keep the delegate mock importable for passive paths.
   // [P-PI-followup] Pi cutover (bea6023) made loop.ts a thin delegate that imports
   // pi/loop.ts, which in turn imports STALL_STEP_THRESHOLD + 4 retry-detector helpers
   // back from loop.ts. The mock MUST expose all of them or Pi's import chain fails
@@ -113,7 +154,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal LanguageModel stub — model never used (runAgentLoop is mocked)
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -209,7 +250,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient errors */
@@ -222,7 +263,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
 // ─── T-Serve.5 — POST /agent/turn: single-turn guard + body validation ────────
 
 describe("runServeSubcommand — POST /agent/turn: concurrency guard + body validation (G-P56b.5)", () => {
-  it.skip("T-Serve.5: given tmp port-file + bearer 'tok' + mocked runAgentLoop sleeping 2000ms, WHEN 4 sequential POSTs: (1) no body→400 missing_prompt, (2) {prompt:'qualify x'}→200 ok+turnId, (3) second turn while #2 sleeping→409 turn_in_progress same turnId, (4) wait 2200ms then new turn→200 ok+NEW turnId", async () => {
+  it("T-Serve.5: D-21 immediate replacement returns 200 with a new owner and force-release SSE", async () => {
     // Given: tmp dir port-file; bearer "tok"; mocked runAgentLoop sleeps 2000ms;
     //        runServeSubcommand started fire-and-forget; poll for port-file ready (5s)
     // When:  (1) POST /agent/turn with no body
@@ -245,6 +286,10 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     // 2s sleep gives us plenty of time for (2)→(3) overlap
     mockTurnSleepMs = 2000;
     mockTurnRespectAbort = false;
+    mockPiCallCount = 0;
+    mockPiResolveCount = 0;
+    mockPiSignals = [];
+    installedTurnSignal = null;
 
     void runServeSubcommand({ portFile, bearerToken: bearer });
 
@@ -252,6 +297,8 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
     assert.ok(port !== null, "server port-file must be ready within 5000ms");
 
     const authHeader = { Authorization: `Bearer ${bearer}` };
+    const ssePromise = udsSSECollect({ port, headers: authHeader, collectMs: 700 });
+    await new Promise((r) => setTimeout(r, 50));
 
     // (1) No body → 400 missing_prompt
     const r1 = await udsReq({ port, method: "POST", path: "/agent/turn", headers: authHeader });
@@ -275,7 +322,7 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
       `(2) turnId must be 8-char hex; got: ${String(turnId1)}`,
     );
 
-    // (3) Second turn while #2 sleeping (immediately after) → 409 same turnId
+    // (3) D-21 replaces the still-running owner.
     const r3 = await udsReq({
       port,
       method: "POST",
@@ -283,10 +330,15 @@ describe("runServeSubcommand — POST /agent/turn: concurrency guard + body vali
       headers: authHeader,
       body: { prompt: "another" },
     });
-    assert.equal(r3.status, 409, `(3) expected 409 got ${r3.status}: ${JSON.stringify(r3.body)}`);
-    assert.equal(r3.body.ok, false, "(3) ok must be false");
-    assert.equal(r3.body.reason, "turn_in_progress", "(3) reason must be turn_in_progress");
-    assert.equal(r3.body.turnId, turnId1, `(3) 409 turnId must match running turn; got ${String(r3.body.turnId)}`);
+    assert.equal(r3.status, 200, `(3) expected 200 got ${r3.status}: ${JSON.stringify(r3.body)}`);
+    assert.equal(r3.body.ok, true, "(3) replacement must be accepted");
+    assert.notEqual(r3.body.turnId, turnId1, "(3) replacement must own a new turn id");
+    assert.equal(mockPiSignals[0]?.aborted, true, "(3) replacement must abort T1's exact Pi signal");
+    const sse = await ssePromise;
+    assert.ok(sse.text.includes(turnId1), "force-release SSE must name T1");
+    assert.ok(sse.text.includes("force-released"), "force-release SSE must explain D-21 release");
+    assert.equal(mockPiCallCount, 2, "both original and replacement turns must enter Pi");
+    assert.equal(mockPiResolveCount, 2, "both original and replacement turns must resolve Pi");
 
     // (4) Wait 2200ms for turn #2 to complete, then new turn → 200 + NEW turnId
     await new Promise((r) => setTimeout(r, 2200));
@@ -392,7 +444,7 @@ describe("runServeSubcommand — GET /agent/events: SSE headers + ping + broadca
 // ─── T-Serve.7 — POST /agent/abort: cancellation ─────────────────────────────
 
 describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_found if no turn (G-P56b.7)", () => {
-  it.skip("T-Serve.7: given tmp port-file + bearer 'tok', WHEN (1) POST /agent/abort with no turn active→200 {ok:false,reason:'not_found'}, (2) start turn+wait 50ms+abort→200 {ok:true}, (3) SSE stream after abort shows done+aborted frame", async () => {
+  it("T-Serve.7: no active turn is not_found; active abort releases the exact Pi owner and emits aborted done", async () => {
     // Given: tmp-dir server; mocked runAgentLoop respects abortSignal (mockTurnRespectAbort=true);
     //        mockTurnSleepMs=5000 (long sleep so abort fires while turn is running)
     // When:  scenario 1: POST /agent/abort (no turn running)
@@ -412,6 +464,10 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
 
     mockTurnSleepMs = 5000; // long sleep so abort fires before turn completes
     mockTurnRespectAbort = true;
+    mockPiCallCount = 0;
+    mockPiResolveCount = 0;
+    mockPiSignals = [];
+    installedTurnSignal = null;
 
     void runServeSubcommand({ portFile, bearerToken: bearer });
 
@@ -451,6 +507,11 @@ describe("runServeSubcommand — POST /agent/abort: abort running turn; 200 not_
     const ra2 = await udsReq({ port, method: "POST", path: "/agent/abort", headers: authHeader });
     assert.equal(ra2.status, 200, `scenario 2: expected status 200 got ${ra2.status}`);
     assert.equal(ra2.body.ok, true, "scenario 2: ok must be true");
+    assert.equal(ra2.body.released, true, "scenario 2: active owner must be released");
+    assert.equal(ra2.body.turnId, rturn.body.turnId, "scenario 2: abort response must name the active turn");
+    assert.equal(mockPiSignals[0]?.aborted, true, "scenario 2: exact Pi signal must abort");
+    assert.equal(mockPiCallCount, 1, "active turn must enter Pi exactly once");
+    assert.equal(mockPiResolveCount, 1, "active turn must resolve Pi exactly once");
 
     // Scenario 3: SSE stream should have done+aborted frame
     const sse = await ssePromise;

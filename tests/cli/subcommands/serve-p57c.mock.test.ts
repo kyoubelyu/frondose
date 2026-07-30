@@ -1,30 +1,3 @@
-/**
- * P-57c Step 5 — T-Serve.14, T-Serve.15, T-Serve.16, T-Serve.17,
- *                  T-Cron.1, T-Cron.2, T-Error.1, T-Error.2, T-Error.3 — FILLED
- * (G-P57c.1, G-P57c.2, G-P57c.3, G-P57c.4, G-P57c.5, G-P57c.6, G-P57c.7, G-P57c.8, G-P57c.9)
- *
- * Mock tests for P-57c extensions to `src/cli/subcommands/serve.ts`.
- *
- * Implementation notes (vs Step 4a + plan §6):
- *   - Production module-level state (lastFailedTurnPrompt / lastTurnUserPrompt /
- *     retryAttempts / MAX_RETRY_ATTEMPTS) is at FILE SCOPE (not closure) — shared
- *     across all runServeSubcommand instances loaded in the same Node process. Each
- *     test resets state explicitly via a successful POST /agent/turn at the top
- *     (success-path clears lastFailedTurnPrompt=null + retryAttempts=0).
- *   - POST /agent/retry rejected response uses 200 + reason:"retry_limit_reached"
- *     (NOT 429). Code at serve.ts:436-438.
- *   - Cron driver fires via `setInterval(60_000)`; for cron tests we accelerate
- *     by overriding globalThis.setInterval BEFORE runServeSubcommand starts, and
- *     write a due-now schedule.jsonl entry to make findDueJobs return work.
- *   - mockRunAgentLoop behavior is controlled per-test via `mockMode` flag:
- *     "succeed" (clean return), "throw" (non-abort error), "respect-abort"
- *     (honor opts.abortSignal + throw AbortError when aborted).
- *
- * Run (mock):
- *   node --import tsx --test --experimental-test-module-mocks --test-force-exit \
- *     --test-timeout=60000 tests/cli/subcommands/serve-p57c.mock.test.ts
- */
-
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request as httpReq } from "node:http";
@@ -35,19 +8,18 @@ import { pathToFileURL } from "node:url";
 
 // ─── Mock state ───────────────────────────────────────────────────────────────
 
-/** Captures the binding handler registered by attachEventBus. */
 let mockBindingCalledHandler: ((arg: { name: string; payload: string }) => void) | null = null;
 
-/** Captures opts passed to mockRunAgentLoop. Reset per-test. */
 // biome-ignore lint/suspicious/noExplicitAny: stub captures opts loosely
 let mockCapturedOpts: any | null = null;
 let mockRunAgentLoopCallCount = 0;
+// biome-ignore lint/suspicious/noExplicitAny: capture current Pi options for ordering assertions
+let mockCapturedOptsHistory: any[] = [];
+let mockPiResolveCount = 0;
+let installedTurnSignal: AbortSignal | null = null;
 
-/** Controls mockRunAgentLoop behavior per-test:
- *   - "succeed":       resolves cleanly (no error; success path runs in serve.ts)
- *   - "throw":         throws non-abort error (catch path; sets lastFailedTurnPrompt if isRetryable)
- *   - "respect-abort": honors opts.abortSignal; throws AbortError when aborted */
 let mockMode: "succeed" | "throw" | "respect-abort" = "succeed";
+let mockScript: Array<typeof mockMode> = [];
 
 /** Override setInterval to accelerate cron driver (used in T-Cron.* tests). */
 let setIntervalAccelerator: { active: boolean; factor: number } = { active: false, factor: 1 };
@@ -66,6 +38,12 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       createLinkedinSession: (_opts: any) => ({
         inputMode: "cdp",
+        setTurnAbortSignal(signal: AbortSignal) {
+          installedTurnSignal = signal;
+        },
+        clearTurnAbortSignal(signal: AbortSignal) {
+          if (installedTurnSignal === signal) installedTurnSignal = null;
+        },
         async getOrInitClient() {
           const handle = {
             Runtime: {
@@ -94,43 +72,49 @@ before(async () => {
     },
   });
 
-  // 2. Mock runAgentLoop — note: post Pi-cutover (bea6023), turn.ts calls runAgentLoopPi
-  // from pi/loop.js directly, NOT runAgentLoop from loop.js. The mock target below
-  // is partially effective (STALL_STEP_THRESHOLD + helpers keep pi/loop.ts's import
-  // chain valid) but the runAgentLoop stub itself is NEVER called by the live code
-  // path. Tests that rely on intercepting the loop call (T-Serve.14-17) fail
-  // because the real Pi loop runs against DeepSeek. Marked it.skip for those tests.
-  // Fix requires either: routing turn.ts through loop.ts delegate, OR injecting
-  // runAgentLoopPi via deps for testability. Tracked as a follow-up phase.
+  const piModelUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/model.js")).href;
+  mock.module(piModelUrl, {
+    namedExports: {
+      resolvePiModel: () => {
+        mockPiResolveCount++;
+        return { model: "mock", apiKey: "mock" };
+      },
+    },
+  });
+
+  // biome-ignore lint/suspicious/noExplicitAny: controlled Pi/delegate seam
+  const controlledLoop = async (opts: any): Promise<void> => {
+    mockCapturedOpts = opts;
+    mockCapturedOptsHistory.push(opts);
+    mockRunAgentLoopCallCount++;
+    const mode = mockScript.shift() ?? mockMode;
+    if (mode === "succeed") {
+      await new Promise<void>((r) => setTimeout(r, 30));
+      return;
+    }
+    if (mode === "throw") {
+      await new Promise<void>((r) => setTimeout(r, 30));
+      throw new Error("mock-runAgentLoop-error");
+    }
+    await new Promise<void>((r) => {
+      if (opts?.abortSignal?.aborted) return r();
+      opts?.abortSignal?.addEventListener("abort", () => r(), { once: true });
+      setTimeout(r, 2000);
+    });
+    if (opts?.abortSignal?.aborted) throw new Error("AbortError: aborted");
+  };
+
+  const piLoopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/pi/loop.js")).href;
+  mock.module(piLoopUrl, {
+    namedExports: {
+      runAgentLoopPi: controlledLoop,
+    },
+  });
+
   const loopUrl = pathToFileURL(resolve(process.cwd(), "src/agent/loop.js")).href;
   mock.module(loopUrl, {
     namedExports: {
-      // biome-ignore lint/suspicious/noExplicitAny: stub
-      runAgentLoop: async (opts: any) => {
-        mockCapturedOpts = opts;
-        mockRunAgentLoopCallCount++;
-        const mode = mockMode;
-        if (mode === "succeed") {
-          await new Promise<void>((r) => setTimeout(r, 30));
-          return;
-        }
-        if (mode === "throw") {
-          await new Promise<void>((r) => setTimeout(r, 30));
-          throw new Error("mock-runAgentLoop-error");
-        }
-        // respect-abort: sleep until aborted or timeout
-        await new Promise<void>((r) => {
-          if (opts?.abortSignal?.aborted) {
-            r();
-            return;
-          }
-          opts?.abortSignal?.addEventListener("abort", () => r(), { once: true });
-          setTimeout(() => r(), 2000);
-        });
-        if (opts?.abortSignal?.aborted) {
-          throw new Error("AbortError: aborted");
-        }
-      },
+      runAgentLoop: controlledLoop,
       // [P-PI-followup] Pi loop transitive imports from loop.js — see _loopMockHelper.ts.
       STALL_STEP_THRESHOLD: 4,
       lastAssistantMessageHasNoToolCalls: () => false,
@@ -140,7 +124,6 @@ before(async () => {
     },
   });
 
-  // 3. Mock resolveModel
   const modelResolverUrl = pathToFileURL(resolve(process.cwd(), "src/agent/modelResolver.js")).href;
   mock.module(modelResolverUrl, {
     namedExports: {
@@ -280,16 +263,11 @@ async function spinHarness(
   const origHome = process.env.FRONDOSE_HOME_BASE;
   process.env.FRONDOSE_HOME_BASE = tmpDir;
   mkdirSync(join(tmpDir, ".frondose", "agent"), { recursive: true });
-  // Write minimal identity.json with updatedAt (required by schema)
   writeFileSync(
     join(tmpDir, ".frondose", "agent", "identity.json"),
     JSON.stringify({ icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() }, null, 2),
     "utf-8",
   );
-  // P-58a RECONCILE: serve now boots cronEnabled from readMode() (default "manual" → cron driver no-ops).
-  // The cron tests exercise the Auto path, so persist mode.json=auto (the realistic "operator enabled Auto")
-  // BEFORE runServeSubcommand boots → cronEnabled=true → the cron driver ticks. (Production: Manual default
-  // means cron is OFF — the supervised default; this harness opts into Auto.)
   writeFileSync(join(tmpDir, ".frondose", "agent", "mode.json"), JSON.stringify({ mode: "auto" }), "utf-8");
   if (opts.writeScheduleJsonl !== undefined) {
     writeFileSync(join(tmpDir, ".frondose", "agent", "schedule.jsonl"), opts.writeScheduleJsonl, "utf-8");
@@ -297,7 +275,11 @@ async function spinHarness(
 
   mockBindingCalledHandler = null;
   mockCapturedOpts = null;
+  mockCapturedOptsHistory = [];
   mockRunAgentLoopCallCount = 0;
+  mockPiResolveCount = 0;
+  mockScript = [];
+  installedTurnSignal = null;
 
   void runServeSubcommand({ portFile, bearerToken: bearer });
   const port = await pollForPort(portFile, 5000);
@@ -324,8 +306,7 @@ async function spinHarness(
   };
 }
 
-/** Reset module-level retry state via a successful operator turn (success-path clears).
- *  Returns when SSE done arrives. */
+/** Reset module-level retry state through a successful operator turn. */
 async function resetRetryStateViaSuccess(port: number, bearer: string, label: string): Promise<void> {
   mockMode = "succeed";
   const authHeader = { Authorization: `Bearer ${bearer}` };
@@ -341,7 +322,6 @@ async function resetRetryStateViaSuccess(port: number, bearer: string, label: st
   await new Promise((r) => setTimeout(r, 150));
 }
 
-/** Drive a failing operator turn to set lastFailedTurnPrompt + leave retryAttempts unchanged. */
 async function setupFailedTurn(port: number, bearer: string, failPrompt: string): Promise<void> {
   mockMode = "throw";
   const authHeader = { Authorization: `Bearer ${bearer}` };
@@ -361,19 +341,17 @@ function dispatchOverlayBindingEvent(rawPayload: any): void {
   mockBindingCalledHandler({ name: "__frondosePost", payload: JSON.stringify(rawPayload) });
 }
 
-// ─── T-Serve.14 — Server-side steer promotion ───────────────────────────────
-
+// T-Serve.14
 describe("dispatchOverlayEvent — overlay prompt during running triggers server-side steer promotion (G-P57c.1)", () => {
-  it.skip("T-Serve.14: given serve.ts harness with mock runAgentLoop in respect-abort mode + operator turn in flight (currentTurn !== null), WHEN dispatch overlay-event {type:'prompt', text:'new prompt'} via binding handler, THEN steerThenTrigger fires: 1st turn's abortController.abort() called → done(aborted:true) SSE → currentTurn cleared within 200ms → triggerCardActionTurn fires 2nd turn with messages.last() content === 'new prompt' AND opts.isRetryable === true per §5.3.2 callsite contract", async () => {
+  it("T-Serve.14: steer aborts T1; T2 failure is retryable with exact new prompt", async () => {
+    // Given/When/Then: steer T1→failing T2, then retry exact T2 prompt at attempts:1.
     const h = await spinHarness("t14");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2500 });
       await new Promise((r) => setTimeout(r, 100));
 
-      // Start an operator turn that will be aborted mid-stream
-      mockMode = "respect-abort";
-      const baselineCount = mockRunAgentLoopCallCount;
+      mockScript = ["respect-abort", "throw", "succeed"];
       const r1 = await udsReq({
         port: h.port,
         method: "POST",
@@ -383,39 +361,20 @@ describe("dispatchOverlayEvent — overlay prompt during running triggers server
       });
       assert.equal(r1.status, 200, "first turn should be accepted");
       const firstTurnId: string = r1.body.turnId;
-      await new Promise((r) => setTimeout(r, 100)); // let runOneTurn start
+      await new Promise((r) => setTimeout(r, 100));
 
-      // Dispatch overlay prompt → should promote to steer (abort + new turn)
-      dispatchOverlayBindingEvent({
-        type: "prompt",
-        text: "new prompt",
-        t0: Date.now(),
-      });
-
-      // Wait for steerThenTrigger's 50ms polling + new turn dispatch
-      await new Promise((r) => setTimeout(r, 800));
-      // Now switch mock back to succeed so the new turn completes
-      mockMode = "succeed";
-      await new Promise((r) => setTimeout(r, 200));
-
-      // Expect at least 2 runAgentLoop calls (1st aborted + 2nd steered)
-      const delta = mockRunAgentLoopCallCount - baselineCount;
-      assert.ok(delta >= 2, `expected ≥2 runAgentLoop invocations (1st aborted + 2nd steered); got delta=${delta}`);
-
-      // Latest captured opts should be from the steered (2nd) turn — verify via messages.last()
-      // (runAgentLoop opts don't carry userPrompt/isRetryable; those are runOneTurn opts. The behavioral
-      // signal: runAgentLoop is called with messages whose LAST entry is the new prompt.)
-      assert.ok(mockCapturedOpts !== null, "mockCapturedOpts must have been captured");
-      const lastMsg = mockCapturedOpts.messages?.[mockCapturedOpts.messages.length - 1];
-      assert.ok(lastMsg, "captured opts must have non-empty messages array");
-      assert.equal(
-        lastMsg.content,
-        "new prompt",
-        `messages.last().content should be 'new prompt' (steered turn); got: ${String(lastMsg.content)}`,
-      );
-      // isRetryable verification: behaviorally, the steered (operator) turn IS retryable.
-      // Direct opts inspection not available (those are runOneTurn-level params not passed to runAgentLoop).
-      // The contract is enforced at the call sites in serve.ts (verified by T-Error.1/T-Cron.2 differential).
+      dispatchOverlayBindingEvent({ type: "prompt", text: "new prompt", t0: Date.now() });
+      await new Promise((r) => setTimeout(r, 500));
+      assert.equal(mockRunAgentLoopCallCount, 2, "steer must enter T1 and failing T2");
+      const retry = await udsReq({ port: h.port, method: "POST", path: "/agent/retry", headers: authHeader });
+      assert.equal(retry.body.ok, true, "steered failure must remain retryable");
+      assert.equal(retry.body.attempts, 1, "steered failure's first retry must be attempts:1");
+      await new Promise((r) => setTimeout(r, 150));
+      assert.equal(mockRunAgentLoopCallCount, 3, "retry must enter Pi");
+      const retryOpts = mockCapturedOptsHistory[2];
+      const lastMsg = retryOpts.messages?.[retryOpts.messages.length - 1];
+      assert.equal(lastMsg?.content, "new prompt", "retry must consume the exact steered prompt");
+      assert.equal(mockPiResolveCount, 3, "all three turns must resolve Pi");
 
       const sse = await ssePromise;
       assert.ok(
@@ -428,10 +387,9 @@ describe("dispatchOverlayEvent — overlay prompt during running triggers server
   });
 });
 
-// ─── T-Serve.15 — POST /agent/retry re-fires lastFailedTurnPrompt ───────────
-
 describe("POST /agent/retry — re-fires lastFailedTurnPrompt + increments retryAttempts (G-P57c.2)", () => {
-  it.skip("T-Serve.15: given serve.ts harness + state reset via successful turn + then a failed operator turn with prompt 'fail-15' sets lastFailedTurnPrompt, WHEN POST /agent/retry, THEN response 200 {ok:true, turnId:<hex>, status:'queued', attempts:1}; mockCapturedOpts.userPrompt === 'fail-15' (retry consumed lastFailedTurnPrompt); attempts:1 confirms retryAttempts incremented", async () => {
+  it("T-Serve.15: HTTP retry re-fires the exact failed prompt with attempts one", async () => {
+    // Given/When/Then: fail one operator prompt, retry, and observe exact prompt plus attempts:1.
     const h = await spinHarness("t15");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
@@ -461,28 +419,22 @@ describe("POST /agent/retry — re-fires lastFailedTurnPrompt + increments retry
         "fail-15",
         `retry messages.last().content should be 'fail-15' (the failed prompt); got: ${String(lastMsgT15?.content)}`,
       );
-      // isRetryable behavioral verification: subsequent retry would consume — but that's T-Serve.16 territory.
     } finally {
       h.restoreEnv();
     }
   });
 });
 
-// ─── T-Serve.16 — MAX_RETRY_ATTEMPTS cap ────────────────────────────────────
-
+// T-Serve.16
 describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
-  it.skip("T-Serve.16: given serve.ts harness + failed turn sets lastFailedTurnPrompt + 3 failing retries push retryAttempts to 3, WHEN 4th POST /agent/retry, THEN response 200 {ok:false, reason:'retry_limit_reached', attempts:3}; mockRunAgentLoop NOT called (zero increment); lastFailedTurnPrompt NOT consumed", async () => {
+  it("T-Serve.16: the fourth HTTP retry is rejected at the three-attempt cap without Pi", async () => {
+    // Given/When/Then: exhaust three retries, then prove the fourth rejects before Pi.
     const h = await spinHarness("t16");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       await resetRetryStateViaSuccess(h.port, h.bearer, "t16");
       await setupFailedTurn(h.port, h.bearer, "p-16");
 
-      // Do 3 failing retries to push retryAttempts to 3
-      // Each retry: retryAttempts++ BEFORE runOneTurn; then runOneTurn throws → catch restores lastFailedTurnPrompt
-      // Race window: retry endpoint clears lastFailedTurnPrompt at line 441 BEFORE runOneTurn is fired.
-      // Test must wait long enough for runOneTurn's catch path to restore lastFailedTurnPrompt='p-16'.
-      // mockRunAgentLoop sleeps 30ms before throwing → catch executes ~50ms in.
       mockMode = "throw";
       for (let i = 0; i < 3; i++) {
         const rRetry = await udsReq({
@@ -496,7 +448,6 @@ describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
         await new Promise((r) => setTimeout(r, 250)); // ensure catch path completes + lastFailedTurnPrompt restored
       }
 
-      // Now retryAttempts=3, lastFailedTurnPrompt='p-16' (restored by catch). 4th retry rejected.
       const countBefore4th = mockRunAgentLoopCallCount;
       const r4 = await udsReq({
         port: h.port,
@@ -515,28 +466,23 @@ describe("POST /agent/retry — MAX_RETRY_ATTEMPTS=3 cap (G-P57c.3)", () => {
   });
 });
 
-// ─── T-Serve.17 — Success clears retry state ────────────────────────────────
-
+// T-Serve.17
 describe("runOneTurn success path — clears lastFailedTurnPrompt + resets retryAttempts (G-P57c.4)", () => {
-  it.skip("T-Serve.17: given serve.ts harness + failed turn sets lastFailedTurnPrompt + 1 failing retry pushes retryAttempts to 1, WHEN POST /agent/turn with prompt 'new' (mockRunAgentLoop succeeds), THEN SSE includes done(finishReason:'stop'); subsequent POST /agent/retry returns ok:false reason:'no_failed_turn' (lastFailedTurnPrompt cleared); 2nd retry returns same — confirms retryAttempts also reset (would say reason:'retry_limit_reached' if still 3 OR proceed if still ≥1)", async () => {
+  it("T-Serve.17: success resets the retry counter before a fresh failure", async () => {
+    // Given/When/Then: seed near cap, succeed, then prove a fresh failure retries at attempts:1.
     const h = await spinHarness("t17");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       await resetRetryStateViaSuccess(h.port, h.bearer, "t17");
       await setupFailedTurn(h.port, h.bearer, "fail-17");
 
-      // 1 failing retry to push retryAttempts to 1
       mockMode = "throw";
-      const r1 = await udsReq({
-        port: h.port,
-        method: "POST",
-        path: "/agent/retry",
-        headers: authHeader,
-      });
-      assert.equal(r1.body.attempts, 1, "after 1 failing retry, attempts should be 1");
-      await new Promise((r) => setTimeout(r, 150));
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const seeded = await udsReq({ port: h.port, method: "POST", path: "/agent/retry", headers: authHeader });
+        assert.equal(seeded.body.attempts, attempt, `seed retry must reach attempts:${attempt}`);
+        await new Promise((r) => setTimeout(r, 150));
+      }
 
-      // Now succeed an operator turn
       mockMode = "succeed";
       const r2 = await udsReq({
         port: h.port,
@@ -548,19 +494,11 @@ describe("runOneTurn success path — clears lastFailedTurnPrompt + resets retry
       assert.equal(r2.status, 200, "success turn should accept");
       await new Promise((r) => setTimeout(r, 200)); // wait for done
 
-      // Verify state cleared: retry should now reject with no_failed_turn
-      const r3 = await udsReq({
-        port: h.port,
-        method: "POST",
-        path: "/agent/retry",
-        headers: authHeader,
-      });
-      assert.equal(r3.body.ok, false, "post-success retry ok must be false");
-      assert.equal(
-        r3.body.reason,
-        "no_failed_turn",
-        `post-success retry reason must be 'no_failed_turn' (lastFailedTurnPrompt cleared); got: ${r3.body.reason}`,
-      );
+      await setupFailedTurn(h.port, h.bearer, "fresh-17");
+      mockMode = "succeed";
+      const freshRetry = await udsReq({ port: h.port, method: "POST", path: "/agent/retry", headers: authHeader });
+      assert.equal(freshRetry.body.ok, true, "fresh failure must be retryable");
+      assert.equal(freshRetry.body.attempts, 1, "success must reset the prior near-cap counter to zero");
     } finally {
       h.restoreEnv();
     }
@@ -700,10 +638,10 @@ describe("Cron driver — cron-fired turns are NOT retryable (G-P57c.6, rev-1 MR
   });
 });
 
-// ─── T-Error.1 — Non-abort error sets retry state ───────────────────────────
-
+// T-Error.1
 describe("runOneTurn catch — non-abort error with isRetryable:true sets lastFailedTurnPrompt (G-P57c.7)", () => {
-  it.skip("T-Error.1: given serve.ts harness + mockRunAgentLoop throws non-abort error, WHEN POST /agent/turn {prompt:'the prompt'} (operator-callsite contract isRetryable:true), THEN SSE includes {type:'error', retryable:true, message:...}; subsequent POST /agent/retry returns 200+ok+turnId+attempts:1 with mockCapturedOpts.userPrompt === 'the prompt' (lastFailedTurnPrompt snapshotted correctly)", async () => {
+  it("T-Error.1: a non-abort Pi error is retryable and preserves the exact prompt", async () => {
+    // Given/When/Then: throw non-abortively, then retry the exact stored operator prompt.
     const h = await spinHarness("te1");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
@@ -728,7 +666,6 @@ describe("runOneTurn catch — non-abort error with isRetryable:true sets lastFa
       assert.equal(errorMatch[1], "true", "operator-turn error must be retryable:true");
       assert.ok(sse.text.includes("mock-runAgentLoop-error"), "SSE error message must contain mock error text");
 
-      // Verify lastFailedTurnPrompt was set by probing retry endpoint
       mockMode = "succeed";
       const r = await udsReq({
         port: h.port,
@@ -751,18 +688,15 @@ describe("runOneTurn catch — non-abort error with isRetryable:true sets lastFa
   });
 });
 
-// ─── T-Error.2 — Aborted turns clear retry state ────────────────────────────
-
+// T-Error.2
 describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPrompt (G-P57c.8)", () => {
-  it.skip("T-Error.2: given serve.ts harness + a prior failed turn set lastFailedTurnPrompt='prior fail' + mockRunAgentLoop in respect-abort mode for the next turn, WHEN POST /agent/turn → POST /agent/abort mid-stream, THEN SSE includes done(aborted:true) (NOT error); subsequent POST /agent/retry returns ok:false reason:'no_failed_turn' (operator-initiated abort clears lastFailedTurnPrompt per §5.3.2 — NOT retryable)", async () => {
+  it("T-Error.2: abort-reject emits one aborted done, no same-turn error, and clears retry state", async () => {
+    // Given/When/Then: abort a rejecting Pi turn and prove exact terminal/error/retry cleanup.
     const h = await spinHarness("te2");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       await resetRetryStateViaSuccess(h.port, h.bearer, "te2");
       await setupFailedTurn(h.port, h.bearer, "prior fail"); // sets lastFailedTurnPrompt
-
-      // Sanity: retry would fire now (lastFailedTurnPrompt set)
-      // But we don't actually do it — we test that an aborted operator turn CLEARS it.
 
       const ssePromise = udsSSECollect({ port: h.port, headers: authHeader, collectMs: 2500 });
       await new Promise((r) => setTimeout(r, 100));
@@ -778,25 +712,32 @@ describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPro
       assert.equal(r1.status, 200, "abortable turn accepted");
       await new Promise((r) => setTimeout(r, 100));
 
-      // Abort mid-stream
-      await udsReq({
+      const abortResponse = await udsReq({
         port: h.port,
         method: "POST",
         path: "/agent/abort",
         headers: authHeader,
       });
+      assert.equal(abortResponse.body.turnId, r1.body.turnId, "abort response must name the active turn");
+      assert.equal(abortResponse.body.released, true, "abort response must release the active turn");
       await new Promise((r) => setTimeout(r, 400));
 
       const sse = await ssePromise;
-      assert.ok(
-        sse.text.includes('"finishReason":"aborted"') || sse.text.includes('"aborted":true'),
-        `SSE must contain done(aborted:true); got: ${sse.text.slice(0, 800)}`,
+      const frames = sse.text
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map((line) => JSON.parse(line.slice(6)));
+      const turnFrames = frames.filter((frame) => frame.turnId === r1.body.turnId);
+      const terminal = turnFrames.filter(
+        (frame) => frame.type === "done" && (frame.finishReason === "aborted" || frame.aborted === true),
       );
-      // Critical: NO error frame for the aborted turn
-      const errorMatchAfterAbort = sse.text.match(/"type":"error"/);
-      // (error MAY be present from an earlier failed-turn setup — we focus on aborted=true)
+      assert.equal(terminal.length, 1, "active turn must emit exactly one aborted terminal frame");
+      assert.equal(
+        turnFrames.filter((frame) => frame.type === "error").length,
+        0,
+        "aborted catch path must emit no error frame for the active turn",
+      );
 
-      // Verify retry rejects with no_failed_turn (lastFailedTurnPrompt was cleared by abort path)
       mockMode = "succeed";
       const retryProbe = await udsReq({
         port: h.port,
@@ -810,24 +751,22 @@ describe("runOneTurn catch — operator-initiated abort clears lastFailedTurnPro
         "no_failed_turn",
         `post-abort retry must report no_failed_turn (abort cleared lastFailedTurnPrompt per §5.3.2); got: ${retryProbe.body.reason}`,
       );
-      void errorMatchAfterAbort;
     } finally {
       h.restoreEnv();
     }
   });
 });
 
-// ─── T-Error.3 — Overlay retry event honors MAX cap ─────────────────────────
-
+// T-Error.3
 describe("dispatchOverlayEvent retry branch — enforces MAX_RETRY_ATTEMPTS guard (G-P57c.9)", () => {
-  it.skip("T-Error.3: given serve.ts harness + failed turn sets lastFailedTurnPrompt + 3 failing retries push retryAttempts to MAX=3, WHEN dispatch overlay-event {event_type:'retry'} via binding handler, THEN SSE collector receives {type:'error', message:'retry limit reached (3/3)', retryable:false}; mockRunAgentLoop NOT called (zero increment from baseline)", async () => {
+  it("T-Error.3: overlay retry at cap emits a non-retryable limit error without Pi", async () => {
+    // Given/When/Then: exhaust retry state, dispatch overlay retry, and prove fail-before-Pi.
     const h = await spinHarness("te3");
     try {
       const authHeader = { Authorization: `Bearer ${h.bearer}` };
       await resetRetryStateViaSuccess(h.port, h.bearer, "te3");
       await setupFailedTurn(h.port, h.bearer, "p-te3");
 
-      // 3 failing retries to push retryAttempts to MAX=3
       mockMode = "throw";
       for (let i = 0; i < 3; i++) {
         await udsReq({
@@ -843,7 +782,6 @@ describe("dispatchOverlayEvent retry branch — enforces MAX_RETRY_ATTEMPTS guar
       await new Promise((r) => setTimeout(r, 100));
 
       const countBefore = mockRunAgentLoopCallCount;
-      // Dispatch overlay retry event — should be rejected at cap
       dispatchOverlayBindingEvent({ type: "retry", t0: Date.now() });
       await new Promise((r) => setTimeout(r, 200));
 
