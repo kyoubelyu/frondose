@@ -95,6 +95,7 @@ function makeSession(opts: {
     getOrInitClient: async () => ({ ok: true, client: fakeClient }),
     getClient: () => fakeClient,
     setTurnAbortSignal: () => {},
+    clearTurnAbortSignal: () => {},
     heartbeat: async () => true,
     setLastContext: (next: CurrentSurfaceContext) => {
       context = next;

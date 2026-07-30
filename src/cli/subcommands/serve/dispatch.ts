@@ -4,6 +4,7 @@ import { setCronMode } from "../../../persistence/mode.js";
 import { MAX_RETRY_ATTEMPTS, type ServeDeps, type ServeState } from "./context.js";
 import type { createPassiveHandlers } from "./passive.js";
 import type { createTurnRunner } from "./turn.js";
+import { clearCurrentTurnIfOwned } from "./turnOwnership.js";
 
 function overlayStringField(event: OverlayEvent, key: string): string | undefined {
   const eventRecord = event as unknown as Record<string, unknown>;
@@ -48,7 +49,7 @@ export function createOverlayDispatcher(
       const abortController = new AbortController();
       state.currentTurn = { turnId, abortController };
       void turn.triggerAnalyzeProfile(pageUrl, turnId, abortController).finally(() => {
-        state.currentTurn = null;
+        clearCurrentTurnIfOwned(state, turnId);
       });
       return;
     }
