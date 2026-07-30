@@ -94,7 +94,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -197,7 +197,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient read errors */
@@ -255,15 +255,15 @@ function dispatchClick(rawCtx: any): void {
 
 // ─── T-PassiveDefault.1 — passiveEnabled defaults OFF (source-level) ─────────
 
-describe("serve.ts passiveEnabled — defaults OFF; only MAI_PASSIVE_SUGGEST='on' enables (G-P57g.1)", () => {
+describe("serve.ts passiveEnabled — defaults OFF through frondoseEnv; only PASSIVE_SUGGEST='on' enables (G-P57g.1)", () => {
   it('T-PassiveDefault.1: given serve.ts L84 post-P-Z1 (ServeState literal), WHEN the default expression is inspected, THEN it reads `?? "off"` + `=== "on"` and the OLD `?? "on"` + `!== "off"` default-ON form is GONE', () => {
     const src = readFileSync(SERVE_TS_PATH, "utf-8");
     assert.ok(
       // P-Z1 OQ-Z1.4: passiveEnabled moved from a module `let` to a ServeState object
       // literal in the serve.ts shell (serve.ts:84). The env-read line stays in serve.ts
       // (SERVE_TS_PATH unchanged); only the `let X =` prefix becomes the `X:` property form.
-      /const\s+passiveEnabledAtBoot\s*=\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"off"\)/.test(src),
-      "serve.ts must compute passiveEnabledAtBoot from MAI_PASSIVE_SUGGEST default 'off'",
+      /const\s+passiveEnabledAtBoot\s*=\s*\(frondoseEnv\("PASSIVE_SUGGEST"\)\s*\?\?\s*"off"\)/.test(src),
+      "serve.ts must compute passiveEnabledAtBoot through frondoseEnv(PASSIVE_SUGGEST) with default 'off'",
     );
     assert.ok(
       /passiveEnabled:\s*passiveEnabledAtBoot/.test(src),
@@ -275,11 +275,13 @@ describe("serve.ts passiveEnabled — defaults OFF; only MAI_PASSIVE_SUGGEST='on
     );
     // OLD default-ON form removed.
     assert.ok(
-      !/passiveEnabled\s*=\s*\(process\.env\.MAI_PASSIVE_SUGGEST\s*\?\?\s*"on"\)/.test(src),
+      !/passiveEnabled\s*=\s*\((?:process\.env\.MAI_PASSIVE_SUGGEST|frondoseEnv\("PASSIVE_SUGGEST"\))\s*\?\?\s*"on"\)/.test(
+        src,
+      ),
       'OLD `?? "on"` default-ON form must be REMOVED',
     );
     assert.ok(
-      !/MAI_PASSIVE_SUGGEST.*\)\.toLowerCase\(\)\s*!==\s*"off"/.test(src),
+      !/PASSIVE_SUGGEST.*\)\.toLowerCase\(\)\s*!==\s*"off"/.test(src),
       'OLD `!== "off"` comparison must be REMOVED',
     );
   });

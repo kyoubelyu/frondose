@@ -38,7 +38,10 @@ export function makeWebSearchTool() {
           command: "web_search",
           error: {
             kind: "mcp_error",
-            message: redactKeyFromString(`Brave Search MCP failed: ${e instanceof Error ? e.message : String(e)}`, apiKey),
+            message: redactKeyFromString(
+              `Brave Search MCP failed: ${e instanceof Error ? e.message : String(e)}`,
+              apiKey,
+            ),
           },
         };
       }

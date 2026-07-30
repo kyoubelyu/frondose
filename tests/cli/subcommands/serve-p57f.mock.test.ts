@@ -101,7 +101,7 @@ before(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: stub
       resolveModel: (): any => ({}),
       resolveModelSpec: () => "mock:stub",
-      resolveModelOrNull: () => null,
+      resolveModelOrNull: () => ({}) as never,
     },
   });
 
@@ -213,7 +213,7 @@ async function pollForPort(portFile: string, deadline_ms: number): Promise<numbe
       if (existsSync(portFile)) {
         const content = readFileSync(portFile, "utf-8").trim();
         const port = parseInt(content, 10);
-        if (!isNaN(port) && port > 0) return port;
+        if (!Number.isNaN(port) && port > 0) return port;
       }
     } catch {
       /* ignore transient read errors */
@@ -335,7 +335,8 @@ describe("triggerPassiveAnalysis — passive turn COMPLETION emits ✓-noted tic
 
       // Completion-ticker present + AFTER runAgentLoop.
       const compIdx = callSeq.findIndex(
-        (s) => s.startsWith("callInOverlay:") && s.includes("__frondoseUpdateTicker") && s.includes("✓ noted: connect_btn"),
+        (s) =>
+          s.startsWith("callInOverlay:") && s.includes("__frondoseUpdateTicker") && s.includes("✓ noted: connect_btn"),
       );
       const loopIdx = callSeq.indexOf("runAgentLoop");
       assert.ok(

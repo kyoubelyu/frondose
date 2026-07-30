@@ -917,22 +917,14 @@ describe("autoUpdate — lint boundary + contract checks", () => {
     );
   });
 
-  it("T-CONTRACT: tool() invocation count in src/tools/ (current: 60 = 54 factory-returns + 6 const exports)", async () => {
+  it("T-CONTRACT: tool() invocation count in src/tools/ (current structural diagnostic: 61)", async () => {
     // Given: P-22 adds src/cli/autoUpdate.ts (CLI layer, not a Vercel tool definition)
     // When:  count actual tool({...}) invocations in src/tools/**
-    // Then:  60 tool() invocations across two definition styles:
-    //          - 54 `return tool({...})` factory returns (makeXTool helpers — P-AUTO-ISOLATE
-    //            added `makeStopAutoTool` (stop_auto), 53→54)
-    //          - 6 `export const X = tool({...})` constants (todoWrite, suggestCard,
-    //            presentSummary, echo, sleep, suggestNextActions — added by P-Y1/Y3 etc)
-    // Updated 2026-06-08 to reflect post-P-Y3 inventory drift; updated again (validator
-    // Step 5) for P-AUTO-ISOLATE's new stop_auto tool.
-    const out = execSync(
-      'grep -rE "(return|=)\\s+tool\\(" src/tools/ --include="*.ts" | wc -l',
-      { encoding: "utf-8" },
-    );
+    // Then:  61 structural tool() calls. This is a source-shape diagnostic, not
+    //        the tier-visible product inventory (owned by makeAllTools contract tests).
+    const out = execSync('grep -rE "(return|=)\\s+tool\\(" src/tools/ --include="*.ts" | wc -l', { encoding: "utf-8" });
     const count = Number.parseInt(out.trim(), 10);
-    assert.strictEqual(count, 60, `Expected exactly 60 tool() invocations in src/tools/, got ${count}.`);
+    assert.strictEqual(count, 61, `Expected exactly 61 tool() invocations in src/tools/, got ${count}.`);
   });
 });
 

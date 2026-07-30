@@ -43,11 +43,11 @@ function makePlistArgs(overrides: Partial<PlistArgs> & { env?: Partial<EnvSnapsh
 // ─── T-SRV.LAUNCHD ────────────────────────────────────────────────────────────
 
 describe("serverLaunchd helpers (G-P25.7, G-P25.8)", () => {
-  it("T-SRV.LAUNCHD.1: renderServerPlist includes Label=com.kyoube.frondose.server, ProgramArguments=[..., 'server', 'daemon'], log paths under ~/.mai/server/logs/", () => {
+  it("T-SRV.LAUNCHD.1: renderServerPlist includes Label=com.kyoube.frondose.server, ProgramArguments=[..., 'server', 'daemon'], log paths under ~/.frondose/server/logs/", () => {
     // Given: PlistArgs with TELEGRAM_TOKEN="abc", nodeBin+maiEntry+home set
     // When:  renderServerPlist(args) called
     // Then:  output contains Label=SERVER_LABEL; ProgramArguments has 'server'+'daemon';
-    //        StandardOutPath + StandardErrorPath under .mai/server/logs/
+    //        StandardOutPath + StandardErrorPath under .frondose/server/logs/
     const args = makePlistArgs({ home: "/tmp/testserver" });
     const xml = renderServerPlist(args);
 
@@ -60,10 +60,10 @@ describe("serverLaunchd helpers (G-P25.7, G-P25.8)", () => {
     assert.ok(xml.includes("<string>server</string>"), "ProgramArguments must include 'server'");
     assert.ok(xml.includes("<string>daemon</string>"), "ProgramArguments must include 'daemon'");
 
-    // Log paths under .mai/server/logs/
+    // Log paths under .frondose/server/logs/
     assert.ok(xml.includes("server-daemon.out.log"), "StandardOutPath must name server-daemon.out.log");
     assert.ok(xml.includes("server-daemon.err.log"), "StandardErrorPath must name server-daemon.err.log");
-    assert.ok(xml.includes(".mai/server/logs/"), "log paths must be under .mai/server/logs/");
+    assert.ok(xml.includes(".frondose/server/logs/"), "log paths must be under .frondose/server/logs/");
 
     // TELEGRAM_TOKEN in env
     assert.ok(xml.includes("<key>TELEGRAM_TOKEN</key>"), "TELEGRAM_TOKEN key must be present");

@@ -32,10 +32,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { type AppSidecarFixture, startAppSidecar } from "../helpers/appSidecarFixture.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, "..", "..");
 const MAI_BIN = join(REPO, "dist", "cli", "main.js");
+const APP_SIDECAR = join(REPO, "dist", "app", "sidecarMain.js");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Sidecar {
@@ -193,37 +195,32 @@ function startFakeLLM(): Promise<FakeLLM> {
   });
 }
 
-const DUMMY_SECRETS = {
-  schema_version: 1,
-  default: "deepseek:deepseek-chat",
-  providers: { deepseek: { key: "dummy", baseUrl: "https://api.deepseek.com/v1", type: "openai" } },
-};
-
 // ─────────────────────────── (a) SIGTERM-shutdown ───────────────────────────
 
 describe("D-RUN-1 (a) SIGTERM-shutdown (G-PY5.1)", () => {
-  let s: Sidecar;
+  let appSidecar: AppSidecarFixture;
   before(async () => {
-    s = await spawnSidecar(DUMMY_SECRETS);
+    appSidecar = await startAppSidecar(APP_SIDECAR);
   });
-  after(() => cleanupSidecar(s));
+  after(() => appSidecar.cleanup());
 
-  it("T-Life.1: SIGTERM ⇒ the sidecar process exits AND the UDS socket file is removed", async () => {
-    // Given: a booted `mai serve` sidecar with a live UDS socket
+  it("T-Life.1: SIGTERM ⇒ the exact app-owned child exits AND production removes its port-file before cleanup", async () => {
+    // Given: a healthy dedicated app sidecar with a published TCP port-file
     // When:  the process receives SIGTERM (the signal the Tauri shell's kill + the OS shutdown deliver)
-    // Then:  the process exits within the grace AND removeSocket() deleted the socket file (no orphan socket)
-    assert.equal(await udsGet(s.sock, s.token, "/health"), 200, "precondition: sidecar healthy");
-    assert.ok(existsSync(s.sock), "precondition: socket file exists");
-    const exited = new Promise<void>((resolve) => s.serve.once("exit", () => resolve()));
-    s.serve.kill("SIGTERM");
-    await Promise.race([exited, sleep(8000)]);
-    assert.equal(
-      s.serve.killed || s.serve.exitCode !== null || s.serve.signalCode !== null,
-      true,
-      "process must have exited after SIGTERM",
+    // Then:  that child exits within the bound and its own shutdown removes the port-file
+    assert.equal((await appSidecar.request("GET", "/health")).status, 200, "precondition: sidecar healthy");
+    assert.ok(existsSync(appSidecar.portFile), "precondition: production port-file exists");
+    const signalled = appSidecar.child.kill("SIGTERM");
+    assert.equal(signalled, true, "SIGTERM must target the exact spawned child");
+    assert.equal(await appSidecar.waitForExit(8000), true, "exact app sidecar child must emit exit within 8s");
+    assert.ok(
+      appSidecar.child.exitCode !== null || appSidecar.child.signalCode !== null,
+      "child exit event must carry an exitCode or signalCode",
     );
-    await sleep(300); // allow removeSocket() in the close callback to run
-    assert.ok(!existsSync(s.sock), "SIGTERM must remove the UDS socket file (no orphan)");
+    assert.ok(
+      !existsSync(appSidecar.portFile),
+      "production shutdown must remove the port-file before helper/temp cleanup",
+    );
   });
 });
 
