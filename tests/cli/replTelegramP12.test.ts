@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { MockLanguageModelV1 } from "ai/test";
 import { TurnLock } from "../../src/agent/turnSemaphore.js";
 import {
@@ -27,8 +27,15 @@ import {
 } from "../../src/cli/replTelegram.js";
 import { writeTelegramConfigFields } from "../../src/persistence/telegramConfig.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
+import { appendAssistant, createPiLoopMock } from "./_helpers/piLoopMock.js";
+import { unexpectedTelegramRoute, waitForPollerStopped } from "./_helpers/telegramTest.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+const piLoop = createPiLoopMock();
+before(() => piLoop.install());
+beforeEach(() => piLoop.reset());
+after(() => piLoop.restore());
 
 function makeOut(): { lines: string[]; stream: NodeJS.WritableStream } {
   const lines: string[] = [];
@@ -138,7 +145,7 @@ function makeDeps(opts: {
 
 // ─── T-Poller.6: PollerHandle.lastReceivedAt (P-12 D-5 NIT-1) ────────────────
 
-describe.skip("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => {
+describe("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => {
   it("T-Poller.6: when startTelegramPoller processes one update, PollerHandle.lastReceivedAt advances from null to an ISO timestamp AND mirrors to telegram.json", async () => {
     // Given: startTelegramPoller called with 1-update mock; handle.lastReceivedAt initially null
     // When: poller processes the update; second poll → abort; timeout after 600ms
@@ -162,6 +169,7 @@ describe.skip("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => 
         const deps = makeDeps({ cfgPath, dir, out: stream });
         let pollCount = 0;
         let capturedHandle: PollerHandle | null = null;
+        piLoop.queue(async (opts) => appendAssistant(opts, "Hi back"));
 
         await withFetchSpy(
           async (url) => {
@@ -175,7 +183,8 @@ describe.skip("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => 
               abort.abort();
               return makeGetUpdatesResponse([]);
             }
-            return makeOkTgResponse();
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             capturedHandle = await startTelegramPoller(
@@ -192,9 +201,10 @@ describe.skip("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => 
               turnLock,
               abort,
             );
-            await new Promise<void>((r) => setTimeout(r, 600));
+            await waitForPollerStopped(capturedHandle, "T-Poller.6");
           },
         );
+        piLoop.assertDrained(1);
 
         assert.ok(capturedHandle !== null, "startTelegramPoller must return a PollerHandle");
         const handle = capturedHandle as PollerHandle;
@@ -222,8 +232,8 @@ describe.skip("T-Poller.6: startTelegramPoller lastReceivedAt (G-P12.4)", () => 
 
 // ─── T-Session.1: sessionFile object-ref survives /new rotation ──────────────
 
-describe.skip("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
-  it.skip("T-Session.1: when sessionFileRef.path is mutated AFTER telegramDeps is built, appendMessages uses NEW path", async () => {
+describe("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
+  it("T-Session.1: when sessionFileRef.path is mutated AFTER telegramDeps is built, appendMessages uses NEW path", async () => {
     // Given: sessionFileRef = { path: dir1/session.jsonl } passed by reference
     // When: path mutated to dir2/session.jsonl before handleTelegramTurn call
     // Then: dir2/session.jsonl created; dir1/session.jsonl does NOT exist
@@ -255,9 +265,13 @@ describe.skip("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
         };
         // Mutate path BEFORE call (simulates /new rotation)
         sessionFileRef.path = join(dir2, "session.jsonl");
+        piLoop.queue(async (opts) => appendAssistant(opts, "Session object-ref response"));
 
         await withFetchSpy(
-          async () => makeOkTgResponse(),
+          async (url) => {
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
+          },
           async () => {
             await handleTelegramTurn(
               { update_id: 77, message: { text: "Session test", from: { username: "alice", id: 12345 } } },
@@ -265,6 +279,7 @@ describe.skip("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
             );
           },
         );
+        piLoop.assertDrained(1);
 
         assert.ok(
           existsSync(join(dir2, "session.jsonl")),
@@ -288,7 +303,7 @@ describe.skip("T-Session.1: sessionFile object-ref rotation (G-P12.1)", () => {
 // ─── T-Visibility.1/2/3: [telegram] ↓/↑ visibility lines ────────────────────
 
 describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
-  it.skip("T-Visibility.1: text-only inbound from alice → deps.out contains '[telegram] ↓ @alice: Hi mai'", async () => {
+  it("T-Visibility.1: text-only inbound from alice → deps.out contains '[telegram] ↓ @alice: Hi mai'", async () => {
     // Given: boundUserId:12345, update from alice (id:12345), text "Hi mai"
     // When: handleTelegramTurn called
     // Then: deps.out contains "[telegram] ↓ @alice: Hi mai"
@@ -307,8 +322,15 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
       try {
         const { stream, lines } = makeOut();
         const deps = makeDeps({ cfgPath, dir, out: stream });
+        piLoop.queue(async (opts) => {
+          assert.ok(lines.join("").includes("[telegram] ↓ @alice: Hi mai"));
+          appendAssistant(opts, "Hi back");
+        });
         await withFetchSpy(
-          async () => makeOkTgResponse(),
+          async (url) => {
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
+          },
           async () => {
             await handleTelegramTurn(
               { update_id: 100, message: { text: "Hi mai", from: { username: "alice", id: 12345 } } },
@@ -316,6 +338,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
             );
           },
         );
+        piLoop.assertDrained(1);
         const output = lines.join("");
         assert.ok(
           output.includes("[telegram] ↓ @alice: Hi mai"),
@@ -330,7 +353,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
     }
   });
 
-  it.skip("T-Visibility.2: agent returns 'Sure thing' → deps.out contains '[telegram] ↑ @alice: Sure thing'", async () => {
+  it("T-Visibility.2: agent returns 'Sure thing' → deps.out contains '[telegram] ↑ @alice: Sure thing'", async () => {
     // Given: boundUserId:12345, model returns "Sure thing"
     // When: handleTelegramTurn completes (agent loop + sendTelegramMessage done)
     // Then: deps.out contains "[telegram] ↑ @alice: Sure thing"
@@ -349,8 +372,12 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
       try {
         const { stream, lines } = makeOut();
         const deps = makeDeps({ cfgPath, dir, out: stream, responseText: "Sure thing" });
+        piLoop.queue(async (opts) => appendAssistant(opts, "Sure thing"));
         await withFetchSpy(
-          async () => makeOkTgResponse(),
+          async (url) => {
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
+          },
           async () => {
             await handleTelegramTurn(
               { update_id: 101, message: { text: "Hello", from: { username: "alice", id: 12345 } } },
@@ -358,6 +385,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
             );
           },
         );
+        piLoop.assertDrained(1);
         const output = lines.join("");
         assert.ok(
           output.includes("[telegram] ↑ @alice: Sure thing"),
@@ -372,7 +400,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
     }
   });
 
-  it.skip("T-Visibility.3: photo-only inbound → ↓ line preview contains '[TG_PHOTO='", async () => {
+  it("T-Visibility.3: photo-only inbound → ↓ line preview contains '[TG_PHOTO='", async () => {
     // Given: photo-only update (no text), download mock, boundUserId:12345
     // When: handleTelegramTurn called
     // Then: ↓ line preview contains "[TG_PHOTO=" (media tag used as preview, not empty)
@@ -392,6 +420,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
         const { stream, lines } = makeOut();
         const deps = makeDeps({ cfgPath, dir, out: stream });
         const fakeJpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+        piLoop.queue(async (opts) => appendAssistant(opts, "Hi back"));
         await withFetchSpy(
           async (url) => {
             if (url.includes("/getFile")) {
@@ -408,7 +437,8 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
                 headers: { get: (h: string) => (h === "content-type" ? "image/jpeg" : null) },
               } as unknown as Response;
             }
-            return makeOkTgResponse();
+            if (url.endsWith("/sendMessage")) return makeOkTgResponse();
+            return unexpectedTelegramRoute(url);
           },
           async () => {
             await handleTelegramTurn(
@@ -424,6 +454,7 @@ describe("T-Visibility: handleTelegramTurn visibility lines (G-P12.3)", () => {
             );
           },
         );
+        piLoop.assertDrained(1);
         const output = lines.join("");
         assert.ok(
           output.includes("[telegram] ↓ @alice:") && output.includes("[TG_PHOTO="),
