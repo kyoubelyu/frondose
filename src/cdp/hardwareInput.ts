@@ -140,9 +140,10 @@ export async function hardwareScroll(
 ): Promise<void> {
   const steps = Math.max(1, Math.ceil(amount / 200));
   const per = Math.round(amount / steps);
-  const sign = direction === "up" ? 1 : -1;
+  const dx = direction === "left" ? per : direction === "right" ? -per : 0;
+  const dy = direction === "up" ? per : direction === "down" ? -per : 0;
   for (let i = 0; i < steps; i++) {
-    cg.scrollWheel(0, sign * per);
+    cg.scrollWheel(dx, dy);
     await sleep(16 + Math.random() * 20);
   }
 }

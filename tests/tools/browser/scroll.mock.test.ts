@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CdpClient } from "../../../src/cdp/client.js";
+import type { ScrollOutcome } from "../../../src/cdp/scroll.js";
 import type { CurrentSurfaceContext } from "../../../src/linkedin/types.js";
 import { makeScrollTool } from "../../../src/tools/browser/scroll.js";
 
@@ -22,18 +23,33 @@ const abortSignal = new AbortController().signal;
 function makeFakeSession() {
   const scrollCalls: Array<{ direction: string; amount: number }> = [];
 
-  // P-37: scroll now uses Runtime.evaluate("window.scrollBy(dx, dy)")
-  // — old Input.synthesizeScrollGesture and Page.getLayoutMetrics are no longer called.
+  // Scroll remains Runtime.evaluate-based; the fake returns movement evidence
+  // while recording the requested axis/delta from the generated expression.
   const fakeHandle = {
     Runtime: {
       evaluate: async ({ expression }: { expression: string; returnByValue?: boolean; awaitPromise?: boolean }) => {
-        const match = expression.match(/window\.scrollBy\((-?\d+),\s*(-?\d+)\)/);
-        if (match) {
-          const dx = parseInt(match[1], 10);
-          const dy = parseInt(match[2], 10);
-          const direction = dy > 0 ? "down" : dy < 0 ? "up" : dx > 0 ? "right" : "left";
-          const amount = Math.abs(dy !== 0 ? dy : dx);
+        const axis = expression.match(/const axis = "(x|y)"/)?.[1];
+        const signed = Number(expression.match(/const requested = before \+ (-?\d+)/)?.[1]);
+        if (axis && Number.isFinite(signed)) {
+          const direction = axis === "y" ? (signed > 0 ? "down" : "up") : signed > 0 ? "right" : "left";
+          const amount = Math.abs(signed);
           scrollCalls.push({ direction, amount });
+          return {
+            result: {
+              value: {
+                verification: "verified",
+                state: "moved",
+                target: "document",
+                axis,
+                beforeX: 0,
+                beforeY: 0,
+                afterX: axis === "x" ? signed : 0,
+                afterY: axis === "y" ? signed : 0,
+                deltaX: axis === "x" ? signed : 0,
+                deltaY: axis === "y" ? signed : 0,
+              },
+            },
+          };
         }
         return { result: { value: undefined } };
       },
@@ -91,6 +107,111 @@ test(
     assert.equal(session.scrollCalls[0]?.amount, 300);
   },
 );
+
+function makeOutcomeSession(outcome: ScrollOutcome, inputMode: "cdp" | "hardware" = "cdp") {
+  const client = {
+    scroll: async () => outcome,
+  } as unknown as CdpClient;
+  return {
+    inputMode,
+    heartbeat: async () => true,
+    getOrInitClient: () => Promise.resolve({ ok: true as const, client }),
+    getClient: () => client,
+    setLastContext: (_ctx: CurrentSurfaceContext) => {},
+    getLastContext: () => undefined as CurrentSurfaceContext | undefined,
+  };
+}
+
+test("T-SCROLL.MOCK.6a: verified movement is additive to the existing success envelope", async () => {
+  // Given a verified CDP outcome; When the tool returns success; Then old fields and exact movement evidence coexist.
+  const outcome: ScrollOutcome = {
+    verification: "verified",
+    state: "moved",
+    target: "document",
+    axis: "y",
+    beforeX: 0,
+    beforeY: 10,
+    afterX: 0,
+    afterY: 210,
+    deltaX: 0,
+    deltaY: 200,
+  };
+  const tool = makeScrollTool(makeOutcomeSession(outcome));
+  const result = await tool.execute(
+    { direction: "down", amount: 200 },
+    { toolCallId: "verified", messages: [], abortSignal },
+  );
+  assert.equal(result.ok, true);
+  // biome-ignore lint/suspicious/noExplicitAny: Vercel Tool result is a runtime envelope union.
+  const data = (result as any).data;
+  assert.equal(data.direction, "down");
+  assert.equal(data.amount, 200);
+  assert.ok(data.pacing);
+  assert.deepEqual(data.scroll, outcome);
+});
+
+for (const reason of ["no_scroll_range", "at_requested_boundary", "movement_blocked"] as const) {
+  test(`T-SCROLL.MOCK.6b: verified ${reason} returns the exact local structured failure`, async () => {
+    // Given a verified zero-delta outcome; When the tool executes; Then runtime_error and top-level scroll evidence are stable.
+    const outcome: ScrollOutcome = {
+      verification: "verified",
+      state: "not_moved",
+      reason,
+      target: "document",
+      axis: "y",
+      beforeX: 0,
+      beforeY: 0,
+      afterX: 0,
+      afterY: 0,
+      deltaX: 0,
+      deltaY: 0,
+    };
+    const tool = makeScrollTool(makeOutcomeSession(outcome));
+    const result = await tool.execute(
+      { direction: "down", amount: 200 },
+      { toolCallId: reason, messages: [], abortSignal },
+    );
+    assert.equal(result.ok, false);
+    // biome-ignore lint/suspicious/noExplicitAny: assert the scroll-specific failure intersection.
+    const failure = result as any;
+    assert.equal(failure.error.kind, "runtime_error");
+    assert.equal(failure.error.message, `Scroll did not move document: ${reason}.`);
+    assert.deepEqual(failure.scroll, outcome);
+  });
+}
+
+test("T-SCROLL.MOCK.6c: hardware success positively dispatches exact args and remains explicitly unverified", async () => {
+  // Given a hardware executor spy; When right 450 runs; Then exact args reach it and the envelope makes no DOM claim.
+  const calls: Array<{ direction: string; amount: number }> = [];
+  const session = makeOutcomeSession(
+    {
+      verification: "unavailable",
+      state: "unverified",
+      target: "hardware",
+      axis: "x",
+    },
+    "hardware",
+  );
+  const tool = makeScrollTool(session, {
+    hardwareScroll: async (_client, direction, amount) => {
+      calls.push({ direction, amount });
+    },
+  });
+  const result = await tool.execute(
+    { direction: "right", amount: 450 },
+    { toolCallId: "hardware", messages: [], abortSignal },
+  );
+  assert.deepEqual(calls, [{ direction: "right", amount: 450 }]);
+  assert.equal(result.ok, true);
+  // biome-ignore lint/suspicious/noExplicitAny: Vercel Tool result is a runtime envelope union.
+  const data = (result as any).data;
+  assert.deepEqual(data.scroll, {
+    verification: "unavailable",
+    state: "unverified",
+    target: "hardware",
+    axis: "x",
+  });
+});
 
 // ─── T-M77 ─────────────────────────────────────────────────────────────────────
 
