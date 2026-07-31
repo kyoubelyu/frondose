@@ -1,28 +1,43 @@
 use crate::state::{uds_request, FrondoseServeState};
+use crate::update_notice::take_update_notice_response;
 use crate::updater::read_update_server_url;
 use hyper::Method;
 use serde_json::{json, Value};
 use tauri_plugin_updater::UpdaterExt;
 
 #[tauri::command]
-pub(crate) async fn frondose_health(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
+pub(crate) async fn frondose_health(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/health", None).await
 }
 
 #[tauri::command]
-pub(crate) async fn frondose_identity(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
+pub(crate) async fn frondose_identity(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/identity", None).await
 }
 
 #[tauri::command]
-pub(crate) async fn frondose_chrome_ensure(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
-    uds_request(state.inner(), Method::POST, "/chrome/ensure", Some(json!({}))).await
+pub(crate) async fn frondose_chrome_ensure(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/chrome/ensure",
+        Some(json!({})),
+    )
+    .await
 }
 
 // P-Y6 — in-app settings (auth/identity/soul). Mirror frondose_identity → GET /settings;
 // frondose_set_settings POSTs the masked-safe patch. The serve handler returns a masked view.
 #[tauri::command]
-pub(crate) async fn frondose_get_settings(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
+pub(crate) async fn frondose_get_settings(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
     uds_request(state.inner(), Method::GET, "/settings", None).await
 }
 
@@ -69,11 +84,22 @@ pub(crate) async fn frondose_check_update(app: tauri::AppHandle) -> Result<Value
 }
 
 #[tauri::command]
+pub(crate) fn frondose_take_update_notice() -> Value {
+    take_update_notice_response(env!("CARGO_PKG_VERSION"))
+}
+
+#[tauri::command]
 pub(crate) async fn frondose_agent_turn(
     state: tauri::State<'_, FrondoseServeState>,
     prompt: String,
 ) -> Result<Value, String> {
-    uds_request(state.inner(), Method::POST, "/agent/turn", Some(json!({"prompt": prompt}))).await
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/agent/turn",
+        Some(json!({"prompt": prompt})),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -95,16 +121,26 @@ pub(crate) async fn frondose_agent_auto_start(
 pub(crate) async fn frondose_agent_auto_stop(
     state: tauri::State<'_, FrondoseServeState>,
 ) -> Result<Value, String> {
-    uds_request(state.inner(), Method::POST, "/agent/auto/stop", Some(json!({}))).await
+    uds_request(
+        state.inner(),
+        Method::POST,
+        "/agent/auto/stop",
+        Some(json!({})),
+    )
+    .await
 }
 
 #[tauri::command]
-pub(crate) async fn frondose_agent_abort(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
+pub(crate) async fn frondose_agent_abort(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/abort", Some(json!({}))).await
 }
 
 #[tauri::command]
-pub(crate) async fn frondose_agent_retry(state: tauri::State<'_, FrondoseServeState>) -> Result<Value, String> {
+pub(crate) async fn frondose_agent_retry(
+    state: tauri::State<'_, FrondoseServeState>,
+) -> Result<Value, String> {
     uds_request(state.inner(), Method::POST, "/agent/retry", Some(json!({}))).await
 }
 

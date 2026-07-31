@@ -62,6 +62,7 @@ const en = {
     "action.openSettings": "Open settings",
     "action.saveSettings": "Save settings",
     "action.checkUpdate": "Check for updates",
+    "update.completed": "Frondose updated to {version}.",
     // identity gate
     "identity.loading": "loading identity...",
     "identity.hint": "New here — just say hello and Frondose will introduce itself.",
@@ -215,6 +216,7 @@ const zhCN = {
     "action.openSettings": "打开设置",
     "action.saveSettings": "保存设置",
     "action.checkUpdate": "检查更新",
+    "update.completed": "Frondose 已更新至 {version}。",
     // identity gate
     "identity.loading": "正在加载身份…",
     "identity.hint": "初次见面 — 打个招呼，Frondose 会主动介绍自己。",
