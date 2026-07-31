@@ -255,7 +255,7 @@ export function buildInspectSummary(ctx: CurrentSurfaceContext, scope?: string):
   const visibleCount = textEligible.length;
   const shownCount = text.length; // real entries only; hint not yet appended
   if (shownCount < visibleCount) {
-    text.push(`[diagnostic] ${visibleCount} entries visible, ${shownCount} shown — scroll/refine to see more`);
+    text.push(`[diagnostic] ${visibleCount} entries in page snapshot, ${shownCount} shown — use scope to refine`);
   }
 
   // P-46 D-3 (OQ-4): composerModal is a runtime-conditional scope — list it only

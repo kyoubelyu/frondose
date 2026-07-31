@@ -749,7 +749,7 @@ describe("T-A15a.9 (G-A15a.4): 18 feedPost + 30 staticText → 18 person + 22 no
     // Given: 18 distinct feedPost entries + 30 staticText entries (48 visible)
     // When:  buildInspectSummary(ctx)
     // Then:  text.length === 41 (40 real + 1 hint); first 18 are feedPost; next 22 are staticText;
-    //        last entry matches /^\[diagnostic\] 48 entries visible, 40 shown/
+    //        last entry identifies page-snapshot entries without claiming viewport visibility
     const feedPosts = Array.from({ length: 18 }, (_, i) => ({
       ref: `@fp${i + 1}`,
       role: "feedPost",
@@ -769,7 +769,7 @@ describe("T-A15a.9 (G-A15a.4): 18 feedPost + 30 staticText → 18 person + 22 no
     }
     const hint = summary.text[summary.text.length - 1];
     assert.ok(
-      hint?.match(/^\[diagnostic\] 48 entries visible, 40 shown/),
+      hint?.match(/^\[diagnostic\] 48 entries in page snapshot, 40 shown/),
       `hint must be present and correct; got: "${hint}"`,
     );
   });
@@ -812,7 +812,7 @@ describe("T-A15a.10b (G-A15a.4): MAX_PERSON_HARD=60 safety cap — 80 searchResu
     assert.equal(summary.text.length, 61, "60 real + 1 hint = 61");
     const hint = summary.text[summary.text.length - 1];
     assert.ok(
-      hint?.match(/^\[diagnostic\] 80 entries visible, 60 shown/),
+      hint?.match(/^\[diagnostic\] 80 entries in page snapshot, 60 shown/),
       `hint must say 80 visible, 60 shown; got: "${hint}"`,
     );
     assert.ok(summary.text.some((t) => t.includes("person-1")), "person-1 must appear");
@@ -847,7 +847,7 @@ describe("T-A15a.10c (G-A15a.4): invariant — dense-search baseline: 30 searchR
     assert.equal(personEntries.length, 30, "all 30 searchResult must survive (person_shown >= old baseline 30)");
     const hint10c = summary.text[summary.text.length - 1];
     assert.ok(
-      hint10c?.match(/^\[diagnostic\] 45 entries visible, 40 shown/),
+      hint10c?.match(/^\[diagnostic\] 45 entries in page snapshot, 40 shown/),
       `hint must say 45 visible, 40 shown; got: "${hint10c}"`,
     );
   });
@@ -918,7 +918,7 @@ describe("T-A15a.13 (G-A15a.5): hint fires when truncation drops entries — tai
     // Given: 30 distinct feedPost entries + 30 staticText entries (60 visible)
     //        person-first: all 30 person emitted; nonPersonBudget=10; 20 staticText dropped
     // When:  buildInspectSummary(ctx)
-    // Then:  last entry in text[] matches /^\[diagnostic\] 60 entries visible, 40 shown — scroll\/refine to see more$/
+    // Then:  last entry reports page-snapshot truncation and recommends scope refinement
     //        text.length === 41 (40 real + 1 hint — hint is EXTRA slot)
     const feedPosts = Array.from({ length: 30 }, (_, i) => ({
       ref: `@fp${i + 1}`,
@@ -935,7 +935,7 @@ describe("T-A15a.13 (G-A15a.5): hint fires when truncation drops entries — tai
     assert.equal(summary.text.length, 41, "40 real + 1 hint = 41");
     const hint13 = summary.text[summary.text.length - 1];
     assert.ok(
-      hint13?.match(/^\[diagnostic\] 60 entries visible, 40 shown — scroll\/refine to see more$/),
+      hint13?.match(/^\[diagnostic\] 60 entries in page snapshot, 40 shown — use scope to refine$/),
       `hint must match canonical format; got: "${hint13}"`,
     );
   });
@@ -968,10 +968,10 @@ describe("T-A15a.14 (G-A15a.5): no hint when all entries fit — shown==visible"
 // ─── T-A15a.15 (G-A15a.5): canonical count semantics — visible vs shown ─────
 
 describe("T-A15a.15 (G-A15a.5): canonical counts — visible=pre-truncation deduped; shown=real emitted (excl hint); hint is EXTRA slot", () => {
-  it("100 staticText → hint says '100 entries visible, 40 shown'; text.length === 41 (40 real + 1 hint)", () => {
+  it("100 staticText → hint says '100 entries in page snapshot, 40 shown'; text.length === 41", () => {
     // Given: 100 distinct staticText entries (no person-bearing entries)
     // When:  buildInspectSummary(ctx)
-    // Then:  hint string contains '100 entries visible' AND '40 shown' (not 39 — hint is EXTRA slot);
+    // Then:  hint contains the snapshot count AND '40 shown' (not 39 — hint is EXTRA slot);
     //        text.length === 41 (40 real + 1 hint; hint does NOT consume a real-entry slot)
     const ctx = makeCtx("feed", Array.from({ length: 100 }, (_, i) => ({
       ref: `@s${i + 1}`,
@@ -982,7 +982,7 @@ describe("T-A15a.15 (G-A15a.5): canonical counts — visible=pre-truncation dedu
     assert.equal(summary.text.length, 41, "40 real + 1 hint = 41 (hint is EXTRA slot — does not displace a real entry)");
     const hint15 = summary.text[summary.text.length - 1];
     assert.ok(
-      hint15?.includes("100 entries visible") && hint15?.includes("40 shown"),
+      hint15?.includes("100 entries in page snapshot") && hint15?.includes("40 shown"),
       `canonical counts must be 100 visible, 40 shown; got: "${hint15}"`,
     );
   });
@@ -1239,7 +1239,7 @@ describe("T-MsgReply.ScopeProj.4 (Group D): unscoped buildInspectSummary — tra
       assert.deepEqual(realText.slice(20), navEntries.slice(0, 20).map((entry) => entry.name));
       assert.match(
         summary.text[summary.text.length - 1] ?? "",
-        /^\[diagnostic\] 55 entries visible, 40 shown/,
+        /^\[diagnostic\] 55 entries in page snapshot, 40 shown/,
         "hint must account for transcript and nav truncation",
       );
     },
@@ -1278,7 +1278,10 @@ describe("T-MsgReply.ScopeProj.4 (Group D): unscoped buildInspectSummary — tra
       assert.deepEqual(realText.slice(0, 3), transcriptEntries.map((entry) => entry.name));
       assert.deepEqual(realText.slice(3, 21), feedPosts.map((entry) => entry.name));
       assert.deepEqual(realText.slice(21), navEntries.slice(0, 19).map((entry) => entry.name));
-      assert.match(summary.text[summary.text.length - 1] ?? "", /^\[diagnostic\] 51 entries visible, 40 shown/);
+      assert.match(
+        summary.text[summary.text.length - 1] ?? "",
+        /^\[diagnostic\] 51 entries in page snapshot, 40 shown/,
+      );
     },
   );
 });
@@ -1294,7 +1297,7 @@ describe("T-MsgReply.ScopeProj.5 (Group D): regression — P-AUTO-15a person/non
       // When:  buildInspectSummary(ctx)
       // Then:  text.length === 41 (40 real + 1 hint);
       //        first 18 entries are feedPost in original order;
-      //        hint matches /^\[diagnostic\] 48 entries visible, 40 shown/;
+      //        hint uses the page-snapshot wording with the same counts;
       //        — byte-identical to the T-A15a.9 expectation (regression pin: no change on feed surface).
       const feedPosts = Array.from({ length: 18 }, (_, i) => ({
         ref: `@fp${i + 1}`,
@@ -1312,7 +1315,7 @@ describe("T-MsgReply.ScopeProj.5 (Group D): regression — P-AUTO-15a person/non
       const expectedText = [
         ...feedPosts.map((entry) => entry.name),
         ...staticTexts.slice(0, 22).map((entry) => entry.name),
-        "[diagnostic] 48 entries visible, 40 shown — scroll/refine to see more",
+        "[diagnostic] 48 entries in page snapshot, 40 shown — use scope to refine",
       ];
 
       assert.deepEqual(summary.text, expectedText, "T-MsgReply.ScopeProj.5: feed output must match T-A15a.9 exactly");

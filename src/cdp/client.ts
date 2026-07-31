@@ -3,6 +3,7 @@ import CDP from "chrome-remote-interface";
 import { waitForPageTarget } from "./launcher.js";
 import { jitter, mouseCurve } from "./mouseRealism.js";
 import { raceCdp } from "./raced.js";
+import { buildDocumentScrollExpression, type ScrollDirection, type ScrollOutcome } from "./scroll.js";
 import { getSnapshot } from "./snapshot.js";
 import { createTurnAbortSignalOwner } from "./turnAbortSignalOwner.js";
 import type {
@@ -357,14 +358,11 @@ export class CdpClient {
     }
   }
 
-  /** P-37 B3: page scroll via window.scrollBy. Replaces Input.synthesizeScrollGesture,
-   *  which required the gesture origin inside the COMPOSITED viewport — it failed
-   *  when Chrome was backgrounded and on Retina DPR=2. window.scrollBy is pure JS:
-   *  no coordinates, no focus dependency, no DPR mismatch. */
-  async scroll(direction: "up" | "down" | "left" | "right", amount: number): Promise<void> {
-    const dx = direction === "left" ? -amount : direction === "right" ? amount : 0;
-    const dy = direction === "up" ? -amount : direction === "down" ? amount : 0;
-    await this.evaluate<void>(`window.scrollBy(${dx}, ${dy})`);
+  /** Document-root scroll with a bounded, page-side movement postcondition.
+   * Pure JS preserves P-37's background/Retina-safe behavior while avoiding
+   * vacuous success envelopes and unsafe guesses at nested scroll ownership. */
+  async scroll(direction: ScrollDirection, amount: number): Promise<ScrollOutcome> {
+    return this.evaluate<ScrollOutcome>(buildDocumentScrollExpression(direction, amount));
   }
 
   /** Get the current page URL via Runtime.evaluate. */
