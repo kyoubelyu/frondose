@@ -30,6 +30,8 @@ import { renderMarkdownInto } from "../../../src/tauri/ui/render.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const APP_TS = readFileSync(join(REPO, "src/tauri/ui/app.ts"), "utf-8");
+const TURN_CONTROLLER_TS = readFileSync(join(REPO, "src/tauri/ui/assistantTurnController.ts"), "utf-8");
+const APP_BINDINGS_TS = readFileSync(join(REPO, "src/tauri/ui/app/assistantAppBindings.ts"), "utf-8");
 
 // ─── Fake DOM (same recording-fake shape as markdownRenderer-tfeChat.mock.test.ts) ───
 
@@ -176,43 +178,27 @@ function makeHarness(): Harness {
 
 // ─── Source-structural pins on app.ts ────────────────────────────────────────
 
-describe("P-FE-MD-HISTORY source-structural — endAgentBubble flushes before detach (app.ts)", () => {
-  it("T-MdHist.SRC.1: endAgentBubble contains the guarded renderMarkdownInto finalize-flush", () => {
-    // Given: src/tauri/ui/app.ts post-fix
-    // When:  the endAgentBubble function body is scanned
-    // Then:  the flush line `if (activeAgentTextEl !== null) renderMarkdownInto(` is present
-    const fnStart = APP_TS.indexOf("function endAgentBubble()");
-    assert.ok(fnStart >= 0, "app.ts must define endAgentBubble()");
-    const body = APP_TS.slice(fnStart, APP_TS.indexOf("\n}", fnStart) + 2);
-    assert.ok(
-      body.includes("if (activeAgentTextEl !== null) renderMarkdownInto("),
-      "endAgentBubble must synchronously flush the markdown render (P-FE-MD-HISTORY fix)",
+describe("P-FE-MD-HISTORY source-structural — controller flushes before detach", () => {
+  it("T-MdHist.SRC.1: endTurn synchronously renders the accumulated final text", () => {
+    // Given the controller, when a turn ends, then it clears progress and renders before detaching.
+    assert.match(
+      TURN_CONTROLLER_TS,
+      /function endTurn\(\)[\s\S]*clearProgress\(target\);[\s\S]*renderNow\(target, targetGeneration\);/,
     );
   });
 
-  it("T-MdHist.SRC.2: the finalize-flush runs BEFORE activeAgentTextEl is nulled (flush-before-detach ordering)", () => {
-    // Given: the endAgentBubble function body
-    // When:  the index of the flush is compared to the index of `activeAgentTextEl = null;`
-    // Then:  flush comes first — flushing after detach cannot recover the final message
-    const fnStart = APP_TS.indexOf("function endAgentBubble()");
-    const body = APP_TS.slice(fnStart, APP_TS.indexOf("\n}", fnStart) + 2);
-    const flushIdx = body.indexOf("renderMarkdownInto(");
-    const detachIdx = body.indexOf("activeAgentTextEl = null;");
-    assert.ok(flushIdx >= 0 && detachIdx >= 0, "endAgentBubble must contain both the flush and the detach");
-    assert.ok(flushIdx < detachIdx, "the flush must run BEFORE activeAgentTextEl = null (P-FE-MD-HISTORY ordering)");
+  it("T-MdHist.SRC.2: finalize runs before the controller drops its active refs", () => {
+    // Given endTurn, when ordered, then renderNow precedes refs=null.
+    const start = TURN_CONTROLLER_TS.indexOf("function endTurn()");
+    const body = TURN_CONTROLLER_TS.slice(start, TURN_CONTROLLER_TS.indexOf("\n  function handle", start));
+    assert.ok(body.indexOf("renderNow(") < body.indexOf("refs = null"));
   });
 
-  it("T-MdHist.SRC.3: both the done and error SSE cases finalize through endAgentBubble()", () => {
-    // Given: app.ts handleEvent
-    // When:  the `case "done":` and `case "error":` arms are scanned
-    // Then:  each calls endAgentBubble() — both finalize paths get the flush (regression pin)
-    const doneStart = APP_TS.indexOf('case "done":');
-    const errorStart = APP_TS.indexOf('case "error":');
-    assert.ok(doneStart >= 0 && errorStart >= 0, "handleEvent must have done + error cases");
-    const doneArm = APP_TS.slice(doneStart, errorStart);
-    const errorArm = APP_TS.slice(errorStart, APP_TS.indexOf('case "overlay-reconnected":', errorStart));
-    assert.ok(doneArm.includes("endAgentBubble()"), 'case "done" must call endAgentBubble()');
-    assert.ok(errorArm.includes("endAgentBubble()"), 'case "error" must call endAgentBubble()');
+  it("T-MdHist.SRC.3: both terminal frame types route to controller endTurn", () => {
+    // Given the binding and controller, when done/error arrive, then both are admitted and non-text frames end.
+    assert.match(APP_BINDINGS_TS, /\["assistant-progress", "text", "done", "error"\]/);
+    assert.match(TURN_CONTROLLER_TS, /if \(frame\.type === "text"\)[\s\S]*endTurn\(\);[\s\S]*return "terminal"/);
+    assert.match(APP_TS, /assistantAppComposition\.handleEvent\(payload\)/);
   });
 });
 

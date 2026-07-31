@@ -1,4 +1,3 @@
-import { t } from "../i18n.js";
 export function buildAgentBubble(doc, conversationListEl) {
     const wrap = doc.createElement("div");
     wrap.classList.add("msg-agent");
@@ -20,24 +19,20 @@ export function buildAgentBubble(doc, conversationListEl) {
     wrap.appendChild(avatar);
     const body = doc.createElement("div");
     body.classList.add("msg-agent-body");
-    // [P-THINK] Gray thinking block ABOVE the answer: a "thinking…" line + the streamed reasoning.
-    // Starts hidden (revealed by the first reasoning chunk) and is removed on `done`/`error`.
-    const thinking = doc.createElement("div");
-    thinking.classList.add("agent-thinking");
-    thinking.classList.add("hidden");
-    const thinkingLine = doc.createElement("div");
-    thinkingLine.classList.add("thinking-line");
-    thinkingLine.textContent = t("status.thinking");
-    const thinkingText = doc.createElement("div");
-    thinkingText.classList.add("thinking-text");
-    thinking.appendChild(thinkingLine);
-    thinking.appendChild(thinkingText);
-    body.appendChild(thinking);
+    const progress = doc.createElement("div");
+    progress.classList.add("assistant-progress");
+    progress.classList.add("hidden");
+    progress.setAttribute?.("aria-live", "polite");
+    progress.setAttribute?.("role", "status");
+    const progressText = doc.createElement("div");
+    progressText.classList.add("assistant-progress-text");
+    progress.appendChild(progressText);
+    body.appendChild(progress);
     const text = doc.createElement("div");
     text.classList.add("msg-agent-text");
     body.appendChild(text);
     wrap.appendChild(body);
     conversationListEl.appendChild(wrap);
-    return { textEl: text, thinkingWrap: thinking, thinkingTextEl: thinkingText };
+    return { textEl: text, progressWrap: progress, progressTextEl: progressText };
 }
 //# sourceMappingURL=agentBubble.js.map

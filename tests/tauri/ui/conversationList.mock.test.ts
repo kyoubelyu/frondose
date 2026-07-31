@@ -31,6 +31,8 @@ import { fileURLToPath } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const APP_TS = readFileSync(join(REPO, "src/tauri/ui/app.ts"), "utf-8");
+const TURN_CONTROLLER_TS = readFileSync(join(REPO, "src/tauri/ui/assistantTurnController.ts"), "utf-8");
+const APP_BINDINGS_TS = readFileSync(join(REPO, "src/tauri/ui/app/assistantAppBindings.ts"), "utf-8");
 
 // ─── Minimal fake-DOM factory (windowRef pattern) ───────────────────────────
 
@@ -205,48 +207,30 @@ function getAgentTextEl(msgAgentEl: FakeEl): FakeEl | undefined {
 
 // ─── Source-structural gate ──────────────────────────────────────────────────
 
-describe("T-PY2MA.Conv — source-structural: Sketch A helpers present in app.ts (P-Y2-MA G1+G2)", () => {
-  it("T-PY2MA.Conv.SRC.1: appendUserBubble, beginAgentBubble, appendAgentChunk, endAgentBubble defined in app.ts", () => {
-    // Given: src/tauri/ui/app.ts source post-builder (Sketch A §5.1.2 pasted)
-    // When:  scanned for the four conversation-list helper function definitions
-    // Then:  all four are present
-    const hasAppendUser = APP_TS.includes("function appendUserBubble");
-    const hasBeginAgent = APP_TS.includes("function beginAgentBubble");
-    const hasAppendChunk = APP_TS.includes("function appendAgentChunk");
-    const hasEndAgent = APP_TS.includes("function endAgentBubble");
-    assert.ok(
-      hasAppendUser && hasBeginAgent && hasAppendChunk && hasEndAgent,
-      "app.ts must define all 4 conversation-list helpers (Sketch A §5.1.2). " +
-        `Found: appendUserBubble=${hasAppendUser}, beginAgentBubble=${hasBeginAgent}, ` +
-        `appendAgentChunk=${hasAppendChunk}, endAgentBubble=${hasEndAgent}.`,
+describe("T-PY2MA.Conv — source-structural ownership after assistant composition", () => {
+  it("T-PY2MA.Conv.SRC.1: user bubbles stay in app while agent turn state lives in one controller", () => {
+    // Given the shipped split, when sources are inspected, then one controller owns begin/final/end.
+    assert.ok(APP_TS.includes("function appendUserBubble"));
+    assert.match(TURN_CONTROLLER_TS, /function beginTurn\(\)/);
+    assert.match(TURN_CONTROLLER_TS, /function appendFinal\(text: string\)/);
+    assert.match(TURN_CONTROLLER_TS, /function endTurn\(\)/);
+  });
+
+  it("T-PY2MA.Conv.SRC.2: app supplies conversation and scroll dependencies to the controller", () => {
+    // Given app composition, when inspected, then the real DOM and scroll seams are wired.
+    assert.ok(APP_TS.includes("conversationListEl"));
+    assert.ok(APP_TS.includes("scrollAreaEl"));
+    assert.match(
+      APP_TS,
+      /createAssistantTurnController\(\{[\s\S]*conversationList: conversationListEl[\s\S]*scrollToBottom: scrollToBottomIfPinned/,
     );
   });
 
-  it("T-PY2MA.Conv.SRC.2: conversation-list state variables (activeAgentTextEl, conversationListEl, scrollAreaEl) declared in app.ts", () => {
-    // Given: src/tauri/ui/app.ts source
-    // When:  scanned for the three state variable declarations added by Sketch A §5.1.1
-    // Then:  activeAgentTextEl, conversationListEl, scrollAreaEl all appear
-    const hasActiveEl = APP_TS.includes("activeAgentTextEl");
-    const hasConvList = APP_TS.includes("conversationListEl");
-    const hasScrollArea = APP_TS.includes("scrollAreaEl");
-    assert.ok(
-      hasActiveEl && hasConvList && hasScrollArea,
-      "app.ts must declare activeAgentTextEl, conversationListEl, scrollAreaEl (Sketch A §5.1.1). " +
-        `Found: activeAgentTextEl=${hasActiveEl}, conversationListEl=${hasConvList}, scrollAreaEl=${hasScrollArea}.`,
-    );
-  });
-
-  it("T-PY2MA.Conv.SRC.3: app.ts handleEvent has case 'text' routing to appendAgentChunk", () => {
-    // Given: src/tauri/ui/app.ts source
-    // When:  scanned for 'appendAgentChunk' call within the case "text" arm of handleEvent
-    // Then:  appendAgentChunk(payload.chunk) is present (Sketch A §5.1.6)
-    const hasTextCase = APP_TS.includes('case "text":');
-    const hasAppendInText = APP_TS.includes("appendAgentChunk(payload.chunk)");
-    assert.ok(hasTextCase, "app.ts handleEvent must have case 'text': (Sketch A §5.1.6).");
-    assert.ok(
-      hasAppendInText,
-      "app.ts case 'text' must call appendAgentChunk(payload.chunk) (Sketch A §5.1.6 — G1 streaming).",
-    );
+  it("T-PY2MA.Conv.SRC.3: classified text routes through the binding to controller final rendering", () => {
+    // Given a text frame, when routed, then it reaches appendFinal without an app-local duplicate branch.
+    assert.match(APP_BINDINGS_TS, /\["assistant-progress", "text", "done", "error"\]/);
+    assert.match(TURN_CONTROLLER_TS, /frame\.type === "text"[\s\S]*appendFinal\(frame\.chunk\)/);
+    assert.match(APP_TS, /assistantAppComposition\.handleEvent\(payload\)/);
   });
 });
 

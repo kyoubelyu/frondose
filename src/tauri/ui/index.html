@@ -142,8 +142,9 @@
     .msg-agent { display: flex; gap: 11px; align-items: flex-start; }
     .avatar { flex-shrink: 0; width: 26px; height: 26px; margin-top: 2px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; background: var(--grad-agent); color: var(--on-brand); box-shadow: 0 0 10px rgba(70, 181, 74, 0.28); }
     .avatar svg { width: 14px; height: 14px; }
-    .msg-agent-body { max-width: 88%; }
-    .msg-agent-text { font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+    .msg-agent-body { width: 88%; max-width: 88%; position: relative; }
+    .msg-agent-body:has(.assistant-progress:not(.hidden)) { min-height: 2.7rem; }
+    .msg-agent-text { display: flow-root; font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
     /* T-FE-CHAT bug 1: rendered-markdown children of .msg-agent-text (safe DOM builder, render/markdown.ts). */
     .msg-agent-text .md-p { margin: 0 0 8px; white-space: pre-wrap; }
     .msg-agent-text .md-p:last-child { margin-bottom: 0; }
@@ -164,10 +165,29 @@
     .msg-agent-text .md-table th, .msg-agent-text .md-table td { border: 0.5px solid var(--line); padding: 4px 8px; text-align: left; }
     .msg-agent-text .md-table thead th { background: var(--line-soft); font-weight: 600; }
     .msg-agent-text .md-link { color: var(--accent-500); text-decoration: underline; }
-    /* P-THINK: gray/semi-transparent live "thinking" block above the answer; removed when the turn's output completes. */
-    .agent-thinking { color: var(--ink-muted); opacity: 0.55; font-size: 12px; line-height: 1.5; margin-bottom: 6px; white-space: pre-wrap; }
-    .agent-thinking.hidden { display: none; }
-    .thinking-line { font-style: italic; opacity: 0.8; }
+    /* Temporary assistant progress above the answer; removed when the turn's output completes. */
+    .assistant-progress {
+      position: absolute;
+      inset: 0;
+      color: var(--ink-muted);
+      opacity: 0.7;
+      font-size: 12px;
+      line-height: 1.35rem;
+      max-height: 2.7rem;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .assistant-progress.hidden { display: none; }
+    .assistant-progress-text {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      min-height: calc(1.35rem + 1px);
+      max-height: 2.7rem;
+      overflow: hidden;
+    }
     /* P-Y2-MA G1+G2: append-list container; preserves the existing .conv layout. */
     .conv-list { list-style: none; margin: 0; padding: 18px 22px 24px; display: flex; flex-direction: column; gap: 16px; }
     .conv-list .msg-user, .conv-list .msg-agent { /* inherit existing styles */ }

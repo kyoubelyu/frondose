@@ -1,9 +1,8 @@
 /**
- * P-THINK — BE serve mock test: runOneTurn wires onReasoning → a `reasoning` SSE frame.
+ * P-UI-THINK-COMPACT — provider reasoning remains private at the serve boundary.
  *
- * Behavior under test: the operator/interactive turn path passes an onReasoning sink into the Pi
- * loop that emits exactly one `{ type: "reasoning", turnId, chunk }` SSE frame per reasoning delta,
- * so the Tauri app can render the gray live-thinking block. (The overlay is not a target here.)
+ * Behavior under test: runOneTurn keeps onReasoning for heartbeat progress, but reasoning bytes
+ * never become SSE frames or caller-owned history.
  *
  * Harness mirrors runOne-autoRunCompleted-pWLC.mock.test.ts (mocks the Pi loop, model, audit, overlay).
  *
@@ -40,6 +39,7 @@ before(async () => {
       runAgentLoopPi: async (opts: LoopOpts) => {
         for (const d of reasoningDeltas) opts.onReasoning?.(d);
         await opts.onStepFinish?.({ toolCalls: [], toolResults: [] });
+        return { finishReason: "stop" };
       },
     },
   });
@@ -47,7 +47,12 @@ before(async () => {
   const piModelUrl = pathToFileURL(join(repoRoot, "src/agent/pi/model.js")).href;
   mock.module(piModelUrl, {
     namedExports: {
-      resolvePiModel: () => ({ model: { id: "deepseek-test" }, apiKey: "test-key", reasoningLevel: "low", timeoutMs: 120_000 }),
+      resolvePiModel: () => ({
+        model: { id: "deepseek-test" },
+        apiKey: "test-key",
+        reasoningLevel: "low",
+        timeoutMs: 120_000,
+      }),
     },
   });
 
@@ -109,46 +114,53 @@ function makeDeps(frames: unknown[]): ServeDeps {
   } as unknown as ServeDeps;
 }
 
-type ReasoningFrame = { type: string; turnId?: string; chunk?: string };
-function reasoningFrames(frames: unknown[]): ReasoningFrame[] {
-  return frames.filter(
-    (f): f is ReasoningFrame => typeof f === "object" && f !== null && (f as { type?: unknown }).type === "reasoning",
-  );
-}
-
-async function runTurn(frames: unknown[], turnId: string): Promise<void> {
+async function runTurn(frames: unknown[], turnId: string): Promise<ServeState> {
   assert.ok(runOneTurn !== null, "runOneTurn imported");
-  await runOneTurn(makeState(), makeDeps(frames), {
+  const state = makeState();
+  await runOneTurn(state, makeDeps(frames), {
     turnId,
     abortController: new AbortController(),
     userPrompt: "go",
     isRetryable: false,
   } as unknown as TurnArgs);
+  return state;
 }
 
-describe("P-THINK — runOneTurn emits reasoning SSE frames", () => {
-  it("T-ServeReasoning.1: each onReasoning delta emits one reasoning frame with the turnId + chunk", async () => {
-    // Given: the loop emits two reasoning deltas for this turn.
-    // When: runOneTurn runs the operator turn.
-    // Then: two reasoning frames are emitted, in order, tagged with the turnId and delta text.
+describe("P-UI-THINK-COMPACT — runOneTurn keeps provider reasoning private", () => {
+  it("T-ServeReasoning.1: reasoning deltas produce no public frame or history bytes", async () => {
+    // Given private reasoning deltas, when runOneTurn completes, then neither SSE nor history exposes them.
     reasoningDeltas = ["Let me ", "think..."];
     const frames: unknown[] = [];
     const turnId = randomUUID();
-    await runTurn(frames, turnId);
-
-    const rf = reasoningFrames(frames);
-    assert.equal(rf.length, 2, "one reasoning frame per delta");
-    assert.deepEqual(rf.map((f) => f.chunk), ["Let me ", "think..."]);
-    assert.ok(rf.every((f) => f.turnId === turnId), "each reasoning frame carries the turnId");
+    const state = await runTurn(frames, turnId);
+    assert.equal(
+      frames.some((frame) => JSON.stringify(frame).includes("Let me")),
+      false,
+    );
+    assert.equal(
+      frames.some((frame) => JSON.stringify(frame).includes("think...")),
+      false,
+    );
+    assert.equal(JSON.stringify(state.messages).includes("Let me"), false);
+    assert.equal(JSON.stringify(state.messages).includes("think..."), false);
+    assert.equal(
+      frames.some((frame) => (frame as { type?: string }).type === "reasoning"),
+      false,
+    );
   });
 
-  it("T-ServeReasoning.2: a turn with no reasoning deltas emits no reasoning frames", async () => {
-    // Given: the loop emits zero reasoning deltas.
-    // When: runOneTurn runs.
-    // Then: no reasoning frames are emitted (thinking is optional).
+  it("T-ServeReasoning.2: a turn without reasoning still emits the normal terminal", async () => {
+    // Given no reasoning deltas, when runOneTurn completes, then the ordinary done frame remains.
     reasoningDeltas = [];
     const frames: unknown[] = [];
     await runTurn(frames, randomUUID());
-    assert.equal(reasoningFrames(frames).length, 0);
+    assert.equal(
+      frames.some((frame) => (frame as { type?: string }).type === "reasoning"),
+      false,
+    );
+    assert.equal(
+      frames.some((frame) => (frame as { type?: string }).type === "done"),
+      true,
+    );
   });
 });

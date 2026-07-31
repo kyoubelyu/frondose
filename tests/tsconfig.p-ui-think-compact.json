@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": [
+    "agent/pi/assistantPhaseText-pUiThinkCompact.mock.test.ts",
+    "cli/subcommands/serve/runOne-assistantPhase-pUiThinkCompact.mock.test.ts",
+    "tauri/ui/assistantProgress-pUiThinkCompact.mock.test.ts",
+    "tauri/ui/assistantAppBindings-pUiThinkCompact.mock.test.ts",
+    "tauri/ui/assistantAppDependencies-pUiThinkCompact.mock.test.ts"
+  ],
+  "exclude": []
+}

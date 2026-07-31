@@ -1,15 +1,14 @@
-// P-SPLIT-APPTS-LOC: the agent-message bubble DOM skeleton (avatar SVG + gray "thinking" block +
-// answer-text sink) extracted from app.ts's beginAgentBubble() — a stateless DOM builder/mounter
+// P-SPLIT-APPTS-LOC: the agent-message bubble DOM skeleton (avatar SVG + temporary progress +
+// answer-text sink) extracted from app.ts — a stateless DOM builder/mounter
 // (no closure state; mirrors the existing render/*.ts build*-and-append convention, e.g. buildIwfCard,
 // buildAutoStage, buildLeafMark). 800-line cap exhausted; established split pattern (S-Public.2: one
 // exported function per leaf). Behavior byte-preserved.
 import type { DocumentLike, ElementLike } from "../render.js";
-import { t } from "../i18n.js";
 
 export interface AgentBubbleRefs {
   textEl: ElementLike;
-  thinkingWrap: ElementLike;
-  thinkingTextEl: ElementLike;
+  progressWrap: ElementLike;
+  progressTextEl: ElementLike;
 }
 
 export function buildAgentBubble(doc: DocumentLike, conversationListEl: ElementLike): AgentBubbleRefs {
@@ -33,23 +32,19 @@ export function buildAgentBubble(doc: DocumentLike, conversationListEl: ElementL
   wrap.appendChild(avatar);
   const body = doc.createElement("div") as unknown as ElementLike;
   body.classList.add("msg-agent-body");
-  // [P-THINK] Gray thinking block ABOVE the answer: a "thinking…" line + the streamed reasoning.
-  // Starts hidden (revealed by the first reasoning chunk) and is removed on `done`/`error`.
-  const thinking = doc.createElement("div") as unknown as ElementLike;
-  thinking.classList.add("agent-thinking");
-  thinking.classList.add("hidden");
-  const thinkingLine = doc.createElement("div") as unknown as ElementLike;
-  thinkingLine.classList.add("thinking-line");
-  thinkingLine.textContent = t("status.thinking");
-  const thinkingText = doc.createElement("div") as unknown as ElementLike;
-  thinkingText.classList.add("thinking-text");
-  thinking.appendChild(thinkingLine);
-  thinking.appendChild(thinkingText);
-  body.appendChild(thinking);
+  const progress = doc.createElement("div") as unknown as ElementLike;
+  progress.classList.add("assistant-progress");
+  progress.classList.add("hidden");
+  progress.setAttribute?.("aria-live", "polite");
+  progress.setAttribute?.("role", "status");
+  const progressText = doc.createElement("div") as unknown as ElementLike;
+  progressText.classList.add("assistant-progress-text");
+  progress.appendChild(progressText);
+  body.appendChild(progress);
   const text = doc.createElement("div") as unknown as ElementLike;
   text.classList.add("msg-agent-text");
   body.appendChild(text);
   wrap.appendChild(body);
   conversationListEl.appendChild(wrap);
-  return { textEl: text, thinkingWrap: thinking, thinkingTextEl: thinkingText };
+  return { textEl: text, progressWrap: progress, progressTextEl: progressText };
 }

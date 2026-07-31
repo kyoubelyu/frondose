@@ -262,18 +262,17 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
     assert.ok(loc <= 150, `turn.ts must be ≤ 150 LoC; got ${loc}`);
   });
 
-  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 410 LoC (relaxed from ≤390 per P-ONBOARD-CONVERSATIONAL-IDENTITY d7f352a; prior 370→390 per P-AUTO-ISOLATE Step 5a F3; includes P-AUTO-7 reaper, P-AUTO-8 selectSystem import, P-AUTO-L3FIX-2 silent-hang closeout, P-THINK onReasoning emit, P-AUTO-ISOLATE's overrideMessages field + envelope-gated stop_auto post-step hook, and P-ONBOARD's identity-write Soul-band recompose hook, G-P72s7.2)", () => {
+  it("T-turn.LoCBudget.1 — turn/runOne.ts ≤ 460 LoC (P-UI-THINK-COMPACT classified assistant routing)", () => {
     // Given: post-split turn/runOne.ts.
     // When:  LoC counted via split("\n").length (= wc -l + 1).
-    // Then:  ≤ 410 — P-ONBOARD-CONVERSATIONAL-IDENTITY (d7f352a) added the
-    //        identity-tool-write Soul-band recompose hook in onStepFinish (the
-    //        onboarding corollary fix, ~18 LoC), pushing the file to 408 LoC
-    //        (locOf); 410 gives ~2 LoC headroom over the approved additive
-    //        feature growth. Well under the §Code&Test ≤800 hard cap.
+    // Then:  ≤ 460 — P-UI-THINK-COMPACT replaces public reasoning output with
+    //        classified assistant progress/final routing and explicit completion.
+    //        Blank/comment lines count (locOf); the leaf stays far below the
+    //        repository's 800-line hard cap.
     const loc = locOf(RUN_ONE_TS);
     assert.ok(
-      loc <= 410,
-      `turn/runOne.ts must be ≤ 410 LoC (§4.2.1 relaxed cap + P-THINK onReasoning emit + P-AUTO-ISOLATE overrideMessages/stop_auto hook + P-ONBOARD identity-write recompose); got ${loc}`,
+      loc <= 460,
+      `turn/runOne.ts must be ≤ 460 LoC (P-UI-THINK-COMPACT classified assistant routing); got ${loc}`,
     );
   });
 

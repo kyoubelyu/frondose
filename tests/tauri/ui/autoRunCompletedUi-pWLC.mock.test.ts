@@ -24,21 +24,14 @@ import { fileURLToPath } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const APP_TS = readFileSync(join(REPO, "src/tauri/ui/app.ts"), "utf-8");
+const APP_BINDINGS_TS = readFileSync(join(REPO, "src/tauri/ui/app/assistantAppBindings.ts"), "utf-8");
+const APP_COMPOSITION_TS = readFileSync(join(REPO, "src/tauri/ui/app/assistantAppComposition.ts"), "utf-8");
 
 // Isolate the handleEvent switch body so case-arm assertions don't match the union type.
 function handleEventBody(): string {
   const start = APP_TS.indexOf("function handleEvent(");
   assert.ok(start >= 0, "app.ts must define handleEvent()");
   return APP_TS.slice(start);
-}
-
-// Isolate the abortTurn function body.
-function abortTurnBody(): string {
-  const start = APP_TS.indexOf("async function abortTurn(");
-  assert.ok(start >= 0, "app.ts must define abortTurn()");
-  const rest = APP_TS.slice(start);
-  const end = rest.indexOf("\nasync function ", 1);
-  return end > 0 ? rest.slice(0, end) : rest;
 }
 
 describe("app.ts SseFrame union — includes the auto-run-completed member (P-WLC)", () => {
@@ -63,21 +56,20 @@ describe('app.ts handleEvent — case "auto-run-completed" finalizes the Auto st
     // The close path mirrors case "workflow-completed": workflowView = null; renderWorkflowCard();
     const caseIdx = body.indexOf('case "auto-run-completed"');
     const arm = body.slice(caseIdx, caseIdx + 700);
-    assert.ok(arm.includes("workflowView = null"), 'the auto-run-completed arm must set workflowView = null');
-    assert.ok(arm.includes("renderWorkflowCard()"), "the auto-run-completed arm must call renderWorkflowCard() to rebuild the idle Auto stage");
+    assert.ok(arm.includes("workflowView = null"), "the auto-run-completed arm must set workflowView = null");
+    assert.ok(
+      arm.includes("renderWorkflowCard()"),
+      "the auto-run-completed arm must call renderWorkflowCard() to rebuild the idle Auto stage",
+    );
   });
 });
 
-describe("app.ts abortTurn — Pause stops the whole auto-run when there is no live turn (P-WLC symptom 2)", () => {
-  it("WLC-UI.3: abortTurn invokes frondose_workflow_cancel when there is no live turn instead of silently returning", () => {
-    // Given: abortTurn. When: scanned. Then: it routes to frondose_workflow_cancel (no early no-op return on the no-live-turn branch).
-    const body = abortTurnBody();
-    assert.ok(body.includes("frondose_workflow_cancel"), "abortTurn must invoke frondose_workflow_cancel for the no-live-turn (Pause) case");
-    assert.ok(body.includes("frondose_agent_abort"), "abortTurn must still invoke frondose_agent_abort when a live turn exists");
-    // The regression the fix removes: the old silent guard `if (... || currentTurnId === null) return;`
-    assert.ok(
-      !/\|\|\s*currentTurnId === null\)\s*return;/.test(body),
-      "abortTurn must NOT early-return (silent no-op) when currentTurnId === null — Pause must act",
-    );
+describe("assistant composition Pause stops either the live turn or the workflow (P-WLC symptom 2)", () => {
+  it("WLC-UI.3: Pause uses runtime abort with an owner and workflow cancel without one", () => {
+    // Given the composition, when Pause has no turn owner, then the binding calls the exact workflow cancel seam.
+    assert.match(APP_BINDINGS_TS, /if \(deps\.getCurrentTurnId\(\) !== null\) return deps\.runtime\.pause\(\);/);
+    assert.match(APP_BINDINGS_TS, /await deps\.cancelWorkflow\(\)/);
+    assert.match(APP_COMPOSITION_TS, /"frondose_workflow_cancel"/);
+    assert.match(APP_TS, /assistantAppComposition\.pause\(\)/);
   });
 });
