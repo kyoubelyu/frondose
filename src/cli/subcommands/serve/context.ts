@@ -11,6 +11,7 @@ export const MAX_RETRY_ATTEMPTS = 3;
 export type PassiveSkipReason = "rate_limit" | "icp_mismatch" | "cache_hit" | "busy" | "disabled";
 
 export type SseFrame =
+  | { type: "assistant-progress"; turnId: string; text: string }
   | {
       type:
         | "tool-call"

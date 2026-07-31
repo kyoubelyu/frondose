@@ -10,7 +10,7 @@ import type {
   InputElementLike,
   TextElementLike,
 } from "./render.js";
-import { buildSwitcher, renderMarkdownInto } from "./render.js";
+import { buildSwitcher } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
 import { createAppActions } from "./appActions.js";
 import { showToast } from "./toast.js";
@@ -19,11 +19,11 @@ import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendBu
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
 import { bindAutoStageButtons as bindAutoStageButtonsImpl } from "./app/autoStageButtons.js";
-import { createRunningComposerController } from "./app/runningComposer.js";
-import { waitForDoneSse as waitForDoneSseImpl } from "./app/turnSync.js";
 import { scrollToBottomIfPinned as scrollToBottomIfPinnedImpl } from "./app/scrolling.js";
-import { buildAgentBubble as buildAgentBubbleImpl } from "./app/agentBubble.js";
-import { clearThinkingBlock as clearThinkingBlockImpl, rawTextWithBreak as rawTextWithBreakImpl } from "./stepBoundary.js";
+import { createAssistantTurnController } from "./assistantTurnController.js";
+import { createAssistantTurnRuntime } from "./app/assistantTurnRuntime.js";
+import { createAssistantAppDependencies } from "./app/assistantAppDependencies.js";
+import { createAssistantAppComposition } from "./app/assistantAppComposition.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
 import { localizeDocument, t } from "./i18n.js";
 
@@ -56,6 +56,7 @@ type WorkflowView = {
 
 type SseFrame =
   | { type: "tool-call"; turnId: string; toolName: string }
+  | { type: "assistant-progress"; turnId: string; text: string }
   | { type: "text"; turnId: string; chunk: string }
   | { type: "reasoning"; turnId: string; chunk: string }
   | { type: "step-done"; turnId: string; toolNames: string[] }
@@ -91,7 +92,10 @@ type SseFrame =
   | { type: "auto-session-completed"; sessionId?: string; reason?: "stop_auto" | "terminated" | "schedule_gone"; ts?: number }
   | { type: "commit-warning"; workflowId: string | null; label: string; severity: "low" };
 
-const windowRef = globalThis as unknown as Window & { document: DocumentLike };
+const windowRef = globalThis as unknown as Window & {
+  document: DocumentLike;
+  requestAnimationFrame(callback: () => void): number;
+};
 
 function mustGet<T extends TextElementLike>(id: string): T {
   const el = windowRef.document.getElementById(id);
@@ -105,7 +109,6 @@ localizeDocument(windowRef.document as unknown as LocalizableDocumentLike);
 type AppState = "identity-missing" | "idle" | "running" | "error";
 let appState: AppState = "identity-missing";
 let currentTurnId: string | null = null;
-let steerInFlight = false;
 let lastTurnPrompt: string | null = null;
 let cronEnabled = false;
 let passiveEnabled = false;
@@ -138,20 +141,6 @@ const workflowPauseBtnEl = mustGet<ButtonElementLike>("workflow-pause-btn");
 const workflowShowAllBtnEl = mustGet<ButtonElementLike>("workflow-showall-btn");
 const autoStageEl = mustGet<ElementLike>("auto-stage");
 let workflowExpanded = false;
-// P-Y2-MA G1+G2 — conversation list state.
-// activeAgentTextEl is the current turn's agent text sink; null between turns.
-// scroll-area autoscroll only fires when the user is already near the bottom
-// (within AUTOSCROLL_PX) so manual scrollback is not yanked.
-let activeAgentTextEl: ElementLike | null = null;
-// T-FE-CHAT bug 1: raw (unrendered) answer text for the active bubble, rAF-coalesced re-render.
-let activeAgentRawText = "";
-let agentRenderScheduled = false;
-// [P-THINK] The current turn's gray "thinking" sinks: the wrapper (.agent-thinking, incl. the
-// "thinking…" line) and the streamed-reasoning text node. Both null between turns; the whole
-// wrapper is removed from the DOM when the turn's output completes ("完成输出后消失").
-let activeAgentThinkingWrap: ElementLike | null = null;
-let activeAgentThinkingEl: ElementLike | null = null;
-let pendingTextBreak = false; // [P-THINK-OVERWRITE] armed by a current-turn step-done; next text chunk gets a paragraph break
 const AUTOSCROLL_PX = 100;
 const scrollAreaEl = mustGet<ElementLike>("scroll-area");
 const conversationListEl = mustGet<ElementLike>("conversation-list");
@@ -191,67 +180,6 @@ function appendUserBubble(text: string): void {
   bubble.textContent = text;
   conversationListEl.appendChild(bubble);
   scrollToBottomIfPinned();
-}
-
-function beginAgentBubble(): void {
-  // P-SPLIT-APPTS-LOC: the DOM-construction body (avatar SVG + gray thinking block + answer-text
-  // sink) is extracted to app/agentBubble.js — 800-line cap exhausted; established split pattern.
-  const refs = buildAgentBubbleImpl(windowRef.document, conversationListEl);
-  activeAgentTextEl = refs.textEl;
-  activeAgentThinkingWrap = refs.thinkingWrap;
-  activeAgentThinkingEl = refs.thinkingTextEl;
-  activeAgentRawText = "";
-  scrollToBottomIfPinned();
-}
-
-// T-FE-CHAT bug 1: coalesce a burst of chunks into <= one parse+DOM-replace per frame. Cast (not a
-// bare global ref — the no-DOM-lib main tsconfig also type-checks this file), same idiom as
-// scrollAreaEl above.
-function scheduleAgentTextRender(): void {
-  if (agentRenderScheduled) return;
-  agentRenderScheduled = true;
-  const raf = (windowRef as unknown as { requestAnimationFrame: (cb: () => void) => number }).requestAnimationFrame;
-  raf(() => {
-    agentRenderScheduled = false;
-    if (activeAgentTextEl === null) return; // turn ended before this frame ran
-    renderMarkdownInto(windowRef.document, activeAgentTextEl, activeAgentRawText);
-    scrollToBottomIfPinned();
-  });
-}
-
-function appendAgentChunk(chunk: string): void {
-  // [BLOCKER-1 fix, 3b round-1] Frame-agnostic: if no active bubble (Manual REPL
-  // path — no turn-started SSE per §5.1.0), AUTO-OPEN one. The explicit
-  // `beginAgentBubble()` call in the `turn-started` handler (5.1.6) covers the
-  // cron/profile-activate/card-action paths; this auto-open is the Manual fallback.
-  if (activeAgentTextEl === null) beginAgentBubble();
-  if (activeAgentTextEl === null) return; // defensive — beginAgentBubble couldn't allocate (DOM missing)
-  // [P-THINK-OVERWRITE] paragraph break between steps' answers (consumed once, never leading).
-  if (pendingTextBreak) { pendingTextBreak = false; activeAgentRawText = rawTextWithBreakImpl(activeAgentRawText); }
-  activeAgentRawText += chunk;
-  scheduleAgentTextRender();
-}
-
-// [P-THINK] Append a reasoning delta to the gray thinking block, auto-opening the bubble if the
-// turn started without a `turn-started` frame (mirrors appendAgentChunk's Manual-REPL fallback).
-function appendReasoningChunk(chunk: string): void {
-  if (activeAgentThinkingEl === null) beginAgentBubble();
-  if (activeAgentThinkingEl === null || activeAgentThinkingWrap === null) return; // defensive — DOM missing
-  activeAgentThinkingWrap.classList.remove("hidden");
-  const prev = activeAgentThinkingEl.textContent ?? "";
-  activeAgentThinkingEl.textContent = `${prev}${chunk}`;
-  scrollToBottomIfPinned();
-}
-
-function endAgentBubble(): void {
-  if (activeAgentTextEl !== null) renderMarkdownInto(windowRef.document, activeAgentTextEl, activeAgentRawText); // P-FE-MD-HISTORY: flush the pending rAF render BEFORE detach, else the bubble freezes on a stale partial parse
-  // [P-THINK] "完成输出后消失" (display:none — ElementLike has no remove(); visually equivalent).
-  clearThinkingBlockImpl(activeAgentThinkingWrap, activeAgentThinkingEl);
-  activeAgentThinkingWrap = null;
-  activeAgentThinkingEl = null;
-  activeAgentTextEl = null;
-  activeAgentRawText = "";
-  pendingTextBreak = false; // [P-THINK-OVERWRITE] reset — no separator leaks into the next bubble
 }
 
 function transition(next: AppState): void {
@@ -396,26 +324,83 @@ const appActions = createAppActions({
 });
 
 const loadIdentity = (): Promise<void> => appActions.loadIdentity();
-async function abortTurn(): Promise<void> {
-  // P-WLC: abort a live turn; otherwise Pause cancels the workflow/Auto run.
-  const live = appState === "running" && currentTurnId !== null;
-  try {
-    if (live) await invoke("frondose_agent_abort");
-    else await invoke("frondose_workflow_cancel", { workflowId: workflowView?.workflowId ?? "" });
-  } catch (e) {
-    surfaceError(t("action.pauseAbort"), e);
-  }
-}
+
+const assistantTurnController = createAssistantTurnController({
+  document: windowRef.document,
+  conversationList: conversationListEl,
+  getCurrentTurnId: () => currentTurnId,
+  requestAnimationFrame: windowRef.requestAnimationFrame.bind(windowRef),
+  scrollToBottom: scrollToBottomIfPinned,
+});
+
+const assistantAppDependencies = createAssistantAppDependencies({
+  getCurrentTurnId: () => currentTurnId,
+  setCurrentTurnId: (turnId) => {
+    currentTurnId = turnId;
+  },
+  getLastTurnPrompt: () => lastTurnPrompt,
+  setLastTurnPrompt: (prompt) => {
+    lastTurnPrompt = prompt;
+  },
+  invoke,
+  requestAnimationFrame: windowRef.requestAnimationFrame.bind(windowRef),
+  scrollToBottom: scrollToBottomIfPinned,
+  endAgentBubble: assistantTurnController.endTurn,
+  appendUserBubble: appendUserBubble,
+  setTicker: (text) => {
+    tickerEl.textContent = text;
+  },
+  setError: (text) => {
+    errorBannerEl.textContent = text;
+    errorBannerEl.classList.toggle("hidden", text.length === 0);
+  },
+  setRetryVisible: (visible) => {
+    retryBtnEl.classList.toggle("hidden", !visible);
+  },
+  setCommand: (text) => {
+    commandEl.value = text;
+  },
+  transition,
+  translate: t as (key: string, vars?: Record<string, string>) => string,
+  surfaceFailure: surfaceError,
+});
+
+const assistantTurnRuntime = createAssistantTurnRuntime({
+  document: windowRef.document,
+  conversationList: conversationListEl,
+  getCurrentTurnId: assistantAppDependencies.getCurrentTurnId,
+  requestAnimationFrame: assistantAppDependencies.requestAnimationFrame,
+  scrollToBottom: assistantAppDependencies.scrollToBottom,
+  invoke,
+  settleOwned: assistantAppDependencies.settleOwned,
+  appendStoppedText: assistantAppDependencies.appendStoppedText,
+  startReplacement: assistantAppDependencies.startReplacement,
+  reportFailure: assistantAppDependencies.reportFailure,
+  turnController: assistantTurnController,
+});
+
+const assistantAppComposition = createAssistantAppComposition({
+  runtime: assistantTurnRuntime,
+  getCurrentTurnId: assistantAppDependencies.getCurrentTurnId,
+  setCurrentTurnId: assistantAppDependencies.setCurrentTurnId,
+  getWorkflowId: () => workflowView?.workflowId ?? null,
+  invoke,
+  onTurnStartedView: assistantAppDependencies.onTurnStartedView,
+  onDoneView: assistantAppDependencies.onDoneView,
+  onErrorView: assistantAppDependencies.onErrorView,
+  reportFailure: assistantAppDependencies.reportFailure,
+});
+
 async function sendCommand(): Promise<void> {
   // P-AUTO-ISOLATE: an Auto-locked composer cannot dispatch even if Enter still fires.
   if (commandEl.disabled) return;
   if (appState === "running" && currentTurnId !== null) {
     const text = commandEl.value.trim();
     if (text.length > 0) {
-      await runningComposerController.dispatch(text);
+      await assistantAppComposition.dispatchRunning(text);
       return;
     }
-    await abortTurn();
+    await assistantAppComposition.pause();
     return;
   }
 
@@ -432,74 +417,18 @@ async function sendCommand(): Promise<void> {
       transition("error");
       return;
     }
-    currentTurnId = r.turnId;
     lastTurnPrompt = prompt;
     appendUserBubble(prompt);
-    tickerEl.textContent = t("ticker.starting");
     commandEl.value = ""; // T-FE-CHAT bug 2: clear only on success — preserves input on failure above
-    transition("running");
+    assistantAppComposition.handleEvent({ type: "turn-started", turnId: r.turnId, source: "server" });
   } catch (e) {
     errorBannerEl.textContent = t("error.invokeFailed", { msg: String(e) });
     transition("error");
   }
 }
-async function performSteer(newPrompt: string): Promise<void> {
-  if (steerInFlight) return;
-  if (appState !== "running" || currentTurnId === null) return;
-  steerInFlight = true;
-  const previousTurnId = currentTurnId;
-  try {
-    try {
-      await invoke("frondose_agent_abort");
-    } catch {}
-    const completed = await waitForDoneSseImpl(() => currentTurnId, previousTurnId, 3000, 50);
-    if (!completed) {
-      errorBannerEl.textContent = t("error.steerTimeout");
-      // Close the abandoned bubble and reject late frames by dropping its turn id.
-      currentTurnId = null;
-      endAgentBubble();
-      transition("error");
-      return;
-    }
-    const r = await invoke<TurnResp>("frondose_agent_turn", { prompt: newPrompt });
-    if (r.ok === false) {
-      errorBannerEl.textContent = t("error.steerRejected", { reason: r.reason });
-      transition("error");
-      return;
-    }
-    currentTurnId = r.turnId;
-    lastTurnPrompt = newPrompt;
-    appendUserBubble(newPrompt);
-    tickerEl.textContent = t("ticker.starting");
-    commandEl.value = ""; // T-FE-CHAT bug 2: clear only once the steer turn is accepted
-    transition("running");
-  } catch (e) {
-    errorBannerEl.textContent = t("error.steerFailed", { msg: String(e) });
-    transition("error");
-  } finally {
-    steerInFlight = false;
-  }
-}
-
-const runningComposerController = createRunningComposerController({
-  invoke,
-  steer: (text) => performSteer(text),
-  settleStopped: (text) => {
-    appendUserBubble(text);
-    currentTurnId = null;
-    endAgentBubble();
-    tickerEl.textContent = t("ticker.done", { reason: "aborted" });
-    commandEl.value = "";
-    transition("idle");
-  },
-  reportStopFailure: (error) => {
-    surfaceError(t("action.pauseAbort"), error);
-  },
-});
-
 function bindAutoStageButtons(): void {
   bindAutoStageButtonsImpl(windowRef.document, () => {
-    void abortTurn();
+    void assistantAppComposition.pause();
   });
 }
 
@@ -520,6 +449,7 @@ function syncExternalMode(): void {
 }
 
 function handleEvent(payload: SseFrame): void {
+  if (assistantAppComposition.handleEvent(payload)) return;
   switch (payload.type) {
     case "tool-call":
       if (payload.turnId === currentTurnId) {
@@ -531,56 +461,7 @@ function handleEvent(payload: SseFrame): void {
         tickerEl.textContent = isAuto ? `→ ${payload.toolName}` : `${payload.toolName}...`;
       }
       break;
-    case "text":
-      if (payload.turnId === currentTurnId) {
-        // P-Y2-MA G1: stream into the ACTIVE agent bubble (not a global sink).
-        appendAgentChunk(payload.chunk);
-      }
-      break;
-    case "reasoning":
-      // [P-THINK] Stream the model's live reasoning into the gray thinking block; it is removed
-      // by endAgentBubble() on `done`/`error` ("完成输出后消失").
-      if (payload.turnId === currentTurnId) {
-        appendReasoningChunk(payload.chunk);
-      }
-      break;
-    case "turn-started":
-      // [P-59 FIX-2/3b] Server-initiated turns (resume/card/profile-activate/cron) have no
-      // frondose_agent_turn invoke to set currentTurnId, so adopt the announced turn here.
-      // P-Y2-MA G1: every turn-started opens a NEW agent bubble; cron/resume turns get one too.
-      currentTurnId = payload.turnId;
-      beginAgentBubble();
-      tickerEl.textContent = payload.source === "cron" ? t("ticker.cronRunning") : t("ticker.starting");
-      transition("running");
-      break;
     case "step-done":
-      // [P-THINK-OVERWRITE] step boundary: clear thinking (next segment OVERWRITES) + arm break. turnId-gated (FM-1 CMR-1).
-      if (payload.turnId === currentTurnId) {
-        clearThinkingBlockImpl(activeAgentThinkingWrap, activeAgentThinkingEl);
-        pendingTextBreak = true;
-      }
-      break;
-    case "done":
-      if (payload.turnId === currentTurnId) {
-        tickerEl.textContent = t("ticker.done", { reason: payload.finishReason });
-        currentTurnId = null;
-        // P-Y2-MA G1: close the active agent bubble so the next turn opens a fresh one.
-        endAgentBubble();
-        if (payload.aborted !== true) {
-          retryBtnEl.classList.add("hidden");
-          errorBannerEl.classList.add("hidden");
-          lastTurnPrompt = null;
-        }
-        transition("idle");
-      }
-      break;
-    case "error":
-      if (payload.turnId !== undefined && payload.turnId !== currentTurnId) break;
-      errorBannerEl.textContent = t("error.agent", { msg: payload.message });
-      currentTurnId = null;
-      endAgentBubble();
-      transition("error");
-      retryBtnEl.classList.toggle("hidden", payload.retryable !== true);
       break;
     case "overlay-reconnected":
       statusEl.textContent = t("status.overlayReconnected");
@@ -731,7 +612,7 @@ workflowHandoffBtnEl.addEventListener("click", () => {
   void appActions.handoffWorkflow();
 });
 workflowPauseBtnEl.addEventListener("click", () => {
-  void abortTurn();
+  void assistantAppComposition.pause();
 });
 workflowShowAllBtnEl.addEventListener("click", () => {
   workflowExpanded = !workflowExpanded;

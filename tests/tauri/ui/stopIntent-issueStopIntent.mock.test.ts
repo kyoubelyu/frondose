@@ -228,47 +228,54 @@ describe("real running-composer controller", () => {
 });
 
 describe("app production wiring", () => {
-  it("T-Stop.Wiring.1: only the running non-empty branch delegates once and returns before idle turn dispatch", () => {
-    // Given app.ts; When its send path is audited; Then one running controller call is terminal for that branch.
+  it("T-Stop.Wiring.1: running input delegates once through the assistant composition", () => {
+    // Given app.ts, when its running send path is audited, then one shared composition call owns stop and steer.
     const source = readFileSync(APP_PATH, "utf8");
     const running =
       /if \(appState === "running" && currentTurnId !== null\) \{([\s\S]*?)\n {2}\}/.exec(source)?.[1] ?? "";
-    assert.match(running, /await runningComposerController\.dispatch\(text\);\s*return;/);
-    assert.doesNotMatch(running, /performSteer\(/);
+    assert.match(running, /await assistantAppComposition\.dispatchRunning\(text\);\s*return;/);
+    assert.match(running, /await assistantAppComposition\.pause\(\)/);
+    assert.doesNotMatch(running, /performSteer|runningComposerController/);
     const idleTurn = source.indexOf('invoke<TurnResp>("frondose_agent_turn"');
     assert.ok(idleTurn > source.indexOf('if (appState === "running"'), "idle kill chrome remains on normal turn path");
   });
 
-  it("T-Stop.Wiring.2: accepted settlement owns all terminal UI mutation; failure callback does not", () => {
-    // Given controller callbacks in app.ts; When inspected; Then cleanup is confined to settleStopped.
-    const source = readFileSync(APP_PATH, "utf8");
-    const settle = /settleStopped:\s*\(text\)\s*=>\s*\{([\s\S]*?)\n\s*\},/.exec(source)?.[1] ?? "";
-    const failure = /reportStopFailure:\s*\(error\)\s*=>\s*\{([\s\S]*?)\n\s*\},/.exec(source)?.[1] ?? "";
-    assert.match(settle, /currentTurnId = null/);
-    assert.match(settle, /endAgentBubble\(\)/);
-    assert.match(settle, /transition\("idle"\)/);
-    assert.match(settle, /commandEl\.value = ""/);
-    assert.doesNotMatch(failure, /currentTurnId = null|endAgentBubble|transition\("idle"\)|commandEl\.value = ""/);
+  it("T-Stop.Wiring.2: the shared binding retains the established raw classifier and one in-flight owner", () => {
+    // Given the assistant binding, when its dispatcher is inspected, then it imports the established classifier and serializes stop with steer.
+    const source = readFileSync(
+      fileURLToPath(new URL("../../../src/tauri/ui/app/assistantAppBindings.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /import \{ isExplicitStopIntent \} from "\.\/runningComposer\.js"/);
+    assert.match(source, /let dispatchInFlight = false/);
+    assert.match(source, /if \(isExplicitStopIntent\(text\)\) return await deps\.runtime\.stop\(text\)/);
+    assert.match(source, /await deps\.runtime\.steer\(text\)/);
   });
 
-  it("T-Stop.Wiring.3: controller construction passes raw invoke and maps steer only to performSteer", () => {
-    // Given the complete controller construction; When audited; Then stop cannot be wired to steer as a side effect.
-    const source = readFileSync(APP_PATH, "utf8");
-    const construction =
-      /createRunningComposerController\(\{([\s\S]*?)\n\}\);/.exec(source)?.[1] ?? "";
-    assert.equal((source.match(/createRunningComposerController\(/g) ?? []).length, 1);
-    assert.match(construction, /^\s*invoke,\s*$/m);
-    assert.match(construction, /steer:\s*\(text\)\s*=>\s*performSteer\(text\)/);
-    assert.doesNotMatch(construction, /abort:|frondose_agent_abort|frondose_agent_turn/);
-    assert.equal((source.match(/runningComposerController\.dispatch\(/g) ?? []).length, 1);
+  it("T-Stop.Wiring.3: interruption captures ownership and settles only the same turn", () => {
+    // Given the interruption controller, when abort resolves or rejects late, then owner comparison precedes every side effect.
+    const source = readFileSync(
+      fileURLToPath(new URL("../../../src/tauri/ui/app/turnInterruption.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /const turnId = deps\.getCurrentTurnId\(\)/);
+    assert.match(source, /deps\.getCurrentTurnId\(\) !== turnId/);
+    assert.match(source, /deps\.settleOwned\(turnId\)/);
+    assert.match(source, /result\.reason !== "not_found"/);
   });
 
-  it("T-Stop.Wiring.4: stale tagged errors are rejected by exact turn ownership; untagged errors still surface", () => {
-    // Given the SSE error arm; When inspected; Then mismatched tagged errors break before the global path.
-    const source = readFileSync(APP_PATH, "utf8");
-    const arm = /case "error":([\s\S]*?)case "overlay-reconnected":/.exec(source)?.[1] ?? "";
-    assert.match(arm, /if \(payload\.turnId !== undefined && payload\.turnId !== currentTurnId\) break;/);
-    assert.match(arm, /errorBannerEl\.textContent/);
+  it("T-Stop.Wiring.4: presentation ownership rejects stale errors while ownerless errors still reach view", () => {
+    // Given the assistant binding and controller, when error routing is inspected, then stale owned frames are ignored and ownerless failures remain visible.
+    const controller = readFileSync(
+      fileURLToPath(new URL("../../../src/tauri/ui/assistantTurnController.ts", import.meta.url)),
+      "utf8",
+    );
+    const binding = readFileSync(
+      fileURLToPath(new URL("../../../src/tauri/ui/app/assistantAppBindings.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(controller, /if \(!\("turnId" in frame\) \|\| frame\.turnId !== owner\) return "ignored"/);
+    assert.match(binding, /outcome === "terminal" \|\| presentation\.turnId === undefined/);
   });
 
   it("T-Stop.Wiring.5: app.ts remains at or below 800 lines with or without final newline", () => {

@@ -6,7 +6,12 @@ import { runAgentLoopPi } from "../../../../agent/pi/loop.js";
 import { callInOverlay } from "../../../../overlay/inject.js";
 import { writeLlmErrorAudit } from "../../../../persistence/audit.js";
 import { setCronMode } from "../../../../persistence/mode.js";
-import { bumpTurnHeartbeat, DATA_DIR_NAME, removeTurnHeartbeat, writeTurnHeartbeat } from "../../../../persistence/paths.js";
+import {
+  bumpTurnHeartbeat,
+  DATA_DIR_NAME,
+  removeTurnHeartbeat,
+  writeTurnHeartbeat,
+} from "../../../../persistence/paths.js";
 import { countAutoLedgerByAction, endAutoRun, getCurrentAutoRun } from "../../../../persistence/salesDb.js";
 import { modeFromState } from "../../../../tauri/ui/mode.js";
 import { getSalesDb } from "../../../../tools/sales/_dbHandle.js";
@@ -23,7 +28,9 @@ function turnDbg(msg: string): void {
   try {
     fs.mkdirSync(path.dirname(TURN_DBG), { recursive: true });
     fs.appendFileSync(TURN_DBG, `${new Date().toISOString()} ${msg}\n`);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // [P-75 D-13] Resume turns must NOT re-run task-start ritual or re-qualify; the workflow
@@ -59,18 +66,21 @@ export interface TurnArgs {
 }
 
 export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnArgs): Promise<void> {
-  const { turnId, abortController } = args; writeTurnHeartbeat();
+  const { turnId, abortController } = args;
+  writeTurnHeartbeat();
   let abortReason: "duration_cap" | "silent_hang" | "no_tool_progress" | "operator_or_other" | null = null;
   const disabledModelMessage = "configure your DeepSeek API key in Settings (gear icon)";
   if (deps.model === null) {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
-    removeTurnHeartbeat(); return;
+    removeTurnHeartbeat();
+    return;
   }
   try {
     (await import("../../../../agent/pi/model.js")).resolvePiModel();
   } catch {
     deps.emitFrame({ type: "error", turnId, message: disabledModelMessage, retryable: false });
-    removeTurnHeartbeat(); return;
+    removeTurnHeartbeat();
+    return;
   }
   // [P-75 P-WEDGE-1] Wire this turn's abort signal into the CDP layer so the D-16
   // cap watcher, the D-27 silent-hang watcher, and operator /agent/abort can
@@ -111,7 +121,9 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         });
         abortController.abort();
       }
-    } catch { /* watcher must never crash the turn */ }
+    } catch {
+      /* watcher must never crash the turn */
+    }
   }, 15_000);
   // [P-75 D-27] Turn-level silent-hang detector. Completes the D-25 coverage gap:
   // when the LLM SDK (DeepSeek custom URL via @ai-sdk/openai) silently hangs on a
@@ -127,8 +139,13 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
   const turnKind = args.isWorkflowResume ? "workflow_resume" : args.isCronTurn ? "cron" : "operator";
   const auditLlmError = (errorName: string, errorMessage: string, status?: number): void =>
     writeLlmErrorAudit(deps.auditPath, { turnId, errorMessage, errorName, turnKind, status });
-  const noteProgress = (): void => { lastProgressAt = Date.now(); bumpTurnHeartbeat(lastProgressAt); };
-  const noteToolProgress = (): void => { lastToolProgressAt = Date.now(); };
+  const noteProgress = (): void => {
+    lastProgressAt = Date.now();
+    bumpTurnHeartbeat(lastProgressAt);
+  };
+  const noteToolProgress = (): void => {
+    lastToolProgressAt = Date.now();
+  };
   const SILENT_HANG_MS = 180_000;
   const silentHangWatcher = setInterval(() => {
     if (abortController.signal.aborted) return;
@@ -140,17 +157,22 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       "Aborting turn and surfacing as llm_error.";
     turnDbg(`[runOneTurn D-27] turnId=${turnId} silent-hang elapsed=${Math.round(elapsed / 1000)}s — aborting`);
     auditLlmError("LlmSilentHang", message);
-    deps.emitFrame({ type: "error", turnId, message }); abortReason = "silent_hang"; abortController.abort();
+    deps.emitFrame({ type: "error", turnId, message });
+    abortReason = "silent_hang";
+    abortController.abort();
   }, 30_000);
   const TOOL_PROGRESS_TIMEOUT_MS = 210_000;
   const toolProgressWatcher = setInterval(() => {
     if (abortController.signal.aborted) return;
     const elapsed = Date.now() - lastToolProgressAt;
     if (elapsed < TOOL_PROGRESS_TIMEOUT_MS) return;
-    const message = `[llm-no-tool-progress] turn made no TOOL/step progress for ${Math.round(elapsed / 1000)}s ` +
+    const message =
+      `[llm-no-tool-progress] turn made no TOOL/step progress for ${Math.round(elapsed / 1000)}s ` +
       "while (possibly) streaming text — degenerate text-only generation. Aborting turn as llm_error.";
     auditLlmError("LlmNoToolProgress", message);
-    deps.emitFrame({ type: "error", turnId, message }); abortReason = "no_tool_progress"; abortController.abort();
+    deps.emitFrame({ type: "error", turnId, message });
+    abortReason = "no_tool_progress";
+    abortController.abort();
   }, 30_000);
   try {
     // [P-75 D-23] Filter the `tools` parameter ITSELF instead of using Vercel SDK's
@@ -169,7 +191,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
     turnDbg(
       `[runOneTurn] turnId=${turnId} isWorkflowResume=${args.isWorkflowResume} filteredTools.size=${Object.keys(filteredTools).length} (vs full=${Object.keys(deps.tools).length})`,
     );
-    await runAgentLoopPi({
+    const completion = (await runAgentLoopPi({
       model: deps.model,
       system: selectSystemForTurn(args, state, deps),
       messages: args.overrideMessages ?? state.messages,
@@ -211,7 +233,11 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
             const client = deps.session.getClient();
             if (ctxId !== undefined && client) {
               const json = JSON.stringify(card);
-              void callInOverlay(client.handle, ctxId, `function() { window.__frondoseShowCard(${JSON.stringify(json)}); }`);
+              void callInOverlay(
+                client.handle,
+                ctxId,
+                `function() { window.__frondoseShowCard(${JSON.stringify(json)}); }`,
+              );
             }
           }
           if (tr.toolName === "end_auto_run") {
@@ -221,9 +247,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
           }
           if (tr.toolName === "stop_auto") {
             const okResult =
-              typeof tr.result === "object" &&
-              tr.result !== null &&
-              (tr.result as { ok?: unknown }).ok === true;
+              typeof tr.result === "object" && tr.result !== null && (tr.result as { ok?: unknown }).ok === true;
             if (okResult) {
               setCronMode(state, false);
               const sessionId = state.autoSessionId ?? undefined;
@@ -284,22 +308,27 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         }
         deps.emitFrame({ type: "step-done", turnId, toolNames: toolCalls.map((call) => call.toolName) });
       },
-      onText: (delta) => {
-        noteProgress(); // [P-75 D-27] feed the silent-hang watcher
-        deps.emitFrame({ type: "text", turnId, chunk: delta });
+      assistantHistory: "final-only",
+      onAssistantPhaseText: (text, phase) => {
+        noteProgress();
+        if (phase === "intermediate") {
+          deps.emitFrame({ type: "assistant-progress", turnId, text });
+          return;
+        }
+        deps.emitFrame({ type: "text", turnId, chunk: text });
         const ctxId = state.overlayContextId;
         const client = deps.session.getClient();
         if (ctxId !== undefined && client) {
-          const s = JSON.stringify(delta);
-          void callInOverlay(client.handle, ctxId, `function() { window.__frondoseAppendOutput(${JSON.stringify(s)}); }`);
+          const serialized = JSON.stringify(text);
+          void callInOverlay(
+            client.handle,
+            ctxId,
+            `function() { window.__frondoseAppendOutput(${JSON.stringify(serialized)}); }`,
+          );
         }
       },
-      // [P-THINK] Stream the model's live reasoning to the Tauri app as a gray thinking block
-      // that disappears once the turn completes. SSE-only (the primary app target); no overlay sink.
-      onReasoning: (delta) => {
-        noteProgress(); // [P-75 D-27] thinking counts as progress for the silent-hang watcher
-        deps.emitFrame({ type: "reasoning", turnId, chunk: delta });
-      },
+      // Provider reasoning is private; it only refreshes the silent-hang watchdog.
+      onReasoning: () => noteProgress(),
       onToolCall: (toolName) => {
         noteProgress(); // [P-75 D-27] feed the silent-hang watcher
         noteToolProgress();
@@ -311,11 +340,15 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
           void callInOverlay(client.handle, ctxId, `function() { window.__frondoseUpdateTicker(${text}); }`);
         }
       },
-    });
+    })) ?? { finishReason: abortController.signal.aborted ? "aborted" : "stop" };
 
-    const finishReason = abortController.signal.aborted ? "aborted" : "stop";
-    deps.emitFrame({ type: "done", turnId, finishReason, aborted: abortController.signal.aborted });
-    if (!abortController.signal.aborted) {
+    deps.emitFrame({
+      type: "done",
+      turnId,
+      finishReason: completion.finishReason,
+      aborted: completion.finishReason === "aborted",
+    });
+    if (completion.finishReason !== "aborted") {
       state.lastFailedTurnPrompt = null;
       state.retryAttempts = 0;
       const ctxId = state.overlayContextId;
@@ -369,7 +402,9 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
       void callInOverlay(client.handle, ctxId, fn);
     }
   } finally {
-    clearInterval(capWatcher); clearInterval(silentHangWatcher); clearInterval(toolProgressWatcher); // [P-75 D-16/D-27] stop turn watchers
+    clearInterval(capWatcher);
+    clearInterval(silentHangWatcher);
+    clearInterval(toolProgressWatcher); // [P-75 D-16/D-27] stop turn watchers
     removeTurnHeartbeat();
     deps.session.clearTurnAbortSignal(abortController.signal); // P-FIX-STOP-INTENT: late T1 teardown cannot clear T2
     hideEdgeRing(state, deps.session); // P-Y2.3: retract ring + clear cursor/highlight on every turn end
@@ -380,7 +415,10 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         const run = getCurrentAutoRun(db);
         if (run?.status === "running") {
           const counters = countAutoLedgerByAction(db, run.id);
-          const summary = abortReason === "silent_hang" ? "silent_hang_abort: LLM stream made no progress and the turn was aborted" : "no_tool_progress_abort: turn made no tool/step progress and was aborted";
+          const summary =
+            abortReason === "silent_hang"
+              ? "silent_hang_abort: LLM stream made no progress and the turn was aborted"
+              : "no_tool_progress_abort: turn made no tool/step progress and was aborted";
           const res = endAutoRun(db, run.id, {
             status: "stopped_by_agent",
             summary,
@@ -402,6 +440,8 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
           }
         }
       }
-    } catch { /* P-AUTO-7: reaper/db handle must never crash turn teardown */ }
+    } catch {
+      /* P-AUTO-7: reaper/db handle must never crash turn teardown */
+    }
   }
 }

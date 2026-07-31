@@ -24,7 +24,6 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { setLocale, t } from "../../../src/tauri/ui/i18n.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const AGENT_BUBBLE_JS = join(REPO, "src/tauri/ui/app/agentBubble.js");
@@ -104,8 +103,8 @@ function makeConversationListEl() {
 
 type AgentBubbleRefsRec = {
   textEl: { __rec: RecEl };
-  thinkingWrap: { __rec: RecEl };
-  thinkingTextEl: { __rec: RecEl };
+  progressWrap: { __rec: RecEl };
+  progressTextEl: { __rec: RecEl };
 };
 type AgentBubbleModule = {
   buildAgentBubble: (doc: unknown, conversationListEl: unknown) => AgentBubbleRefsRec;
@@ -141,12 +140,8 @@ describe("app/agentBubble.ts — buildAgentBubble (P-SPLIT-APPTS-LOC)", () => {
     assert.equal(paths[0]?.attrs.d, "M12 2.5l1.7 6 6 1.7-6 1.7-1.7 6-1.7-6-6-1.7 6-1.7z");
   });
 
-  it("T-AgentBubble.2: the thinking block starts hidden with the i18n status.thinking label, nested wrap > body > [thinking, text]", () => {
-    // Given: a recording DocumentLike stub. When: buildAgentBubble runs. Then: the exact DOM
-    // hierarchy — wrap(.msg-agent) > [avatar(.avatar), body(.msg-agent-body)];
-    // body > [thinking(.agent-thinking.hidden), text(.msg-agent-text)];
-    // thinking > [thinkingLine(.thinking-line, i18n text), thinkingText(.thinking-text)].
-    setLocale("en");
+  it("T-AgentBubble.2: the temporary progress bubble starts hidden and unlabeled beside the final answer sink", () => {
+    // Given the builder, when mounted, then progress and final answer use distinct sibling sinks.
     const { doc, created } = makeRecDoc();
     const conversationListEl = makeConversationListEl();
     agentBubbleMod.buildAgentBubble(doc, conversationListEl);
@@ -158,16 +153,16 @@ describe("app/agentBubble.ts — buildAgentBubble (P-SPLIT-APPTS-LOC)", () => {
     const [avatarEl, bodyEl] = wrapEl.children;
     assert.ok(avatarEl?.classes.has("avatar"), "first child is .avatar");
     assert.ok(bodyEl?.classes.has("msg-agent-body"), "second child is .msg-agent-body");
-    assert.equal(bodyEl?.children.length, 2, "body has exactly 2 children: thinking, text");
-    const [thinkingEl, textEl] = bodyEl?.children ?? [];
-    assert.ok(thinkingEl?.classes.has("agent-thinking"), "first body child is .agent-thinking");
-    assert.ok(thinkingEl?.classes.has("hidden"), "the thinking wrapper starts hidden");
+    assert.equal(bodyEl?.children.length, 2, "body has exactly 2 children: progress, text");
+    const [progressEl, textEl] = bodyEl?.children ?? [];
+    assert.ok(progressEl?.classes.has("assistant-progress"), "first body child is .assistant-progress");
+    assert.ok(progressEl?.classes.has("hidden"), "the progress wrapper starts hidden");
+    assert.equal(progressEl?.attrs.role, "status");
+    assert.equal(progressEl?.attrs["aria-live"], "polite");
     assert.ok(textEl?.classes.has("msg-agent-text"), "second body child is .msg-agent-text");
-    assert.equal(thinkingEl?.children.length, 2, "thinking wrapper has exactly 2 children: line, text sink");
-    const [thinkingLineEl, thinkingTextEl] = thinkingEl?.children ?? [];
-    assert.ok(thinkingLineEl?.classes.has("thinking-line"));
-    assert.equal(thinkingLineEl?.textContent, t("status.thinking"));
-    assert.ok(thinkingTextEl?.classes.has("thinking-text"));
+    assert.equal(progressEl?.children.length, 1, "progress wrapper has exactly one text sink");
+    assert.ok(progressEl?.children[0]?.classes.has("assistant-progress-text"));
+    assert.equal(progressEl?.textContent, null, "no fixed thinking label is rendered");
   });
 
   it("T-AgentBubble.3: mounts by appending the wrap exactly once to conversationListEl (no other appends)", () => {
@@ -180,7 +175,7 @@ describe("app/agentBubble.ts — buildAgentBubble (P-SPLIT-APPTS-LOC)", () => {
     assert.ok(conversationListEl.appended[0]?.classes.has("msg-agent"), "the appended node is the .msg-agent wrap");
   });
 
-  it("T-AgentBubble.4: returns the actual answer/thinking-wrap/thinking-text nodes (not a swapped reference)", () => {
+  it("T-AgentBubble.4: returns the actual answer/progress-wrap/progress-text nodes", () => {
     // Given: a recording DocumentLike stub. When: buildAgentBubble runs. Then: the returned refs'
     // identities match the exact nodes found by class in the constructed tree — guards against a
     // wrong-but-compiling return (e.g. thinkingWrap accidentally set to the thinking-LINE node).
@@ -188,23 +183,13 @@ describe("app/agentBubble.ts — buildAgentBubble (P-SPLIT-APPTS-LOC)", () => {
     const conversationListEl = makeConversationListEl();
     const refs = agentBubbleMod.buildAgentBubble(doc, conversationListEl);
     const textEls = created.filter((e) => e.classes.has("msg-agent-text"));
-    const thinkingWraps = created.filter((e) => e.classes.has("agent-thinking"));
-    const thinkingTexts = created.filter((e) => e.classes.has("thinking-text"));
+    const progressWraps = created.filter((e) => e.classes.has("assistant-progress"));
+    const progressTexts = created.filter((e) => e.classes.has("assistant-progress-text"));
     assert.equal(textEls.length, 1);
-    assert.equal(thinkingWraps.length, 1);
-    assert.equal(thinkingTexts.length, 1);
+    assert.equal(progressWraps.length, 1);
+    assert.equal(progressTexts.length, 1);
     assert.equal(refs.textEl.__rec, textEls[0], "refs.textEl must be the actual .msg-agent-text node");
-    assert.equal(
-      refs.thinkingWrap.__rec,
-      thinkingWraps[0],
-      "refs.thinkingWrap must be the actual .agent-thinking node",
-    );
-    assert.equal(
-      refs.thinkingTextEl.__rec,
-      thinkingTexts[0],
-      "refs.thinkingTextEl must be the actual .thinking-text node (not the .thinking-line label)",
-    );
-    // Cross-check: thinkingTextEl must NOT be the thinking-line label (a plausible swap bug).
-    assert.notEqual(refs.thinkingTextEl.__rec.classes.has("thinking-line"), true);
+    assert.equal(refs.progressWrap.__rec, progressWraps[0]);
+    assert.equal(refs.progressTextEl.__rec, progressTexts[0]);
   });
 });
