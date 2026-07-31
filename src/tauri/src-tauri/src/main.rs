@@ -5,6 +5,8 @@ mod resolve;
 mod sidecar;
 mod sse;
 mod state;
+mod update_notice;
+mod update_scheduler;
 mod updater;
 
 // P-56a M-1 SCAFFOLD: Tauri shell for the v0.5 hover pivot. Throwaway-scope -
@@ -15,18 +17,19 @@ use crate::commands::{
     frondose_agent_abort, frondose_agent_auto_start, frondose_agent_auto_stop,
     frondose_agent_retry, frondose_agent_turn, frondose_check_update, frondose_chrome_ensure,
     frondose_get_settings, frondose_health, frondose_identity, frondose_set_cron_mode,
-    frondose_set_passive_mode, frondose_set_settings, frondose_workflow_approve,
-    frondose_workflow_cancel, frondose_workflow_decline, frondose_workflow_handoff,
+    frondose_set_passive_mode, frondose_set_settings, frondose_take_update_notice,
+    frondose_workflow_approve, frondose_workflow_cancel, frondose_workflow_decline,
+    frondose_workflow_handoff,
 };
+use crate::resolve::provision_state;
 use crate::sidecar::{
     await_serve_ready, shutdown_sidecar, spawn_frondose_serve, supervise_sidecar,
 };
 use crate::sse::run_sse_subscriber;
 use crate::state::FrondoseServeState;
-use crate::resolve::provision_state;
-use crate::updater::{
-    read_update_check_interval_sec, read_update_server_url, run_update_check,
-};
+use crate::update_notice::prepare_update_notice;
+use crate::update_scheduler::run_update_scheduler;
+use crate::updater::{read_update_check_interval_sec, run_update_check};
 
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32};
 use std::sync::Arc;
@@ -39,6 +42,7 @@ use tokio::sync::{Mutex, Notify};
 
 #[tokio::main]
 async fn main() {
+    prepare_update_notice(env!("CARGO_PKG_VERSION"));
     let (token, port_file, parent_dir) = provision_state().expect("provision sidecar state");
     // P-58d.1 [3b/CMR-2]: best-effort spawn — a missing/broken sidecar must NOT panic
     // before the updater gets a turn (the updater is the recovery path).
@@ -104,7 +108,8 @@ async fn main() {
             frondose_workflow_decline,
             frondose_workflow_handoff,
             frondose_workflow_cancel,
-            frondose_check_update
+            frondose_check_update,
+            frondose_take_update_notice
         ])
         .build(tauri::generate_context!())
         .expect("Tauri build");
@@ -157,40 +162,20 @@ async fn main() {
     // and the app.run shutdown handlers are registered — closing the pre-app.run() restart
     // race (a pre-run restart would BYPASS those handlers).
     let ready_notify = Arc::new(Notify::new());
-    let app_handle_updater = app_handle.clone();
-    let updater_ready = ready_notify.clone();
+    let run_ready = ready_notify.clone();
+    let updater_app = app_handle.clone();
     tokio::spawn(async move {
-        updater_ready.notified().await; // park until the run loop signals Ready
-        run_update_check(app_handle_updater).await;
-    });
-
-    // P-58d.3 — Periodic update-check task (operator directive 2026-06-09:
-    // "发布初期会经常更新"). After the boot-time check above, poll at
-    // updateCheckIntervalSec (default 3600s = 1h, floor 60s, 0 = disabled).
-    // First periodic tick fires AFTER one interval (so it doesn't double-check
-    // back-to-back with the boot check). Runs forever; checks are
-    // best-effort (run_update_check swallows all errors). Returns immediately
-    // only when the updater is disabled (config.json updateServerUrl explicitly
-    // null or "" — P-UPDATE-INTRANET Option B; absent config now auto-pulls from
-    // the compiled default), so a disabled config never wastes cycles.
-    let app_handle_periodic = app_handle.clone();
-    let periodic_ready = ready_notify.clone();
-    tokio::spawn(async move {
-        periodic_ready.notified().await; // park alongside the boot check
-        let interval_sec = read_update_check_interval_sec();
-        if interval_sec == 0 {
-            return; // operator opt-out
-        }
-        let mut ticker = tokio::time::interval(Duration::from_secs(interval_sec));
-        ticker.tick().await; // first tick fires immediately — discard so we don't double-check
-        loop {
-            ticker.tick().await;
-            // Re-read updateServerUrl on every tick so toggling config.json
-            // updateServerUrl=null is honored without an app restart.
-            if read_update_server_url().is_some() {
-                run_update_check(app_handle_periodic.clone()).await;
+        run_update_scheduler(
+            ready_notify.clone(),
+            || Duration::from_secs(read_update_check_interval_sec()),
+            move || {
+                let app = updater_app.clone();
+                async move {
+                    run_update_check(app).await;
+                }
             }
-        }
+        )
+        .await;
     });
 
     // P-56b: SSE subscriber (reconnecting — tolerates a not-yet-ready sidecar).
@@ -254,7 +239,7 @@ async fn main() {
             // updater task. notify_one() stores a permit, so this is race-free even if the
             // task has not yet reached notified().await when Ready fires.
             RunEvent::Ready => {
-                ready_notify.notify_one();
+                run_ready.notify_one();
             }
             // D-RUN-1 (safety): macOS does NOT auto-exit when the last window closes
             // (NSApplication convention), so RunEvent::ExitRequested never fires on a

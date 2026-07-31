@@ -856,13 +856,14 @@ dependencies = [
 
 [[package]]
 name = "frondose"
-version = "0.5.15"
+version = "0.5.16"
 dependencies = [
  "bytes",
  "dirs",
  "hyper 0.14.32",
  "libc",
  "rand",
+ "semver",
  "serde",
  "serde_json",
  "tauri",
