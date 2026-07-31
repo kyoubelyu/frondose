@@ -14,6 +14,7 @@ import { buildSwitcher, renderMarkdownInto } from "./render.js";
 import { createSettingsPanel } from "./settings.js";
 import { createAppActions } from "./appActions.js";
 import { showToast } from "./toast.js";
+import { applyLanguageAndShowUpdateCompletion } from "./updateCompletion.js";
 import { updateSendButtonLabel as updateSendButtonLabelImpl } from "./app/sendButton.js";
 import { renderWorkflowCard as renderWorkflowCardImpl } from "./app/workflowCard.js";
 import { upsertWorkflowStep as upsertWorkflowStepImpl } from "./app/workflowSteps.js";
@@ -789,7 +790,7 @@ async function boot(): Promise<void> {
     return;
   }
   await windowRef.__TAURI__.event.listen<SseFrame>("overlay-event", (e) => handleEvent(e.payload));
-  await appActions.applyLanguagePref();
+  await applyLanguageAndShowUpdateCompletion({ applyLanguagePref: appActions.applyLanguagePref, invoke, surfaceToast });
   await loadIdentity();
   syncModeUi("manual");
 }

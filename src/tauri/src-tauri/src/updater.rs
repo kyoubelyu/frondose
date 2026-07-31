@@ -21,7 +21,9 @@ fn config_home_dir() -> Option<String> {
             return Some(home);
         }
     }
-    std::env::var("USERPROFILE").ok().filter(|p| !p.trim().is_empty())
+    std::env::var("USERPROFILE")
+        .ok()
+        .filter(|p| !p.trim().is_empty())
 }
 
 /// P-58d.1 / P-UPDATE-INTRANET: read the operator-set `updateServerUrl`
@@ -93,7 +95,8 @@ pub(crate) fn read_update_check_interval_sec() -> u64 {
 // docs/phase-mac-relaunch-plan.md §3/§6 + docs/phase-mac-relaunch-critics-r2.md.
 
 /// [MR-3] Process-wide update-in-progress guard (boot + periodic + manual paths).
-static UPDATE_IN_PROGRESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static UPDATE_IN_PROGRESS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Stable busy-rejection string — the Settings FE matches on this exact value.
 pub(crate) const ALREADY_UPDATING: &str = "already_updating";
@@ -131,7 +134,10 @@ pub(crate) const MACOS_OPEN_BIN: &str = "/usr/bin/open";
 /// [T-RELAUNCH.5] Exactly `/usr/bin/open -n <bundle>` — one non-shell path argument.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn macos_open_args(bundle: &std::path::Path) -> (&'static str, Vec<std::ffi::OsString>) {
-    (MACOS_OPEN_BIN, vec!["-n".into(), bundle.as_os_str().to_os_string()])
+    (
+        MACOS_OPEN_BIN,
+        vec!["-n".into(), bundle.as_os_str().to_os_string()],
+    )
 }
 
 /// Pure: `…/<name>.app/Contents/MacOS/<exe>` → the bundle root, else None.
@@ -220,7 +226,8 @@ async fn relaunch_macos(bundle: &std::path::Path) -> Result<(), String> {
 /// [MR-3 / T-RELAUNCH.7] Bounded poll on the supervisor-owned pid slot (0 = reaped).
 async fn await_pid_cleared(pid: &std::sync::atomic::AtomicU32, timeout_ms: u64) -> bool {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-    while pid.load(std::sync::atomic::Ordering::SeqCst) != 0 && std::time::Instant::now() < deadline {
+    while pid.load(std::sync::atomic::Ordering::SeqCst) != 0 && std::time::Instant::now() < deadline
+    {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     pid.load(std::sync::atomic::Ordering::SeqCst) == 0
@@ -269,7 +276,11 @@ pub(crate) async fn install_and_relaunch(app: &AppHandle, update: Update) -> Res
         }
     };
 
-    emit_update_status(app, "downloading", Some(("version", update.version.clone())));
+    emit_update_status(
+        app,
+        "downloading",
+        Some(("version", update.version.clone())),
+    );
 
     // [MR-1] Download + signature-verify FIRST. The plugin's on_download_finish callback
     // fires BEFORE signature verification, so it must not drive any stage → no-ops.
@@ -426,7 +437,10 @@ mod tests {
 
     impl TempHome {
         fn new(tag: &str) -> Self {
-            let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
             let dir = std::env::temp_dir().join(format!("frondose-updater-test-{}-{}", tag, nanos));
             std::fs::create_dir_all(&dir).unwrap();
             let original = std::env::var("HOME").ok();
@@ -460,7 +474,10 @@ mod tests {
     fn t_updater_1_absent_config_returns_baked_default() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _home = TempHome::new("absent");
-        assert_eq!(read_update_server_url(), Some(EXPECTED_DEFAULT_URL.to_string()));
+        assert_eq!(
+            read_update_server_url(),
+            Some(EXPECTED_DEFAULT_URL.to_string())
+        );
     }
 
     // T-Updater.2: given config.json with "updateServerUrl": null, when read,
@@ -516,7 +533,10 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("override");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":"http://other:9999"}"#);
-        assert_eq!(read_update_server_url(), Some("http://other:9999".to_string()));
+        assert_eq!(
+            read_update_server_url(),
+            Some("http://other:9999".to_string())
+        );
     }
 
     // ── P-FIX-MAC-UPDATER-RELAUNCH Step 5 — T-RELAUNCH.1–7 (docs/phase-mac-relaunch-plan.md §5) ──
@@ -569,7 +589,10 @@ mod tests {
     #[test]
     fn t_relaunch_4_update_guard_serializes() {
         assert!(try_begin_update(), "first begin must acquire");
-        assert!(!try_begin_update(), "second begin must be rejected while held");
+        assert!(
+            !try_begin_update(),
+            "second begin must be rejected while held"
+        );
         end_update();
         assert!(try_begin_update(), "begin must succeed again after release");
         end_update();
@@ -628,7 +651,10 @@ mod tests {
         let args = vec![std::ffi::OsString::from("60")];
         let r = run_relaunch_command("/bin/sleep", &args, 1).await;
         let e = r.expect_err("over-bound child must time out");
-        assert!(e.contains("timed out"), "err must be the timeout shape: {e}");
+        assert!(
+            e.contains("timed out"),
+            "err must be the timeout shape: {e}"
+        );
     }
 
     // T-RELAUNCH.7: given the pid slot, when await_pid_cleared polls, then: already-0 →
@@ -639,7 +665,10 @@ mod tests {
         use std::sync::Arc;
 
         let already = AtomicU32::new(0);
-        assert!(await_pid_cleared(&already, 500).await, "pid already 0 → immediate true");
+        assert!(
+            await_pid_cleared(&already, 500).await,
+            "pid already 0 → immediate true"
+        );
 
         let late = Arc::new(AtomicU32::new(7));
         let late_clone = late.clone();
@@ -647,9 +676,15 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             late_clone.store(0, Ordering::SeqCst);
         });
-        assert!(await_pid_cleared(&late, 2_000).await, "pid cleared at ~200ms → true within bound");
+        assert!(
+            await_pid_cleared(&late, 2_000).await,
+            "pid cleared at ~200ms → true within bound"
+        );
 
         let never = AtomicU32::new(9);
-        assert!(!await_pid_cleared(&never, 250).await, "pid never cleared → false at timeout");
+        assert!(
+            !await_pid_cleared(&never, 250).await,
+            "pid never cleared → false at timeout"
+        );
     }
 }
