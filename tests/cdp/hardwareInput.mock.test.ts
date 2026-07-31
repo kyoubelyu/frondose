@@ -323,6 +323,37 @@ describe("hardwareScroll — G-P32.17", () => {
       "T-HW.SCROLL.1: all dy must be positive for 'up'",
     );
   });
+
+  it("T-SCROLL.MOCK.5: hardwareScroll maps all four directions to exact CGEvent axes and signs", async () => {
+    // Given an injected CgEvent recorder; When each direction scrolls 400px; Then axis, sign, and total magnitude are exact.
+    const fakeClient = makeFakeClient({
+      sx: 0,
+      sy: 0,
+      ch: 0,
+      border: [0, 0, 0, 0, 0, 0, 0, 0],
+      refKey: "x",
+      backendNodeId: 1,
+    });
+    const cases = [
+      ["up", 0, 400],
+      ["down", 0, -400],
+      ["left", 400, 0],
+      ["right", -400, 0],
+    ] as const;
+    for (const [direction, expectedDx, expectedDy] of cases) {
+      const { cg, log } = makeFakeCg();
+      await hardwareScroll(fakeClient, direction, 400, cg);
+      const total = log.scrollWheel.reduce(
+        (sum, [dx, dy]) => ({ dx: sum.dx + dx, dy: sum.dy + dy }),
+        { dx: 0, dy: 0 },
+      );
+      assert.deepEqual(total, { dx: expectedDx, dy: expectedDy }, `${direction} must use the documented axis/sign`);
+      assert.ok(
+        log.scrollWheel.every(([dx, dy]) => (expectedDx === 0 ? dx === 0 : dy === 0)),
+        `${direction} must keep the unused axis at zero`,
+      );
+    }
+  });
 });
 
 // ─── T-HW.PRESS.1 ─────────────────────────────────────────────────────────────
