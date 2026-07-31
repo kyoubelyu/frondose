@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CdpClient } from "../../src/cdp/client.js";
+import { buildDocumentScrollExpression } from "../../src/cdp/scroll.js";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -276,9 +277,8 @@ test("T-M22: pressKey('Enter') issues keyDown then keyUp", async () => {
 
 // ─── T-M23..T-M27: P-3 CdpClient extensions ──────────────────────────────────
 
-// T-M23: P-37 B3 — scroll uses window.scrollBy evaluate (replaces synthesizeScrollGesture)
-// Updated from the pre-P-37 version that asserted getLayoutMetrics + synthesizeScrollGesture.
-test("T-M23: scroll('down', 300) calls Runtime.evaluate('window.scrollBy(0, 300)') — no synthesizeScrollGesture, no getLayoutMetrics", async () => {
+// T-M23: scroll remains pure evaluate (no coordinate-based synthesizeScrollGesture).
+test("T-M23: scroll('down', 300) evaluates the production self-verifying expression without gesture/layout calls", async () => {
   const evaluateCalls: string[] = [];
   let synthesizeScrollGestureCalled = false;
   let getLayoutMetricsCalled = false;
@@ -310,7 +310,11 @@ test("T-M23: scroll('down', 300) calls Runtime.evaluate('window.scrollBy(0, 300)
   await client.scroll("down", 300);
 
   assert.equal(evaluateCalls.length, 1, "exactly one Runtime.evaluate call expected");
-  assert.equal(evaluateCalls[0], "window.scrollBy(0, 300)", "evaluate expression must be 'window.scrollBy(0, 300)'");
+  assert.equal(
+    evaluateCalls[0],
+    buildDocumentScrollExpression("down", 300),
+    "evaluate expression must be the production self-verifying document scroll",
+  );
   assert.equal(
     getLayoutMetricsCalled,
     false,
