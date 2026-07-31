@@ -14,9 +14,13 @@ export interface AgentLoopOpts {
   activeTools?: string[];
   /** Called for each text chunk. Optional. */
   onText?: (delta: string) => void;
+  /** Called once per completed assistant phase after continuation is known. */
+  onAssistantPhaseText?: (text: string, phase: "intermediate" | "final") => void;
+  /** App turns retain only matched tool protocol plus truly final assistant text. */
+  assistantHistory?: "all" | "final-only";
   /**
    * [P-THINK] Called for each reasoning/thinking delta as the model streams its chain of thought.
-   * Ephemeral — thinking is surfaced live (gray in the UI) but NOT persisted to messages. Optional.
+   * Private and ephemeral — callers may use it as a liveness signal, but must not render or persist it.
    */
   onReasoning?: (delta: string) => void;
   /** Max LLM round-trips for tool-call loops. Default 200 (P-46 D-1). */
@@ -29,6 +33,10 @@ export interface AgentLoopOpts {
   onStopRequested?: () => void;
   /** P-56b: fires when the model starts a tool call before execution. */
   onToolCall?: (toolName: string) => void;
+}
+
+export interface AgentLoopCompletion {
+  finishReason: "stop" | "max_steps" | "aborted";
 }
 
 /**
@@ -174,7 +182,7 @@ export function stalledContinueMessage(): CoreMessage {
  * is a recorded follow-up (PI-LOOP-4) to port into runAgentLoopPi when long-Auto-turn cases
  * actually need it.
  */
-export async function runAgentLoop(opts: AgentLoopOpts): Promise<void> {
+export async function runAgentLoop(opts: AgentLoopOpts): Promise<AgentLoopCompletion> {
   const { runAgentLoopPi } = await import("./pi/loop.js");
-  await runAgentLoopPi(opts);
+  return runAgentLoopPi(opts);
 }
