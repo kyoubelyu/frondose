@@ -190,7 +190,8 @@ else
   rm -f "$SITE_DIR/downloads/Frondose-universal.dmg"
   echo "[build-release] WARNING: no final .dmg — removed any stale installer; portal has no installer this build (updater unaffected)" >&2
 fi
-cp "$REPO_ROOT/website/frondose-landing.html" "$SITE_DIR/index.html"
+# P-OPEN-SOURCE-SPLIT §9.2: the landing page moved to the Web project.
+cp "$REPO_ROOT/projects/web/index.html" "$SITE_DIR/index.html"
 
 SIG_PATH="$SITE_DIR/downloads/Frondose.app.tar.gz.sig" \
 VERSION="$VERSION" \
