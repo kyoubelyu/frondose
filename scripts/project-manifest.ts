@@ -708,7 +708,7 @@ export function validatePublicationContract(input: { projectRoot: string; requir
   if (typeof script !== "string" || script.length === 0) {
     throw new Error(`publication contract requires a check:publication script`);
   }
-  const words = script.split(/\s+/).filter(Boolean);
+  const words = script.split(/\s+/).filter(Boolean).map((word) => word.replace(/^['"]|['"]$/g, ""));
   if (/^\s*(?:echo|true|:|exit|printf)(?=\s|$)/.test(script) || !words.includes("node") || !words.includes("--test")) {
     throw new Error(`check:publication is not a node --test command: ${script}`);
   }
