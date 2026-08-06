@@ -6,19 +6,73 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 // P-OPEN-SOURCE-SPLIT re-home: the four historical serve test files retired with
-// the CLI vertical; the skip-closure contract now covers the 61 `rehome-test`
-// publication carriers from the disposition ledger (the exact set the exported
-// App runs directly at the Step-5 gate — T-SPLIT.2-3 / check:publication).
+// the CLI vertical; the skip-closure contract now covers the 60 ledger-pinned
+// publication carriers (derived from the disposition ledger at build time;
+// inlined so the exported App root — which excludes docs/** — can run it
+// standalone). The 61st rehome-test row is this file itself.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const FILES = (readFileSync(join(REPO_ROOT, "docs/phase-P-OPEN-SOURCE-SPLIT-path-dispositions.tsv"), "utf8")
-  .trim()
-  .split("\n")
-  .slice(1)
-  .map((line) => line.split("\t"))
-  .filter(([path, disposition]) => disposition === "rehome-test")
-  .map(([path]) => path)
-  .filter((path) => path !== "tests/contract/serveSkipClosure.mock.test.ts")
-  .sort()) as readonly string[];
+const FILES = [
+  "tests/agent/pi/loopTimeout-pAutoL3fix.mock.test.ts",
+  "tests/agent/promptFixes.mock.test.ts",
+  "tests/agent/systemResume.mock.test.ts",
+  "tests/agent/workflow/controller-split-shape.mock.test.ts",
+  "tests/app/finalBackend-ownership.mock.test.ts",
+  "tests/app/sidecarImportGraph.mock.test.ts",
+  "tests/app/sidecarMain.mock.test.ts",
+  "tests/app/telegramChannel-migration.mock.test.ts",
+  "tests/auto/phase-auto-16-rls6-cancel.mock.test.ts",
+  "tests/cli/subcommands/serve/agentTurnManualIso-pAutoIsolate.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-autorun-exactly-once.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-autorun-noProgress-faketime.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-markran-failsafe.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-maxSteps.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-noProgress.mock.test.ts",
+  "tests/cli/subcommands/serve/cron-pAuto13.mock.test.ts",
+  "tests/cli/subcommands/serve/cronAutoIsolate-pAutoIsolate.mock.test.ts",
+  "tests/cli/subcommands/serve/cronProgress.mock.test.ts",
+  "tests/cli/subcommands/serve/ipc-contract.mock.test.ts",
+  "tests/cli/subcommands/serve/p-app-8.boot-tolerant.mock.test.ts",
+  "tests/cli/subcommands/serve/per-turn-mode-fragment.mock.test.ts",
+  "tests/cli/subcommands/serve/reapKillCappedRun-pAutoL3fix7.mock.test.ts",
+  "tests/cli/subcommands/serve/reapOrphanIfIdle-pAutoL3fix5.mock.test.ts",
+  "tests/cli/subcommands/serve/routes-characterization.mock.test.ts",
+  "tests/cli/subcommands/serve/routes-split-shape.mock.test.ts",
+  "tests/cli/subcommands/serve/routes/autoStartStop-pAutoIsolate.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-assistantPhase-pUiThinkCompact.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-autoRunCompleted-pWLC.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-identityReload-e2e-pOnboard.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-identityReload-pOnboard.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-operator-maxSteps.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-operator-noProgress-untouched.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-reasoning-pThink.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-silentHang-pAutoL3fix2.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-toolProgress-pAutoL3fix8.mock.test.ts",
+  "tests/cli/subcommands/serve/runOne-turnHeartbeat-pAutoL3fix4.mock.test.ts",
+  "tests/cli/subcommands/serve/runOneOverrideMessages-pAutoIsolate.mock.test.ts",
+  "tests/cli/subcommands/serve/selectSystem.mock.test.ts",
+  "tests/cli/subcommands/serve/stopIntentTurnOwnership-issueStopIntent.mock.test.ts",
+  "tests/cli/subcommands/serve/tcp-transport.mock.test.ts",
+  "tests/cli/subcommands/serve/turn-characterization.mock.test.ts",
+  "tests/cli/subcommands/serve/turn-split-shape.mock.test.ts",
+  "tests/contract/fren5-overlay-protocol.mock.test.ts",
+  "tests/linkedin/scopeResolver.mock.test.ts",
+  "tests/native-port/shadow-delete-orphan.mock.test.ts",
+  "tests/overlay/hideResidual-issueOverlayHideResidual.mock.test.ts",
+  "tests/persistence/mode-p58a.mock.test.ts",
+  "tests/serve/autoAuthorize.mock.test.ts",
+  "tests/serve/autoRunSseFrames.mock.test.ts",
+  "tests/serve/cronAutoRunLifecycle.mock.test.ts",
+  "tests/serve/passivePromptMagical.mock.test.ts",
+  "tests/serve/turnStarted.mock.test.ts",
+  "tests/serve/workflowCancelAutoRun.mock.test.ts",
+  "tests/tauri/tray-p76.1.mock.test.ts",
+  "tests/tauri/two-mode-ui-pY2.1.mock.test.ts",
+  "tests/tauri/ui/assistantAppBindings-pUiThinkCompact.mock.test.ts",
+  "tests/tauri/updater-ui-p58d1.mock.test.ts",
+  "tests/tools/browser/connectSurfaceIntegrity-pAuto6.mock.test.ts",
+  "tests/tools/methodology/qualifyProfile-staleCache.mock.test.ts",
+  "tests/tools/sales/pAuto7-reaper.mock.test.ts"
+] as const;
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
@@ -71,7 +125,7 @@ function skipCallsIn(relativePath: string): number {
 }
 
 describe("P-SERVE-SKIP-CLOSURE completion contract (re-homed)", () => {
-  it("T-ServeSkip.1: the 61 rehome-test publication carriers contain zero runtime skip calls", () => {
+  it("T-ServeSkip.1: the 60 rehome-test publication carriers contain zero runtime skip calls", () => {
     // Given: the ledger-pinned publication carrier set
     // When:  AST traversal counts .skip calls and { skip: true } test options
     // Then:  no runtime skip remains hidden behind comments or formatting
