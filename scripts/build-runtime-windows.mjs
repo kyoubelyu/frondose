@@ -251,8 +251,9 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
         `[build-runtime-win] ABI mismatch after copy: runtime node=${runtimeAbi} sqlite=${expectedSqliteAbi()}`,
       );
     }
-    console.log("[build-runtime-win] loadability check (better-sqlite3 + ssh2)");
-    execFile(runtimeNode, ["-e", "require('better-sqlite3'); require('ssh2');"], {
+    // P-OPEN-SOURCE-SPLIT §9.3: ssh2 retired — probe the kept native addon only.
+    console.log("[build-runtime-win] loadability check (better-sqlite3)");
+    execFile(runtimeNode, ["-e", "require('better-sqlite3');"], {
       cwd: runtime,
       stdio: ["ignore", "inherit", "inherit"],
     });
