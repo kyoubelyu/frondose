@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { after, before, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -387,29 +388,54 @@ describe("every discovered methodology carrier has an explicit compatibility dis
       "a token-free mapped source must be discovered by traversing sources[]",
     );
 
-    const grep = spawnSync(
-      "git",
-      [
-        "grep",
-        "-Il",
-        "-e",
-        "METHODOLOGY_DISTILLATION",
-        "-e",
-        "methodUsed",
-        "-e",
-        "R1-open",
-        "-e",
-        "pain_chain_lean",
-        "-e",
-        "enterprise-mapping",
-        "--",
-        "src",
-        "tests",
-      ],
-      { cwd: process.cwd(), encoding: "utf8" },
-    );
-    assert.equal(grep.status, 0, grep.stderr);
-    const independentlyDiscovered = grep.stdout.trim().split("\n").filter(Boolean);
+    // P-OPEN-SOURCE-SPLIT Step 5: the exported App root is a plain directory (no
+    // .git) — fall back to a token walk there; the writable repo keeps the git
+    // cross-check.
+    const gitCheck = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: process.cwd(), encoding: "utf8" });
+    const isGitRepo = gitCheck.status === 0 && gitCheck.stdout.trim() === "true";
+    const independentlyDiscovered = isGitRepo
+      ? spawnSync(
+          "git",
+          [
+            "grep",
+            "-Il",
+            "-e",
+            "METHODOLOGY_DISTILLATION",
+            "-e",
+            "methodUsed",
+            "-e",
+            "R1-open",
+            "-e",
+            "pain_chain_lean",
+            "-e",
+            "enterprise-mapping",
+            "--",
+            "src",
+            "tests",
+          ],
+          { cwd: process.cwd(), encoding: "utf8" },
+        ).stdout
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+      : (() => {
+          const tokens = ["METHODOLOGY_DISTILLATION", "methodUsed", "R1-open", "pain_chain_lean", "enterprise-mapping"];
+          const hits: string[] = [];
+          const walk = (directory: string): void => {
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+              const full = join(directory, entry.name);
+              if (entry.isDirectory()) {
+                if (entry.name !== "node_modules") walk(full);
+                continue;
+              }
+              if (!/\.(ts|mjs|js|json|map)$/.test(entry.name)) continue;
+              const text = readFileSync(full, "utf8");
+              if (tokens.some((token) => text.includes(token))) hits.push(relative(process.cwd(), full));
+            }
+          };
+          walk(process.cwd());
+          return hits;
+        })();
     assert.ok(independentlyDiscovered.length >= 10, "real repository discovery must be non-empty and broad");
     const realInventory = await inventoryMethodologyCarriers(process.cwd());
     for (const path of independentlyDiscovered) {

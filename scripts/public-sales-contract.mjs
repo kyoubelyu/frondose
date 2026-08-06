@@ -33,11 +33,14 @@ const REVIEWED_DISPOSITIONS = new Map([
   ["src/app/backend/index.ts", "retain"],
   ["src/app/backend/settings.ts", "retain"],
   ["src/app/backend/cron.ts", "retain"],
+  ["src/app/backend/passive.ts", "retain"], // P-OPEN-SOURCE-SPLIT re-home; methodology guidance embedded
   // UI and generated artifacts
   ["src/tauri/ui/settings.ts", "revise-with-stronger-carrier"],
   ["src/tauri/ui/settings.js", "private-excluded"],
   // Carriers
   ["tests/agent/systemPrompt/methodology-repertoire.mock.test.ts", "retain"],
+  ["tests/open-source/public-sales-behavior.mock.test.ts", "retain"], // P-OPEN-SOURCE-SPLIT doctrine oracle carrier
+  ["tests/open-source/sales-doctrine-nonregression.mock.test.ts", "retain"], // P-OPEN-SOURCE-SPLIT doctrine carrier
   ["tests/agent/systemPrompt/soul-icp-precision.mock.test.ts", "retain"],
   ["tests/agent/systemPrompt/soul-rhythm.mock.test.ts", "retain"],
   ["tests/agent/systemPrompt/soul.test.ts", "retain"],
