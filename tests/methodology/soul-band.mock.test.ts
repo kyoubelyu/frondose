@@ -88,7 +88,10 @@ test("T-M_p5.4: composeSoulBand includes key methodology vocabulary substrings",
   };
   const out = composeSoulBand(identity);
 
-  const required = ["R1-open", "qualify_profile", "Pain Chain", "Value Cycle"];
+  // P-OPEN-SOURCE-SPLIT §5.4: the public doctrine renames the private book-derived
+  // "Value Cycle" label to "outcome validation" (banned from the public doctrine by
+  // T-OS.Sales.7); "Pain Chain" survives in the axes section of the Soul base.
+  const required = ["R1-open", "qualify_profile", "Pain Chain", "validate the outcome"];
   for (const token of required) {
     assert.ok(
       out.includes(token),

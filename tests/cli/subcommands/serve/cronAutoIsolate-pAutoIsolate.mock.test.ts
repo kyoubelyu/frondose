@@ -33,11 +33,11 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { before, describe, it } from "node:test";
-import { createCronDriver } from "../../../../src/cli/subcommands/serve/cron.js";
-import { getMemoryDb } from "../../../../src/tools/memory/_dbHandle.js";
+import { createCronDriver } from "../../../../src/app/backend/cron.js";
 import { getMemoryNote, setMemoryNote } from "../../../../src/persistence/memory.js";
 import { insertAutoRun, openSalesDatabase } from "../../../../src/persistence/salesDb.js";
 import { readSchedule } from "../../../../src/persistence/schedule.js";
+import { getMemoryDb } from "../../../../src/tools/memory/_dbHandle.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: mock shapes (state/deps are loosely typed like cron-pAuto13)
 type MockRecord = Record<string, any>;
@@ -200,7 +200,11 @@ describe("createCronDriver — passes a fresh overrideMessages array to runOneTu
       true,
       "overrideMessages[0].content must be the assembled cronPrompt (containing the task text)",
     );
-    assert.notEqual(overrideMessages, state.messages, "overrideMessages must NOT be the same reference as state.messages");
+    assert.notEqual(
+      overrideMessages,
+      state.messages,
+      "overrideMessages must NOT be the same reference as state.messages",
+    );
   });
 });
 
@@ -274,7 +278,11 @@ describe("createCronDriver — injects [PROGRESS SO FAR] from memory.sqlite when
     const { schedulePath, salesDbPath, memoryDbPath } = makeTmpPaths("progress1");
     const memDb = getMemoryDb(memoryDbPath);
     setMemoryNote("auto:progress", NOTE_VALUE, memDb);
-    assert.equal(getMemoryNote("auto:progress", memDb)?.value, NOTE_VALUE, "sanity: note round-trips via existing persistence fns");
+    assert.equal(
+      getMemoryNote("auto:progress", memDb)?.value,
+      NOTE_VALUE,
+      "sanity: note round-trips via existing persistence fns",
+    );
 
     writeDueSchedule(schedulePath, "progress1 task");
     const emittedFrames: unknown[] = [];
@@ -292,7 +300,10 @@ describe("createCronDriver — injects [PROGRESS SO FAR] from memory.sqlite when
     // contains it, regardless of whether a note was actually injected. Search for the
     // injected block's unambiguous signature instead: the "[END PROGRESS]" closing sentinel,
     // which never appears in the soul fragment's exposition, only in the real fenced block.
-    assert.ok(promptText.includes("[END PROGRESS]"), "cronPrompt must contain the injected [PROGRESS SO FAR ...][END PROGRESS] block");
+    assert.ok(
+      promptText.includes("[END PROGRESS]"),
+      "cronPrompt must contain the injected [PROGRESS SO FAR ...][END PROGRESS] block",
+    );
     assert.ok(promptText.includes(NOTE_VALUE), `cronPrompt must contain the note value "${NOTE_VALUE}"`);
   });
 });
@@ -320,7 +331,11 @@ describe("createCronDriver — absent auto:progress note is silent (T-Progress.2
     // block's unambiguous signature ("[END PROGRESS]" sentinel) instead.
     const hasInjectedBlock = promptText.includes("[END PROGRESS]");
 
-    assert.equal(hasInjectedBlock, false, "cronPrompt must NOT contain an injected [PROGRESS SO FAR...][END PROGRESS] block when no note exists");
+    assert.equal(
+      hasInjectedBlock,
+      false,
+      "cronPrompt must NOT contain an injected [PROGRESS SO FAR...][END PROGRESS] block when no note exists",
+    );
   });
 });
 
@@ -364,7 +379,8 @@ describe("createCronDriver — the [PROGRESS SO FAR] block is fenced as untruste
     const fenceIdx = promptText.indexOf(FENCE_LITERAL);
     const injectionIdx = promptText.indexOf(INJECTION);
     const endIdx = promptText.indexOf(END_SENTINEL);
-    const injectionBetween = fenceIdx !== -1 && injectionIdx !== -1 && endIdx !== -1 && fenceIdx < injectionIdx && injectionIdx < endIdx;
+    const injectionBetween =
+      fenceIdx !== -1 && injectionIdx !== -1 && endIdx !== -1 && fenceIdx < injectionIdx && injectionIdx < endIdx;
 
     assert.equal(hasFenceLiteral, true, `cronPrompt must contain the verbatim literal "${FENCE_LITERAL}"`);
     assert.equal(hasEndSentinel, true, `cronPrompt must contain the closing sentinel "${END_SENTINEL}"`);
@@ -394,7 +410,11 @@ describe("createCronDriver — a running turn blocks a cron tick, no overlap (T-
     const driver = createCronDriver(state as any, deps as any, turnStub as any);
     await driver.tick();
 
-    assert.equal(turnStub.calls.length, 0, "a running turn must block the cron tick (no-overlap guard on cron.ts:40-42)");
+    assert.equal(
+      turnStub.calls.length,
+      0,
+      "a running turn must block the cron tick (no-overlap guard on cron.ts:40-42)",
+    );
   });
 });
 
@@ -412,7 +432,11 @@ describe("cron findDueJobs — after stop_auto disables the auto_session record,
     writeDueSchedule(schedulePath, "stopauto4 task");
     // Simulate stop_auto: flip enabled:false on every kind:auto_session record.
     const before1 = readSchedule(schedulePath);
-    const disabled = before1.map((r) => (("kind" in r ? (r as unknown as { kind?: string }).kind : undefined) === "auto_session" ? { ...r, enabled: false } : r));
+    const disabled = before1.map((r) =>
+      ("kind" in r ? (r as unknown as { kind?: string }).kind : undefined) === "auto_session"
+        ? { ...r, enabled: false }
+        : r,
+    );
     writeFileSync(schedulePath, disabled.length === 0 ? "" : `${disabled.map((r) => JSON.stringify(r)).join("\n")}\n`);
 
     const emittedFrames: unknown[] = [];

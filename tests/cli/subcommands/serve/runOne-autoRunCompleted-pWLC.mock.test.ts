@@ -21,8 +21,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type LoopOpts = {
   abortSignal?: AbortSignal;
@@ -56,7 +56,12 @@ before(async () => {
   const piModelUrl = pathToFileURL(join(repoRoot, "src/agent/pi/model.js")).href;
   mock.module(piModelUrl, {
     namedExports: {
-      resolvePiModel: () => ({ model: { id: "deepseek-test" }, apiKey: "test-key", onPayload: (p: unknown) => p, timeoutMs: 120_000 }),
+      resolvePiModel: () => ({
+        model: { id: "deepseek-test" },
+        apiKey: "test-key",
+        onPayload: (p: unknown) => p,
+        timeoutMs: 120_000,
+      }),
     },
   });
 
@@ -66,7 +71,7 @@ before(async () => {
   const injectUrl = pathToFileURL(join(repoRoot, "src/overlay/inject.js")).href;
   mock.module(injectUrl, { namedExports: { callInOverlay: async () => undefined } });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
   const salesDbMod = await import("../../../../src/persistence/salesDb.js");
   openSalesDatabase = salesDbMod.openSalesDatabase as (path: string) => TestDb;
@@ -138,7 +143,10 @@ function endTool(runId: string, alreadyEnded: boolean, status = "completed"): un
   };
 }
 
-function completedFrames(frames: unknown[], runId: string): Array<{ status?: string; summary?: string | null; finalCounters?: unknown }> {
+function completedFrames(
+  frames: unknown[],
+  runId: string,
+): Array<{ status?: string; summary?: string | null; finalCounters?: unknown }> {
   return frames.filter(
     (f): f is { type: string; runId: string; status?: string; summary?: string | null; finalCounters?: unknown } =>
       typeof f === "object" &&
@@ -176,7 +184,11 @@ describe("P-WLC — runOneTurn emits auto-run-completed on agent end_auto_run", 
     const deps = makeDeps(frames, salesDbPath);
     // Mimic the real end_auto_run tool: it mutates the row, then returns the envelope.
     preStep = () => {
-      endAutoRunFn?.(db, runId, { status: "completed", summary: "Run summary: 3 candidates observed, 2 connect_sent.", counters: {} });
+      endAutoRunFn?.(db, runId, {
+        status: "completed",
+        summary: "Run summary: 3 candidates observed, 2 connect_sent.",
+        counters: {},
+      });
     };
     stepToolResults = [endTool(runId, false, "completed")];
 

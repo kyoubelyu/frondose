@@ -46,10 +46,8 @@ async function loadExportedFactories(): Promise<
   const identity = (await import("../../src/persistence/identity.js")) as AnyMod;
   const memory = (await import("../../src/persistence/memory.js")) as AnyMod;
   const session = (await import("../../src/persistence/session.js")) as AnyMod;
-  const workerInbox = (await import("../../src/persistence/workerInbox.js")) as AnyMod;
   const search = (await import("../../src/persistence/search.js")) as AnyMod;
   const github = (await import("../../src/persistence/github.js")) as AnyMod;
-  const serverPaths = (await import("../../src/persistence/serverPaths.js")) as AnyMod;
   const sharedSession = (await import("../../src/persistence/sharedSession.js")) as AnyMod;
   return [
     {
@@ -88,12 +86,8 @@ async function loadExportedFactories(): Promise<
       getter: session.SESSIONS_ROOT,
       expectedRelative: ".frondose/agent/sessions",
     },
-    {
-      name: "WORKER_INBOX_DB_PATH",
-      modulePath: "src/persistence/workerInbox.ts",
-      getter: workerInbox.WORKER_INBOX_DB_PATH,
-      expectedRelative: ".frondose/agent/inbox.sqlite",
-    },
+    // (WORKER_INBOX_DB_PATH — src/persistence/workerInbox.ts — retired with the
+    // fleet worker vertical per the P-OPEN-SOURCE-SPLIT ledger.)
     {
       name: "DEFAULT_SEARCH_CONFIG_PATH",
       modulePath: "src/persistence/search.ts",
@@ -106,12 +100,8 @@ async function loadExportedFactories(): Promise<
       getter: github.DEFAULT_GITHUB_CONFIG_PATH,
       expectedRelative: ".frondose/agent/github.json",
     },
-    {
-      name: "SERVER_ROOT",
-      modulePath: "src/persistence/serverPaths.ts",
-      getter: serverPaths.SERVER_ROOT,
-      expectedRelative: ".frondose/server",
-    },
+    // (SERVER_ROOT — src/persistence/serverPaths.ts — retired with the fleet
+    // server vertical per the P-OPEN-SOURCE-SPLIT ledger.)
     {
       name: "sharedSessionPath",
       modulePath: "src/persistence/sharedSession.ts",
@@ -135,29 +125,13 @@ async function loadExportedFactories(): Promise<
 const T_PATHS_2_PRIVATE_MATRIX = [
   {
     name: "DEFAULT_LOG_PATH (crashLogger)",
-    file: "src/cli/crashLogger.ts",
+    file: "src/app/crashLogger.ts",
     getter: "DEFAULT_LOG_PATH",
     relPathFragment: 'DATA_DIR_NAME, "agent", "logs", "crash.log"',
   },
-  {
-    name: "RELEASES_DIR (autoUpdate)",
-    file: "src/cli/autoUpdate.ts",
-    getter: "RELEASES_DIR",
-    relPathFragment: 'DATA_DIR_NAME, "agent", "releases"',
-  },
-  {
-    name: "UPDATE_LOCK (autoUpdate)",
-    // P-72 slice 9: UPDATE_LOCK moved to src/cli/autoUpdate/lock.ts (barrel split)
-    file: "src/cli/autoUpdate/lock.ts",
-    getter: "UPDATE_LOCK",
-    relPathFragment: 'DATA_DIR_NAME, "agent", "update.lock"',
-  },
-  {
-    name: "UPDATE_LOG (autoUpdate)",
-    file: "src/cli/autoUpdate.ts",
-    getter: "UPDATE_LOG",
-    relPathFragment: 'DATA_DIR_NAME, "agent", "logs", "update.log"',
-  },
+  // (autoUpdate.{RELEASES_DIR,UPDATE_LOCK,UPDATE_LOG} — the CLI autoUpdate
+  // vertical is retired per the P-OPEN-SOURCE-SPLIT ledger; its private getters
+  // are deleted with it. crashLogger's DEFAULT_LOG_PATH is re-homed to src/app/.)
 ] as const;
 
 describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-P52.1, CONCERN-2)", () => {
@@ -223,11 +197,9 @@ describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-
         const importsGetHomeBase =
           text.includes('import { getHomeBase } from "../persistence/paths.js"') ||
           (text.includes("import { getHomeBase }") && text.includes("paths.js")) ||
-          (text.includes("getHomeBase") && /import\s*\{[^}]*getHomeBase[^}]*\}\s*from\s*["'][^"']*paths\.js["']/.test(text));
-        assert.ok(
-          importsGetHomeBase,
-          `${row.file} must import getHomeBase from ../persistence/paths.js`,
-        );
+          (text.includes("getHomeBase") &&
+            /import\s*\{[^}]*getHomeBase[^}]*\}\s*from\s*["'][^"']*paths\.js["']/.test(text));
+        assert.ok(importsGetHomeBase, `${row.file} must import getHomeBase from ../persistence/paths.js`);
         // The getter's declaration line should contain BOTH the getter name
         // AND `getHomeBase()`. Tolerate either `const NAME = ...` or
         // `export const NAME = ...` patterns.
@@ -261,61 +233,7 @@ describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-
   });
 });
 
-// ─── T-Paths.3 ───────────────────────────────────────────────────────────────
-
-describe("telegram.ts:161 mixed-use split — .frondose paths use homeBase, launchd paths use real homedir (G-P52.1, BLOCKER-4)", () => {
-  it("T-Paths.3: src/cli/subcommands/telegram.ts daemon-status region contains BOTH `getHomeBase()` (for .frondose paths like telegram.pid + logs/telegram-daemon.err.log via DATA_DIR_NAME) AND `os.homedir()` (for isDaemonInstalled / plistPath launchd lookups); the pre-P-52 shape of a single `const home = os.homedir()` feeding both data-dir joins AND launchd is absent.", () => {
-    // Given: the source text of src/cli/subcommands/telegram.ts.
-    // When:  the daemon-status region (line 161 region in the post-P-52 file)
-    //        is inspected.
-    // Then:  (a) the region contains `const homeBase = getHomeBase()` (the
-    //            data-dir-resolving variable);
-    //        (b) the region contains `const launchdHome = os.homedir()` (the
-    //            launchd-resolving variable);
-    //        (c) the telegram.pid path is computed under `homeBase` via DATA_DIR_NAME
-    //            (F-REN-4a: path.join(homeBase, DATA_DIR_NAME, "agent", "telegram.pid"));
-    //        (d) `isDaemonInstalled(launchdHome)` and `plistPath(launchdHome)`
-    //            receive the launchd-side variable, NOT homeBase.
-    //
-    // Implementation: extract the daemon-status block (between distinctive
-    // anchors) and run substring + structural checks. The pre-P-52 shape
-    // (single `const home = os.homedir()` feeding both data-dir joins AND
-    // isDaemonInstalled(home)) is asserted absent.
-    const abs = path.join(REPO_ROOT, "src/cli/subcommands/telegram.ts");
-    const text = readFileSync(abs, "utf8");
-
-    // (a)+(b) Both vars co-exist.
-    assert.ok(
-      text.includes("const homeBase = getHomeBase()"),
-      "telegram.ts must declare `const homeBase = getHomeBase()` (the data-dir-resolving variable)",
-    );
-    assert.ok(
-      text.includes("const launchdHome = os.homedir()"),
-      "telegram.ts must declare `const launchdHome = os.homedir()` (the launchd-resolving variable)",
-    );
-
-    // (c) The telegram.pid path is built from `homeBase` via DATA_DIR_NAME (F-REN-4a).
-    // F-REN-4a changed the hard-coded ".mai" to the DATA_DIR_NAME constant.
-    assert.ok(
-      /path\.join\(\s*homeBase\s*,\s*DATA_DIR_NAME\s*,\s*["']agent["']\s*,\s*["']telegram\.pid["']\s*\)/.test(text),
-      "telegram.ts must compute telegram.pid path via path.join(homeBase, DATA_DIR_NAME, 'agent', 'telegram.pid')",
-    );
-
-    // (d) isDaemonInstalled / plistPath receive launchdHome, NOT homeBase.
-    assert.ok(
-      text.includes("isDaemonInstalled(launchdHome)"),
-      "telegram.ts must call isDaemonInstalled(launchdHome) — launchd lookups use real homedir",
-    );
-    assert.ok(
-      text.includes("plistPath(launchdHome)"),
-      "telegram.ts must call plistPath(launchdHome) — launchd plist path under real homedir",
-    );
-
-    // Negative: pre-P-52 shape (single `const home = os.homedir()` feeding
-    // both .mai joins AND isDaemonInstalled(home)) is absent.
-    assert.ok(
-      !text.includes("isDaemonInstalled(home)"),
-      "telegram.ts must NOT pass an undifferentiated `home` to isDaemonInstalled (pre-P-52 shape — would break launchd carve-out when MAI_HOME_BASE is set)",
-    );
-  });
-});
+// ─── T-Paths.3 ─── RETIRED with the CLI telegram subcommand ────────────────
+// (src/cli/subcommands/telegram.ts + the launchd daemon vertical are deleted
+// per the P-OPEN-SOURCE-SPLIT ledger; the inbound Telegram channel is now the
+// App-owned adapter in src/app/backend/telegramChannel.ts.)

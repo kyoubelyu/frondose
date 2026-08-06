@@ -119,10 +119,17 @@ export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: Lega
   }
 
   // (2) Legacy fallback — gather, merge, write, return.
+  const isolatedLegacyDir = legacy ? dirname(path) : undefined;
   const merged = legacyMerged(
-    legacy?.authPath ?? process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
-    legacy?.githubPath ?? process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
-    legacy?.searchPath ?? process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
+    legacy?.authPath ??
+      (isolatedLegacyDir ? join(isolatedLegacyDir, "auth.json") : process.env.FRONDOSE_LEGACY_AUTH_PATH) ??
+      DEFAULT_AUTH_PATH(),
+    legacy?.githubPath ??
+      (isolatedLegacyDir ? join(isolatedLegacyDir, "github.json") : process.env.FRONDOSE_LEGACY_GITHUB_PATH) ??
+      DEFAULT_GITHUB_CONFIG_PATH(),
+    legacy?.searchPath ??
+      (isolatedLegacyDir ? join(isolatedLegacyDir, "search.json") : process.env.FRONDOSE_LEGACY_SEARCH_PATH) ??
+      DEFAULT_SEARCH_CONFIG_PATH(),
     legacy?.defaultCredentialsPath,
   );
   // Check ALL meaningful legacy fields (P-21 `default` / `visionModel` flow
@@ -179,12 +186,10 @@ export function legacyMerged(
   return migrateProviders(applyDefaultCredentials(out, defaultCredentialsPath));
 }
 
-/** P-EMBED-KEYS: layer in the build-embedded default LLM provider + Brave key, but ONLY for
+/** P-EMBED-KEYS: layer in the build-embedded default LLM provider, but ONLY for
  *  fields still unset on `s` — never overrides a user's / legacy config's own values. Called
  *  from BOTH readSecrets branches (the whole-file-absent legacy-merge path, AND the happy path
- *  when secrets.json already exists) so a field that was never seeded/configured — e.g. Brave
- *  on an install that already had secrets.json from before this feature, or before the operator
- *  configured it — still gets backfilled from the embedded default exactly once, per field. */
+ *  when secrets.json already exists). */
 function applyDefaultCredentials(s: SecretsJson, path?: string): SecretsJson {
   const defaults = readDefaultCredentials(path);
   let next = s;
@@ -203,9 +208,6 @@ function applyDefaultCredentials(s: SecretsJson, path?: string): SecretsJson {
         default: next.default ?? `${providerName}:${defaults.llmModel}`,
       };
     }
-  }
-  if (!next.search && defaults.braveKey) {
-    next = { ...next, search: { braveApiKey: defaults.braveKey } };
   }
   return next;
 }

@@ -34,7 +34,7 @@ let endAutoRun: AnyFn;
 let appendAutoLedger: AnyFn;
 
 before(async () => {
-  const cronMod = await import("../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../src/app/backend/cron.js").catch(() => null);
   createCronDriver = cronMod?.createCronDriver ?? null;
 
   const dbMod = await import("../../src/persistence/salesDb.js").catch(() => null);

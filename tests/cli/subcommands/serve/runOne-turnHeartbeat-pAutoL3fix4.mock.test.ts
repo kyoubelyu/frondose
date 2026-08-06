@@ -11,8 +11,8 @@ import * as fs from "node:fs";
 import { join, resolve } from "node:path";
 import { before, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 import { HEARTBEAT_PATH } from "../../../../src/persistence/paths.js";
 import { cleanupTmpDir, makeTmpDir } from "../../../_helpers/tmp.js";
 
@@ -48,17 +48,17 @@ before(async () => {
           const heartbeatPath = HEARTBEAT_PATH();
           const startMtimeMs = fs.statSync(heartbeatPath).mtimeMs;
           mock.timers.tick(5_000);
-          opts.onText?.("first-window-progress");
+          opts.onAssistantPhaseText?.("first-window-progress", "intermediate");
           const afterFirstWindowMtimeMs = fs.statSync(heartbeatPath).mtimeMs;
-          opts.onText?.("rapid-1");
-          opts.onText?.("rapid-2");
+          opts.onAssistantPhaseText?.("rapid-1", "intermediate");
+          opts.onAssistantPhaseText?.("rapid-2", "intermediate");
           opts.onToolCall?.("inspect_page");
           const afterRapidMtimeMs = fs.statSync(heartbeatPath).mtimeMs;
           progressStats = { startMtimeMs, afterFirstWindowMtimeMs, afterRapidMtimeMs };
         }
         if (loopMode === "fs-error") {
           mock.timers.tick(5_000);
-          opts.onText?.("progress-after-start-write-failure");
+          opts.onAssistantPhaseText?.("progress-after-start-write-failure", "intermediate");
         }
         await opts.onStepFinish?.({ toolCalls: [], toolResults: [] });
       },
@@ -114,14 +114,14 @@ before(async () => {
     },
   });
 
-  const reaperUrl = pathToFileURL(`${repoRoot}/src/cli/subcommands/serve/turn/reaper.js`).href;
+  const reaperUrl = pathToFileURL(`${repoRoot}/src/app/backend/turn/reaper.js`).href;
   mock.module(reaperUrl, {
     namedExports: {
       reapExpiredAutoRun: () => undefined,
     },
   });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
 });
 

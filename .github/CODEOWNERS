@@ -1,0 +1,8 @@
+# Default owners for the public repository.
+* @kyoubelyu
+
+# Security-sensitive surfaces require maintainer review.
+/src/tools/ @kyoubelyu
+/src/persistence/ @kyoubelyu
+/scripts/project-manifest.ts @kyoubelyu
+/.github/workflows/ @kyoubelyu

@@ -19,11 +19,26 @@ import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
 import { composeSoulBand } from "../../src/agent/systemPrompt/soul.js";
 
 function extractTriggerHabits(soul: string): string {
+  // The full habits area spans from the first habit line to the mission line and
+  // includes the methodology block between two habit groups; T-Soul.4 scans this
+  // full area for workflow tool names.
   const triggerStart = soul.indexOf("Your habit:");
   const missionStart = soul.indexOf("Your mission on LinkedIn");
   assert.ok(triggerStart > -1, '"Your habit:" must exist in soul band');
   assert.ok(missionStart > -1, '"Your mission on LinkedIn" must exist in soul band');
   return soul.slice(triggerStart, missionStart);
+}
+
+// T-Soul.3's wording rule applies to the FIRST habit block only — the methodology
+// block sits between the two habit groups and carries the doctrine's own wording
+// (e.g. "never invent numbers", required by T-OS.Sales.4), which is not
+// trigger-habit language. Slice to the methodology marker for that check.
+function extractFirstHabitBlock(soul: string): string {
+  const triggerStart = soul.indexOf("Your habit:");
+  const sectionEnd = soul.indexOf("Methodology:");
+  assert.ok(triggerStart > -1, '"Your habit:" must exist in soul band');
+  assert.ok(sectionEnd > -1, '"Methodology:" must exist in soul band');
+  return soul.slice(triggerStart, sectionEnd);
 }
 
 // ─── T-Checkpoint ─────────────────────────────────────────────────────────────
@@ -109,10 +124,13 @@ describe("Soul band — P-39 trigger habits + Night slot (G-P39.10)", () => {
 
   it("T-Soul.3: composeSoulBand(null) trigger-habits section contains no modal or negative command wording", () => {
     // Given: composeSoulBand(null)
-    // When:  only the trigger-habits section is scanned for modal/negative command tokens
+    // When:  only the first trigger-habits block is scanned for modal/negative command tokens
+    //        (the methodology block between the two habit groups carries its own
+    //        doctrine wording, e.g. "never invent numbers" — T-OS.Sales.4 — and is
+    //        not trigger-habit language)
     // Then:  none of must/MUST/do not/don't/don’t/never/forbidden appears in the habits lines
     const soul = composeSoulBand(null);
-    const habitsSection = extractTriggerHabits(soul);
+    const habitsSection = extractFirstHabitBlock(soul);
 
     const forbidden = [
       ["must", /\bmust\b/],

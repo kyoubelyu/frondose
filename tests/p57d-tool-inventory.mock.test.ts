@@ -62,7 +62,7 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
   // power count (full = 54, incl. telegram_notify + gh_issue + report_issue) AND the consumer
   // count (= power - 3 = 51). present_summary remains tier-neutral.
   // (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-  it("T-Inv.1: worker tier:'power' → 54 tools; tier:'consumer' → 51; only telegram_notify + gh_issue + report_issue are gated out", () => {
+  it("T-Inv.1: single-mode App registry tier:'power' → 51 tools; tier:'consumer' → 49; only telegram_notify + gh_issue are gated out", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
@@ -75,33 +75,29 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
       // biome-ignore lint/suspicious/noExplicitAny: minimal ControlSignals subset
     } as any;
 
-    // builder 4b adds `tier` to makeAllTools' opts; typed cast (no `any`) until the contract test catches up.
+    // P-OPEN-SOURCE-SPLIT: single-mode registry; the tier opt is the only mode surface.
     type ToolsOpts = NonNullable<Parameters<typeof makeAllTools>[4]> & { tier?: "consumer" | "power" };
     const power = makeAllTools(makeMockSession(), persistence, control, undefined, {
-      mode: "worker",
       tier: "power",
     } as ToolsOpts);
     const consumer = makeAllTools(makeMockSession(), persistence, control, undefined, {
-      mode: "worker",
       tier: "consumer",
     } as ToolsOpts);
     const powerNames = Object.keys(power);
     const consumerNames = Object.keys(consumer);
 
     // POWER = the full inventory, including present_summary, 17 sales-kernel tools, and
-    // stop_auto (P-REBASE-TOOL-COUNT: added at P-AUTO-ISOLATE).
-    assert.equal(
-      powerNames.length,
-      54,
-      `power worker tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`,
-    );
-    // CONSUMER = power − 3 (telegram_notify + gh_issue + report_issue gated out).
-    assert.equal(consumerNames.length, 51, `consumer = power−3; got ${consumerNames.length}`);
+    // stop_auto (P-REBASE-TOOL-COUNT: added at P-AUTO-ISOLATE). P-OPEN-SOURCE-SPLIT:
+    // report_issue + publish_event + query_lead_globally retired → 51.
+    assert.equal(powerNames.length, 51, `power App tools; got ${powerNames.length}: ${powerNames.sort().join(", ")}`);
+    // CONSUMER = power − 2 (telegram_notify + gh_issue gated out).
+    assert.equal(consumerNames.length, 49, `consumer = power−2; got ${consumerNames.length}`);
 
-    // the 3 operator-output tools: power-only
-    assert.ok("telegram_notify" in power && "gh_issue" in power && "report_issue" in power, "power includes the operator-output tools");
+    // the 2 operator-output tools: power-only; report_issue is retired outright
+    assert.ok("telegram_notify" in power && "gh_issue" in power, "power includes the operator-output tools");
+    assert.ok(!("report_issue" in power), "report_issue is retired (T-RETIRE.Report.1)");
     assert.ok(
-      !("telegram_notify" in consumer) && !("gh_issue" in consumer) && !("report_issue" in consumer),
+      !("telegram_notify" in consumer) && !("gh_issue" in consumer),
       "consumer gates out the operator-output tools",
     );
 

@@ -2,7 +2,7 @@
  * P-AUTO-12 Step 3 scaffold — T-CronProgressHwm.* (G-A12.23)
  *
  * Tests the `cronProgressHighWaterMark(db)` helper from
- * `src/cli/subcommands/serve/cronProgress.ts` (NEW at Step 4).
+ * `src/app/backend/cronProgress.ts` (NEW at Step 4).
  *
  * Gate coverage: G-A12.23
  *
@@ -24,8 +24,8 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { before, describe, it } from "node:test";
 
 // biome-ignore lint/suspicious/noExplicitAny: pre-builder dynamic import
@@ -37,7 +37,7 @@ let closeSalesDatabase: AnyFn | null = null;
 
 before(async () => {
   try {
-    const progressMod = await import("../../../../src/cli/subcommands/serve/cronProgress.js").catch(() => null);
+    const progressMod = await import("../../../../src/app/backend/cronProgress.js").catch(() => null);
     // biome-ignore lint/suspicious/noExplicitAny: pre-builder
     cronProgressHighWaterMark = (progressMod as any)?.cronProgressHighWaterMark ?? null;
   } catch {
@@ -62,7 +62,10 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
     //        1 message_drafts row (created_at=1500), and empty raw_candidates
     // When:  cronProgressHighWaterMark(db) is called
     // Then:  returns {timelineMax:2000, draftsMax:1500, candidatesMax:0}
-    assert.ok(cronProgressHighWaterMark !== null, "cronProgressHighWaterMark must be exported from cronProgress.ts (not yet at Step 3)");
+    assert.ok(
+      cronProgressHighWaterMark !== null,
+      "cronProgressHighWaterMark must be exported from cronProgress.ts (not yet at Step 3)",
+    );
     assert.ok(openSalesDatabase !== null, "openSalesDatabase must be importable from salesDb.ts");
 
     // Use a unique temp-file path per test to avoid the in-process cache sharing rows
@@ -80,14 +83,17 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
 
       // Seed a lead for the message_drafts FK (lead_id is nullable post-v2 migration, so NULL is fine)
       // Seed 2 lead_timeline rows — schema column is `metadata` (not `detail`)
-      db.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'scored', ?, NULL)`)
-        .run(randomUUID(), candidateId, 1000);
-      db.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'promoted_to_lead', ?, NULL)`)
-        .run(randomUUID(), candidateId, 2000);
+      db.prepare(
+        `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'scored', ?, NULL)`,
+      ).run(randomUUID(), candidateId, 1000);
+      db.prepare(
+        `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'promoted_to_lead', ?, NULL)`,
+      ).run(randomUUID(), candidateId, 2000);
 
       // Seed 1 message_drafts row (lead_id nullable after v2 migration)
-      db.prepare(`INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`)
-        .run(randomUUID(), 1500);
+      db.prepare(
+        `INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`,
+      ).run(randomUUID(), 1500);
 
       // raw_candidates has one row with last_seen_at=500 — but this sub-case is "empty raw_candidates for
       // candidatesMax" i.e. candidatesMax should reflect the actual rows. Since we have a row with
@@ -100,16 +106,27 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
       try {
         // Seed a raw_candidate for the timeline FK
         const candidateId2 = randomUUID();
-        db2.prepare(`
+        db2
+          .prepare(`
           INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status)
           VALUES (?, 'Test Person 2', 'https://linkedin.com/in/test2', NULL, 'profile-nav', ?, ?, 'new')
-        `).run(candidateId2, 500, 500);
+        `)
+          .run(candidateId2, 500, 500);
 
-        db2.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'scored', ?, NULL)`)
+        db2
+          .prepare(
+            `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'scored', ?, NULL)`,
+          )
           .run(randomUUID(), candidateId2, 1000);
-        db2.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'promoted_to_lead', ?, NULL)`)
+        db2
+          .prepare(
+            `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, ?, NULL, 'promoted_to_lead', ?, NULL)`,
+          )
           .run(randomUUID(), candidateId2, 2000);
-        db2.prepare(`INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`)
+        db2
+          .prepare(
+            `INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`,
+          )
           .run(randomUUID(), 1500);
 
         // Remove the seeded raw_candidate so candidatesMax reads 0
@@ -118,17 +135,29 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
 
         // Re-seed timeline without raw_candidates (FK check off — WAL + migration sets FK on after v2; disable for this insert)
         db2.pragma("foreign_keys = OFF");
-        db2.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, 'fake-cid-1', NULL, 'scored', ?, NULL)`)
+        db2
+          .prepare(
+            `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, 'fake-cid-1', NULL, 'scored', ?, NULL)`,
+          )
           .run(randomUUID(), 1000);
-        db2.prepare(`INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, 'fake-cid-2', NULL, 'promoted_to_lead', ?, NULL)`)
+        db2
+          .prepare(
+            `INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata) VALUES (?, 'fake-cid-2', NULL, 'promoted_to_lead', ?, NULL)`,
+          )
           .run(randomUUID(), 2000);
         db2.pragma("foreign_keys = ON");
-        db2.prepare(`INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`)
+        db2
+          .prepare(
+            `INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at) VALUES (?, NULL, 'connect_note', 'Hi', 'draft', 'llm', NULL, ?)`,
+          )
           .run(randomUUID(), 1500);
 
         const result = cronProgressHighWaterMark!(db2);
-        assert.deepEqual(result, { timelineMax: 2000, draftsMax: 1500, candidatesMax: 0 },
-          `cronProgressHighWaterMark must return {timelineMax:2000,draftsMax:1500,candidatesMax:0}; got: ${JSON.stringify(result)}`);
+        assert.deepEqual(
+          result,
+          { timelineMax: 2000, draftsMax: 1500, candidatesMax: 0 },
+          `cronProgressHighWaterMark must return {timelineMax:2000,draftsMax:1500,candidatesMax:0}; got: ${JSON.stringify(result)}`,
+        );
       } finally {
         closeSalesDatabase!(dbPath2);
       }
@@ -149,8 +178,11 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
     const db: any = openSalesDatabase!(dbPath);
     try {
       const result = cronProgressHighWaterMark!(db);
-      assert.deepEqual(result, { timelineMax: 0, draftsMax: 0, candidatesMax: 0 },
-        `cronProgressHighWaterMark on empty DB must return all zeros; got: ${JSON.stringify(result)}`);
+      assert.deepEqual(
+        result,
+        { timelineMax: 0, draftsMax: 0, candidatesMax: 0 },
+        `cronProgressHighWaterMark on empty DB must return all zeros; got: ${JSON.stringify(result)}`,
+      );
     } finally {
       closeSalesDatabase!(dbPath);
     }
@@ -173,8 +205,11 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
       `).run(randomUUID(), 8000, 9000);
 
       const result = cronProgressHighWaterMark!(db);
-      assert.deepEqual(result, { timelineMax: 0, draftsMax: 0, candidatesMax: 9000 },
-        `cronProgressHighWaterMark must return candidatesMax=9000; got: ${JSON.stringify(result)}`);
+      assert.deepEqual(
+        result,
+        { timelineMax: 0, draftsMax: 0, candidatesMax: 9000 },
+        `cronProgressHighWaterMark must return candidatesMax=9000; got: ${JSON.stringify(result)}`,
+      );
     } finally {
       closeSalesDatabase!(dbPath);
     }
@@ -197,8 +232,11 @@ describe("T-CronProgressHwm.1: cronProgressHighWaterMark returns MAX timestamps 
       `).run(randomUUID(), 1000, 2000);
 
       const result = cronProgressHighWaterMark!(db);
-      assert.equal(result.candidatesMax, 2000,
-        `candidatesMax must be 2000 (MAX(last_seen_at)), not 1000 (observed_at); got: ${result.candidatesMax}`);
+      assert.equal(
+        result.candidatesMax,
+        2000,
+        `candidatesMax must be 2000 (MAX(last_seen_at)), not 1000 (observed_at); got: ${result.candidatesMax}`,
+      );
     } finally {
       closeSalesDatabase!(dbPath);
     }

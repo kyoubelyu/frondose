@@ -45,7 +45,7 @@ let openSalesDatabase: AnyFn | null = null;
 let insertAutoRun: AnyFn | null = null;
 
 before(async () => {
-  const cronMod = await import("../../../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../../../src/app/backend/cron.js").catch(() => null);
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import
   createCronDriver = (cronMod as any)?.createCronDriver ?? null;
 
@@ -92,11 +92,7 @@ function makeMockState(extra: Partial<MockRecord> = {}): MockRecord {
   };
 }
 
-function makeMockDeps(
-  schedulePath: string,
-  salesDbPath: string,
-  emittedFrames: unknown[],
-): MockRecord {
+function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: unknown[]): MockRecord {
   return {
     model: null,
     system: "test-system",
@@ -158,7 +154,6 @@ function extractCronPrompt(turnStub: { calls: MockRecord[] }): string | null {
 }
 
 describe("T-A13.Cron — cron CONNECTS_USED uses success-only count (G-A13.9, P-AUTO-13)", () => {
-
   // ─── T-A13.Cron.1 — main scenario: 1 success + 2 skipped + 1 failed ────────
   it("T-A13.Cron.1: 1 success + 2 skipped + 1 failed connect_sent rows, maxConnects=5 → cronPrompt contains [CONNECTS_USED=1/5] NOT [CONNECTS_USED=4/5]", async () => {
     // Given: a running auto_run R with maxConnects=5;

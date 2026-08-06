@@ -43,9 +43,9 @@ const tauriConf = JSON.parse(readFileSync(join(REPO, "src/tauri/src-tauri/tauri.
   app?: { trayIcon?: unknown };
 };
 const packageJson = JSON.parse(readFileSync(join(REPO, "package.json"), "utf-8")) as { version?: string };
-const routesSrc = readFileSync(join(REPO, "src/cli/subcommands/serve/routes.ts"), "utf-8");
+const routesSrc = readFileSync(join(REPO, "src/app/backend/routes.ts"), "utf-8");
 // P-72 slice 6: cronEnabled=false on disconnect moved to routes/events.ts; widen T-Belt.1(b) to check EITHER.
-const routesEventsSrc = readFileSync(join(REPO, "src/cli/subcommands/serve/routes/events.ts"), "utf-8");
+const routesEventsSrc = readFileSync(join(REPO, "src/app/backend/routes/events.ts"), "utf-8");
 
 // ─── Source-slicing helpers ───────────────────────────────────────────────────
 
@@ -266,7 +266,7 @@ describe("P-76.1 Quit + ExitRequested still fully shut down (G-P76.1-Tray.4)", (
 
 describe("P-76.1 E4: serve belt unchanged + hide does not flip cron (G-P76.1-Belt.1)", () => {
   it("T-Belt.1: routes.ts has CLIENT_DISCONNECT_GRACE_MS=3000 + cronEnabled=false on disconnect; main.rs close arm has no cronEnabled write", () => {
-    // Given: src/cli/subcommands/serve/routes.ts (the SSE disconnect-belt, already shipped).
+    // Given: src/app/backend/routes.ts (the SSE disconnect-belt, already shipped).
     //        post-builder main.rs CloseRequested arm (hide path).
     // When:  source texts are inspected.
     // Then:  (a) routes.ts CLIENT_DISCONNECT_GRACE_MS === 3000 (belt timing preserved).

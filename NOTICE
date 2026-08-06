@@ -1,0 +1,15 @@
+Frondose
+Copyright 2026 Kyoube Lyu
+
+This product includes software developed by the following third parties,
+licensed under their respective licenses:
+
+- The Vercel AI SDK (https://www.npmjs.com/package/ai) — Apache-2.0
+- The Pi AI agent runtime (@earendil-works/pi-ai) — its package license
+- The Model Context Protocol SDK (@modelcontextprotocol/sdk) — MIT
+- chrome-remote-interface — MIT
+- better-sqlite3 — MIT
+- Tauri (https://tauri.app) — Apache-2.0 / MIT
+
+See package-lock.json and the third-party NOTICE material for the complete
+dependency license inventory.

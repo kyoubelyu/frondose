@@ -6,7 +6,7 @@
  * Step 5:  builder replaces profile-nav branch in passive.ts (F-5 §5.5) → assertions filled.
  *
  * NOTE: `buildPassivePrompt` is currently a PRIVATE function inside the
- * `createPassiveHandlers` closure in `src/cli/subcommands/serve/passive.ts`.
+ * `createPassiveHandlers` closure in `src/app/backend/passive.ts`.
  * For these tests to work, builder must export it as a named export from that
  * module (e.g., `export { buildPassivePrompt }` or move it to module level).
  * This requirement is explicitly documented in the scaffold so builder is aware.
@@ -40,12 +40,12 @@ let buildPassivePrompt: ((eventType: string, ctx: Record<string, unknown>) => st
 // function uses no closure variables and can be safely moved to module scope).
 
 const ROOT = resolve(import.meta.dirname, "../..");
-const PASSIVE_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/passive.ts"), "utf-8");
+const PASSIVE_SRC = readFileSync(resolve(ROOT, "src/app/backend/passive.ts"), "utf-8");
 
 describe("T-SP-C.Passive — buildPassivePrompt Magical-mode profile-nav branch (P-SP-C)", () => {
   before(async () => {
     // Attempt dynamic import — will succeed if builder added the export; no-op otherwise.
-    const mod = await import("../../src/cli/subcommands/serve/passive.js").catch(() => null);
+    const mod = await import("../../src/app/backend/passive.js").catch(() => null);
     if (mod && typeof mod.buildPassivePrompt === "function") {
       buildPassivePrompt = mod.buildPassivePrompt;
     }

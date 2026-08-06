@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { createCronDriver } from "../../../../src/cli/subcommands/serve/cron.js";
+import { createCronDriver } from "../../../../src/app/backend/cron.js";
 import { readSchedule, type ScheduleRecord } from "../../../../src/persistence/schedule.js";
 
 type MockRecord = Record<string, unknown>;

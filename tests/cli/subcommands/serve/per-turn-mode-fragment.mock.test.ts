@@ -24,14 +24,13 @@
 
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { before, describe, it } from "node:test";
-import { mock } from "node:test";
+import { before, describe, it, mock } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BOUNDARY, BOUNDARY_RESUME } from "../../../../src/agent/systemPrompt/boundary.js";
 import { CHECKPOINT, CHECKPOINT_RESUME } from "../../../../src/agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../../../src/agent/systemPrompt/compose.js";
 import { resolveSoulBand, soulModeFragment } from "../../../../src/agent/systemPrompt/soul.js";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
 import { modeFromState } from "../../../../src/tauri/ui/mode.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -174,8 +173,8 @@ before(async () => {
     },
   });
 
-  // 8. Mock src/cli/subcommands/serve/turn/reaper.js — no-op
-  const reaperUrl = pathToFileURL(join(REPO_ROOT, "src/cli/subcommands/serve/turn/reaper.js")).href;
+  // 8. Mock src/app/backend/turn/reaper.js — no-op
+  const reaperUrl = pathToFileURL(join(REPO_ROOT, "src/app/backend/turn/reaper.js")).href;
   mock.module(reaperUrl, {
     namedExports: {
       reapExpiredAutoRun: () => undefined,
@@ -183,7 +182,7 @@ before(async () => {
   });
 
   // 9. Dynamic import createTurnRunner AFTER mocks are registered
-  const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
+  const turnMod = await import("../../../../src/app/backend/turn.js");
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import — shape matches factory sig
   createTurnRunner = (turnMod as any).createTurnRunner as typeof createTurnRunner;
 
@@ -192,7 +191,7 @@ before(async () => {
   // We expose it via a test wrapper that calls analyzePassiveEvent on the returned handlers.
   // Step-4 will make this compile and reach assertion-TODO branch.
   try {
-    const passiveMod = await import("../../../../src/cli/subcommands/serve/passive.js");
+    const passiveMod = await import("../../../../src/app/backend/passive.js");
     // biome-ignore lint/suspicious/noExplicitAny: gate-on-builder — passive module shape TBD
     const passiveModAny = passiveMod as any;
     if (passiveModAny.createPassiveHandlers) {
@@ -248,10 +247,7 @@ function makeState(overrides?: Partial<ServeState>): ServeState {
  * After builder Step 4 added composeOperatorSystem to ServeDeps, we assign it directly
  * (no longer needs a cast).
  */
-function makeSplitDeps(
-  frames: unknown[],
-  bootMode: "manual" | "magical" | "auto" = "manual",
-): ServeDeps {
+function makeSplitDeps(frames: unknown[], bootMode: "manual" | "magical" | "auto" = "manual"): ServeDeps {
   // Oracle: the same computation serve.ts will perform after patch
   const soulBandPlain = resolveSoulBand(null, null); // null → placeholder identity (matches test environment)
   const soulBandWithMode = `${soulBandPlain}\n\n${soulModeFragment(bootMode)}`;
@@ -290,7 +286,9 @@ function makeSplitDeps(
       handleEndpoint: () => ({ status: 200, response: { ok: true } }),
       getState: () => ({ current: null, awaitingApprovalStepId: null }),
     } as unknown as ServeDeps["workflow"],
-    emitFrame: (frame: unknown) => { frames.push(frame); },
+    emitFrame: (frame: unknown) => {
+      frames.push(frame);
+    },
     emitOverlayEvent: () => undefined,
   };
 
@@ -339,7 +337,10 @@ describe("band-split correctness — boot composition removes fragment from syst
     const deps = makeSplitDeps(frames, "auto");
 
     assert.ok(!deps.system.includes(AUTO_MARKER), "system must NOT contain HARD CAPTURE DIRECTIVE (fragment-free)");
-    assert.ok(deps.systemResume.includes(AUTO_MARKER), "systemResume MUST contain HARD CAPTURE DIRECTIVE for bootMode=auto");
+    assert.ok(
+      deps.systemResume.includes(AUTO_MARKER),
+      "systemResume MUST contain HARD CAPTURE DIRECTIVE for bootMode=auto",
+    );
   });
 
   it("T-ModeFrag.4 (G-A8.4): reloadAgentDeps with mode=auto rebuilds system (no fragment), systemResume (has fragment), and refreshes composeOperatorSystem closure", () => {
@@ -376,9 +377,15 @@ describe("band-split correctness — boot composition removes fragment from syst
     deps.composeOperatorSystem = newComposeOperatorSystem;
 
     assert.ok(!deps.system.includes(AUTO_MARKER), "reloaded deps.system must NOT contain HARD CAPTURE DIRECTIVE");
-    assert.ok(deps.systemResume.includes(AUTO_MARKER), "reloaded deps.systemResume MUST contain HARD CAPTURE DIRECTIVE");
+    assert.ok(
+      deps.systemResume.includes(AUTO_MARKER),
+      "reloaded deps.systemResume MUST contain HARD CAPTURE DIRECTIVE",
+    );
     const autoComposed = deps.composeOperatorSystem("auto");
-    assert.ok(autoComposed.includes(AUTO_MARKER), "composeOperatorSystem('auto') must return string with HARD CAPTURE DIRECTIVE");
+    assert.ok(
+      autoComposed.includes(AUTO_MARKER),
+      "composeOperatorSystem('auto') must return string with HARD CAPTURE DIRECTIVE",
+    );
     void frames;
   });
 });
@@ -511,7 +518,10 @@ describe("cron + workflow-resume branches — no double-injection, no resume reg
       "cron turn must receive deps.system exactly (band-only, no per-turn fragment appended)",
     );
     // Verify it is actually fragment-free (belt-and-suspenders; guards double-injection)
-    assert.ok(!capturedPiOpts.system.includes(AUTO_MARKER), "cron deps.system must be fragment-free (cron PROMPT carries the fragment at cron.ts:107)");
+    assert.ok(
+      !capturedPiOpts.system.includes(AUTO_MARKER),
+      "cron deps.system must be fragment-free (cron PROMPT carries the fragment at cron.ts:107)",
+    );
   });
 
   it("T-ModeFrag.9 (G-A8.9): workflow-resume turn receives deps.systemResume regardless of live mode toggle since boot", async () => {
@@ -576,7 +586,10 @@ describe("edge cases — precedence and live-toggle without restart", () => {
     assert.ok(capturedPiOpts, "runAgentLoopPi must have been called");
     const system: string = capturedPiOpts.system;
     // modeFromState: cronEnabled=true → "auto" regardless of passiveEnabled
-    assert.ok(system.includes(AUTO_MARKER), `system must contain "${AUTO_MARKER}" (Auto wins cron-over-passive precedence)`);
+    assert.ok(
+      system.includes(AUTO_MARKER),
+      `system must contain "${AUTO_MARKER}" (Auto wins cron-over-passive precedence)`,
+    );
     assert.ok(!system.includes(MAGICAL_MARKER), `system must NOT contain "${MAGICAL_MARKER}" (passive loses to cron)`);
   });
 
@@ -625,11 +638,18 @@ describe("edge cases — precedence and live-toggle without restart", () => {
     assert.ok(!firstSystem.includes(AUTO_MARKER), `first system must NOT contain "${AUTO_MARKER}"`);
 
     // Second turn: Auto fragment, NOT Manual
-    assert.ok(secondSystem.includes(AUTO_MARKER), `second system must contain "${AUTO_MARKER}" (Auto mode after toggle)`);
+    assert.ok(
+      secondSystem.includes(AUTO_MARKER),
+      `second system must contain "${AUTO_MARKER}" (Auto mode after toggle)`,
+    );
     assert.ok(!secondSystem.includes(MANUAL_MARKER), `second system must NOT contain "${MANUAL_MARKER}"`);
 
     // The M1 failure repro: the two system strings must differ (closure reads live state, not stale boot fragment)
-    assert.notStrictEqual(firstSystem, secondSystem, "live toggle must produce different system strings for consecutive turns");
+    assert.notStrictEqual(
+      firstSystem,
+      secondSystem,
+      "live toggle must produce different system strings for consecutive turns",
+    );
   });
 });
 
@@ -651,10 +671,22 @@ describe("passive path — Magical fragment injected in system for all event typ
 
     // Level 1: verify the closure itself produces the correct Magical system (closure-level contract)
     const magicalSystem = deps.composeOperatorSystem("magical");
-    assert.ok(magicalSystem.includes(MAGICAL_MARKER), `composeOperatorSystem("magical") must contain "${MAGICAL_MARKER}"`);
-    assert.ok(magicalSystem.includes(MAGICAL_OUTBOUND_MARKER), `composeOperatorSystem("magical") must contain "${MAGICAL_OUTBOUND_MARKER}"`);
-    assert.ok(!magicalSystem.includes(AUTO_MARKER), `composeOperatorSystem("magical") must NOT contain "${AUTO_MARKER}"`);
-    assert.ok(!magicalSystem.includes(MANUAL_MARKER), `composeOperatorSystem("magical") must NOT contain "${MANUAL_MARKER}"`);
+    assert.ok(
+      magicalSystem.includes(MAGICAL_MARKER),
+      `composeOperatorSystem("magical") must contain "${MAGICAL_MARKER}"`,
+    );
+    assert.ok(
+      magicalSystem.includes(MAGICAL_OUTBOUND_MARKER),
+      `composeOperatorSystem("magical") must contain "${MAGICAL_OUTBOUND_MARKER}"`,
+    );
+    assert.ok(
+      !magicalSystem.includes(AUTO_MARKER),
+      `composeOperatorSystem("magical") must NOT contain "${AUTO_MARKER}"`,
+    );
+    assert.ok(
+      !magicalSystem.includes(MANUAL_MARKER),
+      `composeOperatorSystem("magical") must NOT contain "${MANUAL_MARKER}"`,
+    );
     // Load-bearing ordering assertion: Magical fragment inside Soul (before Checkpoint)
     assert.ok(
       magicalSystem.indexOf(MAGICAL_MARKER) < magicalSystem.indexOf(CHECKPOINT_MARKER),
@@ -673,7 +705,10 @@ describe("passive path — Magical fragment injected in system for all event typ
       if (capturedPassiveOpts !== null) {
         const passiveSystem: string = capturedPassiveOpts.system;
         assert.ok(passiveSystem.includes(MAGICAL_MARKER), `passive turn system must contain "${MAGICAL_MARKER}"`);
-        assert.ok(passiveSystem.includes(MAGICAL_OUTBOUND_MARKER), `passive turn system must contain "${MAGICAL_OUTBOUND_MARKER}"`);
+        assert.ok(
+          passiveSystem.includes(MAGICAL_OUTBOUND_MARKER),
+          `passive turn system must contain "${MAGICAL_OUTBOUND_MARKER}"`,
+        );
         assert.ok(!passiveSystem.includes(AUTO_MARKER), `passive turn system must NOT contain "${AUTO_MARKER}"`);
         assert.ok(!passiveSystem.includes(MANUAL_MARKER), `passive turn system must NOT contain "${MANUAL_MARKER}"`);
         assert.ok(

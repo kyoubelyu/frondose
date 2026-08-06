@@ -134,7 +134,7 @@ function makeExecFile(scenario: ExecScenario): ExecFile {
       }
       return "";
     }
-    if (argv[0] === "-e" && argv[1]?.includes("require('better-sqlite3')")) return "";
+    if (argv.includes("-e") && argv.some((arg) => arg.includes("better-sqlite3"))) return "";
     return "";
   };
 }
@@ -380,11 +380,15 @@ describe("WIN-7 Windows runtime assembly uses bundled Node ABI", () => {
       const runtimeAbiIndex = scenario.calls.findIndex(
         (call) => call.file === runtimeNode && call.args[0] === "-p" && call.args[1] === "process.versions.modules",
       );
+      const loadabilityProgram =
+        "await import('better-sqlite3'); await import('ssh2'); " +
+        "await import('@modelcontextprotocol/sdk/client/streamableHttp.js')";
       const loadabilityIndex = scenario.calls.findIndex(
         (call) =>
           call.file === runtimeNode &&
-          call.args[0] === "-e" &&
-          call.args[1] === "require('better-sqlite3'); require('ssh2');",
+          call.args[0] === "--input-type=module" &&
+          call.args[1] === "-e" &&
+          call.args[2] === loadabilityProgram,
       );
       assert.ok(installIndex >= 0, "T-WIN7.Runtime.4: npm install must run before runtime loadability checks");
       assert.ok(runtimeAbiIndex > installIndex, "T-WIN7.Runtime.4: runtime ABI guard must run after npm install");
@@ -402,8 +406,9 @@ describe("WIN-7 Windows runtime assembly uses bundled Node ABI", () => {
       const loadabilityCheck = scenario.calls.find(
         (call) =>
           call.file === runtimeNode &&
-          call.args[0] === "-e" &&
-          call.args[1] === "require('better-sqlite3'); require('ssh2');",
+          call.args[0] === "--input-type=module" &&
+          call.args[1] === "-e" &&
+          call.args[2] === loadabilityProgram,
       );
       assert.ok(loadabilityCheck, "T-WIN7.Runtime.4: native dependency require check must run under runtime node.exe");
       assert.equal(

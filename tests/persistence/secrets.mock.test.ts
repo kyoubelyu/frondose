@@ -51,7 +51,9 @@ function restoreEnv(saved: Record<string, string | undefined>): void {
 }
 
 const posixPermissionsOptions: { skip?: string } =
-  process.platform === "win32" ? { skip: "POSIX chmod/read-only directory semantics are not portable to Windows." } : {};
+  process.platform === "win32"
+    ? { skip: "POSIX chmod/read-only directory semantics are not portable to Windows." }
+    : {};
 
 // ─── T-SECRETS.1 ─────────────────────────────────────────────────────────────
 
@@ -161,7 +163,6 @@ describe("readSecrets — malformed JSON → stderr + defaults (G-P24.8)", () =>
         stderr.includes("corrupt or invalid"),
         `T-SECRETS.4: stderr must contain 'corrupt or invalid'; got: "${stderr}"`,
       );
-      // biome-ignore lint/style/noNonNullAssertion: assigned in try block, test fails before this if not set
       assert.deepEqual(result!, { schema_version: 1 }, "T-SECRETS.4: must return default {schema_version:1}");
     } finally {
       restoreEnv(saved);
@@ -202,7 +203,6 @@ describe("readSecrets — schema_version forward-compat → stderr + defaults (G
       }
       const stderr = stderrChunks.join("");
       assert.ok(stderr.length > 0, `T-SECRETS.5: stderr must contain a warning; got empty string`);
-      // biome-ignore lint/style/noNonNullAssertion: assigned in try block
       assert.deepEqual(result!, { schema_version: 1 }, "T-SECRETS.5: must return default {schema_version:1}");
     } finally {
       restoreEnv(saved);
@@ -218,46 +218,46 @@ describe("writeSecrets — directory read-only: original unchanged; error propag
     "T-SECRETS.6: when writeSecrets is called and the target directory is read-only (EACCES), original secrets.json unchanged and error propagates",
     posixPermissionsOptions,
     () => {
-    // Given: existing secrets.json with {schema_version:1, default:'anthropic:claude-sonnet-4-5'}
-    //        directory made read-only (0o555) to trigger EACCES on tmp file creation
-    // When:  writeSecrets({schema_version:1, default:'new-model'}, secretsPath)
-    // Then:  error propagates to caller; original secrets.json content unchanged
-    // Note:  This exercises the EACCES path via directory permissions (not renameSync mock,
-    //        which is blocked by ESM live bindings). Invariant is identical: write fails → original preserved.
-    const { dir, secretsPath, cleanup } = makeTmpDir();
-    try {
-      writeFileSync(
-        secretsPath,
-        JSON.stringify({ schema_version: 1, default: "anthropic:claude-sonnet-4-5" }),
-        "utf-8",
-      );
-      const origContent = readFileSync(secretsPath, "utf-8");
+      // Given: existing secrets.json with {schema_version:1, default:'anthropic:claude-sonnet-4-5'}
+      //        directory made read-only (0o555) to trigger EACCES on tmp file creation
+      // When:  writeSecrets({schema_version:1, default:'new-model'}, secretsPath)
+      // Then:  error propagates to caller; original secrets.json content unchanged
+      // Note:  This exercises the EACCES path via directory permissions (not renameSync mock,
+      //        which is blocked by ESM live bindings). Invariant is identical: write fails → original preserved.
+      const { dir, secretsPath, cleanup } = makeTmpDir();
+      try {
+        writeFileSync(
+          secretsPath,
+          JSON.stringify({ schema_version: 1, default: "anthropic:claude-sonnet-4-5" }),
+          "utf-8",
+        );
+        const origContent = readFileSync(secretsPath, "utf-8");
 
-      // Make directory read-only → writeFileSync(tmp, ...) will fail with EACCES
-      chmodSync(dir, 0o555);
-      let threw = false;
-      try {
-        writeSecrets({ schema_version: 1, default: "new-model" }, secretsPath);
-      } catch (e) {
-        threw = true;
-        assert.ok(e instanceof Error, "T-SECRETS.6: thrown value must be an Error");
+        // Make directory read-only → writeFileSync(tmp, ...) will fail with EACCES
+        chmodSync(dir, 0o555);
+        let threw = false;
+        try {
+          writeSecrets({ schema_version: 1, default: "new-model" }, secretsPath);
+        } catch (e) {
+          threw = true;
+          assert.ok(e instanceof Error, "T-SECRETS.6: thrown value must be an Error");
+        } finally {
+          chmodSync(dir, 0o755); // restore before reads
+        }
+        assert.ok(threw, "T-SECRETS.6: writeSecrets must throw when directory is read-only");
+        assert.equal(
+          readFileSync(secretsPath, "utf-8"),
+          origContent,
+          "T-SECRETS.6: original secrets.json must be unchanged after error",
+        );
       } finally {
-        chmodSync(dir, 0o755); // restore before reads
+        try {
+          chmodSync(dir, 0o755);
+        } catch {
+          /* already restored */
+        }
+        cleanup();
       }
-      assert.ok(threw, "T-SECRETS.6: writeSecrets must throw when directory is read-only");
-      assert.equal(
-        readFileSync(secretsPath, "utf-8"),
-        origContent,
-        "T-SECRETS.6: original secrets.json must be unchanged after error",
-      );
-    } finally {
-      try {
-        chmodSync(dir, 0o755);
-      } catch {
-        /* already restored */
-      }
-      cleanup();
-    }
     },
   );
 });

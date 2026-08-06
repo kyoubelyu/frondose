@@ -2,7 +2,7 @@
  * P-72 slice 6 Step 3a — routes-split-shape.mock.test.ts
  *
  * SPLIT-SHAPE TESTS (7 TODO scaffolds) for the post-split structure of
- * `src/cli/subcommands/serve/routes.ts` + `src/cli/subcommands/serve/routes/**`.
+ * `src/app/backend/routes.ts` + `src/app/backend/routes/**`.
  *
  * These tests FAIL today (pre-split: routes/ directory does not exist, modules not split).
  * They MUST PASS at Step 4 (post-builder Step 3b).
@@ -28,8 +28,8 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
-const ROUTES_TS = join(REPO, "src", "cli", "subcommands", "serve", "routes.ts");
-const ROUTES_DIR = join(REPO, "src", "cli", "subcommands", "serve", "routes");
+const ROUTES_TS = join(REPO, "src", "app", "backend", "routes.ts");
+const ROUTES_DIR = join(REPO, "src", "app", "backend", "routes");
 
 /** Files in the post-split structure (§4.1). */
 const ROUTE_MODULE_FILES = [
@@ -91,7 +91,7 @@ describe("routes.ts public surface after split (G-P72s6.5)", () => {
 
     assert.ok(existsSync(ROUTES_DIR), `routes/ directory must exist (post-split): ${ROUTES_DIR}`);
 
-    const routesMod = (await import("../../../../src/cli/subcommands/serve/routes.js")) as Record<string, unknown>;
+    const routesMod = (await import("../../../../src/app/backend/routes.js")) as Record<string, unknown>;
 
     assert.equal(typeof routesMod.createRequestHandler, "function", "createRequestHandler is a function");
     assert.equal(typeof routesMod.ensureOverlaySubscription, "function", "ensureOverlaySubscription is exported");
@@ -272,7 +272,7 @@ describe("serve.ts still resolves createRequestHandler + ensureOverlaySubscripti
     assert.ok(existsSync(ROUTES_DIR), `routes/ directory must exist (post-split): ${ROUTES_DIR}`);
 
     // Force fresh import by using the .js extension (tsx resolves .ts too)
-    const mod = (await import("../../../../src/cli/subcommands/serve/routes.js")) as Record<string, unknown>;
+    const mod = (await import("../../../../src/app/backend/routes.js")) as Record<string, unknown>;
 
     const crh = mod.createRequestHandler as ((...args: unknown[]) => unknown) | undefined;
     assert.equal(typeof crh, "function", "createRequestHandler is a function");
@@ -429,9 +429,10 @@ describe("each routes/*.ts exports its planned named functions (G-P72s6.5)", () 
 
     for (const [fileName, expectedNames] of Object.entries(EXPECTED_EXPORTS)) {
       // Import each as a module
-      const mod = (await import(
-        `../../../../src/cli/subcommands/serve/routes/${fileName.replace(".ts", ".js")}`
-      )) as Record<string, unknown>;
+      const mod = (await import(`../../../../src/app/backend/routes/${fileName.replace(".ts", ".js")}`)) as Record<
+        string,
+        unknown
+      >;
 
       for (const name of expectedNames) {
         assert.equal(typeof mod[name], "function", `routes/${fileName}: ${name} must be exported as a function`);

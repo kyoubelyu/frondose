@@ -19,8 +19,8 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -63,7 +63,13 @@ const MODULE_IMPORT_PATHS = {
 // Type-only symbols are validated via the barrel's `export type { ... }` blocks
 // which are checked by `npm run check` (tsc). See plan §5 T-P72s4.Barrel.1.
 const VALUE_SYMBOLS_BY_MODULE: Record<string, string[]> = {
-  schema: ["DEFAULT_SALES_DB_PATH", "CURRENT_SCHEMA_VERSION", "CURRENT_SALES_SCHEMA_VERSION", "openSalesDatabase", "closeSalesDatabase"],
+  schema: [
+    "DEFAULT_SALES_DB_PATH",
+    "CURRENT_SCHEMA_VERSION",
+    "CURRENT_SALES_SCHEMA_VERSION",
+    "openSalesDatabase",
+    "closeSalesDatabase",
+  ],
   urlNormalize: ["normalizeProfileUrl"],
   rawCandidates: ["upsertRawCandidate", "getRawCandidate", "setCandidateStatus"],
   leads: ["insertLead", "getLeadByCandidate", "getLead", "updateLeadStage", "setLeadFollowUp", "listDueFollowUps"],
@@ -71,7 +77,15 @@ const VALUE_SYMBOLS_BY_MODULE: Record<string, string[]> = {
   timeline: ["appendTimelineEvent", "listTimelineByLead", "listTimelineByAccount"],
   accounts: ["getAccount", "countLeadsByAccount"],
   scores: ["getLatestScoreByCandidate"],
-  autoRun: ["getCurrentAutoRun", "getAutoRun", "appendAutoLedger", "countAutoLedgerByAction", "insertAutoRun", "updateAutoRunStatus", "endAutoRun"],
+  autoRun: [
+    "getCurrentAutoRun",
+    "getAutoRun",
+    "appendAutoLedger",
+    "countAutoLedgerByAction",
+    "insertAutoRun",
+    "updateAutoRunStatus",
+    "endAutoRun",
+  ],
 };
 
 // ─── T-P72s4.Resolve.1 ────────────────────────────────────────────────────────
@@ -83,7 +97,7 @@ describe("T-P72s4.Resolve — per-module files export their §3.1 symbol sets", 
     // Then:  for each module, Object.keys() is a superset of the value symbols in §3.1
     for (const [moduleKey, importPath] of Object.entries(MODULE_IMPORT_PATHS)) {
       // biome-ignore lint/suspicious/noExplicitAny: dynamic import for runtime inspection
-      const mod = await import(importPath) as Record<string, any>;
+      const mod = (await import(importPath)) as Record<string, any>;
       const keys = Object.keys(mod);
       const expectedSymbols = VALUE_SYMBOLS_BY_MODULE[moduleKey] ?? [];
       for (const sym of expectedSymbols) {
@@ -101,12 +115,8 @@ describe("T-P72s4.Resolve — per-module files export their §3.1 symbol sets", 
     // Then:  typeof module.endAutoRun === 'function' and AutoRunStatus is NOT a runtime key
     //        (AutoRunStatus is a string-literal type; it vanishes at runtime — no collision)
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for runtime inspection
-    const mod = await import("../../src/persistence/sales/auto-run.js") as Record<string, any>;
-    assert.strictEqual(
-      typeof mod.endAutoRun,
-      "function",
-      "auto-run module must export endAutoRun as a function",
-    );
+    const mod = (await import("../../src/persistence/sales/auto-run.js")) as Record<string, any>;
+    assert.strictEqual(typeof mod.endAutoRun, "function", "auto-run module must export endAutoRun as a function");
     // AutoRunStatus is a type alias (string literal union) — it has no runtime artifact
     assert.strictEqual(
       mod.AutoRunStatus,
@@ -124,12 +134,16 @@ describe("T-P72s4.Barrel — every pre-split value symbol importable from salesD
     // When:  `const m = await import('../../src/persistence/salesDb.js')` runs
     // Then:  for every value symbol in VALUE_SYMBOLS_BY_MODULE, typeof m[name] is 'function' or 'string'/'number'
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for runtime inspection
-    const m = await import("../../src/persistence/salesDb.js") as Record<string, any>;
+    const m = (await import("../../src/persistence/salesDb.js")) as Record<string, any>;
 
     // Constants from schema module
     assert.strictEqual(typeof m.DEFAULT_SALES_DB_PATH, "function", "DEFAULT_SALES_DB_PATH must be a function");
     assert.strictEqual(typeof m.CURRENT_SCHEMA_VERSION, "number", "CURRENT_SCHEMA_VERSION must be a number");
-    assert.strictEqual(typeof m.CURRENT_SALES_SCHEMA_VERSION, "number", "CURRENT_SALES_SCHEMA_VERSION must be a number");
+    assert.strictEqual(
+      typeof m.CURRENT_SALES_SCHEMA_VERSION,
+      "number",
+      "CURRENT_SALES_SCHEMA_VERSION must be a number",
+    );
     // Lifecycle fns
     assert.strictEqual(typeof m.openSalesDatabase, "function", "openSalesDatabase must be a function");
     assert.strictEqual(typeof m.closeSalesDatabase, "function", "closeSalesDatabase must be a function");
@@ -182,7 +196,7 @@ describe("T-P72s4.Barrel — every pre-split value symbol importable from salesD
     // When:  barrel is imported and each name is accessed
     // Then:  all 11 are typeof 'function'; none is undefined
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for runtime inspection
-    const m = await import("../../src/persistence/salesDb.js") as Record<string, any>;
+    const m = (await import("../../src/persistence/salesDb.js")) as Record<string, any>;
 
     // Exact 11 symbols from Phase 16 characterization test (lines 35-47)
     const phase16Symbols = [
@@ -201,7 +215,11 @@ describe("T-P72s4.Barrel — every pre-split value symbol importable from salesD
 
     for (const sym of phase16Symbols) {
       assert.notStrictEqual(m[sym], undefined, `Phase 16 symbol '${sym}' must not be undefined via barrel`);
-      assert.strictEqual(typeof m[sym], "function", `Phase 16 symbol '${sym}' must be a function; got typeof=${typeof m[sym]}`);
+      assert.strictEqual(
+        typeof m[sym],
+        "function",
+        `Phase 16 symbol '${sym}' must be a function; got typeof=${typeof m[sym]}`,
+      );
     }
   });
 });
@@ -218,9 +236,7 @@ describe("T-P72s4.NoCircular — no circular imports between the 9 sales modules
     function parseRelativeImports(filePath: string): string[] {
       const src = readFileSync(filePath, "utf8");
       const matches = [...src.matchAll(/from\s+"(\.[^"]+)"/g)];
-      return matches
-        .map((m) => m[1] as string)
-        .filter((p) => p.startsWith("./") || p.startsWith("../"));
+      return matches.map((m) => m[1] as string).filter((p) => p.startsWith("./") || p.startsWith("../"));
     }
 
     // Resolve a relative import path to a canonical module key within sales/
@@ -247,18 +263,11 @@ describe("T-P72s4.NoCircular — no circular imports between the 9 sales modules
     for (const key of moduleKeys) {
       const filePath = MODULE_PATHS[key];
       const imports = parseRelativeImports(filePath);
-      adjacency[key] = imports
-        .map((p) => resolveToKey(filePath, p))
-        .filter((k): k is string => k !== null);
+      adjacency[key] = imports.map((p) => resolveToKey(filePath, p)).filter((k): k is string => k !== null);
     }
 
     // DFS cycle detection — returns the cycle path if found, null if acyclic
-    function findCycle(
-      node: string,
-      visited: Set<string>,
-      stack: Set<string>,
-      path: string[],
-    ): string[] | null {
+    function findCycle(node: string, visited: Set<string>, stack: Set<string>, path: string[]): string[] | null {
       visited.add(node);
       stack.add(node);
       path.push(node);
@@ -280,11 +289,7 @@ describe("T-P72s4.NoCircular — no circular imports between the 9 sales modules
     for (const key of moduleKeys) {
       if (!visited.has(key)) {
         const cycle = findCycle(key, visited, new Set<string>(), []);
-        assert.strictEqual(
-          cycle,
-          null,
-          `Circular import detected in sales modules: ${cycle?.join(" -> ")}`,
-        );
+        assert.strictEqual(cycle, null, `Circular import detected in sales modules: ${cycle?.join(" -> ")}`);
       }
     }
 
@@ -338,10 +343,7 @@ describe("T-P72s4.NoCircular — no circular imports between the 9 sales modules
       "./sales/auto-run.js",
     ];
     for (const imp of expectedBarrelImports) {
-      assert.ok(
-        barrelSrc.includes(imp),
-        `Barrel must import '${imp}'; not found in salesDb.ts`,
-      );
+      assert.ok(barrelSrc.includes(imp), `Barrel must import '${imp}'; not found in salesDb.ts`);
     }
   });
 });
@@ -376,7 +378,11 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     );
 
     closeSalesDatabase(tmpPath);
-    try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* cleanup best-effort */
+    }
   });
 
   it("T-P72s4.Schema.1 edge: schema_version MAX(version) is 4 after open (applyV1+V2+V3+V4 all ran)", async () => {
@@ -450,7 +456,11 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     assert.strictEqual(row.maxVersion, 4, "schema_version MAX(version) must be 4 — applyV1+V2+V3+V4 must have run");
 
     closeSalesDatabase(tmpPath);
-    try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* cleanup best-effort */
+    }
   });
 
   it("T-P72s4.Schema.1 edge: message_drafts.lead_id is nullable AND kind CHECK includes 'post' (applyV2 invariant)", async () => {
@@ -461,9 +471,9 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     const tmpPath = join(tmpdir(), `p72s4-schema3-${randomUUID()}.sqlite`);
     const db = openSalesDatabase(tmpPath);
 
-    const row = db
-      .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_drafts'")
-      .get() as { sql: string };
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_drafts'").get() as {
+      sql: string;
+    };
 
     assert.ok(row, "message_drafts table must exist in sqlite_master");
     // Verify lead_id is nullable (absence of NOT NULL after lead_id column)
@@ -472,13 +482,14 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
       `message_drafts.lead_id must be nullable (no NOT NULL); DDL: ${row.sql}`,
     );
     // Verify 'post' is in the kind CHECK enum (applyV2 invariant)
-    assert.ok(
-      row.sql.includes("'post'"),
-      `message_drafts.kind CHECK must include 'post' (applyV2); DDL: ${row.sql}`,
-    );
+    assert.ok(row.sql.includes("'post'"), `message_drafts.kind CHECK must include 'post' (applyV2); DDL: ${row.sql}`);
 
     closeSalesDatabase(tmpPath);
-    try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* cleanup best-effort */
+    }
   });
 
   it("T-P72s4.Schema.1 edge: named partial indexes idx_drafts_lead, idx_drafts_status, idx_timeline_lead (partial), idx_leads_due (partial), idx_ledger_lead (partial) all exist", async () => {
@@ -489,9 +500,9 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     const tmpPath = join(tmpdir(), `p72s4-schema4-${randomUUID()}.sqlite`);
     const db = openSalesDatabase(tmpPath);
 
-    const rows = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")
-      .all() as Array<{ name: string }>;
+    const rows = db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{
+      name: string;
+    }>;
     const indexNames = rows.map((r) => r.name);
 
     const requiredIndexes = [
@@ -510,7 +521,11 @@ describe("T-P72s4.Schema — openSalesDatabase creates same tables, indexes, and
     }
 
     closeSalesDatabase(tmpPath);
-    try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* cleanup best-effort */
+    }
   });
 });
 
@@ -527,23 +542,34 @@ describe("T-P72s4.Importer — representative importer sample compiles and resol
     // When:  each file is dynamically imported via tsx
     // Then:  no ERR_MODULE_NOT_FOUND or TypeError; each imported function is typeof 'function'
 
-    // Analytics CLI — imports DEFAULT_SALES_DB_PATH, closeSalesDatabase, openSalesDatabase
+    // App backend owner — imports DEFAULT_SALES_DB_PATH, closeSalesDatabase, openSalesDatabase
+    // (P-OPEN-SOURCE-SPLIT: the analytics CLI importer is retired with the CLI vertical;
+    // src/app/backend/index.js is the final App owner of the salesDb imports.)
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
-    const analyticsMod = await import("../../src/cli/subcommands/analytics.js") as Record<string, any>;
-    assert.strictEqual(typeof analyticsMod.runAnalyticsSubcommand, "function",
-      "analytics.ts must export runAnalyticsSubcommand as a function");
+    const backendMod = (await import("../../src/app/backend/index.js")) as Record<string, any>;
+    assert.strictEqual(
+      typeof backendMod.runServeSubcommand,
+      "function",
+      "backend/index.ts must export runServeSubcommand (runAppBackend) as a function",
+    );
 
     // recordRawCandidate.ts — imports appendTimelineEvent, getRawCandidate, upsertRawCandidate from barrel
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
-    const recordRawMod = await import("../../src/tools/sales/recordRawCandidate.js") as Record<string, any>;
-    assert.strictEqual(typeof recordRawMod.makeRecordRawCandidateTool, "function",
-      "recordRawCandidate.ts must export makeRecordRawCandidateTool as a function");
+    const recordRawMod = (await import("../../src/tools/sales/recordRawCandidate.js")) as Record<string, any>;
+    assert.strictEqual(
+      typeof recordRawMod.makeRecordRawCandidateTool,
+      "function",
+      "recordRawCandidate.ts must export makeRecordRawCandidateTool as a function",
+    );
 
     // endAutoRun.ts — imports countAutoLedgerByAction, endAutoRun, getAutoRun from barrel
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
-    const endAutoRunMod = await import("../../src/tools/sales/endAutoRun.js") as Record<string, any>;
-    assert.strictEqual(typeof endAutoRunMod.makeEndAutoRunTool, "function",
-      "endAutoRun.ts must export makeEndAutoRunTool as a function");
+    const endAutoRunMod = (await import("../../src/tools/sales/endAutoRun.js")) as Record<string, any>;
+    assert.strictEqual(
+      typeof endAutoRunMod.makeEndAutoRunTool,
+      "function",
+      "endAutoRun.ts must export makeEndAutoRunTool as a function",
+    );
 
     // tests/sales/salesDb.schema.test.ts — verify the import block (CURRENT_SCHEMA_VERSION etc.) resolves
     // via the barrel by statically reading the import lines + confirming the barrel exports match.
@@ -551,25 +577,37 @@ describe("T-P72s4.Importer — representative importer sample compiles and resol
     // as side effects, inflating the skip count in the full test:fast suite run.
     // Instead, verify the key symbol (CURRENT_SCHEMA_VERSION) directly via the barrel:
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
-    const barrelForSchemaCheck = await import("../../src/persistence/salesDb.js") as Record<string, any>;
+    const barrelForSchemaCheck = (await import("../../src/persistence/salesDb.js")) as Record<string, any>;
     // P-MSG-SEND-LEDGER: CURRENT_SCHEMA_VERSION bumped from 3 to 4 (reflects nullable run_id applyV4)
     assert.strictEqual(
       barrelForSchemaCheck.CURRENT_SCHEMA_VERSION,
       4,
       "CURRENT_SCHEMA_VERSION must be 4 via barrel (P-MSG-SEND-LEDGER bump — runner now reaches v4)",
     );
-    assert.strictEqual(typeof barrelForSchemaCheck.closeSalesDatabase, "function",
-      "closeSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)");
-    assert.strictEqual(typeof barrelForSchemaCheck.openSalesDatabase, "function",
-      "openSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)");
+    assert.strictEqual(
+      typeof barrelForSchemaCheck.closeSalesDatabase,
+      "function",
+      "closeSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)",
+    );
+    assert.strictEqual(
+      typeof barrelForSchemaCheck.openSalesDatabase,
+      "function",
+      "openSalesDatabase must be callable via barrel (salesDb.schema.test.ts imports this)",
+    );
 
     // tests/sales/leadContext.test.ts — verify its imports resolve via the barrel
     // (appendTimelineEvent, closeSalesDatabase, insertLead, openSalesDatabase)
     // Again: do NOT dynamic-import the test file — it would register tests as side effects.
-    assert.strictEqual(typeof barrelForSchemaCheck.appendTimelineEvent, "function",
-      "appendTimelineEvent must be callable via barrel (leadContext.test.ts imports this)");
-    assert.strictEqual(typeof barrelForSchemaCheck.insertLead, "function",
-      "insertLead must be callable via barrel (leadContext.test.ts imports this)");
+    assert.strictEqual(
+      typeof barrelForSchemaCheck.appendTimelineEvent,
+      "function",
+      "appendTimelineEvent must be callable via barrel (leadContext.test.ts imports this)",
+    );
+    assert.strictEqual(
+      typeof barrelForSchemaCheck.insertLead,
+      "function",
+      "insertLead must be callable via barrel (leadContext.test.ts imports this)",
+    );
   });
 
   it("T-P72s4.Importer.1 edge: tests/sales/_fixtures/salesDb.ts dynamic import resolves openSalesDatabase through the barrel", async () => {
@@ -577,7 +615,7 @@ describe("T-P72s4.Importer — representative importer sample compiles and resol
     // When:  the fixture module is loaded
     // Then:  openSalesDatabase is a function and mkTestSalesDb can be called without throw
     // biome-ignore lint/suspicious/noExplicitAny: dynamic import for resolution check
-    const fixtureMod = await import("../../tests/sales/_fixtures/salesDb.js") as Record<string, any>;
+    const fixtureMod = (await import("../../tests/sales/_fixtures/salesDb.js")) as Record<string, any>;
     assert.strictEqual(
       typeof fixtureMod.mkTestSalesDb,
       "function",
@@ -638,14 +676,8 @@ describe("T-P72s4.LoCBudget — per-domain modules are within §3.1 LoC budgets"
 
       const lineCount = readFileSync(filePath, "utf8").split("\n").length;
       const budget = LOC_BUDGETS[key];
-      assert.ok(
-        budget !== undefined,
-        `No LoC budget defined for key '${key}' — update LOC_BUDGETS`,
-      );
-      assert.ok(
-        lineCount <= budget!,
-        `Module '${key}' (${filePath}) has ${lineCount} lines but budget is ${budget!}`,
-      );
+      assert.ok(budget !== undefined, `No LoC budget defined for key '${key}' — update LOC_BUDGETS`);
+      assert.ok(lineCount <= budget!, `Module '${key}' (${filePath}) has ${lineCount} lines but budget is ${budget!}`);
     }
   });
 });
@@ -659,8 +691,15 @@ describe("T-P72s4.UrlNormalize — normalizeProfileUrl callable via raw-candidat
     //        then insertLead is called with the same raw URL (leads path)
     // Then:  both stored profile_url values === normalizeProfileUrl(rawUrl)
     //        (confirms both modules correctly import from url-normalize.ts)
-    const { openSalesDatabase, closeSalesDatabase, upsertRawCandidate, insertLead, normalizeProfileUrl,
-            getRawCandidate, getLead } = await import("../../src/persistence/salesDb.js");
+    const {
+      openSalesDatabase,
+      closeSalesDatabase,
+      upsertRawCandidate,
+      insertLead,
+      normalizeProfileUrl,
+      getRawCandidate,
+      getLead,
+    } = await import("../../src/persistence/salesDb.js");
 
     // Use a temp file path to guarantee isolation from other tests in the same process
     const tmpPath = join(tmpdir(), `p72s4-urlnorm1-${randomUUID()}.sqlite`);
@@ -707,7 +746,11 @@ describe("T-P72s4.UrlNormalize — normalizeProfileUrl callable via raw-candidat
     );
 
     closeSalesDatabase(tmpPath);
-    try { unlinkSync(tmpPath); } catch { /* cleanup best-effort */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* cleanup best-effort */
+    }
   });
 
   it("T-P72s4.UrlNormalize.1 edge: normalizeProfileUrl imported directly from url-normalize module produces same result as via barrel", async () => {

@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a new capability for Frondose.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is missing or painful today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: What should Frondose do, and how would you use it?
+    validations:
+      required: true
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Contract impact
+      description: Tick any that apply.
+      options:
+        - label: New agent-visible tool or tool parameter
+        - label: Change to persisted on-disk data
+        - label: Change to the system prompt structure
+        - label: New external service integration

@@ -25,11 +25,8 @@ const rememberToolParams = z.object({
     ),
 });
 
-/** Build the `remember` Vercel tool for a given memory DB path.
- *  P-26: when `serverCoords` is supplied, the tool fires-and-forgets
- *  POST /api/lead/touch after the local insert. Server failure is silent —
- *  local memory is authoritative for the worker's own ICP qualification. */
-export function makeRememberTool(memoryDbPath: string, serverCoords?: { serverUrl: string; token: string }) {
+/** Build the `remember` Vercel tool for a given memory DB path. */
+export function makeRememberTool(memoryDbPath: string) {
   return tool({
     description:
       "Record an interaction with a LinkedIn person. Persisted to ~/.frondose/agent/memory.sqlite. " +
@@ -43,28 +40,6 @@ export function makeRememberTool(memoryDbPath: string, serverCoords?: { serverUr
         // P-39: upsert score when provided.
         if (validated.score !== undefined) {
           setPersonScore(event.profileUrl, validated.score, db);
-        }
-        // P-26: fire-and-forget POST /api/lead/touch when serverCoords supplied.
-        // Local write already succeeded; server failure is silent per GQ-7.
-        if (serverCoords) {
-          const body = JSON.stringify({
-            personRef: event.profileUrl,
-            actionType: event.interaction,
-            ts: Date.now(),
-          });
-          // Intentionally NOT awaited — fire-and-forget. The .catch keeps an
-          // unhandled rejection from logging during server downtime.
-          fetch(`${serverCoords.serverUrl}/api/lead/touch`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${serverCoords.token}`,
-            },
-            body,
-            signal: AbortSignal.timeout(5000),
-          }).catch(() => {
-            // Server unreachable; local insert succeeded — silent per GQ-7.
-          });
         }
         return ok("remember", { event, score: validated.score ?? null });
       } catch (e) {

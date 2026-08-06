@@ -229,11 +229,12 @@ describe("parsePaceMs — pure-parser value table (D-RUN-2 / R4)", () => {
 // ─── T-Pace.8 — read-only tools remain unpaced (R5 exclusion preserved) ───────
 
 describe("read-only browser tools never call applyPacing (D-RUN-2 / R5 exclusion)", () => {
-  // Given: the 5 read-only tool source files (inspect, screenshot, reload, close, clearCookies).
+  // Given: the 4 read-only tool source files (inspect, screenshot, reload, close —
+  //        clearCookies.ts is retired per the P-OPEN-SOURCE-SPLIT ledger).
   // When:  each source is read and scanned.
   // Then:  none imports or calls `applyPacing` (the F9 read-only exclusion is unchanged).
-  it("T-Pace.8: inspect/screenshot/reload/close/clearCookies tool source contains no applyPacing import or call (read-only exclusion preserved)", () => {
-    const readOnly = ["inspect", "screenshot", "reload", "close", "clearCookies"];
+  it("T-Pace.8: inspect/screenshot/reload/close tool source contains no applyPacing import or call (read-only exclusion preserved)", () => {
+    const readOnly = ["inspect", "screenshot", "reload", "close"];
     for (const t of readOnly) {
       const src = readFileSync(fileURLToPath(new URL(`../../src/tools/browser/${t}.ts`, import.meta.url)), "utf8");
       assert.ok(

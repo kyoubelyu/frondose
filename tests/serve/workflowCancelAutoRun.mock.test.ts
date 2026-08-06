@@ -21,16 +21,13 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-const ROUTES_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes.ts"), "utf-8");
+const ROUTES_SRC = readFileSync(resolve(ROOT, "src/app/backend/routes.ts"), "utf-8");
 // P-72 slice 6: /workflow/cancel extension moved to routes/workflow.ts; widen Cancel tests to check EITHER.
-const ROUTES_WORKFLOW_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"), "utf-8");
+const ROUTES_WORKFLOW_SRC = readFileSync(resolve(ROOT, "src/app/backend/routes/workflow.ts"), "utf-8");
 // LoC-budget follow-up: the cancel extension's body was further extracted to routes/workflowCancel.ts
 // (T-routes.LoCBudget.1 — workflow.ts must stay ≤80 LoC); widen Cancel tests to check ALL THREE locations.
-const ROUTES_WORKFLOW_CANCEL_SRC = readFileSync(
-  resolve(ROOT, "src/cli/subcommands/serve/routes/workflowCancel.ts"),
-  "utf-8",
-);
-const CONTEXT_SRC = readFileSync(resolve(ROOT, "src/cli/subcommands/serve/context.ts"), "utf-8");
+const ROUTES_WORKFLOW_CANCEL_SRC = readFileSync(resolve(ROOT, "src/app/backend/routes/workflowCancel.ts"), "utf-8");
+const CONTEXT_SRC = readFileSync(resolve(ROOT, "src/app/backend/context.ts"), "utf-8");
 
 describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts + OQ-E5)", () => {
   // ─── T-E.Cancel.1 ────────────────────────────────────────────────────────────
@@ -103,7 +100,7 @@ describe("T-E.Cancel — /workflow/cancel auto-run extension (P-SP-E routes.ts +
 describe("T-E.ServeDeps — ServeDeps.salesDbPath type-check regression (P-SP-E Sketch F.4)", () => {
   // ─── T-E.ServeDeps.1 ─────────────────────────────────────────────────────────
   it("T-E.ServeDeps.1: context.ts ServeDeps interface has salesDbPath: string field (CONCERN-MR-1 / Sketch F.4)", () => {
-    // Given: src/cli/subcommands/serve/context.ts ServeDeps interface
+    // Given: src/app/backend/context.ts ServeDeps interface
     // When:  source inspected for salesDbPath field declaration
     // Then:  source contains 'salesDbPath' within the ServeDeps interface body
     //   (Prevents regression: removing the field breaks all cron.ts + routes.ts wiring)

@@ -84,22 +84,24 @@ describe("no-bash boundary — P-32 new/edited files (G-P32.21)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("tool count freeze — G-P32.21 / D-6", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools worker mode returns 54 tools; server mode returns 27 tools (P-REBASE-TOOL-COUNT rebaseline)", () => {
-    // Given: makeAllTools called with worker mode and server mode
-    // When:  tool counts are measured
-    // Then:  worker=53, server=26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+  it("T-CONTRACT.TOOLS: single-mode App registry → exactly 51 tools (P-OPEN-SOURCE-SPLIT §10.2)", () => {
+    // Given: makeAllTools(session, persistence, control) (single-mode App registry)
+    // When:  Object.keys(tools).length
+    // Then:  51 (P-OPEN-SOURCE-SPLIT single-mode inventory: the three retired
+    //        operator/lead tools are absent — T-RETIRE.Report.1 + T-RETIRE.Fleet.2)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
       };
-      const workerTools = makeAllTools(mockSession, persistence, mockControl, undefined, { mode: "worker" });
-      const serverTools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
-      const workerCount = Object.keys(workerTools).length;
-      const serverCount = Object.keys(serverTools).length;
-      assert.equal(workerCount, 54, `T-CONTRACT.TOOLS: worker tool count must be 54, got ${workerCount}`);
-      assert.equal(serverCount, 27, `T-CONTRACT.TOOLS: server tool count must be 27, got ${serverCount}`);
+      const tools = makeAllTools(mockSession, persistence, mockControl);
+      const count = Object.keys(tools).length;
+      assert.equal(
+        count,
+        51,
+        `T-CONTRACT.TOOLS: expected 51 App tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+      );
     } finally {
       cleanup();
     }

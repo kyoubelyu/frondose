@@ -42,7 +42,10 @@ describe("bootstrapLegacy.ts — the collapsed card + cron banner are feature-hi
     assert.ok(fnIdx >= 0, "__frondoseShowCollapsedCard must be defined");
     const guardIdx = LEGACY_TS.indexOf("if (!OVERLAY_WIDGET_ENABLED) return;", fnIdx);
     const parseIdx = LEGACY_TS.indexOf("try { payload = JSON.parse(payloadJson); }", fnIdx);
-    assert.ok(guardIdx >= 0 && guardIdx > fnIdx, "the OVERLAY_WIDGET_ENABLED guard must exist inside __frondoseShowCollapsedCard");
+    assert.ok(
+      guardIdx >= 0 && guardIdx > fnIdx,
+      "the OVERLAY_WIDGET_ENABLED guard must exist inside __frondoseShowCollapsedCard",
+    );
     assert.ok(parseIdx > guardIdx, "the guard must run BEFORE the payload is parsed / any DOM is built");
   });
 
@@ -55,8 +58,14 @@ describe("bootstrapLegacy.ts — the collapsed card + cron banner are feature-hi
     const fnIdx = LEGACY_TS.indexOf("window.__frondoseShowCronBanner = function(text) {");
     assert.ok(fnIdx >= 0, "__frondoseShowCronBanner must be defined");
     const guardIdx = LEGACY_TS.indexOf("if (!OVERLAY_WIDGET_ENABLED) return;", fnIdx);
-    const cleanupIdx = LEGACY_TS.indexOf("if (window.__frondoseHideCronBanner) window.__frondoseHideCronBanner();", fnIdx);
-    assert.ok(guardIdx >= 0 && guardIdx > fnIdx, "the OVERLAY_WIDGET_ENABLED guard must exist inside __frondoseShowCronBanner");
+    const cleanupIdx = LEGACY_TS.indexOf(
+      "if (window.__frondoseHideCronBanner) window.__frondoseHideCronBanner();",
+      fnIdx,
+    );
+    assert.ok(
+      guardIdx >= 0 && guardIdx > fnIdx,
+      "the OVERLAY_WIDGET_ENABLED guard must exist inside __frondoseShowCronBanner",
+    );
     assert.ok(cleanupIdx > guardIdx, "the guard must run BEFORE the self-cleanup call");
   });
 
@@ -66,11 +75,15 @@ describe("bootstrapLegacy.ts — the collapsed card + cron banner are feature-hi
     // Then:  both already guard on their tracked element being non-null — correct as-is,
     //        since the show-guards above prevent the element from ever being created
     assert.ok(
-      LEGACY_TS.includes("if (activeCardEl && activeCardEl.parentNode) {\n      activeCardEl.parentNode.removeChild(activeCardEl);\n    }"),
+      LEGACY_TS.includes(
+        "if (activeCardEl && activeCardEl.parentNode) {\n      activeCardEl.parentNode.removeChild(activeCardEl);\n    }",
+      ),
       "__frondoseHideCollapsedCard's existing null-guard must be untouched",
     );
     assert.ok(
-      LEGACY_TS.includes("if (cronBannerEl && cronBannerEl.parentNode) {\n      cronBannerEl.parentNode.removeChild(cronBannerEl);\n    }"),
+      LEGACY_TS.includes(
+        "if (cronBannerEl && cronBannerEl.parentNode) {\n      cronBannerEl.parentNode.removeChild(cronBannerEl);\n    }",
+      ),
       "__frondoseHideCronBanner's existing null-guard must be untouched",
     );
   });
@@ -80,7 +93,10 @@ describe("bootstrapLegacy.ts — the collapsed card + cron banner are feature-hi
     // When:  scanned for the widget flag
     // Then:  it is absent — the takeover layer stays a completely independent append path,
     //        ungated by this phase's flag (same pin as the parent phase's SRC.6)
-    assert.ok(!TAKEOVER_TS.includes("OVERLAY_WIDGET_ENABLED"), "bootstrapTakeover.ts must not reference OVERLAY_WIDGET_ENABLED");
+    assert.ok(
+      !TAKEOVER_TS.includes("OVERLAY_WIDGET_ENABLED"),
+      "bootstrapTakeover.ts must not reference OVERLAY_WIDGET_ENABLED",
+    );
   });
 });
 
@@ -110,7 +126,8 @@ function makeFakeEl(tag = "div", id = ""): FakeEl {
     parentNode: null,
     listeners: {},
     addEventListener(type, fn) {
-      (el.listeners[type] = el.listeners[type] || []).push(fn);
+      el.listeners[type] = el.listeners[type] || [];
+      el.listeners[type].push(fn);
     },
     fireClick() {
       for (const fn of el.listeners.click || []) fn();
@@ -167,7 +184,7 @@ describe("collapsed suggestion card visibility mirrors OVERLAY_WIDGET_ENABLED (I
   it("T-HideResidual.1: with the flag false (shipped default), the card is never constructed, appended, or clickable — no dead-end click possible", () => {
     // Given: OVERLAY_WIDGET_ENABLED = false (the shipped default)
     // When:  __frondoseShowCollapsedCard is invoked (simulating the serve backend pushing
-    //        a suggestion, src/cli/subcommands/serve/passive.ts:227)
+    //        a suggestion, src/app/backend/passive.ts:227)
     // Then:  no card element is created or appended to document.documentElement, so there
     //        is nothing to click — the previous dead-end (card vanishes, panel-expand no-ops,
     //        nothing opens) is eliminated by never entering the reachable code at all
@@ -223,10 +240,11 @@ describe("cron banner visibility mirrors OVERLAY_WIDGET_ENABLED (ISSUE-OVERLAY-H
   it("T-HideResidual.3: with the flag false (shipped default), the banner is never constructed, appended, or animated", () => {
     // Given: OVERLAY_WIDGET_ENABLED = false (the shipped default)
     // When:  __frondoseShowCronBanner is invoked (simulating a real cron tick,
-    //        src/cli/subcommands/serve/cron.ts:157)
+    //        src/app/backend/cron.ts:157)
     // Then:  no banner element is created, nothing is appended to document.documentElement,
     //        and no pulse interval is started
-    const { documentElement, frondoseShowCronBanner, getCronBannerEl, getIntervalsStarted } = mirrorShowCronBanner(false);
+    const { documentElement, frondoseShowCronBanner, getCronBannerEl, getIntervalsStarted } =
+      mirrorShowCronBanner(false);
     frondoseShowCronBanner("running task X");
     assert.equal(getCronBannerEl(), null, "no banner element must be constructed when the flag is false");
     assert.equal(documentElement.children.length, 0, "document.documentElement must receive no append");
@@ -238,7 +256,8 @@ describe("cron banner visibility mirrors OVERLAY_WIDGET_ENABLED (ISSUE-OVERLAY-H
     // When:  __frondoseShowCronBanner is invoked
     // Then:  the banner is appended and the pulse interval starts — one-line flip fully
     //        restores the feature
-    const { documentElement, frondoseShowCronBanner, getCronBannerEl, getIntervalsStarted } = mirrorShowCronBanner(true);
+    const { documentElement, frondoseShowCronBanner, getCronBannerEl, getIntervalsStarted } =
+      mirrorShowCronBanner(true);
     frondoseShowCronBanner("running task X");
     assert.notEqual(getCronBannerEl(), null, "the banner element must be constructed when the flag is true");
     assert.equal(documentElement.children.length, 1, "document.documentElement must receive the banner append");
@@ -255,18 +274,24 @@ describe("OVERLAY_BOOTSTRAP_JS — the residual-hide gates survive bundle assemb
     // Then:  both guards are present in the final injected source — catches an
     //        interpolation/codegen regression
     const { OVERLAY_BOOTSTRAP_JS } = await import("../../src/overlay/bootstrap.js");
-    const collapsedCardFnIdx = OVERLAY_BOOTSTRAP_JS.indexOf("window.__frondoseShowCollapsedCard = function(payloadJson) {");
+    const collapsedCardFnIdx = OVERLAY_BOOTSTRAP_JS.indexOf(
+      "window.__frondoseShowCollapsedCard = function(payloadJson) {",
+    );
     const cronBannerFnIdx = OVERLAY_BOOTSTRAP_JS.indexOf("window.__frondoseShowCronBanner = function(text) {");
     assert.ok(collapsedCardFnIdx >= 0, "assembled bundle must carry __frondoseShowCollapsedCard");
     assert.ok(cronBannerFnIdx >= 0, "assembled bundle must carry __frondoseShowCronBanner");
     const collapsedGuardIdx = OVERLAY_BOOTSTRAP_JS.indexOf("if (!OVERLAY_WIDGET_ENABLED) return;", collapsedCardFnIdx);
     const cronGuardIdx = OVERLAY_BOOTSTRAP_JS.indexOf("if (!OVERLAY_WIDGET_ENABLED) return;", cronBannerFnIdx);
     assert.ok(
-      collapsedGuardIdx >= 0 && collapsedGuardIdx < OVERLAY_BOOTSTRAP_JS.indexOf("activeCardEl = document.createElement", collapsedCardFnIdx),
+      collapsedGuardIdx >= 0 &&
+        collapsedGuardIdx < OVERLAY_BOOTSTRAP_JS.indexOf("activeCardEl = document.createElement", collapsedCardFnIdx),
       "assembled bundle must carry the collapsed-card guard BEFORE its DOM construction",
     );
     assert.ok(
-      cronGuardIdx >= 0 && cronGuardIdx < cronBannerFnIdx + OVERLAY_BOOTSTRAP_JS.slice(cronBannerFnIdx).indexOf("cronBannerEl = document.createElement"),
+      cronGuardIdx >= 0 &&
+        cronGuardIdx <
+          cronBannerFnIdx +
+            OVERLAY_BOOTSTRAP_JS.slice(cronBannerFnIdx).indexOf("cronBannerEl = document.createElement"),
       "assembled bundle must carry the cron-banner guard BEFORE its DOM construction",
     );
   });

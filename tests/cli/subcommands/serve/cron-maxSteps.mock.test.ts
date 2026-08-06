@@ -37,7 +37,7 @@ let createCronDriver: AnyFn | null = null;
 let openSalesDatabase: AnyFn | null = null;
 
 before(async () => {
-  const cronMod = await import("../../../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../../../src/app/backend/cron.js").catch(() => null);
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import
   createCronDriver = (cronMod as any)?.createCronDriver ?? null;
   const dbMod = await import("../../../../src/persistence/salesDb.js").catch(() => null);
@@ -100,7 +100,9 @@ function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: 
     auditPath: "/dev/null",
     expectedToken: Buffer.from("test"),
     workflow: { handleEndpoint: () => ({ status: 200, response: { ok: true } }) },
-    emitFrame: (frame: unknown) => { emittedFrames.push(frame); },
+    emitFrame: (frame: unknown) => {
+      emittedFrames.push(frame);
+    },
     emitOverlayEvent: () => {},
   };
 }

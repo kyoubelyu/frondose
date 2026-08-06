@@ -73,23 +73,13 @@ describe("G-WIN2.4 — package.json: scripts use cross-platform helpers; no POSI
     );
   });
 
-  it("T-WIN2.4c: scripts['build:web'] contains `node scripts/copy-web-assets.mjs` and does NOT contain `cp ` (POSIX cp)", () => {
-    // Given: package.json scripts["build:web"] reflects the WIN-2 implementation
+  it("T-WIN2.4c: scripts['build:web'] is retired with the fleet console (P-OPEN-SOURCE-SPLIT §9.3)", () => {
+    // Given: the fleet web console (src/web/**) and its build chain are retired
     // When:  scripts["build:web"] is read
-    // Then:  it contains "node scripts/copy-web-assets.mjs" (the new cross-platform helper)
-    //        AND does NOT contain "cp " with a trailing space (bare POSIX cp — fails on Windows)
-    //        NOTE: "cp " (with trailing space) is checked to avoid matching "cpSync" in future helpers
+    // Then:  it is absent — no POSIX shell-ism can be reintroduced through it
 
     const webScript = pkg.scripts["build:web"];
-    assert.ok(typeof webScript === "string", "T-WIN2.4c: scripts['build:web'] must exist");
-    assert.ok(
-      !webScript.includes("cp "),
-      `T-WIN2.4c: scripts['build:web'] must NOT contain 'cp ' (POSIX bare cp — fails on Windows; got: ${JSON.stringify(webScript)})`,
-    );
-    assert.ok(
-      webScript.includes("node scripts/copy-web-assets.mjs"),
-      `T-WIN2.4c: scripts['build:web'] must contain 'node scripts/copy-web-assets.mjs' (got: ${JSON.stringify(webScript)})`,
-    );
+    assert.ok(webScript === undefined, "T-WIN2.4c: scripts['build:web'] must be removed (fleet console retired)");
   });
 
   it("T-WIN2.4d: scripts['build:tauri'] contains `node scripts/chmod-dist.mjs` and does NOT contain `chmod +x`", () => {

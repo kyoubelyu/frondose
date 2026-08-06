@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { SseFrame as CanonicalSseFrame } from "../../../src/cli/subcommands/serve/context.js";
+import type { SseFrame as CanonicalSseFrame } from "../../../src/app/backend/context.js";
 
 type PresentationFrame =
   | { type: "assistant-progress"; turnId: string; text: string }
@@ -186,7 +186,7 @@ function createBindings(
 describe("canonical backend contract owns the assistant progress frame", () => {
   it("T-Binding.Canonical: assistant-progress is an explicit exact-payload SseFrame member", () => {
     // Given the backend source and compile payload above, when the canonical union is inspected, then the new frame exists independently of the test-local presentation union.
-    const source = readFileSync(resolve("src/cli/subcommands/serve/context.ts"), "utf8");
+    const source = readFileSync(resolve("src/app/backend/context.ts"), "utf8");
     const declarationStart = source.indexOf("export type SseFrame =");
     const declarationEnd = source.indexOf("\nexport interface SuggestionCardPayload", declarationStart);
     assert.ok(declarationStart >= 0 && declarationEnd > declarationStart, "exported SseFrame declaration must exist");

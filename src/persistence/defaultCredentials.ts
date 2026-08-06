@@ -1,7 +1,7 @@
 /** P-EMBED-KEYS: build-time-embedded DEFAULT credentials for internal-test (内测) installs.
  *
  * `scripts/gen-default-credentials.ts` (wired into `npm run build` / `build:tauri` before
- * `tsc`) reads FRONDOSE_DEFAULT_LLM_BASEURL / _MODEL / _KEY / FRONDOSE_DEFAULT_BRAVE_KEY at
+ * `tsc`) reads FRONDOSE_DEFAULT_LLM_BASEURL / _MODEL / _KEY at
  * BUILD time and writes a gitignored JSON sidecar next to this module (co-located, so the
  * SAME relative lookup resolves whether this code runs from `src/` via tsx, dev, or from the
  * compiled `dist/` sidecar shipped in the .app — `import.meta.url`-relative, no path-shape
@@ -19,10 +19,9 @@ export interface DefaultCredentials {
   llmBaseUrl: string | null;
   llmModel: string | null;
   llmKey: string | null;
-  braveKey: string | null;
 }
 
-const EMPTY_DEFAULTS: DefaultCredentials = { llmBaseUrl: null, llmModel: null, llmKey: null, braveKey: null };
+const EMPTY_DEFAULTS: DefaultCredentials = { llmBaseUrl: null, llmModel: null, llmKey: null };
 
 const GENERATED_FILENAME = "defaultCredentials.generated.json";
 
@@ -42,7 +41,6 @@ export function readDefaultCredentials(path: string = DEFAULT_CREDENTIALS_PATH()
       llmBaseUrl: asNonEmptyString(raw.llmBaseUrl),
       llmModel: asNonEmptyString(raw.llmModel),
       llmKey: asNonEmptyString(raw.llmKey),
-      braveKey: asNonEmptyString(raw.braveKey),
     };
   } catch {
     return EMPTY_DEFAULTS;

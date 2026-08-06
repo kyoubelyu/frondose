@@ -16,8 +16,8 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { connectNoteRequiredForLabel } from "../../../src/app/backend/index.js";
 import { personNameFromInviteLabel } from "../../../src/tools/browser/outboundGuard.js";
-import { connectNoteRequiredForLabel } from "../../../src/cli/subcommands/serve.js";
 
 // Disable pacing noise
 process.env.FRONDOSE_PACE_MIN_MS = "0";
@@ -122,7 +122,17 @@ function seedCandidate(db: AnyDB, personName: string): string {
     INSERT INTO raw_candidates
       (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status, evidence_summary)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, personName, `https://www.linkedin.com/in/${id.slice(0, 8)}/`, null, "search", now, now, "new", "auto6 test");
+  `).run(
+    id,
+    personName,
+    `https://www.linkedin.com/in/${id.slice(0, 8)}/`,
+    null,
+    "search",
+    now,
+    now,
+    "new",
+    "auto6 test",
+  );
   return id;
 }
 
@@ -136,8 +146,22 @@ function seedLead(db: AnyDB, candidateId: string): string {
        total_score, confidence, one_line_pain_chain, next_action,
        next_action_due_at, owner_mode, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, candidateId, null, "Fixture Lead", `https://www.linkedin.com/in/${id.slice(0, 8)}/`,
-    "qualified", 80, 0.85, "test", null, null, "manual", now, now);
+  `).run(
+    id,
+    candidateId,
+    null,
+    "Fixture Lead",
+    `https://www.linkedin.com/in/${id.slice(0, 8)}/`,
+    "qualified",
+    80,
+    0.85,
+    "test",
+    null,
+    null,
+    "manual",
+    now,
+    now,
+  );
   return id;
 }
 
@@ -278,6 +302,10 @@ describe("G-AUTO6.Seam — connectNoteRequiredForLabel DB seam (T-AUTO6.1-6, .9)
     const lidB = seedLead(db, cidB);
     seedDraftRow(db, lidB, { kind: "connect_note", status: "draft" });
     const result = connectNoteRequiredForLabel(db, "Invite Sam Lee to connect", "search");
-    assert.equal(result.block, true, "homonym: must block if ANY same-named candidate has an unsent connect_note (fail-closed)");
+    assert.equal(
+      result.block,
+      true,
+      "homonym: must block if ANY same-named candidate has an unsent connect_note (fail-closed)",
+    );
   });
 });

@@ -10,7 +10,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -70,8 +70,8 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
     const targets = [
       "src/tools",
       "src/persistence",
-      "src/cli/serverWeb.ts",
-      "src/cli/subcommands/serverWebToken.ts",
+      // (src/cli/serverWeb.ts + src/cli/subcommands/serverWebToken.ts — retired
+      // with the fleet server vertical per the P-OPEN-SOURCE-SPLIT ledger.)
     ];
     const importPattern = /(?:from|require)\s*\(?['"](?:node:)?child_process['"]/;
     const matches = targets
@@ -90,49 +90,29 @@ describe("no-bash boundary — P-29 new/edited files (G-P29.24)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-29 (D-9, G-P29.24)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 54 tools", () => {
-    // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'}) (D-9 — no new tools)
+  it("T-CONTRACT.TOOLS (single-mode): makeAllTools → exactly 51 tools", () => {
+    // Given: makeAllTools(session, persistence, control) (single-mode App registry)
     // When: Object.keys(tools).length
-    // Then: 53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then: 51 (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
       };
-      const tools = makeAllTools(mockSession, persistence, mockControl, undefined, { mode: "worker" });
+      const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        54,
-        `T-CONTRACT.TOOLS worker: expected 54 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        51,
+        `T-CONTRACT.TOOLS: expected 51 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 27 tools", () => {
-    // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'}) (D-9)
-    // When: Object.keys(tools).length
-    // Then: 26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const persistence = {
-        memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
-      };
-      const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
-      const count = Object.keys(tools).length;
-      assert.equal(
-        count,
-        27,
-        `T-CONTRACT.TOOLS server: expected 27 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
-      );
-    } finally {
-      cleanup();
-    }
-  });
+  // (T-CONTRACT.TOOLS (server) — retired with the fleet server mode.)
 });
 
 // ─── T-CONTRACT.CONFIG ────────────────────────────────────────────────────────
@@ -200,32 +180,6 @@ describe("config.json server.web_port — default 8090 + explicit round-trip (G-
   });
 });
 
-// ─── T-CONTRACT.BUILD ─────────────────────────────────────────────────────────
-
-describe("package.json build script contains build:web (G-P29.25 static check)", () => {
-  it("T-CONTRACT.BUILD: package.json scripts.build contains 'build:web'; scripts.build:web references esbuild + tailwindcss + src/web → dist/web paths", async () => {
-    // Given: package.json at project root (G-P29.25 — static check, no live build)
-    // When: read package.json and inspect scripts
-    // Then: scripts.build includes 'build:web'; scripts['build:web'] includes 'esbuild' AND
-    //       the tailwind CLI AND 'src/web' → 'dist/web' output paths
-    const projectRoot = resolve(process.cwd());
-    const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8")) as { scripts?: Record<string, string> };
-    const scripts: Record<string, string> = pkg.scripts ?? {};
-    assert.ok(
-      typeof scripts.build === "string" && scripts.build.includes("build:web"),
-      `T-CONTRACT.BUILD: scripts.build must include 'build:web'; got: ${scripts.build}`,
-    );
-    assert.ok(typeof scripts["build:web"] === "string", "T-CONTRACT.BUILD: scripts['build:web'] must exist");
-    const buildWeb = scripts["build:web"];
-    assert.ok(buildWeb.includes("esbuild"), `T-CONTRACT.BUILD: build:web must reference esbuild; got: ${buildWeb}`);
-    assert.ok(
-      buildWeb.includes("tailwindcss") || buildWeb.includes("tailwind"),
-      `T-CONTRACT.BUILD: build:web must reference tailwindcss; got: ${buildWeb}`,
-    );
-    assert.ok(buildWeb.includes("src/web"), `T-CONTRACT.BUILD: build:web must reference src/web; got: ${buildWeb}`);
-    assert.ok(
-      buildWeb.includes("dist/web"),
-      `T-CONTRACT.BUILD: build:web must reference dist/web output; got: ${buildWeb}`,
-    );
-  });
-});
+// ─── T-CONTRACT.BUILD ─── RETIRED with the fleet web console ────────────────
+// (build:web + src/web/** are deleted per the P-OPEN-SOURCE-SPLIT ledger
+// §9.3 — "build:web delete"; the App build chain no longer references it.)

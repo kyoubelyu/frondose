@@ -17,7 +17,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { applySettings } from "../../../src/cli/subcommands/serve/settings.js";
+import { applySettings } from "../../../src/app/backend/settings.js";
 import { makeQualifyProfileTool } from "../../../src/tools/methodology/qualifyProfile.js";
 import { cleanupTmpDir } from "../../_helpers/tmp";
 

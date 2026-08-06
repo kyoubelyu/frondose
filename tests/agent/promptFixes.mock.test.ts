@@ -6,8 +6,8 @@
  *   F4 `src/tools/identity/identity.ts`  — D-P59-8 (auto-derive from /in/me/)
  *   F5 `src/agent/systemPrompt/checkpoint.ts` — D-P59-9 (must-execute-after-announce)
  *   F6 `src/agent/systemPrompt/boundary.ts`   — D-P59-10 (draft-before-gate) + D-P59-8 (identity-bootstrap)
- *   F7 `src/cli/subcommands/serve/turn.ts`    — D-P59-9 belt (suggest_card in RESUME_EXCLUDED_TOOLS)
- *   F2 `src/cli/subcommands/serve.ts`          — F-MAI_PROFILE_DIR (T-Profile.1)
+ *   F7 `src/app/backend/turn.ts`    — D-P59-9 belt (suggest_card in RESUME_EXCLUDED_TOOLS)
+ *   F2 `src/app/backend/index.ts`          — F-MAI_PROFILE_DIR (T-Profile.1)
  *   F1 `src/agent/workflow/controller.ts`      — D-P59-9(A2) (approve() resumePrompt suggest_card)
  *
  * All assertions FAIL against the pre-builder source — each comment cites the exact pre-builder state.
@@ -21,7 +21,7 @@
  *   F-MAI_PROFILE_DIR (hardcoded Chrome profile dir) ↦ T-Profile.1 (serve.ts env var)
  *   §6.4(C) D-RUN-3 fix ↦ T-Type.1; §6.4(D) identity ↦ T-Identity.1m
  *   §6.4(E) checkpoint ↦ T-Exec.1m; §6.4(F) boundary ↦ T-Draft.1m + T-Identity.1m belt
- *   §6.4(G) turn.ts ↦ T-Exec.1m; §6.4(B) serve.ts ↦ T-Profile.1
+ *   §6.4(G) src/app/backend/turn.ts ↦ T-Exec.1m; §6.4(B) src/app/backend/index.ts ↦ T-Profile.1
  *   §6.4(A4) controller approve() resumePrompt ↦ T-Exec.1m
  *
  * Run (mock — source-structural, no browser/LLM):
@@ -39,21 +39,21 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Pre-read source files (all source-structural — no runtime import of production modules needed)
-const TURN_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+const TURN_SRC = readFileSync(join(REPO, "src/app/backend/turn.ts"), "utf-8");
 // P-72 slice 7: RESUME_EXCLUDED_TOOLS moved to turn/runOne.ts (Strategy A split). Widen scan.
-const TURN_RUN_ONE_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"), "utf-8");
+const TURN_RUN_ONE_SRC = readFileSync(join(REPO, "src/app/backend/turn/runOne.ts"), "utf-8");
 const CHECKPOINT_SRC = readFileSync(join(REPO, "src/agent/systemPrompt/checkpoint.ts"), "utf-8");
 const BOUNDARY_SRC = readFileSync(join(REPO, "src/agent/systemPrompt/boundary.ts"), "utf-8");
 const IDENTITY_SRC = readFileSync(join(REPO, "src/tools/identity/identity.ts"), "utf-8");
 const TYPE_SRC = readFileSync(join(REPO, "src/tools/browser/type.ts"), "utf-8");
-const SERVE_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf-8");
+const SERVE_SRC = readFileSync(join(REPO, "src/app/backend/index.ts"), "utf-8");
 const CONTROLLER_SRC = readFileSync(join(REPO, "src/agent/workflow/controller.ts"), "utf-8");
 
 // ─── T-Exec.1m — D-P59-9 belt: suggest_card excluded from resume turns + checkpoint execute clause ──
 
 describe("T-Exec.1m — D-P59-9 under-execution fix: source contract (turn.ts + checkpoint.ts + controller.ts)", () => {
   it("T-Exec.1m.1: RESUME_EXCLUDED_TOOLS in turn.ts must include 'suggest_card' (belt: resume turn cannot defer approved step to a suggestion card — FAILS pre-builder: current set omits 'suggest_card')", () => {
-    // Given: src/cli/subcommands/serve/turn.ts source as a string
+    // Given: src/app/backend/turn.ts source as a string
     // When:  RESUME_EXCLUDED_TOOLS set definition is located
     // Then:  the literal "suggest_card" appears within the set definition
 
@@ -61,7 +61,11 @@ describe("T-Exec.1m — D-P59-9 under-execution fix: source contract (turn.ts + 
     // Widen to check either file so this assertion holds both pre- and post-split.
     const combinedTurnSrc = TURN_SRC + TURN_RUN_ONE_SRC;
     const resumeExcludedIdx = combinedTurnSrc.indexOf("RESUME_EXCLUDED_TOOLS");
-    assert.notEqual(resumeExcludedIdx, -1, "T-Exec.1m.1: RESUME_EXCLUDED_TOOLS must be defined in turn.ts or turn/runOne.ts");
+    assert.notEqual(
+      resumeExcludedIdx,
+      -1,
+      "T-Exec.1m.1: RESUME_EXCLUDED_TOOLS must be defined in turn.ts or turn/runOne.ts",
+    );
 
     // Extract the block around the definition (up to 200 chars)
     const block = combinedTurnSrc.slice(resumeExcludedIdx, resumeExcludedIdx + 200);
@@ -283,9 +287,9 @@ describe("T-Type.1 — D-RUN-3: type.ts CDP arm must use Cmd+A (modifiers:4) + e
 
 // ─── T-Profile.1 — F-MAI_PROFILE_DIR: serve.ts must honor process.env.MAI_PROFILE_DIR ──────────────
 
-describe("T-Profile.1 — F-FRONDOSE_PROFILE_DIR: serve.ts profileDir must source frondoseEnv(\"PROFILE_DIR\") (§6.4(B) + F-REN-3)", () => {
-  it("T-Profile.1: serve.ts profileDir must use frondoseEnv(\"PROFILE_DIR\") — F-REN-3 renamed from process.env.MAI_PROFILE_DIR", () => {
-    // Given: src/cli/subcommands/serve.ts source
+describe('T-Profile.1 — F-FRONDOSE_PROFILE_DIR: serve.ts profileDir must source frondoseEnv("PROFILE_DIR") (§6.4(B) + F-REN-3)', () => {
+  it('T-Profile.1: serve.ts profileDir must use frondoseEnv("PROFILE_DIR") — F-REN-3 renamed from process.env.MAI_PROFILE_DIR', () => {
+    // Given: src/app/backend/index.ts source
     // When:  the profileDir variable assignment is inspected
     // Then:  it reads via frondoseEnv("PROFILE_DIR") (with nullish coalesce to default)
     //        F-REN-3 flip: process.env.MAI_PROFILE_DIR → frondoseEnv("PROFILE_DIR")
@@ -293,8 +297,8 @@ describe("T-Profile.1 — F-FRONDOSE_PROFILE_DIR: serve.ts profileDir must sourc
     // ── Assertion 1: frondoseEnv("PROFILE_DIR") reference present ──────────────────────────────
     assert.ok(
       SERVE_SRC.includes('frondoseEnv("PROFILE_DIR")'),
-      "T-Profile.1: serve.ts must reference frondoseEnv(\"PROFILE_DIR\") after F-REN-3 rename (§6.4(B)). " +
-        "F-REN-3: serve.ts:90 now reads `frondoseEnv(\"PROFILE_DIR\")` with ?? default.",
+      'T-Profile.1: serve.ts must reference frondoseEnv("PROFILE_DIR") after F-REN-3 rename (§6.4(B)). ' +
+        'F-REN-3: serve.ts:90 now reads `frondoseEnv("PROFILE_DIR")` with ?? default.',
     );
 
     // ── Assertion 2: no raw process.env.MAI_PROFILE_DIR remains ─────────────────────────────────
@@ -305,8 +309,8 @@ describe("T-Profile.1 — F-FRONDOSE_PROFILE_DIR: serve.ts profileDir must sourc
 
     // ── Assertion 3: nullish coalesce fallback to default path still present ───────────────────
     assert.ok(
-      SERVE_SRC.includes('frondoseEnv("PROFILE_DIR") ??') || SERVE_SRC.includes("frondoseEnv(\"PROFILE_DIR\") ??"),
-      "T-Profile.1: serve.ts frondoseEnv(\"PROFILE_DIR\") must still use nullish coalesce (??) to fall back to the default path.",
+      SERVE_SRC.includes('frondoseEnv("PROFILE_DIR") ??') || SERVE_SRC.includes('frondoseEnv("PROFILE_DIR") ??'),
+      'T-Profile.1: serve.ts frondoseEnv("PROFILE_DIR") must still use nullish coalesce (??) to fall back to the default path.',
     );
   });
 });

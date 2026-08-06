@@ -541,10 +541,11 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
 // ─── T-CONTRACT: tool count unchanged (G-P21.8) ──────────────────────────────
 
 describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
-  it("T-CONTRACT: exposed makeAllTools inventory matches P-Y3 worker/server tier counts", () => {
+  it("T-CONTRACT: exposed makeAllTools inventory matches the single-mode App contract", () => {
     // Given: isolated HOME/config/secrets paths and inert session/control deps.
-    // When:  makeAllTools builds the exposed ToolSet for worker/server consumer+power tiers.
-    // Then:  counts match the P-Y3 contract and only operator-output tools are power-only.
+    // When:  makeAllTools builds the exposed ToolSet for the App power/consumer tiers.
+    // Then:  power = 51, consumer = 49, and only operator-output tools are power-only
+    //        (P-OPEN-SOURCE-SPLIT §10.2: retired fleet mode; delta = telegram_notify + gh_issue).
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-tools-contract-"));
     const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_TIER");
     try {
@@ -573,33 +574,21 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
         resetStop: () => undefined,
         setInteractive: () => undefined,
       } as Parameters<typeof makeAllTools>[2];
-      const names = (mode: "worker" | "server", tier: "consumer" | "power") =>
-        Object.keys(
-          makeAllTools(mode === "worker" ? session : undefined, persistence, control, undefined, {
-            mode,
-            tier,
-            workerId: "p66-contract",
-          }),
-        ).sort();
+      const names = (tier: "consumer" | "power") =>
+        Object.keys(makeAllTools(session, persistence, control, undefined, { tier })).sort();
 
-      const workerConsumer = names("worker", "consumer");
-      const workerPower = names("worker", "power");
-      const serverConsumer = names("server", "consumer");
-      const serverPower = names("server", "power");
+      const consumer = names("consumer");
+      const power = names("power");
 
-      assert.equal(workerConsumer.length, 51, `worker consumer inventory drifted: ${workerConsumer.join(", ")}`);
-      assert.equal(workerPower.length, 54, `worker power inventory drifted: ${workerPower.join(", ")}`);
-      assert.equal(serverConsumer.length, 24, `server consumer inventory drifted: ${serverConsumer.join(", ")}`);
-      assert.equal(serverPower.length, 27, `server power inventory drifted: ${serverPower.join(", ")}`);
+      assert.equal(power.length, 51, `power inventory drifted: ${power.join(", ")}`);
+      assert.equal(consumer.length, 49, `consumer inventory drifted: ${consumer.join(", ")}`);
 
-      for (const [label, consumer, power] of [
-        ["worker", workerConsumer, workerPower],
-        ["server", serverConsumer, serverPower],
-      ] as const) {
-        const consumerSet = new Set(consumer);
-        const powerOnly = power.filter((name) => !consumerSet.has(name)).sort();
-        assert.deepEqual(powerOnly, ["gh_issue", "report_issue", "telegram_notify"], `${label} tier delta drifted`);
-        assert.ok(consumer.includes("present_summary"), `${label} consumer inventory must expose present_summary`);
+      const consumerSet = new Set(consumer);
+      const powerOnly = power.filter((name) => !consumerSet.has(name)).sort();
+      assert.deepEqual(powerOnly, ["gh_issue", "telegram_notify"], "tier delta drifted");
+      // Retired fleet tools are absent (T-RETIRE.Report.1 + T-RETIRE.Fleet.2)
+      for (const retired of ["report_issue", "publish_event", "query_lead_globally", "clear_cookies"]) {
+        assert.ok(!power.includes(retired), `${retired} must not be in the power inventory`);
       }
     } finally {
       restoreEnv(saved);

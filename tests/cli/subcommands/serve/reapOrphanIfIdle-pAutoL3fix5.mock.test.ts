@@ -57,7 +57,7 @@ function makeState(autoRunId: string | null): {
 }
 
 async function importReaper() {
-  const mod = await import("../../../../src/cli/subcommands/serve/turn/reaper.js");
+  const mod = await import("../../../../src/app/backend/turn/reaper.js");
   return mod.reapOrphanIfIdle;
 }
 

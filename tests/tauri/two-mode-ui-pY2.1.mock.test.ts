@@ -52,14 +52,14 @@ const PY21_EXCEPTIONS = ["src/tauri/src-tauri/tauri.conf.json", "src/overlay/inj
 
 // SIBLING-PHASE files that legitimately coexist uncommitted in the shared dev tree (not P-Y2.1 scope).
 const PY21_SIBLING_PHASE = [
-  "src/cli/subcommands/serve/routes.ts",
+  "src/app/backend/routes.ts",
   "src/tauri/src-tauri/src/main.rs",
   "src/linkedin/session.ts",
-  "src/cli/subcommands/serve.ts",
+  "src/app/backend/index.ts",
   "src/cdp/client.ts",
   "src/linkedin/types.ts",
-  "src/cli/subcommands/serve/takeover.ts",
-  "src/cli/subcommands/serve/turn.ts",
+  "src/app/backend/takeover.ts",
+  "src/app/backend/turn.ts",
   "src/overlay/bootstrap.ts",
   "src/overlay/bootstrapTakeover.ts",
   "src/overlay/cssTransform.ts",
@@ -72,7 +72,7 @@ const PY21_SIBLING_PHASE = [
   "src/tools/index.ts",
   "src/persistence/mode.ts",
   "src/cli/main.ts",
-  "src/cli/subcommands/serve/dispatch.ts",
+  "src/app/backend/dispatch.ts",
   "src/agent/systemPrompt/soul.ts",
   "src/tauri/src-tauri/Cargo.lock",
   "src/tauri/src-tauri/Cargo.toml",
@@ -81,7 +81,7 @@ const PY21_SIBLING_PHASE = [
   "src/overlay/host.ts",
   "src/persistence/salesDb.ts",
   "src/tools/browser/click.ts",
-  "src/cli/subcommands/serve/settings.ts",
+  "src/app/backend/settings.ts",
 ];
 const PY21_SCOPE_WHITELIST = new Set([...PY21_EXCEPTIONS, ...PY21_SIBLING_PHASE]);
 
@@ -164,7 +164,10 @@ describe("two-mode-ui — switcher wiring in app.ts (G-PY2.1.3, G-PY2.1.2, G-PY2
         /invoke[^\n]*"frondose_set_cron_mode"/.test(APP_TS),
       "applyMode must invoke frondose_set_cron_mode",
     );
-    assert.ok(/invoke[^\n]*"frondose_set_passive_mode"/.test(APP_TS), "applyMode must invoke frondose_set_passive_mode");
+    assert.ok(
+      /invoke[^\n]*"frondose_set_passive_mode"/.test(APP_TS),
+      "applyMode must invoke frondose_set_passive_mode",
+    );
     assert.ok(APP_TS.includes("togglesForMode(mode)"), "the invokes must derive from togglesForMode(mode)");
     assert.ok(
       APP_TS.includes('applyMode("manual")') && APP_TS.includes('applyMode("auto")'),

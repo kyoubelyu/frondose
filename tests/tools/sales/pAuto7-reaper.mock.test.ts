@@ -25,7 +25,7 @@
  *     isCronTurn: boolean,
  *     emitFrame: (frame: unknown) => void,
  *   ): void
- *   — exported from src/cli/subcommands/serve/turn/runOne.ts (preferred) or a new helper module.
+ *   — exported from src/app/backend/turn/runOne.ts (preferred) or a new helper module.
  *   If the builder inlines the reaper into runOne's finally instead of extracting, Step 5
  *   validator will drive runOneTurn via a full harness — but extraction is strongly preferred.
  *
@@ -79,13 +79,7 @@ function insertRawAutoRun(
   db.prepare(`
     INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
     VALUES (?, ?, NULL, ?, ?, ?, NULL, NULL)
-  `).run(
-    id,
-    opts.startedAt,
-    opts.maxDurationMinutes,
-    opts.maxConnects ?? 5,
-    opts.status ?? "running",
-  );
+  `).run(id, opts.startedAt, opts.maxDurationMinutes, opts.maxConnects ?? 5, opts.status ?? "running");
   return id;
 }
 
@@ -95,10 +89,10 @@ function readAutoRunRow(db: AnyDb, id: string): AnyDb {
 }
 
 /** Build a minimal ServeState-compatible state object for the reaper. */
-function makeState(opts: {
-  autoRunId?: string | null;
-  lastEmittedAutoCounters?: Record<string, number> | null;
-}): { autoRunId: string | null; lastEmittedAutoCounters: Record<string, number> | null } {
+function makeState(opts: { autoRunId?: string | null; lastEmittedAutoCounters?: Record<string, number> | null }): {
+  autoRunId: string | null;
+  lastEmittedAutoCounters: Record<string, number> | null;
+} {
   return {
     autoRunId: opts.autoRunId ?? null,
     lastEmittedAutoCounters: opts.lastEmittedAutoCounters ?? null,
@@ -111,7 +105,7 @@ function makeState(opts: {
 
 async function importReaper(): Promise<AnyFn | null> {
   try {
-    const mod = await import("../../../src/cli/subcommands/serve/turn/reaper.js");
+    const mod = await import("../../../src/app/backend/turn/reaper.js");
     // biome-ignore lint/suspicious/noExplicitAny: runtime probe
     return (mod as any).reapExpiredAutoRun ?? null;
   } catch {
@@ -124,7 +118,6 @@ async function importReaper(): Promise<AnyFn | null> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
-
   // ─── T-A7.Reap.1 ─────────────────────────────────────────────────────────
 
   it("T-A7.Reap.1: when past-cap running row + state.autoRunId=null + isCronTurn=false, reapExpiredAutoRun closes row + emits exactly one auto-run-completed frame", async () => {
@@ -151,7 +144,9 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: null });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body — currently placeholder to keep test red
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -200,7 +195,9 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: runId });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, true, emitSpy);
@@ -214,7 +211,11 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
     assert.equal(emits.length, 0, "T-A7.Reap.2: reaper must emit ZERO frames on cron-matched path");
 
     // Assert: state.autoRunId preserved (cron's post-handler needs it)
-    assert.equal(state.autoRunId, runId, "T-A7.Reap.2: state.autoRunId must NOT be cleared by reaper on cron-matched path");
+    assert.equal(
+      state.autoRunId,
+      runId,
+      "T-A7.Reap.2: state.autoRunId must NOT be cleared by reaper on cron-matched path",
+    );
   });
 
   // ─── T-A7.Reap.2b ────────────────────────────────────────────────────────
@@ -242,7 +243,9 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
     const staleId = "stale-" + randomUUID();
     const state = makeState({ autoRunId: staleId });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -284,7 +287,9 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: runId, lastEmittedAutoCounters: { connect_sent: 3 } });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -294,7 +299,11 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
 
     // Assert: state fully cleared (deferred-dup fix)
     assert.equal(state.autoRunId, null, "T-A7.Reap.2c: state.autoRunId must be null after self-emit");
-    assert.equal(state.lastEmittedAutoCounters, null, "T-A7.Reap.2c: state.lastEmittedAutoCounters must be null after self-emit");
+    assert.equal(
+      state.lastEmittedAutoCounters,
+      null,
+      "T-A7.Reap.2c: state.lastEmittedAutoCounters must be null after self-emit",
+    );
   });
 });
 
@@ -303,7 +312,6 @@ describe("T-A7.Reap — auto-run reaper exactly-one-emit (P-AUTO-7)", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("T-A7.Reap — no false reaps (P-AUTO-7)", () => {
-
   // ─── T-A7.Reap.3 ─────────────────────────────────────────────────────────
 
   it("T-A7.Reap.3: when no running auto_runs row (Manual/Magical turn), reapExpiredAutoRun emits 0 frames and mutates nothing", async () => {
@@ -323,7 +331,9 @@ describe("T-A7.Reap — no false reaps (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: null });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -363,7 +373,9 @@ describe("T-A7.Reap — no false reaps (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: null });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -404,7 +416,9 @@ describe("T-A7.Reap — no false reaps (P-AUTO-7)", () => {
 
     const state = makeState({ autoRunId: null });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body
     reapExpiredAutoRun(db, state, false, emitSpy);
@@ -423,7 +437,6 @@ describe("T-A7.Reap — no false reaps (P-AUTO-7)", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("T-A7.Reap.6 — reaper swallows internal errors (P-AUTO-7)", () => {
-
   it("T-A7.Reap.6: when the DB handle throws on getCurrentAutoRun, reapExpiredAutoRun does NOT rethrow", async () => {
     // Given: a DB handle that throws on any prepare() call (simulates closed handle or corrupt state)
     //        state.autoRunId=null; isCronTurn=false
@@ -437,15 +450,20 @@ describe("T-A7.Reap.6 — reaper swallows internal errors (P-AUTO-7)", () => {
     }
 
     // Build a proxy DB that always throws
-    const throwingDb = new Proxy({}, {
-      get() {
-        throw new Error("simulated DB failure");
+    const throwingDb = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("simulated DB failure");
+        },
       },
-    });
+    );
 
     const state = makeState({ autoRunId: null });
     const emits: unknown[] = [];
-    const emitSpy = (frame: unknown): void => { emits.push(frame); };
+    const emitSpy = (frame: unknown): void => {
+      emits.push(frame);
+    };
 
     // TODO: fill assertion body — must not throw
     assert.doesNotThrow(
@@ -463,7 +481,6 @@ describe("T-A7.Reap.6 — reaper swallows internal errors (P-AUTO-7)", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("T-A7.Resume — start_auto_run force-close (P-AUTO-7)", () => {
-
   // ─── T-A7.Resume.1 ───────────────────────────────────────────────────────
 
   it("T-A7.Resume.1: when past-cap orphan row exists, start_auto_run force-closes stale row + inserts fresh row (resumed:false, new runId)", async () => {
@@ -499,7 +516,10 @@ describe("T-A7.Resume — start_auto_run force-close (P-AUTO-7)", () => {
     // Assert: stale row closed
     const staleRow = readAutoRunRow(db, staleId);
     assert.equal(staleRow?.status, "stopped_by_agent", "T-A7.Resume.1: stale row must be stopped_by_agent");
-    assert.ok(staleRow?.ended_at !== null && staleRow?.ended_at !== undefined, "T-A7.Resume.1: stale row.ended_at must be set");
+    assert.ok(
+      staleRow?.ended_at !== null && staleRow?.ended_at !== undefined,
+      "T-A7.Resume.1: stale row.ended_at must be set",
+    );
 
     // Assert: a FRESH row inserted
     const newRunId = result.data?.runId;
