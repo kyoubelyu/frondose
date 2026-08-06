@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 import { cleanupTmpDir, makeTmpDir } from "../../../_helpers/tmp.js";
 
 type LoopStep = { toolCalls: Array<{ toolName: string }>; toolResults: unknown[] };
@@ -21,6 +21,9 @@ type LoopOpts = {
   abortSignal?: AbortSignal;
   onStepFinish?: (step: LoopStep) => Promise<void>;
   onText?: (delta: string) => void;
+  // P-UI-THINK-COMPACT: runOne feeds the silent-hang watchdog from
+  // onAssistantPhaseText (the current Pi-loop text seam), not onText.
+  onAssistantPhaseText?: (delta: string, phase: string) => void;
   onToolCall?: (toolName: string) => void;
 };
 type LoopScript = (opts: LoopOpts) => Promise<void>;
@@ -89,7 +92,7 @@ before(async () => {
     },
   });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
   const salesDbMod = await import("../../../../src/persistence/salesDb.js");
   openSalesDatabase = salesDbMod.openSalesDatabase as (path: string) => TestDb;
@@ -174,7 +177,7 @@ function pendingTextOnlyScript(increments: number[]): LoopScript {
     for (const increment of increments) {
       mock.timers.tick(increment);
       if (opts.abortSignal?.aborted) return;
-      opts.onText?.("still planning");
+      opts.onAssistantPhaseText?.("still planning", "intermediate");
       await Promise.resolve();
     }
     await waitForAbort(opts.abortSignal);
@@ -198,11 +201,7 @@ function regularToolProgressScript(): LoopScript {
   };
 }
 
-async function runTurn(
-  state: ServeState,
-  deps: ServeDeps,
-  args: Partial<TurnArgs> = {},
-): Promise<AbortController> {
+async function runTurn(state: ServeState, deps: ServeDeps, args: Partial<TurnArgs> = {}): Promise<AbortController> {
   assert.ok(runOneTurn !== null, "runOneTurn must be imported");
   const abortController = args.abortController ?? new AbortController();
   await runOneTurn(state, deps, {
@@ -228,10 +227,7 @@ function withTempHome<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-function seedRun(
-  db: TestDb,
-  input: { runId?: string; startedAt: number; maxDurationMinutes: number },
-): string {
+function seedRun(db: TestDb, input: { runId?: string; startedAt: number; maxDurationMinutes: number }): string {
   const runId = input.runId ?? randomUUID();
   db.prepare(
     "INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, ?, 20, 'running', NULL, NULL)",
@@ -240,12 +236,17 @@ function seedRun(
 }
 
 function readRun(db: TestDb, runId: string): { status: string; summary: string | null; endedAt: number | null } {
-  return db
-    .prepare("SELECT status, summary, ended_at AS endedAt FROM auto_runs WHERE id = ?")
-    .get(runId) as { status: string; summary: string | null; endedAt: number | null };
+  return db.prepare("SELECT status, summary, ended_at AS endedAt FROM auto_runs WHERE id = ?").get(runId) as {
+    status: string;
+    summary: string | null;
+    endedAt: number | null;
+  };
 }
 
-function completedFrames(frames: unknown[], runId?: string): Array<{ runId?: string; summary?: string; status?: string }> {
+function completedFrames(
+  frames: unknown[],
+  runId?: string,
+): Array<{ runId?: string; summary?: string; status?: string }> {
   return frames.filter(
     (frame): frame is { type: string; runId?: string; summary?: string; status?: string } =>
       typeof frame === "object" &&
@@ -339,11 +340,11 @@ describe("P-AUTO-L3FIX-8 runOneTurn tool-progress deadline", () => {
         await loopStarted;
         assert.ok(capturedOpts !== null, "loop opts must be captured");
         mock.timers.tick(60_000);
-        capturedOpts.onText?.("first visible text after start");
+        capturedOpts.onAssistantPhaseText?.("first visible text after start", "intermediate");
         mock.timers.tick(60_000);
-        capturedOpts.onText?.("still planning");
+        capturedOpts.onAssistantPhaseText?.("still planning", "intermediate");
         mock.timers.tick(60_000);
-        capturedOpts.onText?.("still planning");
+        capturedOpts.onAssistantPhaseText?.("still planning", "intermediate");
         mock.timers.tick(29_999);
         assert.equal(llmErrors.length, 0, "the deadline must not fire before the 210s boundary");
 

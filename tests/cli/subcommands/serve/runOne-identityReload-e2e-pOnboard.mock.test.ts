@@ -24,8 +24,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 import { DEFAULT_CONFIG_PATH, writeConfig } from "../../../../src/persistence/config.js";
 import { DEFAULT_SECRETS_PATH, writeSecrets } from "../../../../src/persistence/secrets.js";
 import { cleanupTmpDir } from "../../../_helpers/tmp";
@@ -56,7 +56,12 @@ before(async () => {
   const piModelUrl = pathToFileURL(join(repoRoot, "src/agent/pi/model.js")).href;
   mock.module(piModelUrl, {
     namedExports: {
-      resolvePiModel: () => ({ model: { id: "deepseek-test" }, apiKey: "test-key", onPayload: (p: unknown) => p, timeoutMs: 120_000 }),
+      resolvePiModel: () => ({
+        model: { id: "deepseek-test" },
+        apiKey: "test-key",
+        onPayload: (p: unknown) => p,
+        timeoutMs: 120_000,
+      }),
     },
   });
 
@@ -67,9 +72,9 @@ before(async () => {
   mock.module(injectUrl, { namedExports: { callInOverlay: async () => undefined } });
 
   // NOTE: ../settings.js (reloadAgentDeps) is deliberately NOT mocked — this is the point of this file.
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
-  const settingsMod = await import("../../../../src/cli/subcommands/serve/settings.js");
+  const settingsMod = await import("../../../../src/app/backend/settings.js");
   reloadAgentDeps = settingsMod.reloadAgentDeps as (deps: unknown) => { restartRequired: boolean };
 });
 
@@ -178,7 +183,12 @@ describe("P-ONBOARD-CONVERSATIONAL-IDENTITY — end-to-end: a tool-driven identi
       writeConfig(
         {
           schema_version: 2,
-          identity: { fullName: "New Operator", role: "AE", icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() },
+          identity: {
+            fullName: "New Operator",
+            role: "AE",
+            icp: { targetRole: ["VP Sales"] },
+            updatedAt: new Date().toISOString(),
+          },
           soul: { override: null },
           worker: { input_mode: "cdp" },
           // biome-ignore lint/suspicious/noExplicitAny: minimal ConfigJsonV2 fixture
@@ -248,7 +258,12 @@ describe("P-ONBOARD-CONVERSATIONAL-IDENTITY — end-to-end: a tool-driven identi
       writeConfig(
         {
           schema_version: 2,
-          identity: { fullName: "New Operator", role: "AE", icp: { targetRole: ["VP Sales"] }, updatedAt: new Date().toISOString() },
+          identity: {
+            fullName: "New Operator",
+            role: "AE",
+            icp: { targetRole: ["VP Sales"] },
+            updatedAt: new Date().toISOString(),
+          },
           soul: { override: overrideText },
           worker: { input_mode: "cdp" },
           // biome-ignore lint/suspicious/noExplicitAny: minimal ConfigJsonV2 fixture
@@ -265,7 +280,10 @@ describe("P-ONBOARD-CONVERSATIONAL-IDENTITY — end-to-end: a tool-driven identi
         !nextTurnSystem.includes("you have not met this operator yet"),
         "next-turn system must NOT show the onboarding directive once identity is set, even under an override",
       );
-      assert.ok(nextTurnSystem.includes(overrideText), "next-turn system must still contain the override text verbatim");
+      assert.ok(
+        nextTurnSystem.includes(overrideText),
+        "next-turn system must still contain the override text verbatim",
+      );
       assert.ok(
         !nextTurnSystem.includes("New Operator"),
         "next-turn system must NOT inject the operator's name — an override replaces the band's content by design (matches T-Onboard.Soul.4)",

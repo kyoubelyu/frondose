@@ -31,7 +31,6 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { IDEMPOTENT_TOOLS } from "../../src/agent/retryWrapper.js";
-import { OUTREACH_TOOL_NAMES } from "../../src/agent/safeMode.js";
 import { BOUNDARY } from "../../src/agent/systemPrompt/boundary.js";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext, LinkedinSession } from "../../src/linkedin/types.js";
@@ -96,15 +95,12 @@ const FROZEN_WORKER_TOOL_KEYS = [
   "present_summary",
   "press",
   "promote_candidate_to_lead",
-  "publish_event",
   "qualify_profile",
-  "query_lead_globally",
   "record_auto_action",
   "record_lead_event",
   "record_raw_candidate",
   "reload",
   "remember",
-  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -133,44 +129,15 @@ const FROZEN_WORKER_TOOL_KEYS = [
 
 // Post-P-73 server tool name snapshot (25 tools).
 // P-44: updated from 20 to 23; P-73: removed suggest_card/suggest_next_actions (worker-only overlay tools).
-const FROZEN_SERVER_TOOL_KEYS = [
-  "analyze_screenshot",
-  "dispatch_google_login",
-  "echo",
-  "escalate_for_capability",
-  "get_memory_note",
-  "getIdentity",
-  "getMemory",
-  "gh_issue",
-  "identity",
-  "list_personas",
-  "list_workers",
-  "present_summary",
-  "provision_worker",
-  "remember",
-  "report_issue",
-  "revoke_worker",
-  "schedule_task",
-  "search_memory",
-  "send_worker_message",
-  "set_memory_note",
-  "sleep",
-  "stop",
-  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
-  "telegram_notify",
-  "todo_write",
-  "web_fetch",
-  "web_search",
-].sort();
 
 // ─── T-P33.STRUCT.1 ───────────────────────────────────────────────────────────
 
 describe("P-33 source tree structure (G-P33.1)", () => {
-  it("T-P33.STRUCT.1: src/tools/browser/ has 13 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
+  it("T-P33.STRUCT.1: src/tools/browser/ has 12 tool files + index.ts; src/tools/linkedin/ has only launch.ts + index.ts", () => {
     // Given: post-reorg source tree (P-33 builder Step 4b + P-63 outboundGuard.ts + Slice-4 scopedResolve.ts)
     // When:  listing src/tools/browser/ and src/tools/linkedin/ directory contents
-    // Then:  browser/ = 14 .ts files (13 tools + index.ts); linkedin/ = 2 .ts files only
-    //        P-63 added outboundGuard.ts (silent-send safety) → 13 browser tool files total
+    // Then:  browser/ = 13 .ts files (12 tools + index.ts); linkedin/ = 2 .ts files only
+    //        P-OPEN-SOURCE-SPLIT: clearCookies.ts deleted with the retired fleet vertical
 
     const browserDir = join(SRC_ROOT, "tools", "browser");
     const linkedinDir = join(SRC_ROOT, "tools", "linkedin");
@@ -183,7 +150,6 @@ describe("P-33 source tree structure (G-P33.1)", () => {
       .sort();
 
     const expectedBrowserFiles = [
-      "clearCookies.ts",
       "click.ts",
       "close.ts",
       "index.ts",
@@ -268,10 +234,11 @@ describe("makeLinkedinTools registry (G-P33.4)", () => {
 // ─── T-P33.COUNT.WORKER ──────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
-  it("T-P33.COUNT.WORKER: makeAllTools worker mode returns exactly 54 tool keys (P-ISSUE-BOARD)", () => {
-    // Given: makeAllTools called in worker mode with session + persistence + control
-    // When:  worker mode tool set is built (clear_cookies removed from browser registry)
-    // Then:  exactly 54 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot (P-REBASE-TOOL-COUNT: stop_auto)
+  it("T-P33.COUNT.WORKER: makeAllTools (single-mode App registry) returns exactly 51 tool keys", () => {
+    // Given: makeAllTools called with session + persistence + control (single-mode App registry)
+    // When:  the tool set is built (clear_cookies removed from browser registry)
+    // Then:  exactly 51 keys returned; key set matches FROZEN_WORKER_TOOL_KEYS snapshot
+    //        (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -280,55 +247,25 @@ describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
         session,
         { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
         mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
       );
 
       const keys = Object.keys(tools).sort();
 
       assert.equal(
         keys.length,
-        54,
-        `worker mode must have exactly 54 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
+        51,
+        `the App registry must have exactly 51 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
       );
-      assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "worker tool names must match current P-Y3 snapshot");
+      assert.deepEqual(keys, FROZEN_WORKER_TOOL_KEYS, "App tool names must match the single-mode snapshot");
     } finally {
       cleanup();
     }
   });
 });
 
-// ─── T-P33.COUNT.SERVER ──────────────────────────────────────────────────────
-
-describe("makeAllTools server mode (G-P33.6 + P-Y3 supersedes count)", () => {
-  it("T-P33.COUNT.SERVER: makeAllTools server mode returns exactly 27 tool keys (P-Y3)", () => {
-    // Given: makeAllTools called in server mode with persistence + control (no session)
-    // When:  server mode tool set is built (post-P-39 which adds search_memory/set_memory_note/get_memory_note)
-    // Then:  exactly 27 keys returned; no LinkedIn/browser primitives; key set matches snapshot
-
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const tools = makeAllTools(
-        undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-
-      const keys = Object.keys(tools).sort();
-
-      assert.equal(
-        keys.length,
-        27,
-        `server mode must have exactly 27 tools; got ${keys.length}: ${JSON.stringify(keys)}`,
-      );
-      assert.deepEqual(keys, FROZEN_SERVER_TOOL_KEYS, "server tool names must match current P-Y3 snapshot");
-    } finally {
-      cleanup();
-    }
-  });
-});
+// ─── T-P33.COUNT.SERVER — RETIRED with the fleet server mode ─────────────────
+// (server mode is deleted per T-RETIRE.Fleet.1; FROZEN_SERVER_TOOL_KEYS and the
+// dispatch_google_login vertical are removed with it.)
 
 // ─── T-P33.SCHEMA.1 ──────────────────────────────────────────────────────────
 
@@ -480,30 +417,20 @@ describe("No child_process in src/tools/browser/** (G-P33.12)", () => {
 
 describe("IDEMPOTENT_TOOLS + OUTREACH_TOOL_NAMES name-sets (G-P33.14)", () => {
   it("T-P33.RETRY.1: moved tool names remain in their correct name-based sets after the reorg", () => {
-    // Given: IDEMPOTENT_TOOLS and OUTREACH_TOOL_NAMES are name-based ReadonlySet<string>
+    // Given: IDEMPOTENT_TOOLS is a name-based ReadonlySet<string>
     // When:  checking membership for all tools that moved from linkedin/ → browser/
-    // Then:  inspect/scroll/screenshot/reload/close/navigate_to_url/clear_cookies ∈ IDEMPOTENT_TOOLS;
-    //        click/type/press/upload ∈ OUTREACH_TOOL_NAMES
+    // Then:  inspect/scroll/screenshot/reload/close/navigate_to_url ∈ IDEMPOTENT_TOOLS
+    //        (clear_cookies removed with the retired vertical; the safe-mode outreach
+    //        wrapper set retired with src/agent/safeMode.ts)
 
     // Retry-wrapped (idempotent) browser tools — these moved but names are unchanged
-    // clear_cookies remains in IDEMPOTENT_TOOLS even though it is no longer registered in makeBrowserTools
-    for (const name of ["inspect", "scroll", "screenshot", "reload", "close", "navigate_to_url", "clear_cookies"]) {
+    for (const name of ["inspect", "scroll", "screenshot", "reload", "close", "navigate_to_url"]) {
       assert.ok(
         IDEMPOTENT_TOOLS.has(name),
         `${name} must be in IDEMPOTENT_TOOLS (retry-wrapped); check retryWrapper.ts`,
       );
     }
-
-    // Safe-mode-wrapped (outreach) browser tools
-    for (const name of ["click", "type", "press", "upload"]) {
-      assert.ok(
-        OUTREACH_TOOL_NAMES.has(name),
-        `${name} must be in OUTREACH_TOOL_NAMES (safe-mode-wrapped); check safeMode.ts`,
-      );
-    }
-
-    // Confirm OUTREACH_TOOL_NAMES size unchanged (no accidental additions)
-    assert.equal(OUTREACH_TOOL_NAMES.size, 4, "OUTREACH_TOOL_NAMES must have exactly 4 entries");
+    assert.ok(!IDEMPOTENT_TOOLS.has("clear_cookies"), "clear_cookies must be removed from IDEMPOTENT_TOOLS");
   });
 });
 
@@ -543,12 +470,8 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
   navigate_to_url: ["url", "waitUntil"],
   present_summary: ["bullets", "nextStep", "summary", "title"],
   press: ["key"],
-  // P-ISSUE-BOARD (2026-07-27): `report_issue` — intranet issue board (operator-approved new tool).
-  report_issue: ["body", "dedupKey", "kind", "title"],
   promote_candidate_to_lead: ["bypassPersonaCheck", "bypassScoreGate", "candidateId", "ownerMode"],
-  publish_event: ["data", "type"],
   qualify_profile: ["companyName", "icp", "industry", "region", "role"],
-  query_lead_globally: ["lookbackHours", "personRef"],
   record_auto_action: ["actionType", "countWeight", "leadId", "result", "runId"],
   record_lead_event: ["eventType", "leadId", "metadata"],
   record_raw_candidate: [
@@ -638,11 +561,12 @@ const FROZEN_TOOL_SCHEMAS_P72: Record<string, string[]> = {
 };
 
 describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1)", () => {
-  it("T-P72.Schema.1: every worker-power tool's sorted param-field set matches the P-72 frozen golden (all 54 tools)", () => {
-    // Given: makeAllTools in worker-power mode (reuses existing p33 harness + MAI_TIER=power above).
+  it("T-P72.Schema.1: every App-power tool's sorted param-field set matches the P-72 frozen golden (all 51 tools)", () => {
+    // Given: makeAllTools in power tier (reuses existing p33 harness + MAI_TIER=power above).
     // When:  building {name: sorted field names} for every tool via getZodFieldNames.
     // Then:  the map deep-equals FROZEN_TOOL_SCHEMAS_P72 — every tool present, no unexpected tool,
-    //        no field added/removed/renamed in any of the 52 worker-power tools (clear_cookies removed).
+    //        no field added/removed/renamed (P-OPEN-SOURCE-SPLIT: report_issue/publish_event/
+    //        query_lead_globally entries removed with the retired vertical).
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -650,14 +574,12 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
         session,
         { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
         mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
       );
 
       assert.equal(
         Object.keys(tools).length,
-        54,
-        `T-P72.Schema.1: expected 54 worker-power tools; got ${Object.keys(tools).length}`,
+        51,
+        `T-P72.Schema.1: expected 51 App-power tools; got ${Object.keys(tools).length}`,
       );
 
       const actual: Record<string, string[]> = {};
@@ -675,45 +597,5 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
     }
   });
 
-  it("T-P72.Schema.2: server tool schemas are a consistent subset — shared tools have identical field sets to the worker golden", () => {
-    // Given: makeAllTools in server mode (27 tools post-P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
-    // When:  for each server tool present in FROZEN_TOOL_SCHEMAS_P72 (the 20 shared tools),
-    //        compare getZodFieldNames to the golden entry.
-    // Then:  all 20 shared tools have identical field sets (same Zod schema objects, no per-mode variation).
-    //        The 6 server-only tools (dispatch_google_login, list_workers, list_personas,
-    //        provision_worker, revoke_worker, send_worker_message) are outside the worker golden;
-    //        they are NOT checked here (covered structurally by FROZEN_SERVER_TOOL_KEYS).
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const serverTools = makeAllTools(
-        undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-
-      let checkedCount = 0;
-      for (const [name, tool] of Object.entries(serverTools)) {
-        const frozenFields = FROZEN_TOOL_SCHEMAS_P72[name];
-        if (frozenFields === undefined) continue; // server-only tool — outside worker golden
-        const actual = getZodFieldNames(tool.parameters as Parameters<typeof getZodFieldNames>[0]);
-        assert.deepEqual(
-          actual,
-          frozenFields,
-          `T-P72.Schema.2: server tool '${name}' field set [${actual.join(", ")}] differs from worker golden [${frozenFields.join(", ")}]`,
-        );
-        checkedCount++;
-      }
-
-      // 27 server tools − 6 server-only = 21 shared
-      assert.equal(
-        checkedCount,
-        21,
-        `T-P72.Schema.2: expected 21 shared server tools to be checked against the golden; got ${checkedCount}`,
-      );
-    } finally {
-      cleanup();
-    }
-  });
+  // (T-P72.Schema.2 — server-mode schema subset — retired with the fleet server mode.)
 });

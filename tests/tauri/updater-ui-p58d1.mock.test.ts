@@ -335,7 +335,11 @@ describe("settings panel — save() rejection (frondose_set_settings rejects) ca
     await panel.open(); // succeeds (frondose_get_settings returns SAMPLE_GET_UI)
     els["settings-save"].listeners.click();
     await tick();
-    assert.equal(surfaceErrorCalled, true, "surfaceError must be called when frondose_set_settings rejects (not swallowed)");
+    assert.equal(
+      surfaceErrorCalled,
+      true,
+      "surfaceError must be called when frondose_set_settings rejects (not swallowed)",
+    );
   });
 });
 
@@ -498,14 +502,14 @@ C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
     // Then: forbidden paths fail with clear out-of-scope diagnostics.
     const violations = collectP58d1UiScopeViolations(`
  M src/tools/browser/type.ts
- M src/cli/subcommands/serve/settings.ts
+ M src/app/backend/settings.ts
  M src/persistence/config.ts
  M src/tauri/src-tauri/src/main.rs
  M src/agent/unrelated.ts
 `);
     for (const expected of [
       "src/tools/browser/type.ts",
-      "src/cli/subcommands/serve/settings.ts",
+      "src/app/backend/settings.ts",
       "src/persistence/config.ts",
       "src/tauri/src-tauri/src/main.rs",
       "src/agent/unrelated.ts",

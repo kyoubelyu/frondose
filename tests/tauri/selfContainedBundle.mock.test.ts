@@ -116,15 +116,15 @@ describe("tauri.conf.json updater contract — P-58d.1 no-regression (G-P58d3.3)
       "bundle.createUpdaterArtifacts must be true (P-58d.1 updater wiring)",
     );
 
-    // (b) endpoints — Phase 12 (P-58d) wired the local update-server URL as
-    // the baked-in default. Runtime override still flows through UpdaterExt
-    // when config.json:updateServerUrl is set (run_update_check builds its
-    // own updater with that URL); the baked-in value is the fallback for a
-    // fresh install with no config.
+    // (b) endpoints — P-OPEN-SOURCE-SPLIT §13.1: the public GitHub Releases
+    // channel is the baked-in default. Runtime override still flows through
+    // UpdaterExt when config.json:updateServerUrl is set (run_update_check
+    // builds its own updater with that URL); the baked-in value is the
+    // fallback for a fresh install with no config.
     assert.deepStrictEqual(
       tauriConf.plugins?.updater?.endpoints,
-      ["http://127.0.0.1:4875/latest.json"],
-      "plugins.updater.endpoints must point at the local update-server (P-58d wiring)",
+      ["https://github.com/kyoubelyu/frondose/releases/latest/download/latest.json"],
+      "plugins.updater.endpoints must point at the public GitHub Releases channel (P-OPEN-SOURCE-SPLIT §13.1)",
     );
 
     // (c) pubkey — must remain the P-58d.1 28D6A7F5 key (changing this would brick existing installs)

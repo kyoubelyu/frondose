@@ -1,18 +1,15 @@
 /**
- * P-37 Step 4a scaffolds — T-B68.1, T-B68.2, T-B68.3
+ * P-37 Step 4a scaffolds — T-B68.1, T-B68.3 (T-B68.2 retired with the
+ * fleet/server vertical — SERVER_BOUNDARY was deleted with serverBoundary.ts).
  *
- * B6 + B8: combined BOUNDARY / SERVER_BOUNDARY directive additions.
+ * B6 + B8: BOUNDARY directive additions.
  *   B6: "after any tool failure, produce a text response; never exit silently"
  *   B8: "operator-facing replies mirror the latest operator language"
  *
  * Gate coverage:
- *   G-P37.9 (no-silent-exit directive present in BOUNDARY + SERVER_BOUNDARY),
- *   G-P37.10 (mirror-language directive present in BOUNDARY + SERVER_BOUNDARY),
+ *   G-P37.9 (no-silent-exit directive present in BOUNDARY),
+ *   G-P37.10 (mirror-language directive present in BOUNDARY),
  *   G-P37.12 (3-band composition order Boundary→Soul→Checkpoint unchanged)
- *
- * All assertion bodies are TODO — tests intentionally fail at Step 4a.
- * Builder Step 4b: appends one paragraph to both boundary files.
- * Validator Step 5: fill assertions.
  */
 
 import assert from "node:assert/strict";
@@ -20,7 +17,6 @@ import { describe, it } from "node:test";
 import { BOUNDARY, boundaryLanguageDirective } from "../../src/agent/systemPrompt/boundary.js";
 import { CHECKPOINT } from "../../src/agent/systemPrompt/checkpoint.js";
 import { composeSystemPrompt } from "../../src/agent/systemPrompt/compose.js";
-import { SERVER_BOUNDARY } from "../../src/agent/systemPrompt/serverBoundary.js";
 
 // ─── T-B68.1 ─────────────────────────────────────────────────────────────────
 
@@ -48,33 +44,9 @@ describe("B6+B8: BOUNDARY contains both directives (G-P37.9 + G-P37.10)", () => 
   });
 });
 
-// ─── T-B68.2 ─────────────────────────────────────────────────────────────────
-
-describe("B6+B8: SERVER_BOUNDARY contains both directives (G-P37.9 + G-P37.10)", () => {
-  it("T-B68.2: SERVER_BOUNDARY contains the no-silent-exit directive AND the mirror-language directive", () => {
-    // Given: SERVER_BOUNDARY constant exported from serverBoundary.ts (standalone string — NOT importing BOUNDARY)
-    // When:  SERVER_BOUNDARY string is inspected for both P-37 directive additions
-    // Then:  SERVER_BOUNDARY contains text about tool failure → text response (no silent exit);
-    //        SERVER_BOUNDARY says operator-facing replies mirror the operator language
-
-    // G-P37.10: mirror-language directive — serverBoundary uses lowercase style
-    assert.ok(
-      SERVER_BOUNDARY.includes("mirror the language the operator writes"),
-      `SERVER_BOUNDARY must contain 'mirror the language the operator writes'; got excerpt: "${SERVER_BOUNDARY.slice(-500)}"`,
-    );
-    assert.ok(
-      SERVER_BOUNDARY.includes("does not govern outbound content"),
-      `SERVER_BOUNDARY must contain 'does not govern outbound content'; got excerpt: "${SERVER_BOUNDARY.slice(-500)}"`,
-    );
-    // G-P37.9: no-silent-exit directive
-    assert.ok(
-      SERVER_BOUNDARY.includes("exit silently"),
-      `SERVER_BOUNDARY must contain 'exit silently'; got excerpt: "${SERVER_BOUNDARY.slice(-200)}"`,
-    );
-  });
-});
-
 // ─── T-B68.3 ─────────────────────────────────────────────────────────────────
+// (T-B68.2 — SERVER_BOUNDARY directive checks — retired with the fleet/server
+// vertical; serverBoundary.ts is deleted per the P-OPEN-SOURCE-SPLIT ledger.)
 
 describe("B6+B8: 3-band composition order unchanged; CHECKPOINT content stable (G-P37.12)", () => {
   it("T-B68.3: composeSystemPrompt band order is Boundary→Soul→Checkpoint (invariant); CHECKPOINT export is non-empty and unchanged", () => {
@@ -109,9 +81,6 @@ describe("B6+B8: 3-band composition order unchanged; CHECKPOINT content stable (
       CHECKPOINT.includes("CHECKPOINT DISCIPLINE"),
       "CHECKPOINT must contain 'CHECKPOINT DISCIPLINE' (P-10 canonical header — must not be modified by P-37)",
     );
-
-    // SERVER_BOUNDARY sanity: imported but not composed here; must still be non-empty
-    assert.ok(SERVER_BOUNDARY.length > 0, "SERVER_BOUNDARY must be non-empty");
   });
 });
 

@@ -2,7 +2,7 @@
  * P-59 Track A Step 4a — T-Turn.1, T-Turn.2, T-Turn.5 — SCAFFOLD
  * (assertion bodies are REAL + intentionally RED; all FAIL pre-builder)
  *
- * Tests the `turn-started` SSE frame emission from `src/cli/subcommands/serve/turn.ts`
+ * Tests the `turn-started` SSE frame emission from `src/app/backend/turn.ts`
  * and the structural inventory of every `state.currentTurn = {` site.
  *
  * T-Turn.1 (mock — FIX-2 emit-first). `triggerCardActionTurn(prompt)` with
@@ -16,7 +16,7 @@
  *   → currently FAILS: no turn-started frame exists, so the match can't be verified
  *
  * T-Turn.5 (source-structural — [3b CONCERN-MR-2] structural inventory). Every
- *   `state.currentTurn = {` site in `src/cli/subcommands/serve/**` is classified as
+ *   `state.currentTurn = {` site in `src/app/backend/**` is classified as
  *   exactly one of:
  *     (emits turn-started) turn.ts/triggerCardActionTurn (F3C1),
  *                          turn.ts/triggerAnalyzeProfile (F3C2),
@@ -47,22 +47,22 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
-import type { ServeDeps, ServeState } from "../../src/cli/subcommands/serve/context.js";
-import { createTurnRunner } from "../../src/cli/subcommands/serve/turn.js";
+import type { ServeDeps, ServeState } from "../../src/app/backend/context.js";
+import { createTurnRunner } from "../../src/app/backend/turn.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // ── Serve source strings (for T-Turn.5 structural inventory) ─────────────────────────────────────
 
-const TURN_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+const TURN_SRC = readFileSync(join(REPO, "src/app/backend/turn.ts"), "utf-8");
 // P-72 slice 7: triggerCardActionTurn + triggerAnalyzeProfile moved to turn/triggers.ts (Strategy A split).
 // state.currentTurn = { and emitFrame turn-started sites moved there too. Widen T-Turn.5 scan.
-const TURN_TRIGGERS_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/triggers.ts"), "utf-8");
-const CRON_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/cron.ts"), "utf-8");
-const ROUTES_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/routes.ts"), "utf-8");
-const DISPATCH_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/dispatch.ts"), "utf-8");
+const TURN_TRIGGERS_SRC = readFileSync(join(REPO, "src/app/backend/turn/triggers.ts"), "utf-8");
+const CRON_SRC = readFileSync(join(REPO, "src/app/backend/cron.ts"), "utf-8");
+const ROUTES_SRC = readFileSync(join(REPO, "src/app/backend/routes.ts"), "utf-8");
+const DISPATCH_SRC = readFileSync(join(REPO, "src/app/backend/dispatch.ts"), "utf-8");
 // P-72 slice 6: state.currentTurn = { assignments moved to routes/agent.ts; combine for T-Turn.5 count.
-const ROUTES_AGENT_SRC = readFileSync(join(REPO, "src/cli/subcommands/serve/routes/agent.ts"), "utf-8");
+const ROUTES_AGENT_SRC = readFileSync(join(REPO, "src/app/backend/routes/agent.ts"), "utf-8");
 
 // ── Mock factories (T-Turn.1 / T-Turn.2) ─────────────────────────────────────────────────────────
 
@@ -284,9 +284,8 @@ describe("serve/**/*.ts — structural inventory: every state.currentTurn = { si
     );
 
     // turn.ts/triggerAnalyzeProfile (now turn/triggers.ts) must also emit turn-started (F3C2) — must have ≥2 total emits
-    const turnStartedEmitCount = (
-      combinedTurnAndTriggers.match(/emitFrame\(\{\s*type:\s*["']turn-started["']/g) ?? []
-    ).length;
+    const turnStartedEmitCount = (combinedTurnAndTriggers.match(/emitFrame\(\{\s*type:\s*["']turn-started["']/g) ?? [])
+      .length;
     assert.ok(
       turnStartedEmitCount >= 2,
       `turn.ts + turn/triggers.ts must have ≥2 turn-started emits (triggerCardActionTurn + triggerAnalyzeProfile); ` +

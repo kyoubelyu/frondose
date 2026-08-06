@@ -50,7 +50,7 @@ let appendAutoLedger: AnyFn | null = null;
 let insertDraft: AnyFn | null = null;
 
 before(async () => {
-  const cronMod = await import("../../../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../../../src/app/backend/cron.js").catch(() => null);
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import
   createCronDriver = (cronMod as any)?.createCronDriver ?? null;
 
@@ -120,23 +120,23 @@ function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: 
     auditPath: "/dev/null",
     expectedToken: Buffer.from("test"),
     workflow: { handleEndpoint: () => ({ status: 200, response: { ok: true } }) },
-    emitFrame: (frame: unknown) => { emittedFrames.push(frame); },
+    emitFrame: (frame: unknown) => {
+      emittedFrames.push(frame);
+    },
     emitOverlayEvent: () => {},
   };
 }
 
 /** Seed a running auto_run row and pre-set state.cronNoProgressRunId + cronNoProgressTurns. */
-function seedAutoRunAndState(
-  db: AnyFn,
-  state: MockRecord,
-  turns = 0,
-): string {
+function seedAutoRunAndState(db: AnyFn, state: MockRecord, turns = 0): string {
   const id = randomUUID();
   const now = Date.now();
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters)
     VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)
-  `).run(id, now);
+  `)
+    .run(id, now);
   state.autoRunId = id;
   state.cronNoProgressRunId = id;
   state.cronNoProgressTurns = turns;
@@ -147,11 +147,13 @@ function seedAutoRunAndState(
 function upsertRawCandidate(db: AnyFn, existingId?: string): string {
   const id = existingId ?? randomUUID();
   const now = Date.now();
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status)
-    VALUES (?, 'Test Person', 'https://linkedin.com/in/tp-${id.slice(0,6)}', NULL, 'profile-nav', ?, ?, 'new')
+    VALUES (?, 'Test Person', 'https://linkedin.com/in/tp-${id.slice(0, 6)}', NULL, 'profile-nav', ?, ?, 'new')
     ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at
-  `).run(id, now - 5000, now);
+  `)
+    .run(id, now - 5000, now);
   return id;
 }
 
@@ -160,34 +162,42 @@ function insertTimelineEvent(db: AnyFn, eventType: string): void {
   const now = Date.now();
   // Seed a raw_candidate to satisfy the NOT NULL FK on candidate_id
   const candidateId = randomUUID();
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status)
     VALUES (?, 'TL Person', 'https://linkedin.com/in/tlp-${candidateId.slice(0, 6)}', NULL, 'profile-nav', ?, ?, 'new')
-  `).run(candidateId, now - 5000, now - 5000);
+  `)
+    .run(candidateId, now - 5000, now - 5000);
   // Schema column is `metadata`, NOT `detail`
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO lead_timeline (id, candidate_id, lead_id, event_type, ts, metadata)
     VALUES (?, ?, NULL, ?, ?, NULL)
-  `).run(randomUUID(), candidateId, eventType, now);
+  `)
+    .run(randomUUID(), candidateId, eventType, now);
 }
 
 /** Insert a message_drafts row. */
 function insertMessageDraft(db: AnyFn, leadId?: string): void {
   const now = Date.now();
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO message_drafts (id, lead_id, kind, text, status, created_by, evidence, created_at)
     VALUES (?, ?, 'connect_note', 'Draft text', 'draft', 'llm', NULL, ?)
-  `).run(randomUUID(), leadId ?? null, now);
+  `)
+    .run(randomUUID(), leadId ?? null, now);
 }
 
 /** Seed a recent outbound entry in auto_run_ledger. The timestamp column is `ts` (not `created_at`). */
 function seedRecentOutbound(db: AnyFn, runId: string, msecondsAgo = 1000): void {
   const ts = Date.now() - msecondsAgo;
   // auto_run_ledger uses `ts` (integer NOT NULL) — not `created_at`
-  (db as any).prepare(`
+  (db as any)
+    .prepare(`
     INSERT INTO auto_run_ledger (id, run_id, action_type, result, ts, count_weight)
     VALUES (?, ?, 'connect_sent', 'success', ?, 1.0)
-  `).run(randomUUID(), runId, ts);
+  `)
+    .run(randomUUID(), runId, ts);
 }
 
 // ─── T-CronNoProgress.1 — G-A12.6 ───────────────────────────────────────────
@@ -217,8 +227,11 @@ describe("T-CronNoProgress.1: zero-progress non-cooldown tick increments state.c
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 1,
-      `cronNoProgressTurns must be 1 after one zero-progress tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      1,
+      `cronNoProgressTurns must be 1 after one zero-progress tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed frame must be emitted before threshold");
@@ -257,8 +270,11 @@ describe("T-CronNoProgress.2: discovery-only tick (Signal D: raw_candidates.last
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on discovery (Signal D) tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on discovery (Signal D) tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on discovery tick");
@@ -295,8 +311,11 @@ describe("T-CronNoProgress.3: scoring tick (lead_timeline 'scored' — Signal B)
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on 'scored' timeline tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on 'scored' timeline tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on scoring tick");
@@ -333,8 +352,11 @@ describe("T-CronNoProgress.4: promotion tick (lead_timeline 'promoted_to_lead' �
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on 'promoted_to_lead' tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on 'promoted_to_lead' tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on promotion tick");
@@ -371,8 +393,11 @@ describe("T-CronNoProgress.5: drafting tick (message_drafts.created_at — Signa
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on drafting (Signal C) tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on drafting (Signal C) tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on drafting tick");
@@ -409,8 +434,11 @@ describe("T-CronNoProgress.6: outbound tick (auto_run_ledger — Signal A) does 
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on outbound (Signal A) tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on outbound (Signal A) tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on outbound tick");
@@ -447,8 +475,11 @@ describe("T-CronNoProgress.7: cooldown tick HOLDS counter — neither increments
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressTurns, 5,
-      `cronNoProgressTurns must remain 5 (HELD) during cooldown tick; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      5,
+      `cronNoProgressTurns must remain 5 (HELD) during cooldown tick; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on cooldown HOLD tick");
@@ -500,8 +531,11 @@ describe("T-CronNoProgress.8: truly-stuck run closes at threshold 10 with exactl
     // Exactly 1 auto-run-completed frame
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      `Must emit exactly 1 auto-run-completed frame when threshold is reached; got ${completedFrames.length}`);
+    assert.equal(
+      completedFrames.length,
+      1,
+      `Must emit exactly 1 auto-run-completed frame when threshold is reached; got ${completedFrames.length}`,
+    );
 
     const cf = completedFrames[0] as any;
     assert.equal(cf.runId, runId, "auto-run-completed frame must have the correct runId");
@@ -570,8 +604,11 @@ describe("T-CronNoProgress.9: [AUTO_CONNECTS=0] discovery-only run survives 12 t
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 0,
-      `Discovery-only run must NOT be closed after 12 ticks (F-1 acceptance); got ${completedFrames.length} completed frames`);
+    assert.equal(
+      completedFrames.length,
+      0,
+      `Discovery-only run must NOT be closed after 12 ticks (F-1 acceptance); got ${completedFrames.length} completed frames`,
+    );
 
     const row = (db as any).prepare("SELECT status FROM auto_runs WHERE id = ?").get(runId) as any;
     assert.equal(row?.status, "running", "auto_runs row must still be 'running' after 12 discovery-only ticks");
@@ -624,15 +661,21 @@ describe("T-CronNoProgress.10: cooldown-heavy run survives 20 ticks (counter HEL
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 0,
-      `Cooldown-heavy run must NOT be closed after 20 ticks; got ${completedFrames.length} completed frames`);
+    assert.equal(
+      completedFrames.length,
+      0,
+      `Cooldown-heavy run must NOT be closed after 20 ticks; got ${completedFrames.length} completed frames`,
+    );
 
     const row = (db as any).prepare("SELECT status FROM auto_runs WHERE id = ?").get(runId) as any;
     assert.equal(row?.status, "running", "auto_runs row must still be 'running' after 20 cooldown ticks");
 
     // Counter should be HELD at 0 (never incremented because every tick is cooldown)
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must be HELD at 0 by cooldown exclusion; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must be HELD at 0 by cooldown exclusion; got: ${state.cronNoProgressTurns}`,
+    );
   });
 });
 
@@ -660,12 +703,14 @@ describe("T-CronNoProgress.11: run-id change resets counter (no cross-run bleed)
     const now = Date.now();
 
     // run-A is ended
-    db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, ?, 480, 20, 'stopped_by_agent', 'done', NULL)`)
-      .run(runAId, now - 60000, now - 1000);
+    db.prepare(
+      `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, ?, 480, 20, 'stopped_by_agent', 'done', NULL)`,
+    ).run(runAId, now - 60000, now - 1000);
 
     // run-B is the new active run
-    db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`)
-      .run(runBId, now);
+    db.prepare(
+      `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`,
+    ).run(runBId, now);
 
     // State reflects stale run-A tracking
     state.autoRunId = runBId; // the cron driver will read this from the DB on tick
@@ -679,10 +724,16 @@ describe("T-CronNoProgress.11: run-id change resets counter (no cross-run bleed)
     const driver = createCronDriver!(state, deps, turn);
     await driver.tick();
 
-    assert.equal(state.cronNoProgressRunId, runBId,
-      `cronNoProgressRunId must be updated to run-B; got: ${state.cronNoProgressRunId}`);
-    assert.equal(state.cronNoProgressTurns, 0,
-      `cronNoProgressTurns must reset to 0 on run-id change; got: ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressRunId,
+      runBId,
+      `cronNoProgressRunId must be updated to run-B; got: ${state.cronNoProgressRunId}`,
+    );
+    assert.equal(
+      state.cronNoProgressTurns,
+      0,
+      `cronNoProgressTurns must reset to 0 on run-id change; got: ${state.cronNoProgressTurns}`,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
     assert.equal(completedFrames.length, 0, "No auto-run-completed on run-id change tick");
@@ -732,8 +783,11 @@ describe("T-CronNoProgress.13: after no-progress closure, next tick does NOT re-
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const framesAfterTickN = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(framesAfterTickN.length, 1,
-      `Tick N must emit exactly 1 auto-run-completed (for run-A); got ${framesAfterTickN.length}`);
+    assert.equal(
+      framesAfterTickN.length,
+      1,
+      `Tick N must emit exactly 1 auto-run-completed (for run-A); got ${framesAfterTickN.length}`,
+    );
     assert.equal(state.autoRunId, null, "state.autoRunId must be null after closure");
     void runAId; // used above in seedAutoRunAndState
 
@@ -746,8 +800,11 @@ describe("T-CronNoProgress.13: after no-progress closure, next tick does NOT re-
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const framesAfterTickN1 = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(framesAfterTickN1.length, 1,
-      `Tick N+1 must NOT emit another auto-run-completed; total must remain 1; got ${framesAfterTickN1.length}`);
+    assert.equal(
+      framesAfterTickN1.length,
+      1,
+      `Tick N+1 must NOT emit another auto-run-completed; total must remain 1; got ${framesAfterTickN1.length}`,
+    );
   });
 });
 
@@ -790,12 +847,17 @@ describe("T-CronNoProgress.14: agent-called end_auto_run path unaffected (no-pro
     // Exactly 1 auto-run-completed frame with status='completed' (from the agent's call)
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      `Must emit exactly 1 auto-run-completed (P-SP-E path); got ${completedFrames.length}`);
+    assert.equal(
+      completedFrames.length,
+      1,
+      `Must emit exactly 1 auto-run-completed (P-SP-E path); got ${completedFrames.length}`,
+    );
     const cf = completedFrames[0] as any;
     assert.equal(cf.status, "completed", `Frame status must be 'completed' (agent-ended); got: ${cf.status}`);
-    assert.ok(/All targets advanced/i.test(cf.summary ?? ""),
-      `Frame summary must match agent's summary; got: "${cf.summary}"`);
+    assert.ok(
+      /All targets advanced/i.test(cf.summary ?? ""),
+      `Frame summary must match agent's summary; got: "${cf.summary}"`,
+    );
 
     // state.autoRunId must be null (cleared by existing P-SP-E handler)
     assert.equal(state.autoRunId, null, "state.autoRunId must be null after agent-ended detection");
@@ -843,12 +905,17 @@ describe("T-CronNoProgress.16: FRONDOSE_CRON_NOPROGRESS_LIMIT=5 closes run after
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      `Must emit exactly 1 auto-run-completed at custom threshold 5; got ${completedFrames.length}`);
+    assert.equal(
+      completedFrames.length,
+      1,
+      `Must emit exactly 1 auto-run-completed at custom threshold 5; got ${completedFrames.length}`,
+    );
     const cf = completedFrames[0] as any;
     assert.equal(cf.status, "stopped_by_agent");
-    assert.ok(/5 consecutive cron ticks/i.test(cf.summary ?? ""),
-      `Summary must mention '5 consecutive cron ticks'; got: "${cf.summary}"`);
+    assert.ok(
+      /5 consecutive cron ticks/i.test(cf.summary ?? ""),
+      `Summary must mention '5 consecutive cron ticks'; got: "${cf.summary}"`,
+    );
     assert.equal(cf.runId, runId, "Frame runId must match");
     assert.equal(state.autoRunId, null);
     assert.equal(state.cronNoProgressRunId, null);

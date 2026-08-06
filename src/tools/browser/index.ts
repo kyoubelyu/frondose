@@ -13,13 +13,7 @@ import { makeUploadTool } from "./upload.js";
 
 /** P-33: generic browser primitives — work on any HTTPS page, not only LinkedIn.
  *  10 tools. Bound to a session for ref/state sharing. (`launch` stays in the
- *  linkedin/ group — it is LinkedIn-destination-specific.)
- *  NOTE: `clear_cookies` (P-28.5, `makeClearCookiesTool` in `./clearCookies.ts`)
- *  was removed from the LLM-visible worker set 2026-06-10 — the agent twice
- *  (audit 2026-06-05, 2026-06-10) used it as an authwall "self-help" move and
- *  destroyed the operator's own LinkedIn session. The tool code is retained for
- *  the deprecated server-guided Google-login fleet path but is no longer exposed
- *  to the agent. Operator-directed quick removal (option A). */
+ *  linkedin/ group — it is LinkedIn-destination-specific.) */
 export function makeBrowserTools(session: LinkedinSession): ToolSet {
   return {
     inspect: makeInspectTool(session),

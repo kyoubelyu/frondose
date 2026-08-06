@@ -70,15 +70,12 @@ const FROZEN_WORKER_TOOL_KEYS_P39 = [
   "present_summary",
   "press",
   "promote_candidate_to_lead",
-  "publish_event",
   "qualify_profile",
-  "query_lead_globally",
   "record_auto_action",
   "record_lead_event",
   "record_raw_candidate",
   "reload",
   "remember",
-  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -120,7 +117,6 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
   "present_summary",
   "provision_worker",
   "remember",
-  "report_issue",
   "revoke_worker",
   "schedule_task",
   "search_memory",
@@ -139,10 +135,11 @@ const FROZEN_SERVER_TOOL_KEYS_P39 = [
 // ─── T-Count.1 ────────────────────────────────────────────────────────────────
 
 describe("P-39 tool count: worker 54 (P-ISSUE-BOARD) (G-P39.11)", () => {
-  it("T-Count.1: makeAllTools worker mode → exactly 54 tools, including present_summary and current sales tools", () => {
-    // Given: makeAllTools called with a fake session + persistence + control in worker mode
+  it("T-Count.1: makeAllTools (single-mode App registry) → exactly 51 tools, including present_summary and current sales tools", () => {
+    // Given: makeAllTools called with a fake session + persistence + control (single-mode App registry)
     // When:  Object.keys(workerTools).length checked; set includes the 3 P-39 memory tools + 2 P-SP-B scoring tools + stop_auto
-    // Then:  54 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  51 tools; workerKeys deepEquals FROZEN_WORKER_TOOL_KEYS_P39
+    //        (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
@@ -150,50 +147,23 @@ describe("P-39 tool count: worker 54 (P-ISSUE-BOARD) (G-P39.11)", () => {
         session,
         { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
         mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
       );
       const workerKeys = Object.keys(workerTools).sort();
       assert.equal(
         workerKeys.length,
-        54,
-        `worker tool count must be 54; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
+        51,
+        `App tool count must be 51; got ${workerKeys.length}: ${workerKeys.join(", ")}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "worker tool set must match frozen P-Y3 snapshot");
+      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P39, "App tool set must match the single-mode snapshot");
     } finally {
       cleanup();
     }
   });
 });
 
-// ─── T-Count.2 ────────────────────────────────────────────────────────────────
-
-describe("P-39 tool count: server 27 (P-ISSUE-BOARD) (G-P39.11)", () => {
-  it("T-Count.2: makeAllTools server mode → exactly 27 tools, including present_summary", () => {
-    // Given: makeAllTools called with undefined session + persistence + control in server mode
-    // When:  Object.keys(serverTools).length checked; set excludes suggest_card/suggest_next_actions (P-73)
-    // Then:  27 tools; serverKeys deepEquals FROZEN_SERVER_TOOL_KEYS_P39 (P-73 rebaseline; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const serverTools = makeAllTools(
-        undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-      const serverKeys = Object.keys(serverTools).sort();
-      assert.equal(
-        serverKeys.length,
-        27,
-        `server tool count must be 27; got ${serverKeys.length}: ${serverKeys.join(", ")}`,
-      );
-      assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P39, "server tool set must match frozen P-39 snapshot");
-    } finally {
-      cleanup();
-    }
-  });
-});
+// ─── T-Count.2 ─── RETIRED with the fleet server mode ─────────────────────────
+// (server mode is deleted per T-RETIRE.Fleet.1; FROZEN_SERVER_TOOL_KEYS_P39 is
+// removed with it.)
 
 // ─── T-NoBash.1 ───────────────────────────────────────────────────────────────
 

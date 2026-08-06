@@ -8,7 +8,7 @@
  *
  * Builder seams required:
  *   - `isAutoOutboundAuthorized({resolvedMode, runningRun}): boolean`
- *     exported from src/cli/subcommands/serve.ts or a helper module,
+ *     exported from src/app/backend/index.ts or a helper module,
  *     OR testable via session.canClickOutbound seam with injected state.
  *   - `session.autoRun()` must do a DB read (getCurrentAutoRun) even when
  *     state.autoRunId === null (the null-blind short-circuit at serve.ts:141 must be removed).
@@ -70,7 +70,7 @@ describe("G-A1.Authorize — mode-aware outbound authorization predicate (P-AUTO
     // Expected export: isAutoOutboundAuthorized({resolvedMode, runningRun}) from serve.ts
     // OR we test canClickOutbound via the session seam.
     // Try the named helper first; fall back to a seam comment.
-    const serveMod = await import("../../src/cli/subcommands/serve.js").catch(() => null);
+    const serveMod = await import("../../src/app/backend/index.js").catch(() => null);
     // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
     const isAutoOutboundAuthorized: AnyFn = (serveMod as any)?.isAutoOutboundAuthorized ?? null;
 
@@ -106,7 +106,7 @@ describe("G-A1.Authorize — mode-aware outbound authorization predicate (P-AUTO
     const db = openSalesDatabase(salesDbPath);
     const _runRow = insertAutoRun(db, { maxConnects: 5 }); // stale running row
 
-    const serveMod = await import("../../src/cli/subcommands/serve.js").catch(() => null);
+    const serveMod = await import("../../src/app/backend/index.js").catch(() => null);
     // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
     const isAutoOutboundAuthorized: AnyFn = (serveMod as any)?.isAutoOutboundAuthorized ?? null;
     if (!isAutoOutboundAuthorized) {
@@ -138,7 +138,7 @@ describe("G-A1.Authorize — mode-aware outbound authorization predicate (P-AUTO
     const db = openSalesDatabase(salesDbPath);
     const _runRow = insertAutoRun(db, { maxConnects: 5 });
 
-    const serveMod = await import("../../src/cli/subcommands/serve.js").catch(() => null);
+    const serveMod = await import("../../src/app/backend/index.js").catch(() => null);
     // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
     const isAutoOutboundAuthorized: AnyFn = (serveMod as any)?.isAutoOutboundAuthorized ?? null;
     if (!isAutoOutboundAuthorized) {
@@ -166,7 +166,7 @@ describe("G-A1.Authorize — mode-aware outbound authorization predicate (P-AUTO
     const db = openSalesDatabase(salesDbPath);
     // No insertAutoRun — empty DB, no running row
 
-    const serveMod = await import("../../src/cli/subcommands/serve.js").catch(() => null);
+    const serveMod = await import("../../src/app/backend/index.js").catch(() => null);
     // biome-ignore lint/suspicious/noExplicitAny: runtime resolution
     const isAutoOutboundAuthorized: AnyFn = (serveMod as any)?.isAutoOutboundAuthorized ?? null;
     if (!isAutoOutboundAuthorized) {
@@ -350,9 +350,7 @@ describe("G-A1.Mode — reconcile sets approvalMode from resolvedMode, not only 
 
     const todoResult = {
       workflowTitle: "Magical Observe",
-      steps: [
-        { id: `s_${randomUUID()}`, title: "Observe", requiresApproval: false, state: "in_progress" },
-      ],
+      steps: [{ id: `s_${randomUUID()}`, title: "Observe", requiresApproval: false, state: "in_progress" }],
     };
 
     const ctx = { turnId: "t3", isCronTurn: false, resolvedMode: "magical" as const };
@@ -395,9 +393,7 @@ describe("G-A1.Mode — reconcile sets approvalMode from resolvedMode, not only 
 
     const todoResult = {
       workflowTitle: "Cron Auto Run",
-      steps: [
-        { id: `s_${randomUUID()}`, title: "Cron task", requiresApproval: false, state: "in_progress" },
-      ],
+      steps: [{ id: `s_${randomUUID()}`, title: "Cron task", requiresApproval: false, state: "in_progress" }],
     };
 
     const ctx = { turnId: "t4", isCronTurn: true, resolvedMode: "auto" as const };

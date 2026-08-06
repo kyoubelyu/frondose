@@ -22,7 +22,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -39,11 +39,7 @@ function srcContains(dir: string, needle: string): boolean {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (srcContains(fullPath, needle)) return true;
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith(".ts") &&
-        !entry.name.endsWith(".d.ts")
-      ) {
+      } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
         const content = readFileSync(fullPath, "utf-8");
         if (content.includes(needle)) return true;
       }
@@ -82,7 +78,7 @@ describe("Shadow deletion: src/agent/workflow/runtime/deterministicPublishPost.t
 
 describe("Shadow deletion: workflow.ts must not import deterministicPublishPost or contain FRONDOSE_PUBLISH_VIA_ACTION (T-Orphan.2)", () => {
   it(
-    "T-Orphan.2: when src/cli/subcommands/serve/routes/workflow.ts is read, " +
+    "T-Orphan.2: when src/app/backend/routes/workflow.ts is read, " +
       "then it does NOT contain 'deterministicPublishPost' " +
       "AND does NOT contain 'FRONDOSE_PUBLISH_VIA_ACTION'",
     () => {
@@ -90,10 +86,7 @@ describe("Shadow deletion: workflow.ts must not import deterministicPublishPost 
       // When: the file source text is scanned.
       // Then: no match for 'deterministicPublishPost'; no 'FRONDOSE_PUBLISH_VIA_ACTION'.
       // NOTE: RED on current HEAD (workflow.ts imports from the shadow module + has the flag).
-      const workflowSrc = readFileSync(
-        resolve(ROOT, "src/cli/subcommands/serve/routes/workflow.ts"),
-        "utf-8",
-      );
+      const workflowSrc = readFileSync(resolve(ROOT, "src/app/backend/routes/workflow.ts"), "utf-8");
       assert.ok(
         !workflowSrc.includes("deterministicPublishPost"),
         "T-Orphan.2: workflow.ts must NOT reference deterministicPublishPost (shadow import retired)",
@@ -112,7 +105,7 @@ describe("Shadow deletion: workflow.ts must not import deterministicPublishPost 
 
 describe("Shadow deletion: context.ts must not reference deterministicPublishPost and ServeDeps must not have shadow injection field (T-Orphan.3)", () => {
   it(
-    "T-Orphan.3: when src/cli/subcommands/serve/context.ts is read, " +
+    "T-Orphan.3: when src/app/backend/context.ts is read, " +
       "then it does NOT contain 'deterministicPublishPost' " +
       "AND the ServeDeps type does NOT include a 'publishApprovedFeedPost' field " +
       "(word-boundary regex excludes the …ViaAction variant)",
@@ -121,10 +114,7 @@ describe("Shadow deletion: context.ts must not reference deterministicPublishPos
       // When: the file source text is scanned.
       // Then: no 'deterministicPublishPost'; no 'publishApprovedFeedPost\b' field (ViaAction survives).
       // NOTE: RED on current HEAD (context.ts has the shadow injection field referencing deterministicPublishPost).
-      const contextSrc = readFileSync(
-        resolve(ROOT, "src/cli/subcommands/serve/context.ts"),
-        "utf-8",
-      );
+      const contextSrc = readFileSync(resolve(ROOT, "src/app/backend/context.ts"), "utf-8");
       assert.ok(
         !contextSrc.includes("deterministicPublishPost"),
         "T-Orphan.3: context.ts must NOT reference deterministicPublishPost",
@@ -152,10 +142,7 @@ describe("Shadow deletion: src/linkedin/action/publishPost.ts must not import de
       // When: the file source text is scanned.
       // Then: no 'deterministicPublishPost'; no 'ShadowPublishFailReason'.
       // NOTE: RED on current HEAD (publishPost.ts imports ShadowPublishFailReason from shadow).
-      const publishSrc = readFileSync(
-        resolve(ROOT, "src/linkedin/action/publishPost.ts"),
-        "utf-8",
-      );
+      const publishSrc = readFileSync(resolve(ROOT, "src/linkedin/action/publishPost.ts"), "utf-8");
       assert.ok(
         !publishSrc.includes("deterministicPublishPost"),
         "T-Orphan.4: publishPost.ts must NOT reference deterministicPublishPost (shadow import retired)",

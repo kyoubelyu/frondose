@@ -27,7 +27,25 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { before, describe, it, mock } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
+
+type ServeState = Record<string, unknown>;
+type ServeDeps = Record<string, unknown>;
+
+type TurnRunner = {
+  runOneTurn: (args: {
+    turnId: string;
+    abortController: AbortController;
+    userPrompt: string;
+    isRetryable: boolean;
+    maxSteps?: number;
+    isCronTurn?: boolean;
+    isWorkflowResume?: boolean;
+  }) => Promise<void>;
+  triggerAnalyzeProfile: (pageUrl: string, turnId: string, abortController: AbortController) => Promise<void>;
+  steerThenTrigger: (newPrompt: string, isWorkflowResume?: boolean) => Promise<void>;
+  triggerCardActionTurn: (actionPrompt: string, isWorkflowResume?: boolean) => Promise<void>;
+  resumeWorkflowTurn: (prompt: string) => Promise<void>;
+};
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
@@ -52,34 +70,32 @@ let loopRejectError: Error = new Error("mock-llm-error");
 
 // When loopMode === "workflow-abort", the onToolResults mock returns {abort:true}.
 // We control it via a flag the stub checks.
-let workflowAbortOnFirstStep = false;
 
 // ── Factory refs ────────────────────────────────────────────────────────────
 
-let createTurnRunner:
-  | ((
-      state: ServeState,
-      deps: ServeDeps,
-    ) => {
-      runOneTurn: (args: {
-        turnId: string;
-        abortController: AbortController;
-        userPrompt: string;
-        isRetryable: boolean;
-        maxSteps?: number;
-        isCronTurn?: boolean;
-        isWorkflowResume?: boolean;
-      }) => Promise<void>;
-      triggerAnalyzeProfile: (pageUrl: string, turnId: string, abortController: AbortController) => Promise<void>;
-      steerThenTrigger: (newPrompt: string, isWorkflowResume?: boolean) => Promise<void>;
-      triggerCardActionTurn: (actionPrompt: string, isWorkflowResume?: boolean) => Promise<void>;
-      resumeWorkflowTurn: (prompt: string) => Promise<void>;
-    })
-  | null = null;
+function createTurnRunner(state: ServeState, deps: ServeDeps): TurnRunner {
+  let loaded: Promise<TurnRunner> | undefined;
+  const getRunner = () => {
+    loaded ??= import(pathToFileURL(join(REPO_ROOT, "src/app/backend/turn.ts")).href).then((mod) =>
+      (mod.createTurnRunner as (state: ServeState, deps: ServeDeps) => TurnRunner)(state, deps),
+    );
+    return loaded;
+  };
+  return {
+    runOneTurn: async (args) => (await getRunner()).runOneTurn(args),
+    triggerAnalyzeProfile: async (pageUrl, turnId, abortController) =>
+      (await getRunner()).triggerAnalyzeProfile(pageUrl, turnId, abortController),
+    steerThenTrigger: async (newPrompt, isWorkflowResume) =>
+      (await getRunner()).steerThenTrigger(newPrompt, isWorkflowResume),
+    triggerCardActionTurn: async (actionPrompt, isWorkflowResume) =>
+      (await getRunner()).triggerCardActionTurn(actionPrompt, isWorkflowResume),
+    resumeWorkflowTurn: async (prompt) => (await getRunner()).resumeWorkflowTurn(prompt),
+  };
+}
 
 // ── File-level mock registration ────────────────────────────────────────────
 
-before(async () => {
+before(() => {
   // 1. Mock src/agent/pi/loop.js — the actual import target in turn.ts (NOT the
   //    loop.js delegate). We provide runAgentLoopPi + the 5 transitive re-exports
   //    that pi/loop.js re-imports from loop.js to keep the module chain valid.
@@ -171,7 +187,10 @@ before(async () => {
       endAutoRun: () => ({ alreadyEnded: false }),
       getAutoRun: () => null,
       getCurrentAutoRun: () => null,
-      initSalesDb: () => ({ run: () => undefined, prepare: () => ({ all: () => [], get: () => null, run: () => undefined }) }),
+      initSalesDb: () => ({
+        run: () => undefined,
+        prepare: () => ({ all: () => [], get: () => null, run: () => undefined }),
+      }),
     },
   });
 
@@ -185,19 +204,6 @@ before(async () => {
       }),
     },
   });
-
-  // 6b. P-AUTO-7: mock the reaper to a no-op — these tests pin runOneTurn's frame/audit behavior,
-  // not the auto-run reaper (which has its own test, tests/tools/sales/pAuto7-reaper.mock.test.ts).
-  const reaperUrl = pathToFileURL(join(REPO_ROOT, "src/cli/subcommands/serve/turn/reaper.js")).href;
-  mock.module(reaperUrl, {
-    namedExports: {
-      reapExpiredAutoRun: () => undefined,
-    },
-  });
-
-  // 7. Dynamic import createTurnRunner AFTER mocks are registered.
-  const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
-  createTurnRunner = turnMod.createTurnRunner as typeof createTurnRunner;
 });
 
 // ── Stub factories ───────────────────────────────────────────────────────────
@@ -257,7 +263,6 @@ function resetSpies() {
   runLoopCallCount = 0;
   loopMode = "resolve";
   loopRejectError = new Error("mock-llm-error");
-  workflowAbortOnFirstStep = false;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -314,9 +319,21 @@ describe("createTurnRunner — runOneTurn happy path", () => {
     assert.equal(runLoopCallCount, 1);
     // P-AUTO-8: operator turns now call deps.composeOperatorSystem(liveMode) instead of deps.system directly.
     // default state has cronEnabled=false, passiveEnabled=false → liveMode="manual" → stub returns "<SYS:manual>".
-    assert.equal(capturedRunLoopOpts?.system, "<SYS:manual>", "non-resume operator turn must use composeOperatorSystem result");
-    assert.notEqual(capturedRunLoopOpts?.system, "sys", "must NOT pass raw deps.system for operator turn post-P-AUTO-8");
-    assert.notEqual(capturedRunLoopOpts?.system, "sysResume", "must NOT pass deps.systemResume for non-resume operator turn");
+    assert.equal(
+      capturedRunLoopOpts?.system,
+      "<SYS:manual>",
+      "non-resume operator turn must use composeOperatorSystem result",
+    );
+    assert.notEqual(
+      capturedRunLoopOpts?.system,
+      "sys",
+      "must NOT pass raw deps.system for operator turn post-P-AUTO-8",
+    );
+    assert.notEqual(
+      capturedRunLoopOpts?.system,
+      "sysResume",
+      "must NOT pass deps.systemResume for non-resume operator turn",
+    );
   });
 });
 
@@ -403,7 +420,11 @@ describe("createTurnRunner — runOneTurn LLM-error path (D-25 contract)", () =>
     assert.equal(auditRow.status, 504);
 
     // lastFailedTurnPrompt set to userPrompt (retryable branch, L274-275 pre-split)
-    assert.equal(state.lastFailedTurnPrompt, "trigger an LLM failure", "isRetryable:true must set lastFailedTurnPrompt");
+    assert.equal(
+      state.lastFailedTurnPrompt,
+      "trigger an LLM failure",
+      "isRetryable:true must set lastFailedTurnPrompt",
+    );
 
     // error frame emitted with retryable:true
     const frameTypes = (frames as Array<{ type: string }>).map((f) => f.type);
@@ -499,7 +520,11 @@ describe("createTurnRunner — runOneTurn workflow-gate abort path (D-25 / G-P72
     assert.equal(doneFrame.aborted, true);
 
     // lastFailedTurnPrompt preserved (success-path reset guarded out by if(!aborted))
-    assert.equal(state.lastFailedTurnPrompt, null, "workflow-abort: lastFailedTurnPrompt must remain null (preserved, not cleared by success path)");
+    assert.equal(
+      state.lastFailedTurnPrompt,
+      null,
+      "workflow-abort: lastFailedTurnPrompt must remain null (preserved, not cleared by success path)",
+    );
 
     // no LLM-error audit (catch path not entered; LLM resolved normally)
     assert.equal(llmErrorAuditCalls.length, 0, "writeLlmErrorAudit must NOT be called on workflow-gate abort");
@@ -563,10 +588,7 @@ describe("createTurnRunner — triggerCardActionTurn", () => {
     loopMode = "resolve";
     const frames: unknown[] = [];
     const state = makeState({ currentTurn: null });
-    let observedCurrentTurnDuringLoop: { turnId: string } | null = null;
-
     // Intercept inside the loop to observe state mid-call.
-    const piLoopUrl = pathToFileURL(join(REPO_ROOT, "src/agent/pi/loop.js")).href;
     // We use a local capture via a helper — we can't re-register mock.module, but
     // we can observe state.currentTurn from within our existing mock by delegating:
     // The existing mock just calls opts.onStepFinish; state.currentTurn is set before
@@ -662,7 +684,10 @@ describe("createTurnRunner — steerThenTrigger", () => {
 
     // turn-started and message push happen inside triggerCardActionTurn (started via void)
     const frameTypes = (frames as Array<{ type: string }>).map((f) => f.type);
-    assert.ok(frameTypes.includes("turn-started"), "steer must have triggered a turn-started frame (via fire-and-forget triggerCardActionTurn)");
+    assert.ok(
+      frameTypes.includes("turn-started"),
+      "steer must have triggered a turn-started frame (via fire-and-forget triggerCardActionTurn)",
+    );
 
     // Messages: steerThenTrigger → void triggerCardActionTurn → message pushed
     assert.ok(state.messages.length >= 1, "steer must eventually push a message via the card-action turn");
@@ -680,7 +705,10 @@ describe("createTurnRunner — steerThenTrigger", () => {
     // wait a tick for the fire-and-forget triggerCardActionTurn to start
     await new Promise((r) => setTimeout(r, 50));
     const frameTypes3 = (frames3 as Array<{ type: string }>).map((f) => f.type);
-    assert.ok(frameTypes3.includes("turn-started"), "steer with no current turn must fire immediately (turn-started from triggered card-action)");
+    assert.ok(
+      frameTypes3.includes("turn-started"),
+      "steer with no current turn must fire immediately (turn-started from triggered card-action)",
+    );
   });
 });
 

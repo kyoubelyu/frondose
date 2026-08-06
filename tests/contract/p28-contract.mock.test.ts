@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -43,59 +43,33 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 // ─── T-CONTRACT.P28.WORKER ────────────────────────────────────────────────────
 
 describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.WORKER: worker mode → exactly 54 tools", () => {
-    // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
+  it("T-CONTRACT.P28.WORKER: single-mode App registry → exactly 51 tools", () => {
+    // Given: makeAllTools(session, persistence, control) (single-mode App registry)
     // When:  Object.keys(tools).length
-    // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  51 (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
       };
-      const tools = makeAllTools(mockSession, persistence, mockControl, undefined, {
-        mode: "worker",
-        workerId: "w1",
-      });
+      const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        54,
-        `T-CONTRACT.P28.WORKER: expected 54 worker tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
+        51,
+        `T-CONTRACT.P28.WORKER: expected 51 App tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 });
+
+// ─── T-CONTRACT.P28.SERVER ─── RETIRED with the fleet server mode ────────────
+// (server mode is deleted per T-RETIRE.Fleet.1.)
 
 // ─── T-CONTRACT.P28.SERVER ────────────────────────────────────────────────────
-
-describe("makeAllTools P-28 tool-count contract — server mode (G-P28.29)", () => {
-  it("T-CONTRACT.P28.SERVER: server mode → exactly 27 tools", () => {
-    // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
-    // When:  Object.keys(tools).length
-    // Then:  26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const persistence = {
-        memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
-        personasDir: dir,
-        serverUrl: "",
-      };
-      const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
-      const count = Object.keys(tools).length;
-      assert.equal(
-        count,
-        27,
-        `T-CONTRACT.P28.SERVER: expected 27 server tools; got ${count}. Keys: ${Object.keys(tools).join(", ")}`,
-      );
-    } finally {
-      cleanup();
-    }
-  });
-});
 
 // ─── T-CONTRACT.P28.NO-BASH ───────────────────────────────────────────────────
 
@@ -134,22 +108,5 @@ describe("no-bash boundary P-28 (G-P28.30)", () => {
 
 // ─── T-CONTRACT.P28.HANDLERS ──────────────────────────────────────────────────
 
-describe("ServerHttpHandlers 7-field contract (G-P28.31)", () => {
-  it("T-CONTRACT.P28.HANDLERS: serverDaemon.ts + serverRepl.ts source contain 'credentialsDb' — confirming the 7th handler field is wired", () => {
-    // Given: src/cli/serverDaemon.ts and src/cli/serverRepl.ts source files
-    // When:  readFileSync each; check for 'credentialsDb' reference
-    // Then:  both files mention credentialsDb (G-P28.31: handlers object has 7 fields)
-    // Note:  At Step 4a this will FAIL (builder hasn't added the field yet — correct TDD behavior)
-    const projectRoot = resolve(process.cwd());
-    const daemonSrc = readFileSync(join(projectRoot, "src/cli/serverDaemon.ts"), "utf-8");
-    const replSrc = readFileSync(join(projectRoot, "src/cli/serverRepl.ts"), "utf-8");
-    assert.ok(
-      daemonSrc.includes("credentialsDb"),
-      "T-CONTRACT.P28.HANDLERS: src/cli/serverDaemon.ts must reference credentialsDb (G-P28.31)",
-    );
-    assert.ok(
-      replSrc.includes("credentialsDb"),
-      "T-CONTRACT.P28.HANDLERS: src/cli/serverRepl.ts must reference credentialsDb (G-P28.31)",
-    );
-  });
-});
+// (T-CONTRACT.P28.HANDLERS — serverDaemon.ts + serverRepl.ts — retired with the
+// fleet server vertical per the P-OPEN-SOURCE-SPLIT ledger.)

@@ -1,7 +1,7 @@
 // P-EMBED-KEYS build-time codegen (NOT an agent tool; no child_process; runs in
 // `npm run build` / `build:tauri` — mirrors scripts/gen-overlay-assets.ts). Reads
-// FRONDOSE_DEFAULT_LLM_BASEURL / FRONDOSE_DEFAULT_LLM_MODEL / FRONDOSE_DEFAULT_LLM_KEY /
-// FRONDOSE_DEFAULT_BRAVE_KEY and writes a JSON sidecar that src/persistence/defaultCredentials.ts
+// FRONDOSE_DEFAULT_LLM_BASEURL / FRONDOSE_DEFAULT_LLM_MODEL / FRONDOSE_DEFAULT_LLM_KEY
+// and writes a JSON sidecar that src/persistence/defaultCredentials.ts
 // reads at runtime — co-located under BOTH src/persistence/ (dev/tests running via tsx)
 // and dist/persistence/ (the compiled sidecar copied wholesale into the .app by
 // build-release.sh's `cp -R dist`). The generated file is gitignored and holds real
@@ -24,7 +24,6 @@ const payload = {
   llmBaseUrl: nonEmpty(process.env.FRONDOSE_DEFAULT_LLM_BASEURL),
   llmModel: nonEmpty(process.env.FRONDOSE_DEFAULT_LLM_MODEL),
   llmKey: nonEmpty(process.env.FRONDOSE_DEFAULT_LLM_KEY),
-  braveKey: nonEmpty(process.env.FRONDOSE_DEFAULT_BRAVE_KEY),
 };
 
 function main(): void {
@@ -39,8 +38,7 @@ function main(): void {
     payload.llmBaseUrl && "llm.baseUrl",
     payload.llmModel && "llm.model",
     payload.llmKey && "llm.key",
-    payload.braveKey && "brave.key",
-  ].filter((v): v is string => Boolean(v));
+  ].filter((entry): entry is string => Boolean(entry));
 
   if (payload.llmBaseUrl && !payload.llmKey) {
     process.stderr.write(

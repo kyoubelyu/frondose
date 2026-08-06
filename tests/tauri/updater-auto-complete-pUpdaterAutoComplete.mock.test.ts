@@ -36,7 +36,7 @@ const updateNoticePath = resolve("src/tauri/src-tauri/src/update_notice.rs");
 const updateSchedulerPath = resolve("src/tauri/src-tauri/src/update_scheduler.rs");
 const rustHarnessRoot = mkdtempSync(resolve(tmpdir(), "frondose-updater-contract-"));
 
-after(() => rmSync(rustHarnessRoot, { recursive: true, force: true }));
+after(() => rmSync(rustHarnessRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }));
 
 function runSchedulerRust(filter: string): string {
   assert.ok(existsSync(updateSchedulerPath), "real update_scheduler.rs seam must exist");
@@ -617,7 +617,7 @@ describe("durable update completion — the real Rust journal is forward-only an
       assert.equal(results.filter((result) => result === "SOME").length, 1);
       assert.equal(results.filter((result) => result === "NONE").length, 7);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 

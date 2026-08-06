@@ -24,11 +24,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn.js";
 
 const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
-const SERVE_DIR = join(REPO, "src", "cli", "subcommands", "serve");
+const SERVE_DIR = join(REPO, "src", "app", "backend");
 
 // ── File paths for structural checks ────────────────────────────────────────
 
@@ -83,7 +83,7 @@ describe("T-turn.PublicSurface.1 — createTurnRunner returns 5-method object; T
     // When:  createTurnRunner(state, deps) is called.
     // Then:  the returned object has exactly 5 function-valued keys in the pre-split order;
     //        TurnArgs can be used as a type-binding (compile-time check).
-    const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
+    const turnMod = await import("../../../../src/app/backend/turn.js");
     const { createTurnRunner } = turnMod;
     assert.equal(typeof createTurnRunner, "function", "createTurnRunner must be exported");
 
@@ -295,11 +295,11 @@ describe("T-turn.LoCBudget.1 — file size budgets (§4.2 + §4.2.1 relaxation)"
 
 describe("T-turn.Importer.1 — 6 production importers resolve unchanged", () => {
   it("T-turn.Importer.1: public turn.ts exports createTurnRunner (value) + TurnArgs (type) at the same module path; 4 test importers' import paths still resolve", async () => {
-    // Given: post-split turn.ts at src/cli/subcommands/serve/turn.ts.
+    // Given: post-split turn.ts at src/app/backend/turn.ts.
     // When:  dynamic import of the module.
     // Then:  createTurnRunner is a named function export; TurnArgs is exported (verified by
     //        T-turn.TurnArgsExport.1 and compile-time); both have their pre-split names.
-    const turnMod = await import("../../../../src/cli/subcommands/serve/turn.js");
+    const turnMod = await import("../../../../src/app/backend/turn.js");
     assert.equal(typeof turnMod.createTurnRunner, "function", "createTurnRunner must be a named export");
     assert.ok(
       Object.hasOwn(turnMod, "createTurnRunner"),
@@ -334,9 +334,9 @@ describe("T-turn.SignatureShape.1 — extracted helpers follow §4.6 parameter-o
     // Given: 3 extracted modules (runOne, triggers, steer) are loaded.
     // When:  fn.length inspected for arity; source scanned for full signature.
     // Then:  each function's arity and parameter names match §4.6 table.
-    const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
-    const triggersMod = await import("../../../../src/cli/subcommands/serve/turn/triggers.js");
-    const steerMod = await import("../../../../src/cli/subcommands/serve/turn/steer.js");
+    const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
+    const triggersMod = await import("../../../../src/app/backend/turn/triggers.js");
+    const steerMod = await import("../../../../src/app/backend/turn/steer.js");
 
     // runOneTurn: arity 3 — (state, deps, args)
     assert.equal(typeof runOneMod.runOneTurn, "function", "runOneTurn must be exported from runOne.ts");
@@ -437,14 +437,14 @@ describe("T-turn.HelpersResolve.1 — turn/{runOne,triggers,steer}.ts export the
     // Given: 3 post-split turn/* modules exist.
     // When:  each is dynamically imported.
     // Then:  the planned exports are present and are functions.
-    const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+    const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
     assert.equal(typeof runOneMod.runOneTurn, "function", "runOne.ts must export runOneTurn");
 
-    const triggersMod = await import("../../../../src/cli/subcommands/serve/turn/triggers.js");
+    const triggersMod = await import("../../../../src/app/backend/turn/triggers.js");
     assert.equal(typeof triggersMod.triggerAnalyzeProfile, "function", "triggers.ts must export triggerAnalyzeProfile");
     assert.equal(typeof triggersMod.triggerCardActionTurn, "function", "triggers.ts must export triggerCardActionTurn");
 
-    const steerMod = await import("../../../../src/cli/subcommands/serve/turn/steer.js");
+    const steerMod = await import("../../../../src/app/backend/turn/steer.js");
     assert.equal(typeof steerMod.steerThenTrigger, "function", "steer.ts must export steerThenTrigger");
     assert.equal(typeof steerMod.resumeWorkflowTurn, "function", "steer.ts must export resumeWorkflowTurn");
   });

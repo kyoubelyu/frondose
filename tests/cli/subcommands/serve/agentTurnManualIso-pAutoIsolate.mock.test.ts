@@ -19,9 +19,9 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, it } from "node:test";
-import { handlePostAgentTurn } from "../../../../src/cli/subcommands/serve/routes/agent.js";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { createTurnRunner } from "../../../../src/cli/subcommands/serve/turn.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import { handlePostAgentTurn } from "../../../../src/app/backend/routes/agent.js";
+import type { createTurnRunner } from "../../../../src/app/backend/turn.js";
 
 class MockServerResponse extends EventEmitter {
   statusCode = 200;
@@ -130,6 +130,10 @@ describe("handlePostAgentTurn — manual-turn path keeps pushing to state.messag
       (m) => (m as { role?: string }).role === "user" && (m as { content?: unknown }).content === "hello manual",
     );
 
-    assert.equal(pushed, true, "manual-turn path must still push {role:'user',content:'hello manual'} into state.messages (out of scope for this phase)");
+    assert.equal(
+      pushed,
+      true,
+      "manual-turn path must still push {role:'user',content:'hello manual'} into state.messages (out of scope for this phase)",
+    );
   });
 });

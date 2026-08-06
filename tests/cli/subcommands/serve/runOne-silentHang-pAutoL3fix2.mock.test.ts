@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type LoopMode = "resolve" | "hang-until-abort";
 type LoopOpts = {
@@ -86,7 +86,7 @@ before(async () => {
     },
   });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
   const salesDbMod = await import("../../../../src/persistence/salesDb.js");
   openSalesDatabase = salesDbMod.openSalesDatabase as (path: string) => TestDb;
@@ -149,10 +149,7 @@ function makeDeps(frames: unknown[], salesDbPath: string): ServeDeps {
   } as unknown as ServeDeps;
 }
 
-function seedRun(
-  db: TestDb,
-  input: { runId?: string; startedAt: number; maxDurationMinutes: number },
-): string {
+function seedRun(db: TestDb, input: { runId?: string; startedAt: number; maxDurationMinutes: number }): string {
   const runId = input.runId ?? randomUUID();
   db.prepare(
     "INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, ?, 20, 'running', NULL, NULL)",
@@ -161,9 +158,11 @@ function seedRun(
 }
 
 function readRun(db: TestDb, runId: string): { status: string; summary: string | null; endedAt: number | null } {
-  return db
-    .prepare("SELECT status, summary, ended_at AS endedAt FROM auto_runs WHERE id = ?")
-    .get(runId) as { status: string; summary: string | null; endedAt: number | null };
+  return db.prepare("SELECT status, summary, ended_at AS endedAt FROM auto_runs WHERE id = ?").get(runId) as {
+    status: string;
+    summary: string | null;
+    endedAt: number | null;
+  };
 }
 
 async function runTurn(state: ServeState, deps: ServeDeps, args: Partial<TurnArgs> = {}): Promise<void> {
@@ -273,7 +272,11 @@ describe("W2 — runOneTurn silent-hang auto_run closure", () => {
       assert.equal(row.status, "stopped_by_agent");
       assert.match(row.summary ?? "", /Duration cap reached/);
       assert.doesNotMatch(row.summary ?? "", /silent_hang_abort/);
-      assert.equal(completedFrames(frames, runId).length, 1, "duration reaper should emit exactly one completion frame");
+      assert.equal(
+        completedFrames(frames, runId).length,
+        1,
+        "duration reaper should emit exactly one completion frame",
+      );
     } finally {
       mock.timers.reset();
     }

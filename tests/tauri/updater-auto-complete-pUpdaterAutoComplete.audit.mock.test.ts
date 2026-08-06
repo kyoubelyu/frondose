@@ -7,7 +7,7 @@ import { extractRustFunction, runCargoHarness } from "./updater-auto-complete-pU
 
 const updateNoticePath = resolve("src/tauri/src-tauri/src/update_notice.rs");
 const harnessRoot = mkdtempSync(resolve(tmpdir(), "frondose-updater-audit-"));
-after(() => rmSync(harnessRoot, { recursive: true, force: true }));
+after(() => rmSync(harnessRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }));
 
 function runAuditRust(filter: string): string {
   assert.ok(existsSync(updateNoticePath), "real update_notice.rs seam must exist");
