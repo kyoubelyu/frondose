@@ -111,7 +111,8 @@ New-Item -ItemType Directory -Force -Path $downloadsDir | Out-Null
 
 $publishedInstaller = Join-Path $downloadsDir "Frondose-windows-x86_64-setup.exe"
 Copy-Item -Force $installer.FullName $publishedInstaller
-Copy-Item -Force (Join-Path $root "website\frondose-landing.html") (Join-Path $siteDir "index.html")
+# P-OPEN-SOURCE-SPLIT §9.2: the landing page moved to the Web project.
+Copy-Item -Force (Join-Path $root "projects\web\index.html") (Join-Path $siteDir "index.html")
 Write-Host "[build-release.ps1] published Windows installer: $publishedInstaller"
 
 $signedUpdater = $null
