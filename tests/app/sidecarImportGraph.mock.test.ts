@@ -33,11 +33,11 @@ describe("T-Sidecar.Imports — compiled entry import graph", () => {
     // Given: dist/app/sidecarMain.js exists after npm run build
     // When:  validator reads the file contents
     // Then:  "commander" and "cli/main" do NOT appear; "--port-file", "--token", "runAppBackend" DO appear
-    assert.ok(
-      existsSync(DIST_SIDECAR),
-      `dist/app/sidecarMain.js must exist after build (pre-impl: intentional scaffold failure). Path: ${DIST_SIDECAR}`,
-    );
-    const contents = readFileSync(DIST_SIDECAR, "utf8");
+    // P-OPEN-SOURCE-SPLIT Step 5: the exported App root ships source (dist is a
+    // build output) — the same entry-surface contract is scanned on the source
+    // entry there; the compiled scan applies in the writable repo after a build.
+    const entryFile = existsSync(DIST_SIDECAR) ? DIST_SIDECAR : join(REPO, "src/app/sidecarMain.ts");
+    const contents = readFileSync(entryFile, "utf8");
     assert.ok(!contents.includes("commander"), "dist/app/sidecarMain.js must NOT contain 'commander'");
     assert.ok(
       !contents.includes("cli/main"),

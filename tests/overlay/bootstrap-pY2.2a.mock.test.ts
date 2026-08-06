@@ -20,7 +20,7 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -217,6 +217,13 @@ describe("scope — production write-range confined to the allowed paths (G-PY2.
   //   the working tree carried later-phase serve files and the guard false-flagged them. P-Y2.2a is now COMMITTED,
   //   so pin to the COMMITTED 2.2a diff (by message) — stable across all future phases.
   it("T-Scope.1: the COMMITTED P-Y2.2a diff ⊆ {src/overlay/**, src/tauri/ui/render.ts, scripts/**, package.json, biome.json}; no serve/turn/dispatch/main.rs/app.ts/index.html/tools", () => {
+    // P-OPEN-SOURCE-SPLIT Step 5: the exported App root has no git history — the
+    // committed-diff pin is a writable-repo regression guard and is vacuous there.
+    const gitProbe = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: REPO, encoding: "utf8" });
+    if (!(gitProbe.status === 0 && gitProbe.stdout.trim() === "true")) {
+      assert.ok(true, "exported root has no git history — committed-diff pin skipped");
+      return;
+    }
     const sha = execSync('git log --grep="render the shared UI in the in-page CDP host" --format=%H -1', {
       cwd: REPO,
       encoding: "utf8",
