@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -433,7 +433,12 @@ describe("every discovered methodology carrier has an explicit compatibility dis
               if (tokens.some((token) => text.includes(token))) hits.push(relative(process.cwd(), full));
             }
           };
-          walk(process.cwd());
+          // Mirror the git-grep scope (`-- src tests`): the exported root must not
+          // scan scripts/** (the contract module itself carries the marker tokens).
+          for (const sub of ["src", "tests"]) {
+            const root = join(process.cwd(), sub);
+            if (existsSync(root)) walk(root);
+          }
           return hits;
         })();
     assert.ok(independentlyDiscovered.length >= 10, "real repository discovery must be non-empty and broad");
