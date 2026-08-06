@@ -106,7 +106,8 @@ if [ "$NODE_ABI" != "${SQLITE_ABI#v}" ]; then
   echo "[build-release] FAILED: ABI mismatch: node=$NODE_ABI sqlite=${SQLITE_ABI#v}" >&2
   exit 1
 fi
-( cd "$RUNTIME" && ./node -e "require('better-sqlite3'); require('ssh2')" )
+# P-OPEN-SOURCE-SPLIT §9.3: ssh2 retired — the loadability probe covers the kept native addon only.
+( cd "$RUNTIME" && ./node -e "require('better-sqlite3')" )
 (
   cd "$RUNTIME"
   "$RUNTIME/node" --input-type=module -e "await import('@modelcontextprotocol/sdk/client/streamableHttp.js')"
