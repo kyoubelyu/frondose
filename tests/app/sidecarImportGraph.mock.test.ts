@@ -21,7 +21,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 const REPO = resolve(process.cwd());
