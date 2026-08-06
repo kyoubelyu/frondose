@@ -1,7 +1,7 @@
 /**
  * P-72 slice 6 Step 3a — routes-characterization.mock.test.ts
  *
- * 8 CHARACTERIZATION TESTS for `src/cli/subcommands/serve/routes.ts` (PRE-SPLIT).
+ * 8 CHARACTERIZATION TESTS for the final `src/app/backend/routes.ts` owner.
  * These tests are LOAD-BEARING (G-P72s6.1): they pin the observable behavior of the
  * HTTP request handler BEFORE the split and MUST STAY GREEN AFTER the split at Step 4.
  *
@@ -15,21 +15,38 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { EventEmitter } from "node:events";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EventEmitter } from "node:events";
 import { describe, it } from "node:test";
-import { createRequestHandler } from "../../../../src/cli/subcommands/serve/routes.js";
+import { pathToFileURL } from "node:url";
 import { createWorkflowController } from "../../../../src/agent/workflow/controller.js";
-import type { ServeState, ServeDeps } from "../../../../src/cli/subcommands/serve/context.js";
+
+type ServeState = Record<string, unknown>;
+type ServeDeps = Record<string, unknown>;
+type RequestHandler = { handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> };
+
+function createRequestHandler(state: ServeState, deps: ServeDeps, turn: unknown, dispatch: unknown): RequestHandler {
+  const url = pathToFileURL(join(process.cwd(), "src/app/backend/routes.ts")).href;
+  return {
+    handleRequest: async (req, res) => {
+      const mod = (await import(url)) as {
+        createRequestHandler: (state: ServeState, deps: ServeDeps, turn: unknown, dispatch: unknown) => RequestHandler;
+      };
+      return mod.createRequestHandler(state, deps, turn, dispatch).handleRequest(req, res);
+    },
+  };
+}
 
 // ─── Simple inline spy ────────────────────────────────────────────────────────
 
 function makeSpy<T extends unknown[]>(): ((...args: T) => void) & { calls: T[] } {
   const calls: T[] = [];
-  const spy = (...args: T) => { calls.push(args); };
+  const spy = (...args: T) => {
+    calls.push(args);
+  };
   spy.calls = calls;
   return spy;
 }
@@ -60,7 +77,11 @@ class MockServerResponse extends EventEmitter {
   }
 
   parsedBody(): unknown {
-    try { return JSON.parse(this.body); } catch { return null; }
+    try {
+      return JSON.parse(this.body);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -79,9 +100,7 @@ class MockIncomingMessage extends EventEmitter {
     super();
     this.method = opts.method ?? "GET";
     this.url = opts.url ?? "/";
-    this._bodyChunks = opts.body !== undefined
-      ? [Buffer.from(JSON.stringify(opts.body))]
-      : [];
+    this._bodyChunks = opts.body !== undefined ? [Buffer.from(JSON.stringify(opts.body))] : [];
     this.headers = {
       ...(opts.authorization ? { authorization: opts.authorization } : {}),
     };
@@ -150,7 +169,9 @@ function makeDeps(overrides: Partial<ServeDeps> = {}): ServeDeps {
     tools: {} as ServeDeps["tools"],
     maxSteps: 20,
     auditWriter: {} as ServeDeps["auditWriter"],
-    session: { getOrInitClient: async () => ({ ok: false as const, error: "no_chrome", message: "stub" }) } as ServeDeps["session"],
+    session: {
+      getOrInitClient: async () => ({ ok: false as const, error: "no_chrome", message: "stub" }),
+    } as ServeDeps["session"],
     schedulePath: "/tmp/schedule.json",
     salesDbPath: "/tmp/sales.db",
     auditPath: "/tmp/audit.jsonl",
@@ -167,8 +188,14 @@ function makeTurnStub() {
   const runOneTurnCalls: unknown[] = [];
   return {
     stub: {
-      runOneTurn: (opts: unknown) => { runOneTurnCalls.push(opts); return Promise.resolve(); },
-      resumeWorkflowTurn: (prompt: string) => { resumeWorkflowTurnCalls.push(prompt); return Promise.resolve(); },
+      runOneTurn: (opts: unknown) => {
+        runOneTurnCalls.push(opts);
+        return Promise.resolve();
+      },
+      resumeWorkflowTurn: (prompt: string) => {
+        resumeWorkflowTurnCalls.push(prompt);
+        return Promise.resolve();
+      },
       triggerAnalyzeProfile: (_url: string, _turnId: string, _ac: AbortController) => Promise.resolve(),
     },
     resumeWorkflowTurnCalls,
@@ -208,14 +235,16 @@ describe("createRequestHandler — POST /workflow/approve → 200 + resumePrompt
     const { ctrl } = makeWorkflowDeps();
     // Pre-populate approval-pending state
     ctrl.onToolResults(
-      [{
-        toolName: "todo_write",
-        result: {
-          ok: true,
-          workflowTitle: "Plan",
-          steps: [{ id: "s1", title: "Outbound", requiresApproval: true, state: "in_progress" }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "Plan",
+            steps: [{ id: "s1", title: "Outbound", requiresApproval: true, state: "in_progress" }],
+          },
         },
-      }],
+      ],
       { turnId: "t1", isCronTurn: false },
     );
 
@@ -224,12 +253,7 @@ describe("createRequestHandler — POST /workflow/approve → 200 + resumePrompt
     const state = makeState();
     const { stub: dispatchStub } = makeDispatch();
 
-    const handler = createRequestHandler(
-      state,
-      deps,
-      turnStub as never,
-      dispatchStub as never,
-    );
+    const handler = createRequestHandler(state, deps, turnStub as never, dispatchStub as never);
 
     const wfState = ctrl.getState();
     const stepId = wfState.awaitingApprovalStepId;
@@ -250,7 +274,10 @@ describe("createRequestHandler — POST /workflow/approve → 200 + resumePrompt
     // is r.response === {ok:true}). This matches pre-split L314-315 exactly.
     assert.ok(resumeWorkflowTurnCalls.length === 1, "resumeWorkflowTurn called once");
     const calledPrompt = resumeWorkflowTurnCalls[0];
-    assert.ok(typeof calledPrompt === "string" && calledPrompt.length > 0, "resumeWorkflowTurn called with non-empty resumePrompt");
+    assert.ok(
+      typeof calledPrompt === "string" && calledPrompt.length > 0,
+      "resumeWorkflowTurn called with non-empty resumePrompt",
+    );
   });
 });
 
@@ -268,14 +295,16 @@ describe("createRequestHandler — POST /workflow/decline → 200 + gate remains
       writeWorkflowAudit: () => {},
     });
     ctrl.onToolResults(
-      [{
-        toolName: "todo_write",
-        result: {
-          ok: true,
-          workflowTitle: "Plan",
-          steps: [{ id: "s1", title: "Outbound", requiresApproval: true, state: "in_progress" }],
+      [
+        {
+          toolName: "todo_write",
+          result: {
+            ok: true,
+            workflowTitle: "Plan",
+            steps: [{ id: "s1", title: "Outbound", requiresApproval: true, state: "in_progress" }],
+          },
         },
-      }],
+      ],
       { turnId: "t1", isCronTurn: false },
     );
 

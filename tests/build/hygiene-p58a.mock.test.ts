@@ -32,11 +32,11 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PKG = readFileSync(join(REPO, "package.json"), "utf8");
 const TAURI_CONF = readFileSync(join(REPO, "src", "tauri", "src-tauri", "tauri.conf.json"), "utf8");
 const RELEASE_YML = readFileSync(join(REPO, ".github", "workflows", "release.yml"), "utf8");
-const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf8");
+const ROUTES_TS = readFileSync(join(REPO, "src", "app", "backend", "routes.ts"), "utf8");
 // P-72 slice 6: sseClients.add + cron-mode frame moved to routes/events.ts
-const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "events.ts"), "utf8");
+const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "app", "backend", "routes", "events.ts"), "utf8");
 // P-72 slice 6: showEdgeRing ctxId callback moved to routes/cdp.ts
-const ROUTES_CDP_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "cdp.ts"), "utf8");
+const ROUTES_CDP_TS = readFileSync(join(REPO, "src", "app", "backend", "routes", "cdp.ts"), "utf8");
 const APP_TS = readFileSync(join(REPO, "src", "tauri", "ui", "app.ts"), "utf8");
 
 // gate-on-builder: scripts/assert-dist.ts is NEW (builder 4b B5)
@@ -93,18 +93,19 @@ describe("assert-dist core — findMissingDistMarkers (G-P58a.2)", () => {
   });
 });
 
-describe("release.yml — conditional --prerelease (G-P58a.3)", () => {
-  // Given: release.yml. When: inspected. Then: a case "$TAG" sets PRERELEASE=--prerelease for -alpha/-beta/-rc,
-  //        AND $PRERELEASE is passed to `gh release create`.
-  it("T-Release.1: release.yml sets --prerelease for -alpha/-beta/-rc tags and passes $PRERELEASE to gh release create", () => {
+describe("release.yml — gh release create invocation (G-P58a.3)", () => {
+  // Given: release.yml. When: inspected. Then: the workflow creates a draft release
+  //        with --verify-tag and the tag title; prerelease flagging is decided at
+  //        publish time by scripts/release.sh (the local ops tool), not the workflow.
+  it("T-Release.1: release.yml creates a draft, verify-tag release named after the pushed tag", () => {
     assert.match(
       RELEASE_YML,
-      /\*-alpha\*\|\*-beta\*\|\*-rc\*\)\s*PRERELEASE="--prerelease"/,
-      "a case branch sets --prerelease for -alpha/-beta/-rc tags",
+      /gh release create "\$\{GITHUB_REF#refs\/tags\/\}" artifacts\/release-macos\/\* artifacts\/release-windows\/\*/,
+      "gh release create attaches both platform artifact globs",
     );
-    assert.match(RELEASE_YML, /\$PRERELEASE/, "$PRERELEASE is interpolated into the gh release create invocation");
-    // a bare vX.Y.Z would not match the case → PRERELEASE stays "" (stable release)
-    assert.match(RELEASE_YML, /PRERELEASE=""/, "PRERELEASE defaults empty (bare vX.Y.Z → stable, no --prerelease)");
+    assert.match(RELEASE_YML, /--draft/, "releases are created as drafts (never auto-published by CI)");
+    assert.match(RELEASE_YML, /--verify-tag/, "the pushed tag is verified before the release is created");
+    assert.match(RELEASE_YML, /--title "\$\{GITHUB_REF#refs\/tags\/\}"/, "the release title is the tag name");
   });
 });
 
@@ -129,7 +130,10 @@ describe("desktop reconcile — initial cron-mode frame on SSE connect (G-P58a.7
         ? ROUTES_EVENTS_TS.indexOf("state.sseClients.add(res)")
         : ROUTES_TS.indexOf("state.sseClients.add(res)");
     const src = ROUTES_EVENTS_TS.indexOf("state.sseClients.add(res)") > 0 ? ROUTES_EVENTS_TS : ROUTES_TS;
-    assert.ok(addIdx > 0, "the /agent/events handler adds the new client (routes.ts or routes/events.ts after P-72 slice 6)");
+    assert.ok(
+      addIdx > 0,
+      "the /agent/events handler adds the new client (routes.ts or routes/events.ts after P-72 slice 6)",
+    );
     const after = src.slice(addIdx, addIdx + 220);
     assert.match(after, /res\.write\(/, "writes to the new res right after add");
     assert.match(after, /["']cron-mode["']|type.*cron-mode/, "the initial frame is a cron-mode frame");
@@ -161,15 +165,18 @@ describe("ring re-push on mid-Auto-turn ctxId capture (G-P58a.8)", () => {
   it("T-Repush.1: the ctxId callback re-pushes showEdgeRing guarded by currentTurn!==null && cronEnabled", () => {
     // P-72 slice 6: showEdgeRing import + ctxId callback moved to routes/cdp.ts; widen to check EITHER location.
     assert.ok(
-      /import\s*\{\s*showEdgeRing\s*\}\s*from\s*["'][.\/]*takeover\.js["']/.test(ROUTES_CDP_TS) ||
-        /import\s*\{\s*showEdgeRing\s*\}\s*from\s*["'][.\/]*takeover\.js["']/.test(ROUTES_TS),
+      /import\s*\{\s*showEdgeRing\s*\}\s*from\s*["'][./]*takeover\.js["']/.test(ROUTES_CDP_TS) ||
+        /import\s*\{\s*showEdgeRing\s*\}\s*from\s*["'][./]*takeover\.js["']/.test(ROUTES_TS),
       "imports showEdgeRing (routes.ts or routes/cdp.ts after P-72 slice 6)",
     );
     const cdpIdIdx = ROUTES_CDP_TS.indexOf("state.overlayContextId = id");
     const routesIdIdx = ROUTES_TS.indexOf("state.overlayContextId = id");
     const idIdx = cdpIdIdx > 0 ? cdpIdIdx : routesIdIdx;
     const src = cdpIdIdx > 0 ? ROUTES_CDP_TS : ROUTES_TS;
-    assert.ok(idIdx > 0, "the ctxId callback assigns state.overlayContextId (routes.ts or routes/cdp.ts after P-72 slice 6)");
+    assert.ok(
+      idIdx > 0,
+      "the ctxId callback assigns state.overlayContextId (routes.ts or routes/cdp.ts after P-72 slice 6)",
+    );
     const after = src.slice(idIdx, idIdx + 220);
     assert.match(
       after,

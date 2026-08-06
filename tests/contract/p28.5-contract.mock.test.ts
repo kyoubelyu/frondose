@@ -1,36 +1,25 @@
 /**
- * P-28.5 Step 4a — T-CONTRACT.{WORKER,SERVER,NO-BASH,CLI}
+ * P-28.5 / P-OPEN-SOURCE-SPLIT — makeAllTools contract tests (single-mode App registry).
  *
- * Contract regression tests for P-28.5 Google login automation phase.
- * Gate coverage:
- *   G-P28.5.17 (worker tool count = 28 — +navigate_to_url +clear_cookies)
- *   G-P28.5.18 (server tool count = 19 — +dispatch_google_login)
- *   G-P28.5.19 (zero child_process imports in P-28.5 new/edited files)
- *   G-P28.5.20 (CLI login action + dispatch_google_login tool both route through dispatchGoogleLogin core fn)
+ * The fleet server/worker modes and the dispatch_google_login vertical are
+ * retired (T-RETIRE.Fleet.1/2): the App registry is single-mode, power = 51,
+ * consumer = 49, differing only by telegram_notify + gh_issue (§10.2).
  *
- * CREDENTIAL PLACEHOLDER POLICY (C-5, inherited from P-28):
- *   password:"PLACEHOLDER", twofa_link:"https://2fa.show/PLACEHOLDER", email:"acct@example.com"
- *   NEVER a real password / live 2fa.show URL / real SMS link.
+ * Kept from P-28.5: navigate_to_url presence + the no-bash scan over the
+ * retained P-28.5-era files. Retired: server mode counts, worker/server mode
+ * branches, dispatch_google_login core/tool parity, credentialLibrary/
+ * personaLibrary/serverInbox/workersRegistry imports.
  */
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import type { LinkedinSession } from "../../src/linkedin/types.js";
-import { addGoogleAccount, openCredentialsDb } from "../../src/persistence/credentialLibrary.js";
-import { personaTemplateSchema, writePersonaTemplate } from "../../src/persistence/personaLibrary.js";
-import { openServerInboxDb } from "../../src/persistence/serverInbox.js";
-import { addWorker, openWorkersDb } from "../../src/persistence/workersRegistry.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
-import {
-  type DispatchGoogleLoginDeps,
-  dispatchGoogleLogin,
-  makeDispatchGoogleLoginTool,
-} from "../../src/tools/server/dispatchGoogleLogin.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
 process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool inventory (tiering reconciliation)
@@ -54,58 +43,52 @@ const mockControl: ControlSignals = { requestStop: () => {} };
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
-describe("makeAllTools P-28.5 tool-count contract — worker mode (G-P28.5.17)", () => {
-  it("T-CONTRACT.WORKER: worker mode → exactly 54 tools; includes 'navigate_to_url'", () => {
-    // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker', workerId:'w1'})
+describe("makeAllTools single-mode App inventory (G-P28.5.17, T-RETIRE.Fleet.2)", () => {
+  it("T-CONTRACT.WORKER: power inventory → exactly 51 tools; includes 'navigate_to_url'", () => {
+    // Given: makeAllTools(session, persistence, control) under the power tier
     // When:  Object.keys(tools).length + includes check for new tool names
-    // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); navigate_to_url still present
+    // Then:  51 (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
       };
-      const tools = makeAllTools(mockSession, persistence, mockControl, undefined, {
-        mode: "worker",
-        workerId: "w1",
-      });
+      const tools = makeAllTools(mockSession, persistence, mockControl);
       const keys = Object.keys(tools);
-      const count = keys.length;
-      assert.equal(count, 54, "T-CONTRACT.WORKER: worker mode has exactly 54 tools");
+      assert.equal(keys.length, 51, "T-CONTRACT.WORKER: power inventory has exactly 51 tools");
       assert.ok(keys.includes("navigate_to_url"), "T-CONTRACT.WORKER: navigate_to_url present (P-28.5 new)");
+      for (const retired of ["report_issue", "query_lead_globally", "publish_event", "clear_cookies"]) {
+        assert.ok(!keys.includes(retired), `T-CONTRACT.WORKER: ${retired} must be retired (T-RETIRE.Fleet.2)`);
+      }
     } finally {
       cleanup();
     }
   });
-});
 
-// ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
-
-describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)", () => {
-  it("T-CONTRACT.SERVER: server mode → exactly 27 tools; includes 'dispatch_google_login'", () => {
-    // Given: makeAllTools(undefined, persistence {+credentialsDbPath}, control, undefined, {mode:'server'})
-    //        credentialsDbPath supplied so the server block opens credentialsDb and registers the tool
-    // When:  Object.keys(tools).length + includes check for 'dispatch_google_login'
-    // Then:  26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); 'dispatch_google_login' key present
+  it("T-CONTRACT.CONSUMER: consumer inventory → exactly 49 tools; delta is telegram_notify + gh_issue only", () => {
+    // Given: the same registry under the consumer tier
+    // When:  keys inspected
+    // Then:  49 keys; the power-only delta is exactly { telegram_notify, gh_issue }
     const { dir, cleanup } = makeTmpDir();
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
-        personasDir: dir,
-        serverUrl: "",
-        // P-28.5: credentialsDbPath wires dispatch_google_login
-        credentialsDbPath: join(dir, "credentials.sqlite"),
       };
-      const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
-      const keys = Object.keys(tools);
-      const count = keys.length;
-      assert.equal(count, 27, "T-CONTRACT.SERVER: server mode has exactly 27 tools");
-      assert.ok(
-        keys.includes("dispatch_google_login"),
-        "T-CONTRACT.SERVER: dispatch_google_login present (P-28.5 new)",
+      process.env.FRONDOSE_TIER = "consumer";
+      const consumer = Object.keys(makeAllTools(mockSession, persistence, mockControl)).sort();
+      process.env.FRONDOSE_TIER = "power";
+      const power = Object.keys(makeAllTools(mockSession, persistence, mockControl)).sort();
+      assert.equal(consumer.length, 49, "T-CONTRACT.CONSUMER: consumer inventory has exactly 49 tools");
+      const powerOnly = power.filter((name) => !consumer.includes(name)).sort();
+      assert.deepEqual(
+        powerOnly,
+        ["gh_issue", "telegram_notify"],
+        "T-CONTRACT.CONSUMER: tier delta is exactly telegram_notify + gh_issue",
       );
     } finally {
+      process.env.FRONDOSE_TIER = "power";
       cleanup();
     }
   });
@@ -114,119 +97,19 @@ describe("makeAllTools P-28.5 tool-count contract — server mode (G-P28.5.18)",
 // ─── T-CONTRACT.NO-BASH ───────────────────────────────────────────────────────
 
 describe("no-bash boundary P-28.5 (G-P28.5.19)", () => {
-  it("T-CONTRACT.NO-BASH: zero child_process imports in P-28.5's new + edited files (src/tools/browser/navigateToUrl.ts, clearCookies.ts, src/tools/server/dispatchGoogleLogin.ts, src/cdp/client.ts, src/persistence/serverInbox.ts, src/persistence/workerInbox.ts, src/cli/workerInbox.ts)", () => {
-    // Given: the P-28.5 new/edited source files
+  it("T-CONTRACT.NO-BASH: zero child_process imports in the retained P-28.5-era files", () => {
+    // Given: the retained P-28.5 new/edited source files (clearCookies.ts and the
+    //        fleet server files are deleted with the retired vertical)
     // When:  grep -rE child_process across those specific files
     // Then:  zero matches (Hard Rule 8: no child_process in tool/persistence layers)
     const projectRoot = resolve(process.cwd());
-    // Check P-28.5 specific new/edited files — grep each file that builder will touch
-    const p285Files = [
-      "src/tools/browser/navigateToUrl.ts",
-      "src/tools/browser/clearCookies.ts",
-      "src/tools/server/dispatchGoogleLogin.ts",
-      "src/cdp/client.ts",
-      "src/persistence/serverInbox.ts",
-      "src/persistence/workerInbox.ts",
-      "src/cli/workerInbox.ts",
-    ];
+    const p285Files = ["src/tools/browser/navigateToUrl.ts", "src/cdp/client.ts"];
     const result = spawnSync(
       "grep",
       ["-l", "--include=*.ts", "-E", `(from|require)\\s*\\(?['"]((node:)?child_process)['"]`, ...p285Files],
       { cwd: projectRoot, encoding: "utf-8" },
     );
     const output = (result.stdout ?? "").trim();
-    assert.equal(output, "", "T-CONTRACT.NO-BASH: zero child_process imports in P-28.5 new/edited files");
+    assert.equal(output, "", "T-CONTRACT.NO-BASH: zero child_process imports in retained P-28.5 files");
   });
 });
-
-// ─── T-CONTRACT.CLI ───────────────────────────────────────────────────────────
-
-describe("dispatch_google_login tool + CLI login action share dispatchGoogleLogin core fn (G-P28.5.20)", () => {
-  it("T-CONTRACT.CLI: given same deps, dispatchGoogleLogin(deps,'w1') and makeDispatchGoogleLoginTool(deps).execute({workerId:'w1'}) produce structurally identical outcomes (same queuedId sequence, same worker_pending count)", async () => {
-    // Given: full deps (workersDb + serverInboxDb + credentialsDb + personasDir) with worker 'w1'
-    //        Two separate calls that BOTH route through dispatchGoogleLogin():
-    //          1. dispatchGoogleLogin(deps,'w1') — core fn (what CLI login action calls)
-    //          2. makeDispatchGoogleLoginTool(deps).execute({workerId:'w1'}) — Vercel tool wrapper
-    // When:  both called on independent fresh deps (separate DBs to avoid cross-contamination)
-    // Then:  both return {ok:true, queuedId, workerId:'w1'}; both result in 1 row enqueued
-    //        (proves the tool wrapper is a thin pass-through to the shared core fn)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      // Build deps for core fn call
-      const deps1 = makeFullDeps(dir, "contract-cli-1");
-      const coreResult = dispatchGoogleLogin(deps1, "w1");
-      // Core fn result
-      assert.ok(coreResult.ok === true, "T-CONTRACT.CLI: core fn result.ok===true");
-      if (coreResult.ok) {
-        assert.equal(coreResult.workerId, "w1", "T-CONTRACT.CLI: core fn workerId='w1'");
-        const coreCount = (
-          deps1.serverInboxDb!.prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE worker_id='w1'").get() as {
-            c: number;
-          }
-        ).c;
-        assert.equal(coreCount, 1, "T-CONTRACT.CLI: core fn enqueued 1 row");
-      }
-
-      // Build separate deps for Vercel tool call (fresh DBs to avoid id-sequence coupling)
-      const deps2 = makeFullDeps(dir, "contract-cli-2");
-      const tool = makeDispatchGoogleLoginTool(deps2);
-      const toolResult = await tool.execute({ workerId: "w1" }, { messages: [], toolCallId: "cli-test" });
-      // Tool wrapper result (same shape as core fn — thin pass-through)
-      const tr = toolResult as { ok: boolean; workerId?: string; queuedId?: number };
-      assert.ok(tr.ok === true, "T-CONTRACT.CLI: tool wrapper result.ok===true");
-      if (tr.ok) {
-        assert.equal(tr.workerId, "w1", "T-CONTRACT.CLI: tool wrapper workerId='w1'");
-        const toolCount = (
-          deps2.serverInboxDb!.prepare("SELECT COUNT(*) AS c FROM worker_pending WHERE worker_id='w1'").get() as {
-            c: number;
-          }
-        ).c;
-        assert.equal(toolCount, 1, "T-CONTRACT.CLI: tool wrapper enqueued 1 row");
-      }
-    } finally {
-      cleanup();
-    }
-  });
-});
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-/** Build a fresh set of `:memory:`-style deps with worker 'w1' + persona + google account.
- *  `suffix` keeps separate DB files from colliding within the same tmp dir. */
-function makeFullDeps(baseDir: string, suffix: string): DispatchGoogleLoginDeps {
-  const personasDir = join(baseDir, `personas-${suffix}`);
-  mkdirSync(personasDir, { recursive: true });
-
-  const workersDb = openWorkersDb(join(baseDir, `workers-${suffix}.sqlite`));
-  addWorker(workersDb, "w1", `token-${suffix}`, undefined, "contract-persona");
-
-  const serverInboxDb = openServerInboxDb(join(baseDir, `inbox-${suffix}.sqlite`));
-
-  const credentialsDb = openCredentialsDb(":memory:");
-  addGoogleAccount(credentialsDb, {
-    id: "g-contract",
-    email: "acct@example.com",
-    password: "PLACEHOLDER",
-    recovery_email: null,
-    phone: null,
-    sms_link: null,
-    twofa_link: "https://2fa.show/PLACEHOLDER",
-    label: null,
-  });
-
-  writePersonaTemplate(
-    personasDir,
-    "contract-persona",
-    personaTemplateSchema.parse({
-      fullName: "Contract Test",
-      role: "BD",
-      company: "X",
-      priorities: [],
-      traits: [],
-      googleAccountRef: "g-contract",
-      updatedAt: new Date().toISOString(),
-    }),
-  );
-
-  return { workersDb, serverInboxDb, credentialsDb, personasDir };
-}

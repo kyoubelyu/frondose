@@ -23,11 +23,10 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { CdpClient } from "../../src/cdp/client.js";
 import type { CurrentSurfaceContext } from "../../src/linkedin/types.js";
 import { makeAllTools, tools } from "../../src/tools/index.js";
@@ -64,8 +63,8 @@ const SALES_TOOL_NAMES = [
 
 // ─── T-M81 ─────────────────────────────────────────────────────────────────────
 
-test("T-M81: makeAllTools with no session returns 25 keys; with session returns 36 keys (P-REBASE-TOOL-COUNT: stop_auto)", () => {
-  // No session → 25 base tools (P-SP-F adds get_sales_report; P-SP-E adds start/end_auto_run; P-REBASE-TOOL-COUNT adds stop_auto)
+test("T-M81: makeAllTools with no session returns 23 keys; with session returns 34 keys (single-mode App registry)", () => {
+  // No session → 23 base tools (P-OPEN-SOURCE-SPLIT: publish_event + query_lead_globally retired)
   const echoOnly = makeAllTools();
   const echoKeys = Object.keys(echoOnly).sort();
   assert.deepEqual(
@@ -73,15 +72,13 @@ test("T-M81: makeAllTools with no session returns 25 keys; with session returns 
     [
       "analyze_screenshot",
       "echo",
-      "publish_event",
-      "query_lead_globally",
       "schedule_task",
       "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
       "web_fetch",
       "web_search",
       ...SALES_TOOL_NAMES,
     ].sort(),
-    "makeAllTools() (no session) must return 21 base tools in P-SP-A+B",
+    "makeAllTools() (no session) must return 23 base tools in the single-mode App registry",
   );
 
   // Static export `tools` must also be echo-only (P-1 backward compat)
@@ -104,21 +101,18 @@ test("T-M81: makeAllTools with no session returns 25 keys; with session returns 
   const allKeys = Object.keys(allTools).sort();
 
   const expectedKeys = [
-    // base (19)
+    // base (17)
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
     "web_fetch",
     "web_search",
     ...SALES_TOOL_NAMES,
-    // browser (11; clear_cookies removed from registry)
+    // browser (10; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
-    "launch",
     "navigate_to_url",
     "press",
     "reload",
@@ -126,10 +120,12 @@ test("T-M81: makeAllTools with no session returns 25 keys; with session returns 
     "scroll",
     "type",
     "upload",
+    // linkedin group (launch)
+    "launch",
   ].sort();
 
-  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 36 keys (P-REBASE-TOOL-COUNT: stop_auto)");
-  assert.equal(allKeys.length, 36, "must have exactly 36 tools with session (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)");
+  assert.deepEqual(allKeys, expectedKeys, "makeAllTools(session) must return 34 keys (single-mode App registry)");
+  assert.equal(allKeys.length, 34, "must have exactly 34 tools with session (single-mode App registry)");
 
   // echo tool must be present in both
   assert.ok("echo" in echoOnly, "echo must be in minimal set");
@@ -141,16 +137,14 @@ test("T-M81: makeAllTools with no session returns 25 keys; with session returns 
 
 // ─── T-M120 ─────────────────────────────────────────────────────────────────
 
-test("T-M120: makeAllTools() with no args returns exactly 25 keys — P-REBASE-TOOL-COUNT updated", () => {
-  // P-SP-F: no-args returns 24 tools (7 core + 17 sales: +2 P-SP-E auto-run + 1 P-SP-F analytics)
-  // P-REBASE-TOOL-COUNT: +1 stop_auto (cron tool group, always registered) = 25
+test("T-M120: makeAllTools() with no args returns exactly 23 keys — single-mode App registry", () => {
+  // P-OPEN-SOURCE-SPLIT: publish_event + query_lead_globally retired with the
+  // fleet vertical (T-RETIRE.Fleet.2); 25 → 23.
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     "web_fetch",
@@ -160,19 +154,15 @@ test("T-M120: makeAllTools() with no args returns exactly 25 keys — P-REBASE-T
   assert.deepEqual(
     keys,
     expected.sort(),
-    `makeAllTools() must return 25 base tools in P-REBASE-TOOL-COUNT; got: ${keys.join(", ")}`,
+    `makeAllTools() must return 23 base tools in the single-mode App registry; got: ${keys.join(", ")}`,
   );
-  assert.equal(
-    keys.length,
-    25,
-    "makeAllTools() must have exactly 25 tools (P-REBASE-TOOL-COUNT: +1 stop_auto over P-SP-F's 24)",
-  );
+  assert.equal(keys.length, 23, "makeAllTools() must have exactly 23 tools (single-mode App registry)");
 });
 
 // ─── T-M121 ─────────────────────────────────────────────────────────────────
 
-test("T-M121: makeAllTools(undefined, persistence) returns 33 keys (base 25 + 8 memory/identity) [P-REBASE-TOOL-COUNT updated]", () => {
-  // P-REBASE-TOOL-COUNT update: base 25 (P-SP-F's 24 + stop_auto) + 8 persistence = 33.
+test("T-M121: makeAllTools(undefined, persistence) returns 31 keys (base 23 + 8 memory/identity) [single-mode App registry]", () => {
+  // P-OPEN-SOURCE-SPLIT: 33 → 31 (publish_event + query_lead_globally retired).
   const persistence = {
     memoryDbPath: join(tmpdir(), "p4-t121-memory.sqlite"),
     identityPath: join(tmpdir(), "p4-t121-identity.json"),
@@ -181,11 +171,9 @@ test("T-M121: makeAllTools(undefined, persistence) returns 33 keys (base 25 + 8 
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (19)
+    // base (17)
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     "web_fetch",
@@ -204,19 +192,16 @@ test("T-M121: makeAllTools(undefined, persistence) returns 33 keys (base 25 + 8 
   assert.deepEqual(
     keys,
     expected,
-    `persistence-only must yield 33 tools in P-REBASE-TOOL-COUNT (base 25 + 8 memory/identity); got: ${keys.join(", ")}`,
+    `persistence-only must yield 31 tools in the single-mode App registry (base 23 + 8 memory/identity); got: ${keys.join(", ")}`,
   );
-  assert.equal(
-    keys.length,
-    33,
-    "must have exactly 33 tools with persistence-only (P-REBASE-TOOL-COUNT: base 25 + 8; was 32 in P-SP-F)",
-  );
+  assert.equal(keys.length, 31, "must have exactly 31 tools with persistence-only (single-mode App registry)");
 });
 
 // ─── T-M122 ─────────────────────────────────────────────────────────────────
 
-test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-REBASE-TOOL-COUNT: stop_auto", () => {
-  // 25 base + 11 browser + 8 persistence = 44 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+test("T-M122: makeAllTools(session, persistence) returns 42 keys — single-mode App registry", () => {
+  // 23 base + 10 browser + 1 linkedin (launch) + 8 persistence = 42
+  // (P-OPEN-SOURCE-SPLIT: publish_event + query_lead_globally retired).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -236,21 +221,18 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-REBASE-TO
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (19)
+    // base (17)
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     "web_fetch",
     "web_search",
     ...SALES_TOOL_NAMES,
-    // browser (11; clear_cookies removed from registry)
+    // browser (10; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
-    "launch",
     "navigate_to_url",
     "press",
     "reload",
@@ -258,6 +240,8 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-REBASE-TO
     "scroll",
     "type",
     "upload",
+    // linkedin group (launch)
+    "launch",
     // persistence (8)
     "get_memory_note",
     "getIdentity",
@@ -272,19 +256,19 @@ test("T-M122: makeAllTools(session, persistence) returns 44 keys — P-REBASE-TO
   assert.deepEqual(
     keys,
     expected,
-    `makeAllTools(session, persistence) must yield 44 keys (P-REBASE-TOOL-COUNT: stop_auto); got: ${keys.join(", ")}`,
+    `makeAllTools(session, persistence) must yield 42 keys (single-mode App registry); got: ${keys.join(", ")}`,
   );
   assert.equal(
     keys.length,
-    44,
-    "must have exactly 44 tools with session + persistence (base 25 + 11 browser + 8 persist)",
+    42,
+    "must have exactly 42 tools with session + persistence (23 base + 10 browser + 1 linkedin + 8 persist)",
   );
 });
 
 // ─── T-M_p5.18 ────────────────────────────────────────────────────────────────
 
-test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'qualify_profile' (P-REBASE-TOOL-COUNT: stop_auto)", () => {
-  // 25 base + 11 browser + 8 persistence = 44 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+test("T-M_p5.18: makeAllTools(session, persistence) returns 42 keys including 'qualify_profile' (P-REBASE-TOOL-COUNT: stop_auto)", () => {
+  // 23 base + 10 browser + 1 linkedin (launch) + 8 persistence = 42 (single-mode App registry).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -315,16 +299,17 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 44 keys including 'q
   assert.ok("get_memory_note" in t, "T-M_p5.18: makeAllTools must include 'get_memory_note' tool (P-39)");
   assert.equal(
     keys.length,
-    44,
-    `T-M_p5.18: must have exactly 44 tools (P-REBASE-TOOL-COUNT: stop_auto); got ${keys.length}: ${keys.sort().join(", ")}`,
+    42,
+    `T-M_p5.18: must have exactly 42 tools (single-mode App registry); got ${keys.length}: ${keys.sort().join(", ")}`,
   );
-  console.log("T-M_p5.18: makeAllTools returns 44 tools including qualify_profile + sales kernel tools");
+  console.log("T-M_p5.18: makeAllTools returns 42 tools including qualify_profile + sales kernel tools");
 });
 
 // ─── T-M_p6.21 — session + persistence + control (full worker) ─────────────────
 
-test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (base 25 + 11 browser + 8 persist + 10 control)", () => {
-  // 25 base + 11 browser + 8 persistence + 10 control = 54 (P-ISSUE-BOARD: report_issue).
+test("T-M_p6.21: makeAllTools(session, persistence, control) returns 51 keys (single-mode App registry)", () => {
+  // 23 base + 10 browser + 1 linkedin (launch) + 8 persistence + 9 control = 51
+  // (P-OPEN-SOURCE-SPLIT: report_issue + publish_event + query_lead_globally retired).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -345,21 +330,18 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (ba
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (19)
+    // base (17)
     "echo",
     "analyze_screenshot",
     "web_fetch",
     "web_search",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     ...SALES_TOOL_NAMES,
-    // browser (11; clear_cookies removed from registry)
+    // browser (10; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
-    "launch",
     "navigate_to_url",
     "press",
     "reload",
@@ -367,6 +349,8 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (ba
     "scroll",
     "type",
     "upload",
+    // linkedin group (launch)
+    "launch",
     // persistence (8)
     "get_memory_note",
     "getIdentity",
@@ -379,7 +363,6 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (ba
     // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
     "escalate_for_capability",
     "gh_issue",
-    "report_issue",
     "present_summary",
     "sleep",
     "stop",
@@ -392,9 +375,9 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (ba
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 54 keys (P-ISSUE-BOARD: report_issue); got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.21: makeAllTools(session, persistence, control) must yield 51 keys (single-mode App registry); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 54, `T-M_p6.21: must have exactly 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
+  assert.equal(keys.length, 51, `T-M_p6.21: must have exactly 51 tools (single-mode App registry); got ${keys.length}`);
 
   // Spot-check P-6 new tools
   assert.ok("telegram_notify" in t, "T-M_p6.21: telegram_notify must be registered");
@@ -419,21 +402,23 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 54 keys (ba
   // Spot-check P-Y3 presentation tool
   assert.ok("present_summary" in t, "T-M_p6.21: present_summary must be registered (P-Y3)");
 
-  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 54 keys (P-ISSUE-BOARD: report_issue)");
+  // Retired fleet tools MUST NOT be in the registry (T-RETIRE.Fleet.2 / Report.1)
+  for (const retired of ["report_issue", "publish_event", "query_lead_globally", "clear_cookies"]) {
+    assert.ok(!(retired in t), `T-M_p6.21: ${retired} must NOT be registered (T-RETIRE.Fleet.2)`);
+  }
+
+  console.log("T-M_p6.21: makeAllTools(session, persistence, control) -> 51 keys (single-mode App registry)");
 });
 
 // ─── T-M_p6.22 — no-args backward compat ──────────────────────────────────────
 
-test("T-M_p6.22: makeAllTools() returns 25 keys — P-REBASE-TOOL-COUNT update; base includes all 17 sales tools", () => {
-  // P-SP-F: no-args returns 24 tools (7 core + 17 sales: +2 P-SP-E + 1 P-SP-F).
-  // P-REBASE-TOOL-COUNT: +1 stop_auto (cron tool group, always registered) = 25.
+test("T-M_p6.22: makeAllTools() returns 23 keys — single-mode App registry; base includes all 17 sales tools", () => {
+  // P-OPEN-SOURCE-SPLIT: publish_event + query_lead_globally retired → 23.
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     "web_fetch",
@@ -443,10 +428,10 @@ test("T-M_p6.22: makeAllTools() returns 25 keys — P-REBASE-TOOL-COUNT update; 
   assert.deepEqual(
     keys,
     expected.sort(),
-    `T-M_p6.22: makeAllTools() must return 25 base tools in P-REBASE-TOOL-COUNT; got: ${keys.join(", ")}`,
+    `T-M_p6.22: makeAllTools() must return 23 base tools in the single-mode App registry; got: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 25, "T-M_p6.22: must have exactly 25 tools with no args (P-REBASE-TOOL-COUNT: +1 over P-SP-F's 24)");
-  console.log("T-M_p6.22: makeAllTools() -> 25 keys (base set, P-REBASE-TOOL-COUNT)");
+  assert.equal(keys.length, 23, "T-M_p6.22: must have exactly 23 tools with no args (single-mode App registry)");
+  console.log("T-M_p6.22: makeAllTools() -> 23 keys (base set, single-mode App registry)");
 });
 
 // ─── T-M_p6.23 — session + control (no persistence) ──────────────────────────
@@ -498,8 +483,9 @@ test("T-SP-B.Wiring.1: when makeAllTools runs with worker-mode + power tier, the
 
 // ─── T-M_p6.23 ───────────────────────────────────────────────────────────────
 
-test("T-M_p6.23: makeAllTools(session, undefined, control) returns 46 keys (base 25 + browser 11 + control 10)", () => {
-  // 25 base + 11 browser + 10 control = 46 (P-ISSUE-BOARD: report_issue added power-tier).
+test("T-M_p6.23: makeAllTools(session, undefined, control) returns 43 keys (base 23 + browser 10 + linkedin 1 + control 9)", () => {
+  // 23 base + 10 browser + 1 linkedin (launch) + 9 control = 43
+  // (P-OPEN-SOURCE-SPLIT: report_issue + publish_event + query_lead_globally retired).
   const fakeHandle = {};
   const client = CdpClient.fromHandle(fakeHandle);
   const session = {
@@ -516,21 +502,18 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 46 keys (base
   const keys = Object.keys(t).sort();
 
   const expected = [
-    // base (19)
+    // base (17)
     "echo",
     "analyze_screenshot",
     "web_fetch",
     "web_search",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto",
     ...SALES_TOOL_NAMES,
-    // browser (11; clear_cookies removed from registry)
+    // browser (10; clear_cookies removed from registry)
     "click",
     "close",
     "inspect",
-    "launch",
     "navigate_to_url",
     "press",
     "reload",
@@ -538,11 +521,12 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 46 keys (base
     "scroll",
     "type",
     "upload",
-    // control (10: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary + P-ISSUE-BOARD report_issue)
+    // linkedin group (launch)
+    "launch",
+    // control (9: original 5 + P-57a suggest_card/suggest_next_actions + P-Y1 todo_write + P-Y3 present_summary)
     "escalate_for_capability",
     "gh_issue",
     "present_summary",
-    "report_issue",
     "sleep",
     "stop",
     "telegram_notify",
@@ -554,9 +538,9 @@ test("T-M_p6.23: makeAllTools(session, undefined, control) returns 46 keys (base
   assert.deepEqual(
     keys,
     expected,
-    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 46 keys (P-ISSUE-BOARD: report_issue); got ${keys.length}: ${keys.join(", ")}`,
+    `T-M_p6.23: makeAllTools(session, undefined, control) must yield 43 keys (single-mode App registry); got ${keys.length}: ${keys.join(", ")}`,
   );
-  assert.equal(keys.length, 46, `T-M_p6.23: must have exactly 46 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${keys.length}`);
+  assert.equal(keys.length, 43, `T-M_p6.23: must have exactly 43 tools (single-mode App registry); got ${keys.length}`);
 
   // Key negatives: no persistence tools when persistence is undefined
   assert.ok(!("remember" in t), "T-M_p6.23: 'remember' must NOT be present without persistence");
@@ -613,43 +597,62 @@ test("T-F.Wire.1: when makeAllTools() is called (no args), the returned registry
   console.log(`T-F.Wire.1 PASS: get_sales_report registered in makeAllTools() (${Object.keys(t).length} total keys).`);
 });
 
-// ─── T-F.Wire.2 — worker=54/51, server=27/24 count contract (P-ISSUE-BOARD) ─────
-// NOTE: P-73 rebaselines server counts from P-Y3 27/25 to 25/23 (suggest_card/suggest_next_actions worker-only);
-// P-AUTO-ISOLATE adds stop_auto ungated in both modes (+1 each → 54/51, 27/24).
+// ─── T-F.Wire.2 — single-mode power=51 / consumer=49 count contract ───────────
+// P-OPEN-SOURCE-SPLIT (§10.2): the worker/server dual-mode counts are retired;
+// the App registry is single-mode: power 51 / consumer 49, differing only by
+// telegram_notify + gh_issue (T-RETIRE.Fleet.2). No ROADMAP.md text is pinned —
+// the executable registry is the contract.
 
-test("T-F.Wire.2: post-P-73 tool count docs — ROADMAP.md contains worker 54/51 and server 27/24 plus present_summary", () => {
-  // Given: P-73 has shipped (suggest_card/suggest_next_actions gated out of server mode);
-  //        FULL worker power/consumer = 54/51 and server power/consumer = 27/24 (post P-ISSUE-BOARD)
-  //        AND CLAUDE.md documents present_summary in the breakdown
-  // When:  makeAllTools() key count checked (base set = no session / persist / control)
-  //        AND CLAUDE.md source scanned for count strings
-  // Then:  makeAllTools() returns 24 keys (23 pre-P-SP-F + 1 get_sales_report);
-  //        CLAUDE.md contains the P-Y3 worker/server tier counts and present_summary
-  //
-  // Pre-builder: makeAllTools() returns 23 keys (no get_sales_report yet) → fails
+test("T-F.Wire.2: single-mode App registry — power 51 / consumer 49, delta telegram_notify + gh_issue only", () => {
+  // Given: the retired fleet mode branch removed from makeAllTools
+  // When:  the full registry is built under power tier and consumer tier
+  // Then:  power has exactly 51 tools, consumer exactly 49, and the power-only
+  //        delta is exactly { telegram_notify, gh_issue }
+
+  const fakeHandle = {};
+  const client = CdpClient.fromHandle(fakeHandle);
+  const session = {
+    inputMode: "cdp" as const,
+    getOrInitClient: () => Promise.resolve(client),
+    getClient: () => client as ReturnType<typeof CdpClient.fromHandle> | undefined,
+    heartbeat: async () => true,
+    setLastContext: (_ctx: CurrentSurfaceContext) => {},
+    getLastContext: () => undefined as CurrentSurfaceContext | undefined,
+  };
+  const persistence = {
+    memoryDbPath: join(tmpdir(), "p6-t-m-p6-21-memory.sqlite"),
+    identityPath: join(tmpdir(), "p6-t-m-p6-21-identity.json"),
+  };
+  const control = { requestStop: () => {} };
 
   process.env.FRONDOSE_TIER = "power";
-  // biome-ignore lint/suspicious/noExplicitAny: test assertion
-  const t = makeAllTools() as any;
-  const baseCount = Object.keys(t).length;
+  const powerKeys = Object.keys(makeAllTools(session, persistence, control)).sort();
   assert.equal(
-    baseCount,
-    25,
-    `T-F.Wire.2: makeAllTools() base (power, no session/persist/control) must have 25 keys post-P-REBASE-TOOL-COUNT ` +
-      `(P-SP-F base 24 + 1 stop_auto). Got ${baseCount}: ${Object.keys(t).sort().join(", ")}`,
+    powerKeys.length,
+    51,
+    `T-F.Wire.2: power inventory must be exactly 51 tools; got ${powerKeys.length}: ${powerKeys.join(", ")}`,
   );
 
-  // ROADMAP.md count contract check
-  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-  const roadmap = readFileSync(join(repoRoot, "ROADMAP.md"), "utf-8");
-  assert.ok(
-    roadmap.includes("worker/server `54/27`"),
-    "T-F.Wire.2: ROADMAP.md must document worker/server 54/27 in the power-tier paragraph",
+  process.env.FRONDOSE_TIER = "consumer";
+  const consumerKeys = Object.keys(makeAllTools(session, persistence, control)).sort();
+  assert.equal(
+    consumerKeys.length,
+    49,
+    `T-F.Wire.2: consumer inventory must be exactly 49 tools; got ${consumerKeys.length}: ${consumerKeys.join(", ")}`,
   );
-  assert.ok(
-    roadmap.includes("worker/server `51/24`"),
-    "T-F.Wire.2: ROADMAP.md must document worker/server 51/24 in the consumer-tier paragraph",
+
+  const powerOnly = powerKeys.filter((name) => !consumerKeys.includes(name)).sort();
+  assert.deepEqual(
+    powerOnly,
+    ["gh_issue", "telegram_notify"],
+    `T-F.Wire.2: power-only delta must be exactly telegram_notify + gh_issue; got ${powerOnly.join(", ")}`,
   );
-  assert.ok(roadmap.includes("present_summary"), "T-F.Wire.2: ROADMAP.md must document present_summary (P-Y3)");
-  console.log(`T-F.Wire.2 PASS: post-P-Y3 base count = ${baseCount}; ROADMAP.md count strings verified.`);
+
+  // Retired fleet tools are absent from BOTH tiers (T-RETIRE.Report.1 + Fleet.2)
+  for (const retired of ["report_issue", "publish_event", "query_lead_globally", "clear_cookies"]) {
+    assert.ok(!powerKeys.includes(retired), `T-F.Wire.2: ${retired} must not be in the power inventory`);
+    assert.ok(!consumerKeys.includes(retired), `T-F.Wire.2: ${retired} must not be in the consumer inventory`);
+  }
+
+  console.log("T-F.Wire.2 PASS: power 51 / consumer 49, delta telegram_notify + gh_issue (single-mode registry)");
 });

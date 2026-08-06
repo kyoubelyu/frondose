@@ -16,8 +16,8 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type LoopOpts = {
   abortSignal?: AbortSignal;
@@ -62,7 +62,7 @@ before(async () => {
   const injectUrl = pathToFileURL(join(repoRoot, "src/overlay/inject.js")).href;
   mock.module(injectUrl, { namedExports: { callInOverlay: async () => undefined } });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
 });
 

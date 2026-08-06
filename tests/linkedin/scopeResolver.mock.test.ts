@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { connectNoteRequiredForLabel } from "../../src/cli/subcommands/serve.js";
+import { connectNoteRequiredForLabel } from "../../src/app/backend/index.js";
 import { inferSurface, isLinkedInLoginUrl, LINKEDIN_APP_HOSTS } from "../../src/linkedin/scopeResolver.js";
 import { classifyOutboundEntry } from "../../src/tools/browser/outboundGuard.js";
 

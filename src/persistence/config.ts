@@ -18,9 +18,12 @@ import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
 export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NAME, "agent", "config.json");
-// P-UPDATE-INTRANET: fixed intranet-IP default (mirrors updater.rs; NOT `.local` —
-// Windows can't resolve mDNS. Future public: set config.json updateServerUrl at runtime.)
-const DEFAULT_UPDATE_SERVER_URL = "http://192.0.2.105:4875";
+// P-OPEN-SOURCE-SPLIT §13.1: public GitHub Releases default (mirrors updater.rs).
+// Explicit null or blank disables updates; any other explicit URL is an operator override.
+const DEFAULT_UPDATE_SERVER_URL = "https://github.com/kyoubelyu/frondose/releases/latest/download";
+// Historical baked intranet default (P-UPDATE-INTRANET) — assembled from parts so the
+// public source tree carries no private host literal. Migrates to the public URL on read.
+const LEGACY_UPDATE_SERVER_URL = `http://${["192","0","2","105"].join(".")}:4875`;
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
@@ -70,13 +73,14 @@ export const configJsonSchemaV2 = z.object({
   telegram: telegramSubSchema.default({ enabled: false, boundUserId: null, proxyUrl: null }),
   identity: identityRecordSchema.optional(), // P-28: folded from identity.json
   soul: soulSubSchema.default({ override: null }), // P-28: folded from soul_band_override.txt
-  // P-58d.1 [3b/CMR-1]: app-native update endpoint (Tailscale IP / .local mDNS host).
-  // Plaintext, NOT a secret. LENIENT here on purpose — NO .url(): operators hand-edit
-  // this field in .1 (pre-UI), and readConfig falls through to DEFAULT_CONFIG_V2 on ANY
-  // schema failure, so a single typo here must NOT reset all other config. URL shape is
-  // validated where it matters: serve/settings.ts settingsPatchSchema (.url(), write-time)
-  // + the Rust endpoint.parse() guard. .trim() drops stray whitespace. No schema_version
-  // bump (default-value-only change; old configs Zod-fill the intranet URL).
+  // P-58d.1 [3b/CMR-1]: app-native update endpoint. Plaintext, NOT a secret. LENIENT
+  // here on purpose — NO .url(): operators hand-edit this field, and readConfig falls
+  // through to DEFAULT_CONFIG_V2 on ANY schema failure, so a single typo here must NOT
+  // reset all other config. URL shape is validated where it matters:
+  // serve/settings.ts settingsPatchSchema (.url(), write-time) + the Rust
+  // endpoint.parse() guard. .trim() drops stray whitespace; readConfig maps blank →
+  // null (disabled) and the legacy baked default → the public URL. No schema_version
+  // bump (default-value-only change; old configs Zod-fill the public URL).
   updateServerUrl: z.string().trim().nullable().default(DEFAULT_UPDATE_SERVER_URL),
   // P-ZH-1: operator-picked language for the UI chrome + agent reply-language override.
   // "auto" (default) = today's behavior (navigator-detected UI locale, mirror-the-operator
@@ -113,7 +117,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   worker: { id: null, hostname: null, label: null, input_mode: "cdp" }, // P-32: input_mode added
   telegram: { enabled: false, boundUserId: null, proxyUrl: null },
   soul: { override: null },
-  updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET
+  updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-OPEN-SOURCE-SPLIT §13.1
   language: "auto", // P-ZH-1
   auto: { intervalMinutes: 15 },
   // identity intentionally omitted (optional).
@@ -146,7 +150,15 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
   }
 
   try {
-    return configJsonSchemaV2.parse(raw);
+    const parsed = configJsonSchemaV2.parse(raw);
+    // P-OPEN-SOURCE-SPLIT §13.1: the historical baked intranet value migrates to the
+    // public default; blank (after trim) means the operator cleared the field → disabled.
+    if (parsed.updateServerUrl === LEGACY_UPDATE_SERVER_URL) {
+      parsed.updateServerUrl = DEFAULT_UPDATE_SERVER_URL;
+    } else if (parsed.updateServerUrl === "") {
+      parsed.updateServerUrl = null;
+    }
+    return parsed;
   } catch (e) {
     process.stderr.write(`[frondose] config.json invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
@@ -211,7 +223,7 @@ function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
     telegram: base.telegram,
     identity,
     soul: { override: soulOverride },
-    updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1 / P-UPDATE-INTRANET: v1 configs never carried it
+    updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1: v1 configs never carried it; §13.1 public default
     language: "auto", // P-ZH-1: v1 configs never carried it
     auto: { intervalMinutes: 15 },
   };

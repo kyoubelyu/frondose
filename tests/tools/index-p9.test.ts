@@ -1,19 +1,23 @@
 /**
  * P-9 mock tests — T-MakeAllTools.1..T-MakeAllTools.9
+ * (P-OPEN-SOURCE-SPLIT: inventory rebaselined to the single-mode App registry —
+ * report_issue, query_lead_globally, publish_event and the fleet mode branch
+ * are retired. Power = 51, consumer = 49, delta = telegram_notify + gh_issue.)
  *
  * Tests for the P-9 changes to makeAllTools() in src/tools/index.ts.
  *
  * T-MakeAllTools.1 — 3-arg call still compiles and works (backward compat; G-P9.12)
- * T-MakeAllTools.2 — no-args call returns 24 tools (base + current sales kernel)
- * T-MakeAllTools.3 — full 4-arg call → exactly 54 tools
- * T-MakeAllTools.4 — all 54 expected tool names present
+ * T-MakeAllTools.2 — no-args call returns 23 tools (base + sales kernel + cron)
+ * T-MakeAllTools.3 — full 4-arg call → exactly 51 tools
+ * T-MakeAllTools.4 — all 51 expected tool names present
  * T-MakeAllTools.5 — IDEMPOTENT tools get retry wrapper (execute replaced); analyze_screenshot does NOT
  * T-MakeAllTools.6 — hook wrapping: with hookRunner, all tools get hook wrapper (outermost)
  * T-MakeAllTools.7 — without hookRunner, tools are NOT hook-wrapped
- * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 54 tools
+ * T-MakeAllTools.8 — session+persistence+control (3-arg, no hookRunner) → 51 tools
  * T-MakeAllTools.9 — HookRunner with ENOENT hooks.json → makeAllTools still works (no-op hooks)
  *
- * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-SP-A rebaseline)
+ * Gate coverage: G-P9.12 (regression), G-P9.14 (tool count; P-SP-A rebaseline),
+ *                T-RETIRE.Fleet.2 (single-mode inventory)
  *
  * No LLM, no Chrome (CdpClient.fromHandle with fake handle).
  */
@@ -73,8 +77,9 @@ const SALES_TOOL_NAMES = [
   "update_lead_stage",
 ] as const;
 
-// Complete enumeration — 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
-const EXPECTED_52_TOOLS = [
+// Complete enumeration — 51 tools (single-mode App registry; P-OPEN-SOURCE-SPLIT
+// retired report_issue + query_lead_globally + publish_event from the 54-tool set).
+const EXPECTED_51_TOOLS = [
   // P-1 (1)
   "echo",
   // P-4 memory (2)
@@ -107,8 +112,6 @@ const EXPECTED_52_TOOLS = [
   // P-6 operatorOutput (2)
   "telegram_notify",
   "gh_issue",
-  // P-ISSUE-BOARD (1)
-  "report_issue",
   // P-6 control (3)
   "stop",
   "sleep",
@@ -124,9 +127,6 @@ const EXPECTED_52_TOOLS = [
   "web_fetch",
   "web_search",
   "analyze_screenshot",
-  // P-26 server-coords (2)
-  "publish_event",
-  "query_lead_globally",
   // P-31 scheduler (1)
   "schedule_task",
   // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE (1)
@@ -143,18 +143,16 @@ test("T-MakeAllTools.1: 3-arg makeAllTools call (no hookRunner) still compiles a
   assert.ok("web_fetch" in t, "web_fetch must be present even without 4th arg (always registered)");
 });
 
-// ─── T-MakeAllTools.2: no-args → 24 tools ───────────────────────────────────
+// ─── T-MakeAllTools.2: no-args → 23 tools ───────────────────────────────────
 
-test("T-MakeAllTools.2: makeAllTools() with no args → 25 tools (base + sales kernel)", () => {
+test("T-MakeAllTools.2: makeAllTools() with no args → 23 tools (base + sales kernel + cron)", () => {
   // P-9: web tools are ALWAYS registered (no deps required)
-  // P-26 + P-31: publish_event, query_lead_globally, schedule_task, stop_auto are base tools (no session/persistence needed)
+  // P-31: schedule_task + stop_auto are base tools (no session/persistence needed)
   const t = makeAllTools();
   const keys = Object.keys(t).sort();
   const expected = [
     "analyze_screenshot",
     "echo",
-    "publish_event",
-    "query_lead_globally",
     "schedule_task",
     "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
     "web_fetch",
@@ -162,12 +160,12 @@ test("T-MakeAllTools.2: makeAllTools() with no args → 25 tools (base + sales k
     ...SALES_TOOL_NAMES,
   ].sort();
 
-  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 25 tools with no args; got: ${keys.join(", ")}`);
+  assert.deepEqual(keys, expected, `makeAllTools() must return exactly 23 tools with no args; got: ${keys.join(", ")}`);
 });
 
-// ─── T-MakeAllTools.3: full 4-arg → exactly 54 tools ─────────────────────────
+// ─── T-MakeAllTools.3: full 4-arg → exactly 51 tools ─────────────────────────
 
-test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 54 tools (G-P9.14; P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 51 tools (single-mode App registry)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-make-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json")); // no hooks.json → no-op
@@ -175,24 +173,24 @@ test("T-MakeAllTools.3: full 4-arg makeAllTools → exactly 54 tools (G-P9.14; P
     const count = Object.keys(t).length;
     assert.equal(
       count,
-      54,
-      `must have exactly 54 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
+      51,
+      `must have exactly 51 tools with all args; got ${count}: ${Object.keys(t).sort().join(", ")}`,
     );
   } finally {
     cleanupTmpDir(dir);
   }
 });
 
-// ─── T-MakeAllTools.4: all 54 expected tool names present ────────────────────
+// ─── T-MakeAllTools.4: all 51 expected tool names present ────────────────────
 
-test("T-MakeAllTools.4: all 54 expected tool names present (enumeration; P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.4: all 51 expected tool names present (enumeration; single-mode registry)", () => {
   const dir = mkdtempSync(join(tmpdir(), "mai-p9-enum-"));
   try {
     const runner = new HookRunner(join(dir, "nonexistent.json"));
     const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL, runner);
     const keys = Object.keys(t).sort();
 
-    assert.deepEqual(keys, EXPECTED_52_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
+    assert.deepEqual(keys, EXPECTED_51_TOOLS, `tool set mismatch; actual: ${keys.join(", ")}`);
 
     // Spot-check P-9 web tools
     assert.ok("web_fetch" in t, "web_fetch must be in tool set (P-9)");
@@ -204,10 +202,12 @@ test("T-MakeAllTools.4: all 54 expected tool names present (enumeration; P-REBAS
     assert.ok("search_memory" in t, "search_memory must be in tool set (P-39)");
     assert.ok("set_memory_note" in t, "set_memory_note must be in tool set (P-39)");
     assert.ok("get_memory_note" in t, "get_memory_note must be in tool set (P-39)");
-    // Spot-check P-26/31 base tools
-    assert.ok("publish_event" in t, "publish_event must be in tool set (P-26)");
-    assert.ok("query_lead_globally" in t, "query_lead_globally must be in tool set (P-26)");
+    // Spot-check P-31 base tool
     assert.ok("schedule_task" in t, "schedule_task must be in tool set (P-31)");
+    // Retired fleet tools MUST NOT be in the registry (T-RETIRE.Fleet.2)
+    for (const retired of ["report_issue", "query_lead_globally", "publish_event", "clear_cookies"]) {
+      assert.ok(!(retired in t), `${retired} must NOT be in the App tool registry (T-RETIRE.Fleet.2)`);
+    }
   } finally {
     cleanupTmpDir(dir);
   }
@@ -311,12 +311,12 @@ test("T-MakeAllTools.7: without hookRunner → tools run normally (no hook gate)
   assert.equal(result.echoed, "hello", "echo must return { echoed: message }");
 });
 
-// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 54 tools ─
+// ─── T-MakeAllTools.8: session+persistence+control (no hookRunner) → 51 tools ─
 
-test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 54 tools (P-REBASE-TOOL-COUNT: stop_auto)", () => {
+test("T-MakeAllTools.8: makeAllTools(session, persistence, control) 3-arg → 51 tools (single-mode App registry)", () => {
   const t = makeAllTools(makeFakeSession(), FAKE_PERSISTENCE, FAKE_CONTROL);
   const count = Object.keys(t).length;
-  assert.equal(count, 54, `3-arg makeAllTools must return 54 tools (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE); got ${count}`);
+  assert.equal(count, 51, `3-arg makeAllTools must return 51 tools; got ${count}`);
 });
 
 // ─── T-MakeAllTools.9: HookRunner with ENOENT hooks.json → no-op, tools work ─

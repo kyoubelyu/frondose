@@ -11,7 +11,7 @@
  *              Rust handler; every Rust handler is in generate_handler!; 2 zero-TS-caller
  *              commands (frondose_health / frondose_chrome_ensure; WLC gave workflow_cancel a TS caller)
  *              are allowed as handler-only entries
- *   T-REN.3 — exactly 17 frondose_* handlers defined, registered, and pinned in the
+ *   T-REN.3 — exactly 18 frondose_* handlers defined, registered, and pinned in the
  *              P-APP-7 golden (rebased 15→17 for P-AUTO-ISOLATE's frondose_agent_auto_start/stop)
  *
  * All assertion bodies are intentionally TODO (replaced with assert.fail stubs) so these
@@ -56,14 +56,7 @@ const MAIN_RS = readdirSync(CRATE_SRC_DIR)
   .join("\n");
 const APP_TS = join(REPO_ROOT, "src", "tauri", "ui", "app.ts");
 const SETTINGS_TS = join(REPO_ROOT, "src", "tauri", "ui", "settings.ts");
-const IPC_FIXTURE = join(
-  REPO_ROOT,
-  "tests",
-  "cli",
-  "subcommands",
-  "serve",
-  "ipc-contract.mock.test.ts",
-);
+const IPC_FIXTURE = join(REPO_ROOT, "tests", "cli", "subcommands", "serve", "ipc-contract.mock.test.ts");
 
 // ─── Regex constants ───────────────────────────────────────────────────────────
 
@@ -94,6 +87,7 @@ const EXPECTED_FRONDOSE_COMMANDS: ReadonlySet<string> = new Set([
   "frondose_workflow_handoff",
   "frondose_workflow_cancel",
   "frondose_check_update",
+  "frondose_take_update_notice", // updater command set (17→18)
 ]);
 
 /**
@@ -104,10 +98,7 @@ const EXPECTED_FRONDOSE_COMMANDS: ReadonlySet<string> = new Set([
  * there is no live turn (stops the whole auto-run), so it has a real TS caller and
  * is verified by T-REN.2b's "every invoke maps to a Rust handler" instead.
  */
-const ZERO_TS_CALLER_COMMANDS: ReadonlySet<string> = new Set([
-  "frondose_health",
-  "frondose_chrome_ensure",
-]);
+const ZERO_TS_CALLER_COMMANDS: ReadonlySet<string> = new Set(["frondose_health", "frondose_chrome_ensure"]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,7 +125,7 @@ function extractTauriCommandFnNames(src: string): Set<string> {
   const names = new Set<string>();
   // Match the pattern: #[tauri::command] ... async fn <name>
   // The attribute and fn may be separated by a blank line or other attributes.
-  const pattern = /#\[tauri::command\][\s\S]*?async fn (\w+)/g;
+  const pattern = /#\[tauri::command\][\s\S]*?(?:async\s+)?fn (\w+)/g;
   let m: RegExpExecArray | null = pattern.exec(src);
   for (; m !== null; m = pattern.exec(src)) {
     names.add(m[1]);
@@ -251,10 +242,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
       );
     }
     for (const name of frondoseRegs) {
-      assert.ok(
-        frondoseFns.has(name),
-        `'${name}' is in generate_handler! but no matching async fn found in main.rs`,
-      );
+      assert.ok(frondoseFns.has(name), `'${name}' is in generate_handler! but no matching async fn found in main.rs`);
     }
     assert.equal(
       frondoseFns.size,
@@ -271,10 +259,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     const appTsSrc = readFileSync(APP_TS, "utf-8");
     const settingsTsSrc = readFileSync(SETTINGS_TS, "utf-8");
     const handlerSet = extractGenerateHandlerIds(mainRsSrc);
-    const tsInvokes = new Set([
-      ...extractTsInvokeNames(appTsSrc),
-      ...extractTsInvokeNames(settingsTsSrc),
-    ]);
+    const tsInvokes = new Set([...extractTsInvokeNames(appTsSrc), ...extractTsInvokeNames(settingsTsSrc)]);
     // Every TS invoke name that starts with frondose_ must have a matching registered handler
     const orphans: string[] = [];
     for (const name of tsInvokes) {
@@ -289,7 +274,9 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     );
     // Also assert no mai_* names remain in the TS invoke set (the rename is complete)
     const legacyInvokes = [...tsInvokes].filter((n) =>
-      /^mai_(health|identity|chrome_ensure|get_settings|set_settings|check_update|agent_turn|agent_abort|agent_retry|set_cron_mode|set_passive_mode|workflow_approve|workflow_decline|workflow_handoff|workflow_cancel)$/.test(n)
+      /^mai_(health|identity|chrome_ensure|get_settings|set_settings|check_update|agent_turn|agent_abort|agent_retry|set_cron_mode|set_passive_mode|workflow_approve|workflow_decline|workflow_handoff|workflow_cancel)$/.test(
+        n,
+      ),
     );
     assert.deepEqual(
       legacyInvokes,
@@ -304,10 +291,7 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
     // Then:  none of the two zero-caller names appear in the TS invoke set (correct absence)
     const appTsSrc = readFileSync(APP_TS, "utf-8");
     const settingsTsSrc = readFileSync(SETTINGS_TS, "utf-8");
-    const tsInvokes = new Set([
-      ...extractTsInvokeNames(appTsSrc),
-      ...extractTsInvokeNames(settingsTsSrc),
-    ]);
+    const tsInvokes = new Set([...extractTsInvokeNames(appTsSrc), ...extractTsInvokeNames(settingsTsSrc)]);
     // frondose_health / frondose_chrome_ensure / frondose_workflow_cancel are registered
     // handler-only commands — they are NOT invoked from TS (correct gap per P-APP-7 contract)
     for (const name of ZERO_TS_CALLER_COMMANDS) {
@@ -328,10 +312,10 @@ describe("F-REN-2 — lockstep symmetry: every TS invoke maps to a registered Ru
   });
 });
 
-// ─── T-REN.3 — exactly 17 frondose_* handlers; count pinned in fixture golden ─
+// ─── T-REN.3 — exactly 18 frondose_* handlers; count pinned in fixture golden ─
 
-describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in the golden (T-REN.3)", () => {
-  it("T-REN.3a: given renamed main.rs, when #[tauri::command] fn names are extracted, then exactly 17 frondose_* names exist and match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+describe("F-REN-2 — exactly 18 frondose_* commands defined, registered, and in the golden (T-REN.3)", () => {
+  it("T-REN.3a: given renamed main.rs, when #[tauri::command] fn names are extracted, then exactly 18 frondose_* names exist and match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE, +1 frondose_take_update_notice)", () => {
     // Given: the original 15 Rust handler fn names were renamed to frondose_*; P-AUTO-ISOLATE
     //        (f546d8c) later added frondose_agent_auto_start/frondose_agent_auto_stop (15→17)
     // When:  tauri-command fn-names are extracted from main.rs
@@ -341,8 +325,8 @@ describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in
     const frondoseFns = new Set([...fnNames].filter((n) => n.startsWith("frondose_")));
     assert.equal(
       frondoseFns.size,
-      17,
-      `Expected exactly 17 frondose_* #[tauri::command] fn names; got ${frondoseFns.size}: ${JSON.stringify([...frondoseFns])}`,
+      18,
+      `Expected exactly 18 frondose_* #[tauri::command] fn names; got ${frondoseFns.size}: ${JSON.stringify([...frondoseFns])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
       assert.ok(
@@ -358,7 +342,7 @@ describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in
     }
   });
 
-  it("T-REN.3b: given renamed main.rs, when generate_handler! block is extracted, then exactly 17 frondose_* entries match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+  it("T-REN.3b: given renamed main.rs, when generate_handler! block is extracted, then exactly 18 frondose_* entries match EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE, +1 frondose_take_update_notice)", () => {
     // Given: the original 15 generate_handler! registrations were renamed to frondose_*;
     //        P-AUTO-ISOLATE (f546d8c) later added 2 more entries (15→17)
     // When:  the generate_handler! identifier set is extracted
@@ -368,14 +352,11 @@ describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in
     const frondoseRegs = new Set([...registrations].filter((n) => n.startsWith("frondose_")));
     assert.equal(
       frondoseRegs.size,
-      17,
-      `Expected exactly 17 frondose_* entries in generate_handler!; got ${frondoseRegs.size}: ${JSON.stringify([...frondoseRegs])}`,
+      18,
+      `Expected exactly 18 frondose_* entries in generate_handler!; got ${frondoseRegs.size}: ${JSON.stringify([...frondoseRegs])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
-      assert.ok(
-        frondoseRegs.has(expected),
-        `Expected '${expected}' in generate_handler! list but it was not found`,
-      );
+      assert.ok(frondoseRegs.has(expected), `Expected '${expected}' in generate_handler! list but it was not found`);
     }
     for (const found of frondoseRegs) {
       assert.ok(
@@ -385,7 +366,7 @@ describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in
     }
   });
 
-  it("T-REN.3c: given the P-APP-7 golden flipped to frondose_*, when TAURI_COMMANDS_GOLDEN is extracted, then it contains exactly 17 frondose_* names matching EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE)", () => {
+  it("T-REN.3c: given the P-APP-7 golden flipped to frondose_*, when TAURI_COMMANDS_GOLDEN is extracted, then it contains exactly 18 frondose_* names matching EXPECTED_FRONDOSE_COMMANDS (rebased 15→17 for P-AUTO-ISOLATE, +1 frondose_take_update_notice)", () => {
     // Given: ipc-contract.mock.test.ts TAURI_COMMANDS_GOLDEN has been flipped to frondose_* by validator;
     //        P-AUTO-ISOLATE (f546d8c) later added 2 more entries to that golden (15→17)
     // When:  the golden set is extracted from the fixture source
@@ -394,8 +375,8 @@ describe("F-REN-2 — exactly 17 frondose_* commands defined, registered, and in
     const golden = extractFixtureGolden(src);
     assert.equal(
       golden.size,
-      17,
-      `Expected exactly 17 entries in TAURI_COMMANDS_GOLDEN; got ${golden.size}: ${JSON.stringify([...golden])}`,
+      18,
+      `Expected exactly 18 entries in TAURI_COMMANDS_GOLDEN; got ${golden.size}: ${JSON.stringify([...golden])}`,
     );
     for (const expected of EXPECTED_FRONDOSE_COMMANDS) {
       assert.ok(

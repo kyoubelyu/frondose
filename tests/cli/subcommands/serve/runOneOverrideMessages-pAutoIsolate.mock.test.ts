@@ -26,8 +26,8 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type LoopOpts = {
   messages?: unknown[];
@@ -56,7 +56,12 @@ before(async () => {
   const piModelUrl = pathToFileURL(resolve(repoRoot, "src/agent/pi/model.js")).href;
   mock.module(piModelUrl, {
     namedExports: {
-      resolvePiModel: () => ({ model: { id: "deepseek-test" }, apiKey: "test-key", onPayload: (p: unknown) => p, timeoutMs: 120_000 }),
+      resolvePiModel: () => ({
+        model: { id: "deepseek-test" },
+        apiKey: "test-key",
+        onPayload: (p: unknown) => p,
+        timeoutMs: 120_000,
+      }),
     },
   });
 
@@ -66,7 +71,7 @@ before(async () => {
   const injectUrl = pathToFileURL(resolve(repoRoot, "src/overlay/inject.js")).href;
   mock.module(injectUrl, { namedExports: { callInOverlay: async () => undefined } });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
 });
 
@@ -177,10 +182,16 @@ describe("runOneTurn — the stop_auto post-step hook disables cronEnabled + cle
     //        {type:'auto-session-completed', reason:'stop_auto'} frame AND one
     //        {type:'cron-mode', cronEnabled:false} frame were emitted
     const frames: unknown[] = [];
-    const state = makeState({ cronEnabled: true, autoSessionId: "session-under-test" } as unknown as Partial<ServeState>);
+    const state = makeState({
+      cronEnabled: true,
+      autoSessionId: "session-under-test",
+    } as unknown as Partial<ServeState>);
     const deps = makeDeps(frames);
     stepToolResults = [
-      { toolName: "stop_auto", result: { ok: true, command: "stop_auto", data: { sessionsDisabled: 1, summary: null } } },
+      {
+        toolName: "stop_auto",
+        result: { ok: true, command: "stop_auto", data: { sessionsDisabled: 1, summary: null } },
+      },
     ];
 
     await runTurn(state, deps, { isCronTurn: true });
@@ -206,7 +217,11 @@ describe("runOneTurn — the stop_auto post-step hook disables cronEnabled + cle
         (f as { cronEnabled?: unknown }).cronEnabled === false,
     );
 
-    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must flip to false");
+    assert.equal(
+      (state as unknown as { cronEnabled: boolean }).cronEnabled,
+      false,
+      "state.cronEnabled must flip to false",
+    );
     assert.equal(
       (state as unknown as { autoSessionId: unknown }).autoSessionId,
       null,

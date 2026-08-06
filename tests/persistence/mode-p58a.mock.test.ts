@@ -25,16 +25,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ServeDeps, ServeState } from "../../src/cli/subcommands/serve/context.js";
-import { createOverlayDispatcher } from "../../src/cli/subcommands/serve/dispatch.js";
+import type { ServeDeps, ServeState } from "../../src/app/backend/context.js";
+import { createOverlayDispatcher } from "../../src/app/backend/dispatch.js";
 import type { OverlayEvent } from "../../src/overlay/eventBus.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SERVE_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve.ts"), "utf8");
-const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf8");
+const SERVE_TS = readFileSync(join(REPO, "src", "app", "backend", "index.ts"), "utf8");
+const ROUTES_TS = readFileSync(join(REPO, "src", "app", "backend", "routes.ts"), "utf8");
 // P-72 slice 6: setCronMode call moved to routes/agent.ts; cronEnabled=false on disconnect moved to routes/events.ts
-const ROUTES_AGENT_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "agent.ts"), "utf8");
-const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes", "events.ts"), "utf8");
+const ROUTES_AGENT_TS = readFileSync(join(REPO, "src", "app", "backend", "routes", "agent.ts"), "utf8");
+const ROUTES_EVENTS_TS = readFileSync(join(REPO, "src", "app", "backend", "routes", "events.ts"), "utf8");
 
 /** Run `fn` with MAI_HOME_BASE pointed at a fresh temp dir (so DEFAULT_MODE_PATH → temp mode.json). */
 function withTempHome<T>(fn: () => T): T {
@@ -146,8 +146,7 @@ describe("setCronMode — sets runtime cronEnabled AND persists (the /agent/cron
     // structural companion: the /agent/cron-mode route calls setCronMode(state, enabled)
     // P-72 slice 6: the call moved to routes/agent.ts; widen to check EITHER location.
     assert.ok(
-      /setCronMode\(state,\s*enabled\)/.test(ROUTES_AGENT_TS) ||
-        /setCronMode\(state,\s*enabled\)/.test(ROUTES_TS),
+      /setCronMode\(state,\s*enabled\)/.test(ROUTES_AGENT_TS) || /setCronMode\(state,\s*enabled\)/.test(ROUTES_TS),
       "routes.ts or routes/agent.ts (after P-72 slice 6) /agent/cron-mode routes through setCronMode",
     );
   });

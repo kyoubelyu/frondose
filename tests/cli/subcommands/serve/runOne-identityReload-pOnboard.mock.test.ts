@@ -24,8 +24,8 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type LoopOpts = {
   abortSignal?: AbortSignal;
@@ -52,7 +52,12 @@ before(async () => {
   const piModelUrl = pathToFileURL(join(repoRoot, "src/agent/pi/model.js")).href;
   mock.module(piModelUrl, {
     namedExports: {
-      resolvePiModel: () => ({ model: { id: "deepseek-test" }, apiKey: "test-key", onPayload: (p: unknown) => p, timeoutMs: 120_000 }),
+      resolvePiModel: () => ({
+        model: { id: "deepseek-test" },
+        apiKey: "test-key",
+        onPayload: (p: unknown) => p,
+        timeoutMs: 120_000,
+      }),
     },
   });
 
@@ -65,7 +70,7 @@ before(async () => {
   // P-ONBOARD-CONVERSATIONAL-IDENTITY: mock the recompose hook itself — this test asserts
   // runOne.ts CALLS it on a successful identity write, not what it computes (that's
   // reloadAgentDeps's own existing test coverage from P-FIX-ICP-STALE-CACHE / earlier).
-  const settingsUrl = pathToFileURL(join(repoRoot, "src/cli/subcommands/serve/settings.js")).href;
+  const settingsUrl = pathToFileURL(join(repoRoot, "src/app/backend/settings.js")).href;
   mock.module(settingsUrl, {
     namedExports: {
       reloadAgentDeps: (deps: unknown) => {
@@ -75,7 +80,7 @@ before(async () => {
     },
   });
 
-  const runOneMod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const runOneMod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = runOneMod.runOneTurn as RunOneTurn;
 });
 
@@ -195,6 +200,10 @@ describe("P-ONBOARD-CONVERSATIONAL-IDENTITY — runOneTurn recomposes system-pro
 
     await runTurn(state, deps);
 
-    assert.equal(reloadCalls.length, 1, "reloadAgentDeps must be called exactly once even with 2 identity results in one step");
+    assert.equal(
+      reloadCalls.length,
+      1,
+      "reloadAgentDeps must be called exactly once even with 2 identity results in one step",
+    );
   });
 });

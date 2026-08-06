@@ -4,7 +4,7 @@
  * Settings panel UI (plan §6.4-D/F): `createSettingsPanel({invoke, surfaceError})` — open() loads via
  * frondose_get_settings (key field shows the MASK as placeholder, never raw), save() collects + POSTs a key ONLY when
  * freshly typed, then re-loads (re-masks). Custom-URL-only (P-57d): the LLM form exposes baseUrl + model + key ONLY;
- * Brave MCP search key is allowed, while Anthropic/OpenAI-direct/Tavily presets are not. T-Scope.1 guards
+ * Search-provider keys are absent, while Anthropic/OpenAI-direct/Tavily presets are not allowed. T-Scope.1 guards
  * config/secrets schemas unchanged + write-range.
  *
  * LOAD: MIXED. `src/tauri/ui/settings.ts` is NEW (builder 4b B4) → GATE-ON-BUILDER (dynamic import of
@@ -13,7 +13,7 @@
  * jsdom is NOT a project dep — a minimal getElementById stub is used.
  *
  * Gate coverage: G-PY6.6 (mask placeholder + key-only-when-typed + re-mask), G-PY6.1 (UI never shows raw),
- *   G-PY6.5 (custom-URL-only LLM form; Brave MCP search key is allowed), G-PY6.7 (schemas unchanged + write-range).
+ *   G-PY6.5 (custom-URL-only LLM form; no search-provider key), G-PY6.7 (schemas unchanged + write-range).
  *
  * Run (mock): node --import tsx --test --test-force-exit --test-timeout=30000 \
  *   tests/tauri/settings-pY6.mock.test.ts
@@ -119,8 +119,8 @@ function parsePorcelainFixturePaths(statusOut: string): string[] {
 
 function isPY6AllowedPath(p: string): boolean {
   return (
-    p === "src/cli/subcommands/serve/settings.ts" ||
-    p === "src/cli/subcommands/serve/routes.ts" ||
+    p === "src/app/backend/settings.ts" ||
+    p === "src/app/backend/routes.ts" ||
     p === "src/tauri/src-tauri/src/main.rs" ||
     p === "src/agent/systemPrompt/soul.ts" ||
     p === "src/agent/workflow/controller.ts" ||
@@ -201,7 +201,7 @@ describe("settings panel — save sends key ONLY when typed (G-PY6.6, .2)", () =
 
 describe("settings panel — custom-URL-only LLM form (structural, P-57d/P-BRAVE-MCP) (G-PY6.5)", () => {
   // Given: index.html + settings.ts. When: inspected. Then: the LLM controls stay baseUrl/model/key only,
-  //        with NO anthropic / openai-direct / tavily preset/control token. Brave MCP search key is allowed.
+  //        with NO direct-provider or vendor-search preset/control token.
   it("T-UI.3: the settings form keeps custom-URL-only LLM controls and no direct-provider/Tavily preset", () => {
     const start = INDEX_HTML.indexOf('id="settings-panel"');
     assert.ok(start > 0, "the #settings-panel section exists in index.html");
@@ -215,7 +215,8 @@ describe("settings panel — custom-URL-only LLM form (structural, P-57d/P-BRAVE
       assert.ok(!settingsTs.toLowerCase().includes(tok), `settings.ts must not mention ${tok} (custom-URL-only)`);
     }
     assert.ok(
-      !panel.toLowerCase().includes("api.search.brave.com") && !settingsTs.toLowerCase().includes("api.search.brave.com"),
+      !panel.toLowerCase().includes("api.search.brave.com") &&
+        !settingsTs.toLowerCase().includes("api.search.brave.com"),
       "Brave MCP settings must not guide a direct Brave HTTP adapter",
     );
   });
@@ -252,7 +253,7 @@ describe("scope — config/secrets schemas UNCHANGED + write-range (structural) 
     assert.match(CONFIG_TS, /configJsonSchemaV2 = z\.object/, "configJsonSchemaV2 present");
     assert.match(SECRETS_TS, /secretsJsonSchema = z\.object/, "secretsJsonSchema present");
     assertPY6Scope(`
- M src/cli/subcommands/serve/settings.ts
+ M src/app/backend/settings.ts
 A  src/tauri/ui/settings.ts
 ?? src/tauri/ui/index.html
 R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts
@@ -295,8 +296,8 @@ describe("scope — deterministic P-Y6 fixture validator (P-69a)", () => {
     // Then: approved paths pass without reading the operator's live worktree.
     assert.deepEqual(
       parsePorcelainFixturePaths(`
- M src/cli/subcommands/serve/settings.ts
- M src/cli/subcommands/serve/routes.ts
+ M src/app/backend/settings.ts
+ M src/app/backend/routes.ts
 A  src/tauri/src-tauri/src/main.rs
 ?? src/tauri/ui/settings.ts
 R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts
@@ -305,8 +306,8 @@ C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
  M src/tools/browser/click.ts
 `),
       [
-        "src/cli/subcommands/serve/settings.ts",
-        "src/cli/subcommands/serve/routes.ts",
+        "src/app/backend/settings.ts",
+        "src/app/backend/routes.ts",
         "src/tauri/src-tauri/src/main.rs",
         "src/tauri/ui/settings.ts",
         "src/overlay/frondoseCss.generated.ts",
@@ -318,8 +319,8 @@ C  src/tauri/ui/app.js -> src/tauri/ui/app.js.map
       ],
     );
     assertPY6Scope(`
- M src/cli/subcommands/serve/settings.ts
- M src/cli/subcommands/serve/routes.ts
+ M src/app/backend/settings.ts
+ M src/app/backend/routes.ts
 A  src/tauri/src-tauri/src/main.rs
 ?? src/tauri/ui/settings.ts
 R  src/overlay/frondoseCss.generated.ts -> src/overlay/sharedRenderBundle.generated.ts

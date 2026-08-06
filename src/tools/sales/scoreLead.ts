@@ -130,11 +130,11 @@ const scoreLeadParams = z.object({
     .nullable()
     .optional()
     .describe(
-      "Methodology applied to this scoring decision: 'solution_selling' (default when Pain " +
-        "Chain evidence is strong), 'spin' (open discovery), 'challenger' (buyer is " +
-        "complacent), 'meddic' (enterprise multi-stakeholder), 'pain_chain' / 'key_players' / " +
-        "'value_cycle' (Solution Selling sub-method), or 'operator' (custom heuristic). " +
-        "Open-text field — record the method name that drove your reasoning.",
+      "Methodology applied to this scoring decision: 'exploratory' (default when thin " +
+        "evidence), 'causal' (open discovery: Situation/Problem/Implication/Need-payoff), " +
+        "'insight-led' (complacent buyer — teach an insight), 'enterprise-mapping' " +
+        "(multi-stakeholder), or 'operator' (custom heuristic). Open-text field — record " +
+        "the method label that drove your reasoning.",
     ),
 });
 

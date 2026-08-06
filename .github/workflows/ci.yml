@@ -2,44 +2,85 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - "ROADMAP.md"
-      - "CLAUDE.md"
-      - "AGENTS.md"
-      - "bootstrap.md"
-      - "docs/**"
-      - "website/**"
-      - ".zed/**"
-      - ".codegraph/**"
-      - ".claude/**"
-      - ".omx/**"
+    branches: [main]
   pull_request:
-    paths-ignore:
-      - "ROADMAP.md"
-      - "CLAUDE.md"
-      - "AGENTS.md"
-      - "bootstrap.md"
-      - "docs/**"
-      - "website/**"
-      - ".zed/**"
-      - ".codegraph/**"
-      - ".claude/**"
-      - ".omx/**"
+
+permissions:
+  contents: read
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
       - run: npm run check
       - run: npm run lint
       - run: npm run test:fast
+
+  macos:
+    runs-on: macos-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:tauri
+
+  windows:
+    runs-on: windows-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:release:win
+
+  public-export:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export public candidates
+        run: |
+          node --import tsx -e "import('./scripts/project-manifest.ts').then((m) => m.exportProjects({ repoRoot: process.cwd(), commit: process.env.GITHUB_SHA, outRoot: '/tmp/frondose-public' }))"
+
+  license:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: npm ci
+      - run: npx license-checker-rseidelsohn --failOn 'AGPL;GPL;LGPL;UNLICENSED' --production
+
+  audit:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: npm ci
+      - name: Scan exported production bytes
+        run: node --import tsx scripts/public-scan.mjs

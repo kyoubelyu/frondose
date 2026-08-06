@@ -38,12 +38,9 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { after, describe, it } from "node:test";
-import { derivePackageSymlink } from "../../src/cli/autoUpdate/symlink.js";
-import { cleanupTmpDir } from "../_helpers/tmp";
+import { describe, it } from "node:test";
 
 const REPO = resolve(process.cwd());
 
@@ -169,11 +166,10 @@ describe("source-scan guard — no @kyoube/mai-agent / mai-agent literals outsid
     // Then:  zero violations outside the line-exact allowlist
 
     const tsRsFiles = collectFiles(SRC_DIR, [".ts", ".rs"], SCAN_EXCLUDED_PREFIXES);
-    const installSh = join(REPO, "install.sh");
 
     const violations: string[] = [];
 
-    const allFiles = [...tsRsFiles, installSh];
+    const allFiles = [...tsRsFiles];
     for (const filePath of allFiles) {
       const relPath = relative(REPO, filePath).replace(/\\/g, "/");
 
@@ -253,153 +249,24 @@ describe(`package identity — @kyoube/frondose + ${EXPECTED_VERSION} (T-FREN4b.
 });
 
 // ---------------------------------------------------------------------------
-// T-FREN4b.SymlinkResolution — autoUpdate symlink helpers
+// T-FREN4b.SymlinkResolution + T-FREN4b.RepoRef — RETIRED with the CLI
+// autoUpdate/update/install vertical (src/cli/autoUpdate/**, src/cli/subcommands/
+// update.ts, install.sh all deleted per the P-OPEN-SOURCE-SPLIT ledger; the App
+// updates via the Tauri updater, not the CLI installer).
 // ---------------------------------------------------------------------------
-
-const skipSymlinkOnWindows = process.platform === "win32" ? { skip: "POSIX symlink install layout" } : {};
-
-describe(
-  "autoUpdate symlink resolution — PKG_NAME === '@kyoube/frondose' (T-FREN4b.SymlinkResolution)",
-  skipSymlinkOnWindows,
-  () => {
-    // Shared tmpdir for symlink fixtures
-    let tmpDir: string;
-
-    after(() => {
-      // Cleanup tmpdir after all tests in this describe block
-      try {
-        cleanupTmpDir(tmpDir);
-      } catch {
-        // best-effort
-      }
-    });
-
-    it("T-FREN4b.Symlink.1: given a @kyoube/frondose-named fixture (bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js), derivePackageSymlink returns the resolved @kyoube/frondose package path", () => {
-      // Given: tmpdir layout: bin/mai -> ../lib/@kyoube/frondose/dist/cli/main.js;
-      //        lib/@kyoube/frondose -> ../releases/v0.5.0-alpha.54 (symlink)
-      // When:  derivePackageSymlink(argv1) runs with post-Step-4 PKG_NAME = "@kyoube/frondose"
-      // Then:  returns the resolved lib/@kyoube/frondose path (slice logic keys off PKG_NAME.length)
-
-      tmpDir = mkdtempSync(join(tmpdir(), "fren4b-symlink1-"));
-      mkdirSync(join(tmpDir, "bin"), { recursive: true });
-      mkdirSync(join(tmpDir, "lib", "@kyoube"), { recursive: true });
-      mkdirSync(join(tmpDir, "lib", "releases", "v0.5.0-alpha.54"), { recursive: true });
-
-      // lib/@kyoube/frondose → ../../releases/v0.5.0-alpha.54
-      const pkgSymlinkPath = join(tmpDir, "lib", "@kyoube", "frondose");
-      symlinkSync("../../releases/v0.5.0-alpha.54", pkgSymlinkPath);
-
-      // bin/mai → ../lib/@kyoube/frondose/dist/cli/main.js (dangling ok — readlinkSync only reads target string)
-      const argv1 = join(tmpDir, "bin", "mai");
-      symlinkSync("../lib/@kyoube/frondose/dist/cli/main.js", argv1);
-
-      const result = derivePackageSymlink(argv1);
-      assert.ok(result !== null, "T-FREN4b.Symlink.1: result must not be null for @kyoube/frondose-named fixture");
-      assert.ok(
-        result.includes("@kyoube/frondose"),
-        `T-FREN4b.Symlink.1: result must contain '@kyoube/frondose'; got: ${result}`,
-      );
-      assert.ok(
-        !result.includes("@kyoube/mai-agent"),
-        `T-FREN4b.Symlink.1: result must NOT contain '@kyoube/mai-agent'; got: ${result}`,
-      );
-    });
-
-    it("T-FREN4b.Symlink.2: given a legacy @kyoube/mai-agent-named bin-symlink target, derivePackageSymlink returns null (expected documented behavior — legacy install requires runbook re-install)", () => {
-      // Given: bin/mai -> ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy, pre-rename fixture)
-      // When:  derivePackageSymlink(argv1) runs with new PKG_NAME = "@kyoube/frondose"
-      // Then:  returns null — idx === -1; autoUpdate skips as not_global_install (benign; no corruption)
-
-      const legacyDir = mkdtempSync(join(tmpdir(), "fren4b-symlink2-"));
-      try {
-        mkdirSync(join(legacyDir, "bin"), { recursive: true });
-        mkdirSync(join(legacyDir, "lib", "@kyoube"), { recursive: true });
-
-        // bin/mai → ../lib/@kyoube/mai-agent/dist/cli/main.js (legacy symlink target)
-        const argv1 = join(legacyDir, "bin", "mai");
-        symlinkSync("../lib/@kyoube/mai-agent/dist/cli/main.js", argv1);
-
-        const result = derivePackageSymlink(argv1);
-        assert.strictEqual(
-          result,
-          null,
-          "T-FREN4b.Symlink.2: legacy @kyoube/mai-agent symlink MUST return null with new PKG_NAME=@kyoube/frondose (gated re-install required per runbook — NOT a bug)",
-        );
-      } finally {
-        cleanupTmpDir(legacyDir);
-      }
-    });
-  },
-);
-
-// ---------------------------------------------------------------------------
-// T-FREN4b.RepoRef — GitHub repo references
-// ---------------------------------------------------------------------------
-
-describe("GitHub repo refs — kyoubelyu/frondose throughout (T-FREN4b.RepoRef)", () => {
-  it("T-FREN4b.Repo.1: src/cli/autoUpdate/fetch.ts LATEST_URL contains 'kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'", () => {
-    // Given: post-Step-4 src/cli/autoUpdate/fetch.ts
-    // When:  the file text is read
-    // Then:  'kyoubelyu/frondose/releases/latest' appears; 'kyoubelyu/mai-agent' does NOT
-
-    const text = readFileSync(join(REPO, "src/cli/autoUpdate/fetch.ts"), "utf-8");
-    // REPO_PATH is a template variable: LATEST_URL = `https://api.github.com/repos/${REPO_PATH}/releases/latest`
-    // So the literal "kyoubelyu/frondose/releases/latest" does NOT appear — check REPO_PATH constant instead.
-    assert.ok(
-      text.includes('kyoubelyu/frondose"') ||
-        text.includes("kyoubelyu/frondose'") ||
-        text.includes("kyoubelyu/frondose`"),
-      "T-FREN4b.Repo.1: fetch.ts REPO_PATH constant must contain 'kyoubelyu/frondose'",
-    );
-    assert.ok(
-      !text.includes("kyoubelyu/mai-agent"),
-      "T-FREN4b.Repo.1: fetch.ts must NOT contain 'kyoubelyu/mai-agent'",
-    );
-  });
-
-  it("T-FREN4b.Repo.2: src/cli/subcommands/update.ts contains 'api.github.com/repos/kyoubelyu/frondose/releases/latest'; does NOT contain 'kyoubelyu/mai-agent'", () => {
-    // Given: post-Step-4 src/cli/subcommands/update.ts
-    // When:  the file text is read
-    // Then:  correct frondose URL present; stale mai-agent URL absent
-
-    const text = readFileSync(join(REPO, "src/cli/subcommands/update.ts"), "utf-8");
-    assert.ok(
-      text.includes("api.github.com/repos/kyoubelyu/frondose/releases/latest"),
-      "T-FREN4b.Repo.2: update.ts must contain correct frondose API URL",
-    );
-    assert.ok(
-      !text.includes("kyoubelyu/mai-agent"),
-      "T-FREN4b.Repo.2: update.ts must NOT contain 'kyoubelyu/mai-agent'",
-    );
-  });
-
-  it('T-FREN4b.Repo.3: install.sh contains REPO="kyoubelyu/frondose"; does NOT contain REPO="kyoubelyu/mai-agent"', () => {
-    // Given: post-Step-4 install.sh at repo root
-    // When:  the file text is read
-    // Then:  'REPO="kyoubelyu/frondose"' appears; 'REPO="kyoubelyu/mai-agent"' does NOT
-
-    const text = readFileSync(join(REPO, "install.sh"), "utf-8");
-    assert.ok(
-      text.includes('REPO="kyoubelyu/frondose"'),
-      'T-FREN4b.Repo.3: install.sh must contain REPO="kyoubelyu/frondose"',
-    );
-    assert.ok(
-      !text.includes('REPO="kyoubelyu/mai-agent"'),
-      'T-FREN4b.Repo.3: install.sh must NOT contain REPO="kyoubelyu/mai-agent"',
-    );
-  });
-});
 
 // ---------------------------------------------------------------------------
 // T-FREN4b.TauriPathResolution — main.rs dual-name candidate arrays
 // ---------------------------------------------------------------------------
 
 describe("Tauri path resolution — dual-name candidate arrays in main.rs (T-FREN4b.TauriPathResolution)", () => {
-  it("T-FREN4b.MainRs.1: full rebrand — main.rs candidate arrays contain ONLY @kyoube/frondose paths for sidecarMain.js and cli/main.js; the @kyoube/mai-agent fallback paths are fully removed", () => {
+  it("T-FREN4b.MainRs.1: full retirement — the Rust crate contains ONLY the App sidecar candidate; no CLI entry path remains", () => {
     // Given: full-rebrand Rust crate (operator directive 2026-06-15 — drop mai-agent back-compat)
-    //        CH-3 module split: path resolution (including candidate arrays) moved from main.rs to resolve.rs
+    //        CH-3 module split: path resolution moved from main.rs to resolve.rs
+    //        P-OPEN-SOURCE-SPLIT: the CLI entrypoint is retired (T-RETIRE.CLI.1)
     // When:  concatenated crate source is read and searched for candidate path substrings
-    // Then:  the @kyoube/frondose paths are present AND no @kyoube/mai-agent path remains
+    // Then:  the App sidecar @kyoube/frondose path is present; no dist/cli/main.js and no
+    //        @kyoube/mai-agent path remains
 
     const crateDir = join(REPO, "src/tauri/src-tauri/src");
     const text = readdirSync(crateDir)
@@ -408,17 +275,19 @@ describe("Tauri path resolution — dual-name candidate arrays in main.rs (T-FRE
       .map((f) => readFileSync(join(crateDir, f), "utf-8"))
       .join("\n");
 
-    // Sidecar + CLI frondose candidates (the only ones that should remain)
+    // Sidecar candidate — the only executable entry the App resolver knows
     const SIDECAR_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/app/sidecarMain.js";
-    const CLI_FRONDOSE = "/opt/homebrew/lib/node_modules/@kyoube/frondose/dist/cli/main.js";
 
     assert.ok(text.includes(SIDECAR_FRONDOSE), `T-FREN4b.MainRs.1: sidecar @kyoube/frondose path must be present`);
-    assert.ok(text.includes(CLI_FRONDOSE), `T-FREN4b.MainRs.1: CLI @kyoube/frondose path must be present`);
 
-    // No @kyoube/mai-agent fallback may remain anywhere in main.rs
+    // No CLI entry literal and no @kyoube/mai-agent fallback may remain anywhere in the crate
+    assert.ok(
+      !text.includes("dist/cli/main.js"),
+      `T-FREN4b.MainRs.1: no dist/cli/main.js literal may remain in the Rust crate (T-RETIRE.CLI.1)`,
+    );
     assert.ok(
       !text.includes("@kyoube/mai-agent"),
-      `T-FREN4b.MainRs.1: main.rs must no longer contain any @kyoube/mai-agent fallback path after full rebrand`,
+      `T-FREN4b.MainRs.1: the crate must not contain any @kyoube/mai-agent fallback path`,
     );
   });
 });
@@ -428,16 +297,7 @@ describe("Tauri path resolution — dual-name candidate arrays in main.rs (T-FRE
 // ---------------------------------------------------------------------------
 
 describe("cosmetic strings — frondose throughout operator-visible surfaces (T-FREN4b.Cosmetic)", () => {
-  it("T-FREN4b.Cosmetic.1: src/cli/repl.ts line ~248 contains 'frondose ready.' and does NOT contain 'mai-agent ready'", () => {
-    // Given: post-Step-4 src/cli/repl.ts
-    // When:  file text is read
-    // Then:  'frondose ready.' present; 'mai-agent ready' absent
-
-    const text = readFileSync(join(REPO, "src/cli/repl.ts"), "utf-8");
-    assert.ok(text.includes("frondose ready."), "T-FREN4b.Cosmetic.1: repl.ts must contain 'frondose ready.'");
-    assert.ok(!text.includes("mai-agent ready"), "T-FREN4b.Cosmetic.1: repl.ts must NOT contain 'mai-agent ready'");
-  });
-
+  // (T-FREN4b.Cosmetic.1 — src/cli/repl.ts — retired with the REPL vertical.)
   it("T-FREN4b.Cosmetic.2: src/tools/webTools/webFetch.ts User-Agent string contains 'frondose/1.0' and 'kyoubelyu/frondose'; does NOT contain 'kyoubelyu/mai-agent'", () => {
     // Given: post-Step-4 src/tools/webTools/webFetch.ts
     // When:  file text is read to inspect the User-Agent literal

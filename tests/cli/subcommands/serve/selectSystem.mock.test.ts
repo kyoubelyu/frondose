@@ -13,8 +13,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectSystemForTurn } from "../../../../src/cli/subcommands/serve/turn/selectSystem.js";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import { selectSystemForTurn } from "../../../../src/app/backend/turn/selectSystem.js";
 
 // ── Minimal stub factory ──────────────────────────────────────────────────────
 
@@ -55,7 +55,11 @@ describe("selectSystemForTurn — 3-branch routing", () => {
 
     const result = selectSystemForTurn({ isWorkflowResume: true, isCronTurn: false }, state, deps);
 
-    assert.strictEqual(result, deps.systemResume, "isWorkflowResume=true must return deps.systemResume by exact reference");
+    assert.strictEqual(
+      result,
+      deps.systemResume,
+      "isWorkflowResume=true must return deps.systemResume by exact reference",
+    );
     assert.strictEqual(result, "RESUME_SYSTEM_STRING");
   });
 
@@ -160,7 +164,11 @@ describe("selectSystemForTurn — 3-branch routing", () => {
 
       const result = selectSystemForTurn({ isWorkflowResume: false, isCronTurn: false }, state, deps);
 
-      assert.deepEqual(capturedMode, ["auto"], "cronEnabled=true wins over passiveEnabled=true — must call composeOperatorSystem('auto')");
+      assert.deepEqual(
+        capturedMode,
+        ["auto"],
+        "cronEnabled=true wins over passiveEnabled=true — must call composeOperatorSystem('auto')",
+      );
       assert.strictEqual(result, "<SYS:auto>");
       assert.notStrictEqual(result, "<SYS:magical>", "must NOT return magical when cron wins");
     });

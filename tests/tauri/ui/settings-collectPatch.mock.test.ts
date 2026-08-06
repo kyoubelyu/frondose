@@ -1,7 +1,7 @@
 /**
  * P-SETTINGS-SAVE-FIX — collectPatch() omits blank optional fields (regression for the shipped 0.5.0
  * save-400 bug). `frondose_set_settings`'s `settingsPatchSchema` is "omit=unchanged, if present must be
- * valid" (src/cli/subcommands/serve/settings.ts:51-75): `llm.baseUrl` needs `.url()`, `llm.model` and every
+ * valid" (src/app/backend/settings.ts:51-75): `llm.baseUrl` needs `.url()`, `llm.model` and every
  * identity field need `.min(1)`. The old collectPatch() ALWAYS sent these keys, so a blank input produced
  * `""` and 400'd. The fix (src/tauri/ui/settings.ts collectPatch()) omits a field entirely when its input
  * is blank, letting the "omit=unchanged" schema semantics apply.
@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
-import { parseSettingsPatch } from "../../../src/cli/subcommands/serve/settings.js";
+import { parseSettingsPatch } from "../../../src/app/backend/settings.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: dynamic import of the fixed settings.ts
 let createSettingsPanel: ((deps: any) => { open(): Promise<void>; close(): void }) | undefined;
@@ -34,7 +34,6 @@ const SETTINGS_IDS = [
   "settings-baseurl",
   "settings-model",
   "settings-key",
-  "settings-brave-key",
   "settings-fullname",
   "settings-company",
   "settings-role",
@@ -78,7 +77,13 @@ function mockInvoke() {
   const invoke = async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args });
     return cmd === "frondose_get_settings"
-      ? { ok: true, llm: { baseUrl: null, model: null, hasKey: false, maskedKey: null, provider: null }, identity: {}, soul: { override: null }, updateServerUrl: null }
+      ? {
+          ok: true,
+          llm: { baseUrl: null, model: null, hasKey: false, maskedKey: null, provider: null },
+          identity: {},
+          soul: { override: null },
+          updateServerUrl: null,
+        }
       : { ok: true };
   };
   return { invoke, calls };
@@ -103,7 +108,13 @@ function mockInvokeWithIdentity(identity: Record<string, unknown>) {
   const invoke = async (cmd: string, _args?: Record<string, unknown>) => {
     calls.push({ cmd, args: _args });
     return cmd === "frondose_get_settings"
-      ? { ok: true, llm: { baseUrl: null, model: null, hasKey: false, maskedKey: null, provider: null }, identity, soul: { override: null }, updateServerUrl: null }
+      ? {
+          ok: true,
+          llm: { baseUrl: null, model: null, hasKey: false, maskedKey: null, provider: null },
+          identity,
+          soul: { override: null },
+          updateServerUrl: null,
+        }
       : { ok: true };
   };
   return { invoke, calls };
@@ -228,7 +239,9 @@ describe("collectPatch() — backfilled ICP sub-fields (industry/region/companyN
     els["settings-icp-region"].value = "US, EMEA";
     els["settings-icp-keywords"].value = "payments";
     const patch = await fireSaveAndGetPatch(els);
-    const identity = patch.identity as { icp?: { targetRole: string[]; industry?: string[]; region?: string[]; companyNameKeywords?: string[] } };
+    const identity = patch.identity as {
+      icp?: { targetRole: string[]; industry?: string[]; region?: string[]; companyNameKeywords?: string[] };
+    };
     assert.deepEqual(identity.icp?.targetRole, ["VP Sales", "Head of Growth"]);
     assert.deepEqual(identity.icp?.industry, ["SaaS", "Fintech"]);
     assert.deepEqual(identity.icp?.region, ["US", "EMEA"]);
@@ -277,7 +290,7 @@ describe("collectPatch() — freeAxes (methodology habits) always included as a 
 describe("collectPatch() output (expanded fields) passes the serve settingsPatchSchema", () => {
   // Given: every backfilled field filled in (the full new form surface). When: validated via the
   //        real serve-side parseSettingsPatch. Then: ok:true — settingsPatchSchema.identity is
-  //        already the full identityPatchSchema (verified at Step 1: src/cli/subcommands/serve/settings.ts
+  //        already the full identityPatchSchema (verified at Step 1: src/app/backend/settings.ts
   //        settingsPatchSchema — no server-side widening was needed for this phase).
   it("T-Onboard.Patch.7: a fully-filled expanded patch (all backfilled fields) passes parseSettingsPatch with ok:true", async () => {
     const els = installDomStub();

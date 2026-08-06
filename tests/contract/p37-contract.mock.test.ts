@@ -81,15 +81,12 @@ const FROZEN_WORKER_TOOL_KEYS_P37 = [
   "present_summary",
   "press",
   "promote_candidate_to_lead",
-  "publish_event",
   "qualify_profile",
-  "query_lead_globally",
   "record_auto_action",
   "record_lead_event",
   "record_raw_candidate",
   "reload",
   "remember",
-  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -131,7 +128,6 @@ const FROZEN_SERVER_TOOL_KEYS_P37 = [
   "present_summary",
   "provision_worker",
   "remember",
-  "report_issue",
   "revoke_worker",
   "schedule_task",
   "search_memory",
@@ -161,7 +157,6 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
       resolve(ROOT, "src/linkedin/inspectSummary.ts"),
       resolve(ROOT, "src/tools/webTools/analyzeScreenshot.ts"),
       resolve(ROOT, "src/agent/systemPrompt/boundary.ts"),
-      resolve(ROOT, "src/agent/systemPrompt/serverBoundary.ts"),
       resolve(ROOT, "src/linkedin/session.ts"),
     ];
 
@@ -182,44 +177,33 @@ describe("no child_process import in P-37's 7 edited production files (G-P37.12)
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("tool counts: worker 54 / server 27 (rebaselined) (G-P37.12)", () => {
-  it("T-CONTRACT.TOOLS: makeAllTools current inventory (worker 54 / server 27)", () => {
-    // Given: makeAllTools called in worker mode and server mode with fake deps
+  it("T-CONTRACT.TOOLS: single-mode App registry — power 51 / consumer 49 (P-OPEN-SOURCE-SPLIT §10.2)", () => {
+    // Given: makeAllTools called with fake deps under both tiers (server mode retired)
     // When:  count the tool registrations returned
-    // Then:  worker count === 54; server count === 27 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-
+    // Then:  power count === 51; consumer count === 49; the delta is telegram_notify + gh_issue
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
-      const workerTools = makeAllTools(
-        session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
-      );
-      const workerKeys = Object.keys(workerTools).sort();
+      const persistence = { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") };
+      process.env.FRONDOSE_TIER = "power";
+      const powerKeys = Object.keys(makeAllTools(session, persistence, mockControl)).sort();
       assert.equal(
-        workerKeys.length,
-        54,
-        `worker tool count must be 54; got ${workerKeys.length}: [${workerKeys.join(", ")}]`,
+        powerKeys.length,
+        51,
+        `power tool count must be 51; got ${powerKeys.length}: ${JSON.stringify(powerKeys)}`,
       );
-      assert.deepEqual(workerKeys, FROZEN_WORKER_TOOL_KEYS_P37, "worker tool name set must match P-37 P-Y3 snapshot");
-
-      const serverTools = makeAllTools(
-        undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-      const serverKeys = Object.keys(serverTools).sort();
+      assert.deepEqual(powerKeys, FROZEN_WORKER_TOOL_KEYS_P37, "power tool name set must match the frozen snapshot");
+      process.env.FRONDOSE_TIER = "consumer";
+      const consumerKeys = Object.keys(makeAllTools(session, persistence, mockControl)).sort();
       assert.equal(
-        serverKeys.length,
-        27,
-        `server tool count must be 27; got ${serverKeys.length}: [${serverKeys.join(", ")}]`,
+        consumerKeys.length,
+        49,
+        `consumer tool count must be 49; got ${consumerKeys.length}: ${JSON.stringify(consumerKeys)}`,
       );
-      assert.deepEqual(serverKeys, FROZEN_SERVER_TOOL_KEYS_P37, "server tool name set must match P-37 P-Y3 snapshot");
+      const powerOnly = powerKeys.filter((name) => !consumerKeys.includes(name)).sort();
+      assert.deepEqual(powerOnly, ["gh_issue", "telegram_notify"], "tier delta must be telegram_notify + gh_issue");
     } finally {
+      process.env.FRONDOSE_TIER = "power";
       cleanup();
     }
   });

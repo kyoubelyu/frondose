@@ -4,7 +4,7 @@
  * Tests that all 52 worker power-tier tools are registered with a fake LinkedIn session.
  * Does NOT use real LLM calls — only makeAllTools + assertion.
  *
- * T-Tools.1: All 54 tools registered with fake session
+ * T-Tools.1: All 51 tools registered with fake session
  *
  * Gate coverage: G-P16.7
  *
@@ -37,9 +37,9 @@ const LINKEDIN_TOOL_NAMES = [
 // ─── T-Tools.1 ────────────────────────────────────────────────────
 // Given: FakeLinkedInWorld session + test identity persistence
 // When:  makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "...control })
-// Then:  returned ToolSet has exactly 54 keys. All 10 LinkedIn tool names present.
+// Then:  returned ToolSet has exactly 51 keys. All 10 LinkedIn tool names present.
 
-test("T-Tools.1: all 54 tools registered with fake session", async () => {
+test("T-Tools.1: all 51 tools registered with fake session", async () => {
   const world = new FakeLinkedInWorld();
   const session = world.makeSession();
   const control: ControlSignals = {
@@ -50,8 +50,9 @@ test("T-Tools.1: all 54 tools registered with fake session", async () => {
   const tools = makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "" }, control);
   const toolNames = Object.keys(tools);
 
-  // Total count assertion (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-  assert.equal(toolNames.length, 54, `Expected 54 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
+  // Total count assertion (P-OPEN-SOURCE-SPLIT single-mode inventory: the three
+  // retired operator/lead tools are absent — T-RETIRE.Report.1 + T-RETIRE.Fleet.2)
+  assert.equal(toolNames.length, 51, `Expected 51 tools, got ${toolNames.length}: ${toolNames.join(", ")}`);
 
   // All 10 LinkedIn tool names present
   const missing = LINKEDIN_TOOL_NAMES.filter((name) => !toolNames.includes(name));

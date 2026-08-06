@@ -76,15 +76,12 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
   "present_summary",
   "press",
   "promote_candidate_to_lead",
-  "publish_event",
   "qualify_profile",
-  "query_lead_globally",
   "record_auto_action",
   "record_lead_event",
   "record_raw_candidate",
   "reload",
   "remember",
-  "report_issue",
   "save_message_draft",
   "schedule_task",
   "schedule_follow_up",
@@ -113,35 +110,6 @@ const FROZEN_WORKER_TOOL_KEYS_P36 = [
 
 // Post-P-73 server tool name snapshot (25 tools).
 // P-44: updated from 20 to 23; P-73: removed suggest_card/suggest_next_actions (worker-only overlay tools).
-const FROZEN_SERVER_TOOL_KEYS_P36 = [
-  "analyze_screenshot",
-  "dispatch_google_login",
-  "echo",
-  "escalate_for_capability",
-  "get_memory_note",
-  "getIdentity",
-  "getMemory",
-  "gh_issue",
-  "identity",
-  "list_personas",
-  "list_workers",
-  "present_summary",
-  "provision_worker",
-  "remember",
-  "report_issue",
-  "revoke_worker",
-  "schedule_task",
-  "search_memory",
-  "send_worker_message",
-  "set_memory_note",
-  "sleep",
-  "stop",
-  "stop_auto", // P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE
-  "telegram_notify",
-  "todo_write",
-  "web_fetch",
-  "web_search",
-].sort();
 
 // ─── T-CONTRACT.NO-BASH ───────────────────────────────────────────────────────
 
@@ -151,14 +119,12 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
     // When:  grep for 'child_process' in each file
     // Then:  zero matches in all 8 files
     // P-APP-11 stage (b1): auth.ts deleted → removed from this scan (was present since P-36).
+    // P-OPEN-SOURCE-SPLIT: the CLI/fleet files (serverRepl, serverDaemon,
+    // serverWebToken, main) are retired with the CLI vertical.
     const p36Files = [
       resolve(ROOT, "src/agent/modelResolver.ts"),
-      resolve(ROOT, "src/cli/serverRepl.ts"),
-      resolve(ROOT, "src/cli/serverDaemon.ts"),
-      resolve(ROOT, "src/cli/subcommands/serverWebToken.ts"),
       resolve(ROOT, "src/persistence/secrets.ts"),
       resolve(ROOT, "src/persistence/config.ts"),
-      resolve(ROOT, "src/cli/main.ts"),
     ];
     for (const filePath of p36Files) {
       const content = readFileSync(filePath, "utf-8");
@@ -178,53 +144,33 @@ describe("no child_process import in P-36's 8 edited production files (G-P36.14)
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("tool counts: worker 54 / server 27 rebaselined (G-P36.14)", () => {
-  it("T-CONTRACT.TOOLS: P-36 count contract follows current makeAllTools inventory (worker 54 / server 27)", () => {
-    // Given: makeAllTools called in worker mode and server mode with fake deps
+  it("T-CONTRACT.TOOLS: single-mode App registry — power 51 / consumer 49 (P-OPEN-SOURCE-SPLIT §10.2)", () => {
+    // Given: makeAllTools called with fake deps under both tiers (server mode retired)
     // When:  count the tool registrations returned
-    // Then:  worker count === 54; server count === 27 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  power count === 51; consumer count === 49; the delta is telegram_notify + gh_issue
     const { dir, cleanup } = makeTmpDir();
     try {
-      // Worker mode — 29 tools
       const session = makeFakeSession();
-      const workerTools = makeAllTools(
-        session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
-      );
-      const workerKeys = Object.keys(workerTools).sort();
+      const persistence = { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") };
+      process.env.FRONDOSE_TIER = "power";
+      const powerKeys = Object.keys(makeAllTools(session, persistence, mockControl)).sort();
       assert.equal(
-        workerKeys.length,
-        54,
-        `T-CONTRACT.TOOLS: worker mode must have exactly 54 tools across P-36; got ${workerKeys.length}: ${JSON.stringify(workerKeys)}`,
+        powerKeys.length,
+        51,
+        `power tool count must be 51; got ${powerKeys.length}: ${JSON.stringify(powerKeys)}`,
       );
-      assert.deepEqual(
-        workerKeys,
-        FROZEN_WORKER_TOOL_KEYS_P36,
-        "T-CONTRACT.TOOLS: worker tool names must match P-36 P-Y3 snapshot",
-      );
-
-      // Server mode — 20 tools
-      const serverTools = makeAllTools(
-        undefined,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-      const serverKeys = Object.keys(serverTools).sort();
+      assert.deepEqual(powerKeys, FROZEN_WORKER_TOOL_KEYS_P36, "power tool name set must match the frozen snapshot");
+      process.env.FRONDOSE_TIER = "consumer";
+      const consumerKeys = Object.keys(makeAllTools(session, persistence, mockControl)).sort();
       assert.equal(
-        serverKeys.length,
-        27,
-        `T-CONTRACT.TOOLS: server mode must have exactly 27 tools across P-36; got ${serverKeys.length}: ${JSON.stringify(serverKeys)}`,
+        consumerKeys.length,
+        49,
+        `consumer tool count must be 49; got ${consumerKeys.length}: ${JSON.stringify(consumerKeys)}`,
       );
-      assert.deepEqual(
-        serverKeys,
-        FROZEN_SERVER_TOOL_KEYS_P36,
-        "T-CONTRACT.TOOLS: server tool names must match P-36 P-Y3 snapshot",
-      );
+      const powerOnly = powerKeys.filter((name) => !consumerKeys.includes(name)).sort();
+      assert.deepEqual(powerOnly, ["gh_issue", "telegram_notify"], "tier delta must be telegram_notify + gh_issue");
     } finally {
+      process.env.FRONDOSE_TIER = "power";
       cleanup();
     }
   });

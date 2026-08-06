@@ -24,7 +24,7 @@
  *     src/cli/serverRepl.ts
  *     src/cli/subcommands/_prompts.ts
  *     src/cli/subcommands/passiveRateLimit.ts
- *     src/cli/subcommands/serve.ts
+ *     src/app/backend/index.ts
  *     src/cli/subcommands/server.ts
  *     src/cli/subcommands/telegram.ts
  *     src/cli/subcommands/telegramDaemon.ts
@@ -160,10 +160,6 @@ describe("source-scan guard — zero raw process.env.MAI_ reads in production sr
       }
     }
 
-    assert.deepEqual(
-      violations,
-      [],
-      `Raw process.env.MAI_* reads found outside allowlist:\n${violations.join("\n")}`,
-    );
+    assert.deepEqual(violations, [], `Raw process.env.MAI_* reads found outside allowlist:\n${violations.join("\n")}`);
   });
 });

@@ -85,8 +85,10 @@ const APP_CONCRETE_PATHS_GOLDEN: ReadonlySet<string> = new Set([
   "GET /agent/events",
 ]);
 
-/** 17 Tauri invoke_handler command identifiers (main.rs:745-761+). F-REN-2: mai_* → frondose_*.
- *  P-AUTO-ISOLATE added 2: frondose_agent_auto_start, frondose_agent_auto_stop (15→17). */
+/** 18 Tauri invoke_handler command identifiers (main.rs:745-761+). F-REN-2: mai_* → frondose_*.
+ *  P-AUTO-ISOLATE added 2: frondose_agent_auto_start, frondose_agent_auto_stop (15→17).
+ *  frondose_take_update_notice restored in the updater command set (17→18 — stale-count
+ *  fix noted in the P-OPEN-SOURCE-SPLIT Step-2 report). */
 const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
   "frondose_health",
   "frondose_identity",
@@ -105,6 +107,7 @@ const TAURI_COMMANDS_GOLDEN: ReadonlySet<string> = new Set([
   "frondose_workflow_handoff",
   "frondose_workflow_cancel",
   "frondose_check_update",
+  "frondose_take_update_notice",
 ]);
 
 /** Workflow subpaths that controller/endpoints.ts:8-12 must accept. */
@@ -118,14 +121,16 @@ const WORKFLOW_SUBPATHS = [
 
 // ─── §C Goldens ──────────────────────────────────────────────────────────────
 
-/** 31 sidecar SSE frame type strings (24 SseFrame context.ts + 7 WorkflowSseFrame types.ts).
+/** 32 sidecar SSE frame type strings (25 SseFrame context.ts + 7 WorkflowSseFrame types.ts).
  *  P-THINK 2026-07-02: added `reasoning` (live model-thinking stream) to context.ts SseFrame → 21→22.
- *  P-AUTO-ISOLATE: added `auto-session-started` + `auto-session-completed` to context.ts SseFrame → 22→24. */
+ *  P-AUTO-ISOLATE: added `auto-session-started` + `auto-session-completed` to context.ts SseFrame → 22→24.
+ *  P-UI-THINK-COMPACT: added `assistant-progress` (compact assistant turn progress) → 24→25. */
 const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
-  // SseFrame context.ts — multiline block (17):
+  // SseFrame context.ts — multiline block (18):
   "tool-call",
   "text",
   "reasoning", // P-THINK: gray live-thinking stream frame
+  "assistant-progress", // P-UI-THINK-COMPACT: compact assistant turn progress
   "step-done",
   "done",
   "error",
@@ -158,17 +163,19 @@ const SIDECAR_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "commit-warning",
 ]);
 
-/** 27 UI SseFrame literals (app.ts:51-80+) — documented drift baseline (4 sidecar-only frames missing).
+/** 28 UI SseFrame literals (app.ts:51-80+) — documented drift baseline (4 sidecar-only frames missing).
  *  WORKFLOW-LIFECYCLE-COMPLETION (2026-07-02): the UI now HANDLES `auto-run-completed` (app.ts handleEvent
  *  closes the Auto-run card on completion), so it moved from SIDECAR_ONLY_DRIFT into the UI union —
  *  drift shrank 5→4. P-THINK (2026-07-02): added `reasoning` (UI renders the gray live-thinking block) → 24→25.
  *  P-AUTO-ISOLATE: added `auto-session-started` + `auto-session-completed` to BOTH sides (UI handles the
  *  composer lock/unlock) → 25→27; drift stays at 4 (these 2 are NOT sidecar-only).
- *  See src/tauri/ui/app.ts + src/cli/subcommands/serve/turn/runOne.ts. */
+ *  P-UI-THINK-COMPACT: added `assistant-progress` → 27→28; drift stays at 4.
+ *  See src/tauri/ui/app.ts + src/app/backend/turn/runOne.ts. */
 const UI_SSE_FRAMES_GOLDEN: ReadonlySet<string> = new Set([
   "tool-call",
   "text",
   "reasoning", // P-THINK: gray live-thinking block in the agent bubble
+  "assistant-progress", // P-UI-THINK-COMPACT: compact assistant turn progress
   "step-done",
   "done",
   "error",
@@ -207,10 +214,10 @@ const SIDECAR_ONLY_DRIFT: ReadonlySet<string> = new Set([
 // ─── Source file paths ────────────────────────────────────────────────────────
 
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
-const CONTEXT_TS = join(ROOT, "src", "cli", "subcommands", "serve", "context.ts");
+const CONTEXT_TS = join(ROOT, "src", "app", "backend", "context.ts");
 const WORKFLOW_TYPES_TS = join(ROOT, "src", "agent", "workflow", "types.ts");
 const APP_TS = join(ROOT, "src", "tauri", "ui", "app.ts");
-const ROUTES_TS = join(ROOT, "src", "cli", "subcommands", "serve", "routes.ts");
+const ROUTES_TS = join(ROOT, "src", "app", "backend", "routes.ts");
 // CH-3 module split (2026-06-18): various symbols moved from main.rs to sub-modules:
 //   127.0.0.1 / Authorization / Bearer → state.rs (uds_request fn)
 //   FRONDOSE_SIDECAR_OWNER → sidecar.rs (spawn_frondose_serve env)
@@ -223,9 +230,9 @@ const MAIN_RS = readdirSync(CRATE_SRC_DIR)
   .sort()
   .map((f) => readFileSync(join(CRATE_SRC_DIR, f), "utf8"))
   .join("\n");
-const HTTP_TS = join(ROOT, "src", "cli", "subcommands", "serve", "http.ts");
+const HTTP_TS = join(ROOT, "src", "app", "backend", "http.ts");
 const HOST_TS = join(ROOT, "src", "overlay", "host.ts");
-const SERVE_TS = join(ROOT, "src", "cli", "subcommands", "serve.ts");
+const SERVE_TS = join(ROOT, "src", "app", "backend", "index.ts");
 const ENDPOINTS_TS = join(ROOT, "src", "agent", "workflow", "controller", "endpoints.ts");
 
 // ─── TS compiler API extractor ────────────────────────────────────────────────
@@ -365,8 +372,8 @@ function makeTempHome(): string {
 // Note: makeState and makeDeps are used inside async test bodies; the actual
 // WorkflowController import happens inside each test that needs it.
 function makeState(
-  overrides: Partial<import("../../../../src/cli/subcommands/serve/context.js").ServeState> = {},
-): import("../../../../src/cli/subcommands/serve/context.js").ServeState {
+  overrides: Partial<import("../../../../src/app/backend/context.js").ServeState> = {},
+): import("../../../../src/app/backend/context.js").ServeState {
   return {
     currentTurn: null,
     overlayContextId: undefined,
@@ -723,7 +730,7 @@ describe("IPC.Endpoints — sidecar route branches (16), app HTTP paths (17), Ta
     }
   });
 
-  it("T-IPC.Endpoints.3: when main.rs invoke_handler block is parsed, it has exactly 17 Tauri command names matching the golden set", () => {
+  it("T-IPC.Endpoints.3: when main.rs invoke_handler block is parsed, it has exactly 18 Tauri command names matching the golden set", () => {
     // Given: main.rs:745-761+ contains the tauri::generate_handler![...] block (P-AUTO-ISOLATE added 2)
     // When: the identifier list is extracted
     // Then: count===17 (fail-closed); any rename or drop fails
@@ -746,8 +753,8 @@ describe("IPC.Endpoints — sidecar route branches (16), app HTTP paths (17), Ta
     // Fail-closed count assertion BEFORE set equality
     assert.strictEqual(
       extracted.size,
-      17,
-      `expected exactly 17 Tauri command names in generate_handler!, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
+      18,
+      `expected exactly 18 Tauri command names in generate_handler!, got ${extracted.size}:\n  ${[...extracted].sort().join("\n  ")}`,
     );
 
     assertSetsEqual(extracted, TAURI_COMMANDS_GOLDEN, "Tauri invoke_handler commands");
@@ -758,11 +765,11 @@ describe("IPC.Endpoints — sidecar route branches (16), app HTTP paths (17), Ta
 // §C — IPC.Frames
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("IPC.Frames — SseFrame discriminator union (sidecar=31, UI=27)", () => {
-  it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 31-element golden", () => {
+describe("IPC.Frames — SseFrame discriminator union (sidecar=32, UI=28)", () => {
+  it("T-IPC.Frames.1: when SseFrame (context.ts) + WorkflowSseFrame (types.ts) are parsed via TS compiler API, combined discriminants === 32-element golden", () => {
     // Given: context.ts declares SseFrame (multiline + standalone forms); types.ts declares WorkflowSseFrame
     // When: TS compiler API extracts all type: discriminants from both files (Approach A — no regex)
-    // Then: context.ts yields exactly 24, types.ts yields exactly 7, combined===31; any drift fails
+    // Then: context.ts yields exactly 25, types.ts yields exactly 7, combined===32; any drift fails
 
     const contextSseFrameSet = extractSseFrameDiscriminants(CONTEXT_TS, "SseFrame");
     const workflowSseFrameSet = extractSseFrameDiscriminants(WORKFLOW_TYPES_TS, "WorkflowSseFrame");
@@ -770,8 +777,8 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=31, UI=27)", () =
     // Fail-closed counts BEFORE set equality
     assert.strictEqual(
       contextSseFrameSet.size,
-      24,
-      `expected 24 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
+      25,
+      `expected 25 SseFrame discriminants in context.ts, got ${contextSseFrameSet.size}: ${JSON.stringify([...contextSseFrameSet].sort())}`,
     );
     assert.strictEqual(
       workflowSseFrameSet.size,
@@ -782,14 +789,14 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=31, UI=27)", () =
     const combined = new Set([...contextSseFrameSet, ...workflowSseFrameSet]);
     assert.strictEqual(
       combined.size,
-      31,
-      `expected combined sidecar SseFrame set size === 31, got ${combined.size} (overlap or wrong count)`,
+      32,
+      `expected combined sidecar SseFrame set size === 32, got ${combined.size} (overlap or wrong count)`,
     );
 
-    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (31 literals)");
+    assertSetsEqual(combined, SIDECAR_SSE_FRAMES_GOLDEN, "sidecar SseFrame union (32 literals)");
   });
 
-  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 27 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
+  it("T-IPC.Frames.2: when UI app.ts SseFrame is parsed, it has exactly 28 literals (documented drift baseline) and the 4 sidecar-only frames are absent", () => {
     // Given: ui/app.ts:51-80+ declares a hand-copied subset SseFrame with 27 literals (4 sidecar-only frames missing)
     // When: TS compiler API extracts discriminants from app.ts (Approach A)
     // Then: count===27 (fail-closed); set matches UI golden; delta === the exact 4 SIDECAR_ONLY_DRIFT frames (latent UX bug — CONCERN-MR-4;
@@ -800,11 +807,11 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=31, UI=27)", () =
     // Fail-closed count BEFORE set equality
     assert.strictEqual(
       uiSseFrameSet.size,
-      27,
-      `expected 27 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
+      28,
+      `expected 28 SseFrame discriminants in ui/app.ts, got ${uiSseFrameSet.size}: ${JSON.stringify([...uiSseFrameSet].sort())}`,
     );
 
-    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (27 literals)");
+    assertSetsEqual(uiSseFrameSet, UI_SSE_FRAMES_GOLDEN, "UI SseFrame union (28 literals)");
 
     // Delta assertion: sidecar-only frames are EXACTLY the 4 documented drift frames
     const sidecarOnlyActual = new Set([...SIDECAR_SSE_FRAMES_GOLDEN].filter((f) => !uiSseFrameSet.has(f)));
@@ -868,7 +875,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
     // When: GET /settings issued with valid bearer
     // Then: body.llm.hasKey===true, body.llm.key===undefined, JSON does not contain "abc12345"
 
-    const { createRequestHandler } = await import("../../../../src/cli/subcommands/serve/routes.js");
+    const { createRequestHandler } = await import("../../../../src/app/backend/routes.js");
     const { createWorkflowController } = await import("../../../../src/agent/workflow/controller.js");
 
     const ctrl = createWorkflowController({ emitFrame: () => {}, writeWorkflowAudit: () => {} });
@@ -890,7 +897,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
       workflow: ctrl,
       emitFrame: makeSpy(),
       emitOverlayEvent: makeSpy(),
-    } as unknown as import("../../../../src/cli/subcommands/serve/context.js").ServeDeps;
+    } as unknown as import("../../../../src/app/backend/context.js").ServeDeps;
     const handler = createRequestHandler(state, deps, {} as never, {} as never);
 
     const res = await issueRequest(handler, {
@@ -921,7 +928,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
     // When: GET /settings with valid bearer
     // Then: maskedKey==="***2345", length<8, JSON does not contain raw key
 
-    const { createRequestHandler } = await import("../../../../src/cli/subcommands/serve/routes.js");
+    const { createRequestHandler } = await import("../../../../src/app/backend/routes.js");
     const { createWorkflowController } = await import("../../../../src/agent/workflow/controller.js");
 
     const ctrl = createWorkflowController({ emitFrame: () => {}, writeWorkflowAudit: () => {} });
@@ -943,7 +950,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
       workflow: ctrl,
       emitFrame: makeSpy(),
       emitOverlayEvent: makeSpy(),
-    } as unknown as import("../../../../src/cli/subcommands/serve/context.js").ServeDeps;
+    } as unknown as import("../../../../src/app/backend/context.js").ServeDeps;
     const handler = createRequestHandler(state, deps, {} as never, {} as never);
 
     const res = await issueRequest(handler, {

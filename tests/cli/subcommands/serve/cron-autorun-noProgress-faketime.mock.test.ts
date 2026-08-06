@@ -40,7 +40,7 @@ let createCronDriver: AnyFn | null = null;
 let openSalesDatabase: AnyFn | null = null;
 
 before(async () => {
-  const cronMod = await import("../../../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../../../src/app/backend/cron.js").catch(() => null);
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import
   createCronDriver = (cronMod as any)?.createCronDriver ?? null;
   const dbMod = await import("../../../../src/persistence/salesDb.js").catch(() => null);
@@ -99,7 +99,9 @@ function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: 
     auditPath: "/dev/null",
     expectedToken: Buffer.from("test"),
     workflow: { handleEndpoint: () => ({ status: 200, response: { ok: true } }) },
-    emitFrame: (frame: unknown) => { emittedFrames.push(frame); },
+    emitFrame: (frame: unknown) => {
+      emittedFrames.push(frame);
+    },
     emitOverlayEvent: () => {},
   };
 }
@@ -158,14 +160,16 @@ describe("L1-Stuck: truly-stuck run closes at threshold=10 (real cron driver, re
 
     // auto_runs row must be stopped_by_agent
     const row = db.prepare("SELECT status FROM auto_runs WHERE id = ?").get(runId) as any;
-    assert.equal(row?.status, "stopped_by_agent",
-      `auto_runs row must be 'stopped_by_agent' after 10 zero-progress ticks; got: ${row?.status}`);
+    assert.equal(
+      row?.status,
+      "stopped_by_agent",
+      `auto_runs row must be 'stopped_by_agent' after 10 zero-progress ticks; got: ${row?.status}`,
+    );
 
     // Exactly 1 auto-run-completed frame
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      `Must emit exactly 1 auto-run-completed; got ${completedFrames.length}`);
+    assert.equal(completedFrames.length, 1, `Must emit exactly 1 auto-run-completed; got ${completedFrames.length}`);
 
     const cf = completedFrames[0] as any;
     assert.equal(cf.status, "stopped_by_agent");
@@ -213,11 +217,13 @@ describe("L1-Discovery: discovery-only run (raw_candidate upsert per tick) survi
       runOneTurn: async () => {
         const id = randomUUID();
         const now = Date.now();
-        (openSalesDatabase!(salesDbPath) as any).prepare(`
+        (openSalesDatabase!(salesDbPath) as any)
+          .prepare(`
           INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status)
           VALUES (?, 'Discovery Person', 'https://linkedin.com/in/dp-${id.slice(0, 6)}', NULL, 'profile-nav', ?, ?, 'new')
           ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at
-        `).run(id, now - 1000, now);
+        `)
+          .run(id, now - 1000, now);
       },
     };
 
@@ -236,13 +242,19 @@ describe("L1-Discovery: discovery-only run (raw_candidate upsert per tick) survi
 
     // auto_runs row must still be running
     const row = db.prepare("SELECT status FROM auto_runs WHERE id = ?").get(runId) as any;
-    assert.equal(row?.status, "running",
-      `Discovery-only run must still be 'running' after 12 ticks; got: ${row?.status} (F-1 acceptance — Step-1 design with ledger-only signal would have wrongly closed this at tick 3)`);
+    assert.equal(
+      row?.status,
+      "running",
+      `Discovery-only run must still be 'running' after 12 ticks; got: ${row?.status} (F-1 acceptance — Step-1 design with ledger-only signal would have wrongly closed this at tick 3)`,
+    );
 
     // No auto-run-completed frame
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 0,
-      `Discovery-only run must NOT emit auto-run-completed after 12 ticks; got ${completedFrames.length} frames`);
+    assert.equal(
+      completedFrames.length,
+      0,
+      `Discovery-only run must NOT emit auto-run-completed after 12 ticks; got ${completedFrames.length} frames`,
+    );
   });
 });

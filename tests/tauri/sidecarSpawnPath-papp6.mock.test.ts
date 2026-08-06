@@ -63,11 +63,7 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     const spawnSrc = spawnMaiServeSource();
 
     // Must reference resolve_sidecar_bin, not resolve_frondose_bin
-    assert.match(
-      spawnSrc,
-      /resolve_sidecar_bin\s*\(\s*\)/,
-      "spawn_frondose_serve must call resolve_sidecar_bin()",
-    );
+    assert.match(spawnSrc, /resolve_sidecar_bin\s*\(\s*\)/, "spawn_frondose_serve must call resolve_sidecar_bin()");
     assert.doesNotMatch(
       spawnSrc,
       /resolve_frondose_bin\s*\(\s*\)/,
@@ -119,26 +115,23 @@ describe("T-Sidecar.Spawn — main.rs sidecar spawn path after P-APP-6", () => {
     );
     assert.ok(
       MAIN_RS.includes("FRONDOSE_SIDECAR_BIN_PATH"),
-      'main.rs must reference FRONDOSE_SIDECAR_BIN_PATH in resolve_sidecar_bin (pre-impl: intentional scaffold failure)',
+      "main.rs must reference FRONDOSE_SIDECAR_BIN_PATH in resolve_sidecar_bin (pre-impl: intentional scaffold failure)",
     );
   });
 
-  it("T-Sidecar.Spawn.4: resolve_frondose_bin is kept with #[allow(dead_code)] for P-APP-11 transition", () => {
-    // Given: main.rs after P-APP-6; resolve_frondose_bin is no longer called by spawn_frondose_serve
-    // When:  validator reads the main.rs source
-    // Then:  resolve_frondose_bin function is still present (not deleted);
-    //        #[allow(dead_code)] annotation appears above it
+  it("T-Sidecar.Spawn.4: resolve_frondose_bin is removed — the P-APP-11 transition is complete (P-OPEN-SOURCE-SPLIT)", () => {
+    // Given: the CLI entrypoint is retired (T-RETIRE.CLI.1 — no dist/cli/main.js in
+    //        source, package, Rust resolver or build scripts)
+    // When:  validator reads the Rust crate source
+    // Then:  the CLI-entry resolver no longer exists and no dist/cli/main.js literal
+    //        remains anywhere in the crate
     assert.ok(
-      MAIN_RS.includes("fn resolve_frondose_bin"),
-      "main.rs must retain resolve_frondose_bin function (kept for P-APP-11 transition)",
+      !MAIN_RS.includes("fn resolve_frondose_bin"),
+      "resolve_frondose_bin must be deleted (CLI entrypoint retired with P-OPEN-SOURCE-SPLIT)",
     );
-    // Check that allow(dead_code) appears near (within 3 lines of) resolve_frondose_bin
-    const deadCodeIdx = MAIN_RS.indexOf("#[allow(dead_code)]");
-    const resolveMaiBinIdx = MAIN_RS.indexOf("fn resolve_frondose_bin");
-    assert.ok(deadCodeIdx !== -1, "#[allow(dead_code)] must be present in main.rs");
     assert.ok(
-      resolveMaiBinIdx !== -1 && Math.abs(deadCodeIdx - resolveMaiBinIdx) < 200,
-      "#[allow(dead_code)] must appear close to resolve_frondose_bin",
+      !MAIN_RS.includes("dist/cli/main.js"),
+      "no dist/cli/main.js literal may remain in the Rust crate (T-RETIRE.CLI.1)",
     );
   });
 });

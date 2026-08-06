@@ -68,10 +68,16 @@ describe("T-CronNoProgress.15: operator (non-cron) turn does NOT read or write c
     // Confirm the fields are unchanged after the turn would run:
     // (In the real system, turn.runOneTurn runs asynchronously and cron.ts post-handler is never
     //  invoked because routes/agent.ts does not call cron.ts. Structural assertion is sufficient.)
-    assert.equal(state.cronNoProgressRunId, preRunId,
-      `cronNoProgressRunId must be unchanged after operator turn; expected '${preRunId}', got '${state.cronNoProgressRunId}'`);
-    assert.equal(state.cronNoProgressTurns, preTurns,
-      `cronNoProgressTurns must be unchanged after operator turn; expected ${preTurns}, got ${state.cronNoProgressTurns}`);
+    assert.equal(
+      state.cronNoProgressRunId,
+      preRunId,
+      `cronNoProgressRunId must be unchanged after operator turn; expected '${preRunId}', got '${state.cronNoProgressRunId}'`,
+    );
+    assert.equal(
+      state.cronNoProgressTurns,
+      preTurns,
+      `cronNoProgressTurns must be unchanged after operator turn; expected ${preTurns}, got ${state.cronNoProgressTurns}`,
+    );
   });
 
   it("routes/agent.ts handlePostAgentTurn does not import from cron.ts (structural — no cross-module coupling)", async () => {
@@ -79,7 +85,7 @@ describe("T-CronNoProgress.15: operator (non-cron) turn does NOT read or write c
     // When:  the module is imported
     // Then:  it does NOT import createCronDriver or any cron-module symbol
     //        (the cron cap lives in cron.ts, not in the agent route)
-    const agentRouteSrc = await import("../../../../src/cli/subcommands/serve/routes/agent.js").catch(() => null);
+    const agentRouteSrc = await import("../../../../src/app/backend/routes/agent.js").catch(() => null);
     assert.ok(agentRouteSrc !== null, "routes/agent.ts must be importable");
 
     // The agent route exports handlePostAgentTurn + handlePostAgentActivate — no cron symbols
@@ -87,7 +93,9 @@ describe("T-CronNoProgress.15: operator (non-cron) turn does NOT read or write c
     const exports = Object.keys(agentRouteSrc as any);
     assert.ok(exports.includes("handlePostAgentTurn"), "routes/agent.ts must export handlePostAgentTurn");
     // Confirm no cron-module bleed: the route module must not export createCronDriver
-    assert.ok(!exports.includes("createCronDriver"),
-      "routes/agent.ts must NOT export createCronDriver (cron cap must NOT bleed to operator path)");
+    assert.ok(
+      !exports.includes("createCronDriver"),
+      "routes/agent.ts must NOT export createCronDriver (cron cap must NOT bleed to operator path)",
+    );
   });
 });

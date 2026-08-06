@@ -1,14 +1,14 @@
 {
   "name": "@kyoube/frondose",
-  "version": "0.5.18",
-  "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). Internal-only package; the operator product is the compiled Frondose.app, not this npm package. CLI surface retained as transitional internal sidecar/build entrypoint until P-APP-11 retirement completes.",
+  "version": "0.5.19",
+  "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). Internal-only package; the operator product is the compiled Frondose.app, not this npm package. The legacy CLI surface is retired (P-OPEN-SOURCE-SPLIT); the App sidecar is the boot entrypoint.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
+  "private": true,
   "files": [
     "dist",
     "native",
     "binding.gyp",
-    "install.sh",
     "references",
     "README.md",
     "LICENSE"
@@ -17,8 +17,7 @@
     "install": "node -e \"\"",
     "build:overlay-assets": "node --import tsx scripts/gen-overlay-assets.ts",
     "build:default-credentials": "node --import tsx scripts/gen-default-credentials.ts",
-    "build": "npm run build:overlay-assets && npm run build:default-credentials && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:web && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
-    "build:web": "esbuild src/web/main.tsx --bundle --minify --jsx=automatic --external:/vendor/* --outfile=dist/web/app.js && tailwindcss -i src/web/style.css -o dist/web/style.css --minify && node scripts/copy-web-assets.mjs",
+    "build": "npm run build:overlay-assets && npm run build:default-credentials && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:native && npm run build:tauri-ui && npm run assert-dist",
     "build:native": "node-gyp rebuild || echo '[frondose] cgevent native addon build skipped (Xcode CLT missing) — hardware input mode unavailable; cdp mode unaffected'",
     "build:tauri-ui": "tsc -p src/tauri/ui/tsconfig.json",
     "build:tauri": "npm run build:overlay-assets && npm run build:default-credentials && tsc -p tsconfig.json && node scripts/chmod-dist.mjs && npm run build:tauri-ui",
@@ -32,46 +31,33 @@
     "format:check": "biome format .",
     "test": "npm run test:fast",
     "test:fast": "node scripts/test-fast.mjs",
-    "test:integration": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/cdp/launcher.mock.test.ts' 'tests/cdp/lifecycle.mock.test.ts' 'tests/cli/commander-p45.mock.test.ts' 'tests/cli/autoUpdate.mock.test.ts' 'tests/cli/launchd.mock.test.ts' 'tests/cli/install-sh.test.ts' 'tests/cli/update-subcommand.mock.test.ts' 'tests/cli/subcommands/serverLaunchd.mock.test.ts' 'tests/cli/subcommands/serve-p56b.mock.test.ts' 'tests/cli/subcommands/serve-p57a.mock.test.ts' 'tests/cli/subcommands/serve-p57b.mock.test.ts' 'tests/cli/subcommands/serve-p57c.mock.test.ts' 'tests/cli/subcommands/serve-p57e.mock.test.ts' 'tests/cli/subcommands/serve-p57f.mock.test.ts' 'tests/cli/subcommands/serve-p57g.mock.test.ts' 'tests/cli/subcommands/serve-present-summary-pY3.mock.test.ts' 'tests/linkedin/session-pY4.mock.test.ts' 'tests/tauri/button-click-pY2.1.test.ts' 'tests/tauri/button-integ-pY2.1.test.ts' 'tests/tauri/lifecycle-drun1-pY5.test.ts' 'tests/tauri/entry-flow-pY4.mock.test.ts'",
+    "test:integration": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/cdp/launcher.mock.test.ts' 'tests/cdp/lifecycle.mock.test.ts' 'tests/linkedin/session-pY4.mock.test.ts' 'tests/tauri/button-click-pY2.1.test.ts' 'tests/tauri/button-integ-pY2.1.test.ts' 'tests/tauri/lifecycle-drun1-pY5.test.ts' 'tests/tauri/entry-flow-pY4.mock.test.ts'",
     "test:all": "node --import tsx --test --experimental-test-module-mocks --test-force-exit 'tests/**/*.test.ts'",
     "test:live": "tsx --test 'tests/live/**/*.smoke.ts'"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/openai": "^1.0.0",
-    "@brave/brave-search-mcp-server": "2.0.83",
     "@earendil-works/pi-agent-core": "^0.78.1",
     "@earendil-works/pi-ai": "^0.78.1",
     "@inquirer/core": "^7",
     "@inquirer/prompts": "^7.10.1",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "ai": "^4.0.0",
     "better-sqlite3": "^12.4.1",
     "chalk": "^5.6.2",
     "chrome-launcher": "^1.1.2",
     "chrome-remote-interface": "0.34.0",
     "commander": "^12.1.0",
-    "ssh2": "^1.17.0",
-    "undici": "^6.21.0",
-    "ws": "^8.20.1",
+    "undici": "^6.28.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.15",
-    "@tailwindcss/cli": "^4.0.0",
     "@tauri-apps/cli": "^2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "@types/ssh2": "^1.15.5",
-    "@types/ws": "^8.18.1",
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/xterm": "^5.5.0",
     "esbuild": "^0.24.0",
     "node-addon-api": "^8.7.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "tsx": "^4.20.6",
     "typescript": "^5.6.0"
   },
@@ -80,5 +66,9 @@
   },
   "publishConfig": {
     "access": "restricted"
+  },
+  "overrides": {
+    "ws@^8": "^8.21.0",
+    "fast-uri": "^3.1.4"
   }
 }

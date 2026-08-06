@@ -2,11 +2,10 @@
  * P-57d Step 5 — T-Boundary.1, T-Boundary.2 — FILLED
  * (G-P57d.2 + G-P57d.4 [via single paragraph]; G-P57d.7 Soul UNCHANGED)
  *
- * P-BRAVE-MCP update:
+ * P-WEB-SEARCH-MCP-SCOPE update:
  *   - Boundary still has one Tool-preference paragraph with both vision + search
  *     keywords (analyze_screenshot + inspect + vision_unavailable + web_search).
- *   - Search guidance now says Brave Search MCP when configured and missing_config
- *     fallback, not unconditional P-71 scope_disabled/future MCP.
+ *   - Search guidance now says operator-configured MCP and scope_disabled/mcp_error fallback.
  *   - soul.ts exports SOUL constant without any P-57d keywords (verified absent).
  *
  * Run (mock):
@@ -23,20 +22,16 @@ import { composeSoulBand } from "../../../src/agent/systemPrompt/soul.js";
 // the canonical placeholder soul band string (template + methodology distillation).
 const SOUL = composeSoulBand(null);
 
-// ─── T-Boundary.1 — Single paragraph; both vision + Brave MCP search directives ──
+// ─── T-Boundary.1 — Single paragraph; both vision + approved MCP search directives ──
 
-describe("BOUNDARY constant — tool-preference paragraph covering vision + Brave MCP search", () => {
-  it("T-Boundary.1: given BOUNDARY import, WHEN substring + count searches applied, THEN string contains one tool-preference header; that paragraph contains vision guidance plus web_search via Brave Search MCP with missing_config fallback", () => {
+describe("BOUNDARY constant — tool-preference paragraph covering vision + approved MCP search", () => {
+  it("T-Boundary.1: tool-preference guidance carries vision plus MCP web_search and visible failure fallback", () => {
     // Given: import { BOUNDARY }
     assert.ok(typeof BOUNDARY === "string" && BOUNDARY.length > 0, "BOUNDARY must be non-empty exported string");
 
     // EXACTLY ONE occurrence of the tool-preference paragraph header
     const matches = BOUNDARY.match(/Tool-preference hints/g) ?? [];
-    assert.equal(
-      matches.length,
-      1,
-      `BOUNDARY must contain EXACTLY ONE tool-preference header; got ${matches.length}`,
-    );
+    assert.equal(matches.length, 1, `BOUNDARY must contain EXACTLY ONE tool-preference header; got ${matches.length}`);
 
     // Extract the paragraph after the header
     const headerIdx = BOUNDARY.indexOf("Tool-preference hints");
@@ -47,24 +42,18 @@ describe("BOUNDARY constant — tool-preference paragraph covering vision + Brav
     assert.ok(remaining.includes("analyze_screenshot"), "tool-preference paragraph must contain 'analyze_screenshot'");
     assert.ok(remaining.includes("inspect"), "tool-preference paragraph must contain 'inspect'");
     assert.ok(remaining.includes("web_search"), "tool-preference paragraph must contain 'web_search'");
-    assert.ok(remaining.includes("Brave Search MCP"), "tool-preference paragraph must mention Brave Search MCP");
-    assert.ok(remaining.includes("missing_config"), "tool-preference paragraph must mention missing_config fallback");
+    assert.match(remaining, /operator-configured MCP server|MCP_SEARCH_URL/);
+    assert.ok(remaining.includes("scope_disabled"), "tool-preference paragraph must mention scope_disabled fallback");
+    assert.ok(remaining.includes("mcp_error"), "tool-preference paragraph must mention mcp_error fallback");
     assert.ok(remaining.includes("vision_unavailable"), "tool-preference paragraph must contain 'vision_unavailable'");
-    assert.ok(
-      !remaining.includes("MCP_SEARCH_URL"),
-      "tool-preference paragraph must NOT route search through MCP_SEARCH_URL",
-    );
-    assert.ok(
-      !/web_search`? is scope-disabled during P-71|future MCP/i.test(remaining),
-      "tool-preference paragraph must not say web_search is unconditionally P-71-disabled or future-only",
-    );
+    assert.doesNotMatch(remaining, /Brave Search|Tavily/i);
   });
 });
 
 // ─── T-Boundary.2 — Soul UNCHANGED ──────────────────────────────────────────
 
-describe("Soul band — UNCHANGED by P-57d per OQ-scope-4 LOCKED (G-P57d.7)", () => {
-  it("T-Boundary.2: given SOUL import from src/agent/systemPrompt/soul.ts, WHEN substring searches applied for P-57d markers, THEN SOUL is a non-empty exported string + does NOT contain 'Tool-preference hints (P-57d scope lock)' / 'scope_disabled' / 'vision_unavailable' / 'MCP_SEARCH_URL' (P-57d directives belong in Boundary; Soul is identity/methodology only)", () => {
+describe("Soul band — base identity/methodology remains free of Boundary-only runtime directives", () => {
+  it("T-Boundary.2: base SOUL excludes tool-preference/runtime-failure markers", () => {
     assert.ok(typeof SOUL === "string" && SOUL.length > 0, "SOUL must be non-empty exported string");
     assert.ok(
       !SOUL.includes("Tool-preference hints (P-57d scope lock)"),
