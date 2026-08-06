@@ -555,8 +555,32 @@ function checkExportedDependencySurface(
         throw new Error(`exported package-lock.json root declares retired dependency ${dependency}`);
       }
     }
+    // §15.2 carve-out (mirrors the Fleet.3 carrier): `ws` may resolve only as a
+    // transitive of retained Pi/MCP/CDP packages; the react family may resolve only
+    // as peer/transitive of the retained Vercel AI SDK family (`ai` / `@ai-sdk/react`
+    // and its direct peer chain). Everything else must be absent from the export.
+    const retainedPeerOwners = new Set([
+      "node_modules/ai",
+      "node_modules/@ai-sdk/react",
+      "node_modules/swr",
+      "node_modules/use-sync-external-store",
+    ]);
+    const reactFamily = new Set(["react", "react-dom", "@types/react", "@types/react-dom"]);
     for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
       if (dependency === "ws") continue;
+      if (reactFamily.has(dependency)) {
+        const resolved = `node_modules/${dependency}`;
+        if (!(resolved in packages)) continue;
+        const owners = Object.entries(packages).filter(
+          ([, entry]) => entry?.peerDependencies?.[dependency] ?? entry?.dependencies?.[dependency],
+        );
+        for (const [owner] of owners) {
+          if (!retainedPeerOwners.has(owner)) {
+            throw new Error(`exported package-lock.json resolves retired dependency ${dependency} under ${owner}`);
+          }
+        }
+        continue;
+      }
       if (`node_modules/${dependency}` in packages) {
         throw new Error(`exported package-lock.json resolves retired dependency ${dependency}`);
       }
