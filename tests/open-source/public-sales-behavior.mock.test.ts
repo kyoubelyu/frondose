@@ -414,8 +414,8 @@ describe("every discovered methodology carrier has an explicit compatibility dis
             "tests",
           ],
           { cwd: process.cwd(), encoding: "utf8" },
-        ).stdout
-          .trim()
+        )
+          .stdout.trim()
           .split("\n")
           .filter(Boolean)
       : (() => {
