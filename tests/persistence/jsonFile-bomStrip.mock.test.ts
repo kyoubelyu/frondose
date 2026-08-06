@@ -20,7 +20,6 @@ import { describe, it } from "node:test";
 import { configJsonSchemaV2, readConfig, writeConfig } from "../../src/persistence/config.js";
 import { readJsonFileSync } from "../../src/persistence/jsonFile.js";
 import { readSecrets } from "../../src/persistence/secrets.js";
-import { readServerIdentity, writeServerIdentity } from "../../src/persistence/serverIdentity.js";
 import { cleanupTmpDir, makeTmpDir } from "../_helpers/tmp";
 
 const UTF8_BOM = "﻿";
@@ -124,30 +123,9 @@ describe("readConfig BOM tolerance (src/persistence/config.ts)", () => {
 });
 
 describe("other readers tolerate a BOM-prefixed file", () => {
-  it("T-ServerIdentityBom.1: readServerIdentity parses a BOM-prefixed identity file correctly", () => {
-    const dir = makeTmpDir("frondose-bom-serverIdentity-");
-    try {
-      const path = join(dir, "identity.json");
-      writeServerIdentity(
-        {
-          operatorName: "Kyoube",
-          orchestratorName: "mai-server",
-          orchestratorRole: "Operator's chief-of-staff agent",
-          priorities: [],
-          traits: [],
-          updatedAt: new Date().toISOString(),
-        },
-        path,
-      );
-      const written = readJsonFileSync(path) as Record<string, unknown>;
-      writeFileSync(path, `${UTF8_BOM}${JSON.stringify(written)}`, "utf-8");
-
-      const identity = readServerIdentity(path);
-      assert.equal(identity?.operatorName, "Kyoube");
-    } finally {
-      cleanupTmpDir(dir);
-    }
-  });
+  // (T-ServerIdentityBom.1 — readServerIdentity/writeServerIdentity — retired
+  // with src/persistence/serverIdentity.ts, a fleet runtime owner deleted per
+  // the P-OPEN-SOURCE-SPLIT ledger.)
 
   it("T-SecretsBom.1: readSecrets on a BOM-prefixed secrets.json parses it directly (does not fall through to legacy migration)", () => {
     const dir = makeTmpDir("frondose-bom-secrets-");

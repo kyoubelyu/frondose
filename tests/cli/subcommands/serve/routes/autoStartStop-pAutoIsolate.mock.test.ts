@@ -6,7 +6,7 @@
  *
  * Per outside-in TDD + BDD-light: ALL assertion bodies are
  * `assert.fail("TODO Step 5: …")` — RED at Step 2/3/4a. Neither route exists yet
- * in routes.ts's dispatch table (src/cli/subcommands/serve/routes.ts), so every
+ * in routes.ts's dispatch table (src/app/backend/routes.ts), so every
  * request in this file currently 404s — that IS the intentional Step-2 RED state.
  * Validator fills real assertions at Step 5 once Codex's Step 4b lands the routes
  * per plan §6.5 + wires them into routes.ts + persistence/schedule.ts helpers.
@@ -35,9 +35,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { createWorkflowController } from "../../../../../src/agent/workflow/controller.js";
-import type { ServeDeps, ServeState } from "../../../../../src/cli/subcommands/serve/context.js";
-import { createRequestHandler } from "../../../../../src/cli/subcommands/serve/routes.js";
-import type { createTurnRunner } from "../../../../../src/cli/subcommands/serve/turn.js";
+import type { ServeDeps, ServeState } from "../../../../../src/app/backend/context.js";
+import { createRequestHandler } from "../../../../../src/app/backend/routes.js";
+import type { createTurnRunner } from "../../../../../src/app/backend/turn.js";
 import { readSchedule } from "../../../../../src/persistence/schedule.js";
 
 // ─── Mock HTTP classes (mirrors routes-characterization.mock.test.ts) ────────
@@ -120,7 +120,10 @@ function makeDeps(schedulePath: string, salesDbPath: string, emittedFrames: unkn
     tools: {},
     maxSteps: 5,
     auditWriter: async () => undefined,
-    session: { getOrInitClient: async () => ({ ok: false as const, error: "no_chrome", message: "stub" }), getClient: () => null },
+    session: {
+      getOrInitClient: async () => ({ ok: false as const, error: "no_chrome", message: "stub" }),
+      getClient: () => null,
+    },
     schedulePath,
     salesDbPath,
     auditPath: "/dev/null",
@@ -177,7 +180,12 @@ async function issue(
   handler: { handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> },
   opts: { url: string; body?: unknown },
 ): Promise<MockServerResponse> {
-  const req = new MockIncomingMessage({ method: "POST", url: opts.url, authorization: "Bearer test-token", body: opts.body });
+  const req = new MockIncomingMessage({
+    method: "POST",
+    url: opts.url,
+    authorization: "Bearer test-token",
+    body: opts.body,
+  });
   const res = new MockServerResponse();
   await handler.handleRequest(req as unknown as IncomingMessage, res as unknown as ServerResponse);
   return res;
@@ -200,7 +208,11 @@ describe("POST /agent/auto/start — empty/whitespace prompt rejected (T-Start.1
 
     assert.equal(res.statusCode, 400, "empty prompt must be rejected with HTTP 400");
     assert.deepEqual(res.parsedBody(), { ok: false, reason: "missing_prompt" });
-    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must stay unchanged");
+    assert.equal(
+      (state as unknown as { cronEnabled: boolean }).cronEnabled,
+      false,
+      "state.cronEnabled must stay unchanged",
+    );
     assert.equal(readSchedule(schedulePath).length, 0, "no schedule record must be written");
   });
 
@@ -247,7 +259,12 @@ describe("POST /agent/auto/start — non-empty prompt writes a record + flips cr
         (f as { type?: unknown }).type === "cron-mode" &&
         (f as { cronEnabled?: unknown }).cronEnabled === true,
     );
-    const body = res.parsedBody() as { ok?: unknown; sessionId?: unknown; intervalMinutes?: unknown; cronExpr?: unknown };
+    const body = res.parsedBody() as {
+      ok?: unknown;
+      sessionId?: unknown;
+      intervalMinutes?: unknown;
+      cronExpr?: unknown;
+    };
 
     assert.equal(res.statusCode, 200, "non-empty prompt must succeed with HTTP 200");
     assert.equal(body.ok, true);
@@ -260,7 +277,11 @@ describe("POST /agent/auto/start — non-empty prompt writes a record + flips cr
     assert.equal((newRecord as unknown as { kind?: unknown })?.kind, "auto_session");
     assert.equal(newRecord?.enabled, true);
     assert.equal(newRecord?.task, "Prospect HK founders");
-    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, true, "state.cronEnabled must flip to true");
+    assert.equal(
+      (state as unknown as { cronEnabled: boolean }).cronEnabled,
+      true,
+      "state.cronEnabled must flip to true",
+    );
     assert.equal(
       (state as unknown as { autoSessionId: unknown }).autoSessionId,
       body.sessionId,
@@ -406,8 +427,16 @@ describe("POST /agent/auto/stop — disables all auto_session records + flips cr
     const records = readSchedule(schedulePath);
     const record = records.find((r) => (r as unknown as { sessionId?: unknown }).sessionId === sessionId);
     assert.equal(record?.enabled, false, "the auto_session record must be disabled");
-    assert.equal((state as unknown as { cronEnabled: boolean }).cronEnabled, false, "state.cronEnabled must flip to false");
-    assert.equal((state as unknown as { autoSessionId: unknown }).autoSessionId, null, "state.autoSessionId must be cleared");
+    assert.equal(
+      (state as unknown as { cronEnabled: boolean }).cronEnabled,
+      false,
+      "state.cronEnabled must flip to false",
+    );
+    assert.equal(
+      (state as unknown as { autoSessionId: unknown }).autoSessionId,
+      null,
+      "state.autoSessionId must be cleared",
+    );
     assert.ok(completedIdx >= 0, "auto-session-completed frame must be emitted");
     assert.equal(
       (emittedFrames[completedIdx] as { reason?: unknown }).reason,

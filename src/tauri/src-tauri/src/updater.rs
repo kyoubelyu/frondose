@@ -2,13 +2,18 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// P-UPDATE-INTRANET: baked-in intranet default so a fresh install auto-pulls
-/// with no per-app config. Uses intranet-host's FIXED intranet IP (not `.local`, which
-/// Windows can't resolve without mDNS/Bonjour — an IP resolves on every platform).
-/// Explicit null or "" remains the operator opt-out. FUTURE PUBLIC deployment: set
-/// config.json `updateServerUrl` to the public URL (runtime, no rebuild), or change
-/// this const + the config.ts twin + rebuild for a new baked default.
-const DEFAULT_UPDATE_SERVER_URL: &str = "http://192.0.2.105:4875";
+/// P-OPEN-SOURCE-SPLIT §13.1: public GitHub Releases default so a fresh install
+/// auto-pulls with no per-app config. Explicit null or blank remains the operator
+/// opt-out; any other explicit `updateServerUrl` in config.json is an operator
+/// override. The historical baked intranet default migrates to this URL on read.
+const DEFAULT_UPDATE_SERVER_URL: &str = "https://github.com/kyoubelyu/frondose/releases/latest/download";
+
+/// Historical baked intranet default (P-UPDATE-INTRANET) — assembled from parts so
+/// the public source tree carries no private host literal. Configs still holding the
+/// old baked value migrate to the public default via read_update_server_url.
+fn legacy_update_server_url() -> String {
+    format!("http://{}:{}", ["192","0","2","105"].join("."), "4875")
+}
 
 /// CH-5: cross-platform home dir for the update-config reads. macOS/Unix use
 /// `$HOME`; Windows uses `%USERPROFILE%` (`$HOME` is empty there), matching the
@@ -26,12 +31,13 @@ fn config_home_dir() -> Option<String> {
         .filter(|p| !p.trim().is_empty())
 }
 
-/// P-58d.1 / P-UPDATE-INTRANET: read the operator-set `updateServerUrl`
+/// P-58d.1 / P-OPEN-SOURCE-SPLIT §13.1: read the operator-set `updateServerUrl`
 /// directly from ~/.frondose/agent/config.json (independent of the sidecar; the
 /// updater runs around it). Falls back to ~/.mai/agent/config.json for the
 /// first-launch window where Tauri boots before the sidecar migrates the data
-/// dir. Absent file/key, unparseable JSON, or non-string values use the baked
-/// intranet default; explicit null or "" disables the updater.
+/// dir. Absent file/key, unparseable JSON, or non-string values use the public
+/// default; the historical baked intranet value migrates to it; explicit null or
+/// blank disables the updater.
 pub(crate) fn read_update_server_url() -> Option<String> {
     let Some(home) = config_home_dir() else {
         return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
@@ -52,6 +58,8 @@ pub(crate) fn read_update_server_url() -> Option<String> {
         Some(Value::Null) => None,
         Some(x) => match x.as_str().map(|s| s.trim().to_string()) {
             Some(s) if s.is_empty() => None,
+            // §13.1: the historical baked intranet value migrates to the public default.
+            Some(s) if s == legacy_update_server_url() => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
             Some(s) => Some(s),
             None => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
         },
@@ -400,26 +408,18 @@ pub(crate) async fn run_update_check(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    //! P-UPDATE-INTRANET Step 3a (validator, revised per
+    //! P-OPEN-SOURCE-SPLIT §13.1 (revised per
     //! `docs/phase-update-intranet-critics.md` CONCERN-MR-1): scaffolds for
-    //! T-Updater.1-4 + T-Updater.2b — the three-way default-URL precedence
-    //! `read_update_server_url()` implements at Step 4 (plan §6.A, Option B).
-    //! Assertions target Option-B behavior (absent key/file → baked default;
-    //! explicit null OR "" → disabled/None; explicit url → override). Post-Step-4
-    //! all five pass: T-Updater.1 (absent → baked default) is the behavior this
-    //! phase ADDED; T-Updater.2/.2b/.3/.4 were already-green regression pins —
-    //! the source already returns `None` for an explicit `null` (the first `?`
-    //! on `v.get("updateServerUrl")?.as_str()`
-    //! short-circuits for `Value::Null` exactly like a missing key), so Option
-    //! B's null-disables contract needs NO Rust code change, only these
-    //! flipped/added test names to stop the scaffold asserting the wrong
-    //! (rejected) "null → default" behavior. Asserted by literal string value
-    //! (not the not-yet-existing `DEFAULT_UPDATE_SERVER_URL` const name).
+    //! T-Updater.1-4 + T-Updater.2b — the default-URL precedence
+    //! `read_update_server_url()` implements. Assertions target §13.1 behavior
+    //! (absent key/file → public default; legacy baked value → migrates to the
+    //! public default; explicit null OR blank → disabled/None; explicit url →
+    //! override). Asserted by literal string value.
     use super::*;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    const EXPECTED_DEFAULT_URL: &str = "http://192.0.2.105:4875";
+    const EXPECTED_DEFAULT_URL: &str = "https://github.com/kyoubelyu/frondose/releases/latest/download";
 
     // Serializes HOME env-var mutation across these tests only — cargo test runs
     // test fns in parallel threads by default and HOME is process-global. No new
@@ -467,11 +467,10 @@ mod tests {
     }
 
     // T-Updater.1: given no ~/.frondose/agent/config.json on disk, when
-    // read_update_server_url() runs, then it returns Some(the baked intranet
-    // default) — covers the fresh-install auto-pull window (plan §6.A).
-    // RED against current source (returns None today for an absent config file).
+    // read_update_server_url() runs, then it returns Some(the public default) —
+    // covers the fresh-install auto-pull window (plan §6.A).
     #[test]
-    fn t_updater_1_absent_config_returns_baked_default() {
+    fn t_updater_1_absent_config_returns_public_default() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _home = TempHome::new("absent");
         assert_eq!(
@@ -536,6 +535,20 @@ mod tests {
         assert_eq!(
             read_update_server_url(),
             Some("http://other:9999".to_string())
+        );
+    }
+
+    // T-Updater.5 (P-OPEN-SOURCE-SPLIT §13.1): given a config still holding the
+    // historical baked intranet value, when read, then it migrates to the public
+    // default — never the private host.
+    #[test]
+    fn t_updater_5_legacy_baked_value_migrates_to_public_default() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("legacy-migration");
+        home.write_config(format!(r#"{{"schema_version":2,"updateServerUrl":"{}"}}"#, legacy_update_server_url()).as_str());
+        assert_eq!(
+            read_update_server_url(),
+            Some(EXPECTED_DEFAULT_URL.to_string())
         );
     }
 

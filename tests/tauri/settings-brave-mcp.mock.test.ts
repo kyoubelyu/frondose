@@ -7,11 +7,15 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const INDEX_HTML = readFileSync(join(REPO, "src", "tauri", "ui", "index.html"), "utf8");
 const SETTINGS_TS = readFileSync(join(REPO, "src", "tauri", "ui", "settings.ts"), "utf8");
+const SETTINGS_JS = readFileSync(join(REPO, "src", "tauri", "ui", "settings.js"), "utf8");
+const I18N_TS = readFileSync(join(REPO, "src", "tauri", "ui", "i18n.ts"), "utf8");
+const I18N_JS = readFileSync(join(REPO, "src", "tauri", "ui", "i18n.js"), "utf8");
+const OVERLAY_BUNDLE = readFileSync(join(REPO, "src", "overlay", "sharedRenderBundle.generated.ts"), "utf8");
 
 type SettingsPanelFactory = (deps: {
   invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-  surfaceError: (label: string, e: unknown) => void;
-}) => { open(): Promise<void>; close(): void };
+  surfaceError: (label: string, error: unknown) => void;
+}) => { open(): Promise<void> };
 
 let createSettingsPanel: SettingsPanelFactory | undefined;
 before(async () => {
@@ -20,134 +24,103 @@ before(async () => {
 });
 
 interface FakeEl {
-  id: string;
   value: string;
   placeholder: string;
   textContent: string | null;
   listeners: Record<string, () => void>;
-  classList: { add(c: string): void; remove(c: string): void; contains(c: string): boolean };
-  addEventListener(ev: string, fn: () => void): void;
+  classList: { add(value: string): void; remove(value: string): void };
+  addEventListener(event: string, listener: () => void): void;
 }
 
-const SETTINGS_IDS = [
-  "settings-panel",
-  "settings-save",
-  "settings-close",
-  "settings-baseurl",
-  "settings-model",
-  "settings-key",
-  "settings-brave-key",
-  "settings-fullname",
-  "settings-company",
-  "settings-role",
-  "settings-headline",
-  "settings-icp-roles",
-  "settings-soul",
-  "settings-update-url",
-  "settings-update-status",
-  "settings-check-update",
-];
-
 function installDomStub(): Record<string, FakeEl> {
-  const els: Record<string, FakeEl> = {};
-  for (const id of SETTINGS_IDS) {
-    const cls = new Set<string>();
-    els[id] = {
-      id,
+  const ids = [
+    "settings-panel",
+    "settings-save",
+    "settings-close",
+    "settings-baseurl",
+    "settings-model",
+    "settings-key",
+    "settings-fullname",
+    "settings-company",
+    "settings-role",
+    "settings-headline",
+    "settings-icp-roles",
+    "settings-soul",
+    "settings-update-url",
+    "settings-update-status",
+    "settings-check-update",
+  ];
+  const elements: Record<string, FakeEl> = {};
+  for (const id of ids) {
+    elements[id] = {
       value: "",
       placeholder: "",
       textContent: null,
       listeners: {},
-      classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) },
-      addEventListener(ev, fn) {
-        els[id].listeners[ev] = fn;
+      classList: { add() {}, remove() {} },
+      addEventListener(event, listener) {
+        elements[id].listeners[event] = listener;
       },
     };
   }
-  (globalThis as unknown as { document: unknown }).document = { getElementById: (id: string) => els[id] ?? null };
-  return els;
-}
-
-const SAMPLE_GET = {
-  ok: true,
-  llm: {
-    baseUrl: "https://llm.example/v1",
-    model: "deepseek-chat",
-    hasKey: true,
-    maskedKey: "sk-***9999",
-    provider: "deepseek",
-  },
-  search: { brave: { hasKey: true, maskedKey: "bsa-***7890" } },
-  identity: { fullName: "A" },
-  soul: { override: "s" },
-  updateServerUrl: null,
-};
-
-function mockInvoke(getResp: Record<string, unknown>) {
-  const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
-  const invoke = async (cmd: string, args?: Record<string, unknown>) => {
-    calls.push({ cmd, args });
-    return cmd === "frondose_get_settings" ? getResp : { ok: true };
+  (globalThis as unknown as { document: unknown }).document = {
+    getElementById: (id: string) => elements[id] ?? null,
   };
-  return { invoke, calls };
+  return elements;
 }
 
 const tick = (): Promise<void> => new Promise((resolveTick) => setTimeout(resolveTick, 0));
 
-describe("P-BRAVE-MCP Tauri Settings UI", () => {
-  it("T-PBrave.UI.1: index.html contains a password Brave key input and no Tavily control", () => {
-    // Given: the Tauri Settings HTML.
-    // When: the settings markup is inspected.
-    // Then: it contains the Brave MCP key input and no Tavily settings control.
-    assert.match(INDEX_HTML, /id="settings-brave-key"/);
-    assert.match(INDEX_HTML, /id="settings-brave-key"[^>]*type="password"|type="password"[^>]*id="settings-brave-key"/);
-    assert.match(INDEX_HTML, /id="settings-brave-key"[^>]*autocomplete="off"|autocomplete="off"[^>]*id="settings-brave-key"/);
-    assert.doesNotMatch(`${INDEX_HTML}\n${SETTINGS_TS}`, /settings-tavily|Tavily Search API key/i);
+describe("P-WEB-SEARCH-MCP-SCOPE Tauri Settings UI", () => {
+  // Given shipped Settings markup/source, when scanned, then neither Brave nor Tavily controls or patch keys exist.
+  it("T-MCP-SCOPE.7e: Settings has no search-provider control", () => {
+    for (const [label, source] of [
+      ["index.html", INDEX_HTML],
+      ["settings.ts", SETTINGS_TS],
+      ["settings.js", SETTINGS_JS],
+      ["i18n.ts", I18N_TS],
+      ["i18n.js", I18N_JS],
+      ["sharedRenderBundle.generated.ts", OVERLAY_BUNDLE],
+    ]) {
+      assert.doesNotMatch(
+        source,
+        /settings-brave-key|settings-tavily|settings\.braveKey|settings\.groupSearch|Brave Search API key|braveApiKey|tavilyApiKey/i,
+        `${label} must not retain a generated or source search-provider control`,
+      );
+    }
   });
 
-  it("T-PBrave.UI.2: open() loads the Brave mask as placeholder and keeps the password value empty", async () => {
-    assert.ok(createSettingsPanel, "settings.ts must export createSettingsPanel");
-    const els = installDomStub();
-    const m = mockInvoke(SAMPLE_GET);
-
-    // Given: frondose_get_settings returns search.brave.maskedKey.
-    // When: the Settings panel opens.
-    // Then: settings-brave-key.value is empty and placeholder is the mask.
-    await createSettingsPanel({ invoke: m.invoke, surfaceError: () => {} }).open();
-
-    assert.equal(els["settings-brave-key"].value, "", "Brave key input must never show the raw key");
-    assert.equal(els["settings-brave-key"].placeholder, "bsa-***7890");
-    assert.equal(els["settings-key"].placeholder, "sk-***9999", "existing LLM key placeholder behavior remains");
-  });
-
-  it("T-PBrave.UI.3: save sends search.brave.key only when the operator typed a Brave key", async () => {
-    assert.ok(createSettingsPanel, "settings.ts must export createSettingsPanel");
-    const els = installDomStub();
-    const m = mockInvoke(SAMPLE_GET);
-    const panel = createSettingsPanel({ invoke: m.invoke, surfaceError: () => {} });
-    await panel.open();
-    m.calls.length = 0;
-
-    // Given: the Brave key input is empty.
-    // When: save is clicked.
-    // Then: the settings patch omits search.brave.key.
-    els["settings-save"].listeners.click();
-    await tick();
-    const firstSet = m.calls.find((call) => call.cmd === "frondose_set_settings") as {
-      args?: { settings?: { search?: { brave?: { key?: string } } } };
+  // Given a backend response containing no search state, when Settings opens and saves, then the emitted patch has no search field.
+  it("T-MCP-SCOPE.7f: open/save emits no search patch", async () => {
+    assert.ok(createSettingsPanel);
+    const elements = installDomStub();
+    const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
+    const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+      calls.push({ cmd, args });
+      return (
+        cmd === "frondose_get_settings"
+          ? {
+              ok: true,
+              llm: {
+                baseUrl: "https://llm.example/v1",
+                model: "deepseek-chat",
+                hasKey: true,
+                maskedKey: "sk-***9999",
+                provider: "deepseek",
+              },
+              identity: {},
+              soul: { override: null },
+              updateServerUrl: null,
+            }
+          : { ok: true }
+      ) as T;
     };
-    assert.ok(!firstSet.args?.settings?.search?.brave?.key, "empty Brave key input must not send a key");
-
-    // Given: the operator typed a Brave key.
-    // When: save is clicked again.
-    // Then: the patch contains search.brave.key with the typed value.
-    m.calls.length = 0;
-    els["settings-brave-key"].value = "typed-brave-key";
-    els["settings-save"].listeners.click();
+    await createSettingsPanel({ invoke, surfaceError: () => {} }).open();
+    calls.length = 0;
+    elements["settings-save"].listeners.click();
     await tick();
-    const secondSet = m.calls.find((call) => call.cmd === "frondose_set_settings") as {
-      args?: { settings?: { search?: { brave?: { key?: string } } } };
-    };
-    assert.equal(secondSet.args?.settings?.search?.brave?.key, "typed-brave-key");
+    const saved = calls.find((call) => call.cmd === "frondose_set_settings");
+    const settings = (saved?.args?.settings ?? {}) as Record<string, unknown>;
+    assert.ok(!("search" in settings));
   });
 });

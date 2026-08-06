@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { before, beforeEach, describe, it, mock } from "node:test";
 import { pathToFileURL } from "node:url";
-import type { ServeDeps, ServeState } from "../../../../src/cli/subcommands/serve/context.js";
-import type { TurnArgs } from "../../../../src/cli/subcommands/serve/turn/runOne.js";
+import type { ServeDeps, ServeState } from "../../../../src/app/backend/context.js";
+import type { TurnArgs } from "../../../../src/app/backend/turn/runOne.js";
 
 type Phase = "intermediate" | "final";
 type Completion = { finishReason: "stop" | "max_steps" | "aborted" };
@@ -84,7 +84,7 @@ before(async () => {
       },
     },
   });
-  const mod = await import("../../../../src/cli/subcommands/serve/turn/runOne.js");
+  const mod = await import("../../../../src/app/backend/turn/runOne.js");
   runOneTurn = mod.runOneTurn as RunOneTurn;
 });
 

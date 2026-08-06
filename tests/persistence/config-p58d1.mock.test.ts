@@ -73,16 +73,16 @@ describe("readConfig — updateServerUrl round-trip (G-P58d.1.1)", () => {
 
 // ─── T-UpdCfg.2 ──────────────────────────────────────────────────────────────
 
-describe("readConfig — backward-compat: v2 config missing updateServerUrl → baked intranet default, no v1→v2 migration, no field wipe (G-P58d.1.1; default flipped by P-UPDATE-INTRANET)", () => {
+describe("readConfig — backward-compat: v2 config missing updateServerUrl → public GitHub Releases default, no v1→v2 migration, no field wipe (G-P58d.1.1; default flipped by P-OPEN-SOURCE-SPLIT §13.1)", () => {
   // Given: config.json with schema_version:2 AND NO updateServerUrl key, but populated server/telegram/soul fields
   // When:  readConfig(path)
-  // Then:  result.updateServerUrl === "http://192.0.2.105:4875" (Zod default — P-UPDATE-INTRANET flips the
-  //        absent-key default from null to the baked intranet URL; see config-updateDefault.mock.test.ts
-  //        T-Config.1a for the new-behavior scaffold; T-UpdCfg.3/4 below still pin null/malformed EXPLICIT
-  //        values verbatim — only the ABSENT-key default changed)
+  // Then:  result.updateServerUrl === "https://github.com/kyoubelyu/frondose/releases/latest/download" (Zod default —
+  //        P-OPEN-SOURCE-SPLIT §13.1 flips the absent-key default to the public URL; see
+  //        config-updateDefault.mock.test.ts T-Config.1a for the new-behavior scaffold; T-UpdCfg.3/4 below
+  //        still pin null/malformed EXPLICIT values verbatim — only the ABSENT-key default changed)
   //        AND result.schema_version === 2 (no v1→v2 migration fired — the file is already v2)
   //        AND result.server / result.telegram / result.soul are preserved byte-for-byte (NOT wiped to DEFAULT_CONFIG_V2)
-  it("T-UpdCfg.2: old v2 config without updateServerUrl → baked intranet default (P-UPDATE-INTRANET; was null pre-phase); schema_version stays 2; server/telegram/soul fields preserved unchanged", () => {
+  it("T-UpdCfg.2: old v2 config without updateServerUrl → public GitHub Releases default (§13.1; was intranet pre-split); schema_version stays 2; server/telegram/soul fields preserved unchanged", () => {
     const { configPath, cleanup } = makeTmpDir();
     try {
       // Write raw JSON WITHOUT updateServerUrl key (simulates a pre-P-58d.1 v2 config)
@@ -109,8 +109,8 @@ describe("readConfig — backward-compat: v2 config missing updateServerUrl → 
       const result = readConfig(configPath);
       assert.equal(
         result.updateServerUrl,
-        "http://192.0.2.105:4875",
-        "absent key → Zod fills the baked intranet default (P-UPDATE-INTRANET; was null pre-phase)",
+        "https://github.com/kyoubelyu/frondose/releases/latest/download",
+        "absent key → Zod fills the public GitHub Releases default (P-OPEN-SOURCE-SPLIT §13.1)",
       );
       assert.equal(result.schema_version, 2, "schema_version stays 2 — no v1→v2 migration triggered");
       assert.equal(result.server.url, "http://myserver:8080", "server.url preserved");

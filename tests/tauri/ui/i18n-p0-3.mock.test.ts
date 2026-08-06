@@ -18,17 +18,45 @@ import { fileURLToPath } from "node:url";
 
 // NOTE: leaf modules (render/progress.ts, app/sendButton.ts) are NOT imported directly —
 // the slice-11/12 R-Source guards forbid tests importing UI leaves; use the render.js barrel.
-import { detectLocale, getLocale, isI18nKey, localizeDocument, prefToLocale, setLocale, t } from "../../../src/tauri/ui/i18n.js";
+import {
+  detectLocale,
+  getLocale,
+  isI18nKey,
+  localizeDocument,
+  prefToLocale,
+  setLocale,
+  t,
+} from "../../../src/tauri/ui/i18n.js";
 import { statusForMode } from "../../../src/tauri/ui/mode.js";
 import { stepChipLabel } from "../../../src/tauri/ui/render.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const INDEX_HTML = readFileSync(join(REPO, "src/tauri/ui/index.html"), "utf-8");
+const I18N_TS = readFileSync(join(REPO, "src/tauri/ui/i18n.ts"), "utf-8");
+const I18N_JS = readFileSync(join(REPO, "src/tauri/ui/i18n.js"), "utf-8");
+const OVERLAY_BUNDLE = readFileSync(join(REPO, "src/overlay/sharedRenderBundle.generated.ts"), "utf-8");
 
 // Every test leaves the module-level locale back at en (node env is en-US → detectLocale() = en,
 // but pin "en" explicitly so this suite is deterministic on zh-locale machines too).
 afterEach(() => {
   setLocale("en");
+});
+
+describe("P-WEB-SEARCH-MCP-SCOPE generated i18n artifacts", () => {
+  // Given source and tracked generated i18n surfaces, when scanned, then retired search-provider labels are absent everywhere.
+  it("T-MCP-SCOPE.7e-i18n: source, compiled UI, and overlay bundle contain no retired search labels", () => {
+    for (const [label, source] of [
+      ["i18n.ts", I18N_TS],
+      ["i18n.js", I18N_JS],
+      ["sharedRenderBundle.generated.ts", OVERLAY_BUNDLE],
+    ]) {
+      assert.doesNotMatch(
+        source,
+        /settings\.braveKey|settings\.groupSearch|Brave Search API key/i,
+        `${label} must be regenerated without retired search labels`,
+      );
+    }
+  });
 });
 
 describe("P0-3 i18n — locale detection", () => {
@@ -257,7 +285,6 @@ describe("P-ZH-UI-ALIAS — live language-pref switch actually rewrites the DOM 
       "settings-baseurl",
       "settings-model",
       "settings-key",
-      "settings-brave-key",
       "settings-fullname",
       "settings-company",
       "settings-role",

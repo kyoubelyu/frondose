@@ -71,12 +71,9 @@ const PRE_P31_WORKER_KEYS = [
   "launch",
   "navigate_to_url",
   "press",
-  "publish_event",
   "qualify_profile",
-  "query_lead_globally",
   "reload",
   "remember",
-  "report_issue",
   "screenshot",
   "scroll",
   "search_memory",
@@ -122,50 +119,19 @@ const POST_P31_WORKER_KEYS = [
 
 // Pre-P-31 server tool snapshot (23 keys).
 // P-44: updated from 19 to 22 to include P-39's search_memory/set_memory_note/get_memory_note.
-const PRE_P31_SERVER_KEYS = [
-  "analyze_screenshot",
-  "dispatch_google_login",
-  "echo",
-  "escalate_for_capability",
-  "get_memory_note",
-  "getIdentity",
-  "getMemory",
-  "gh_issue",
-  "identity",
-  "list_personas",
-  "list_workers",
-  "provision_worker",
-  "remember",
-  "report_issue",
-  "revoke_worker",
-  "search_memory",
-  "send_worker_message",
-  "set_memory_note",
-  "sleep",
-  "stop",
-  "telegram_notify",
-  "web_fetch",
-  "web_search",
-].sort();
 
 // P-73 rebaseline: current server tool snapshot (27 keys = pre-P-31 23 + schedule_task [P-31]
 // + todo_write [P-Y1] + present_summary [P-Y3] + stop_auto [P-REBASE-TOOL-COUNT: stop_auto added
 // at P-AUTO-ISOLATE]; suggest_card/suggest_next_actions worker-only per P-73).
-const POST_P31_SERVER_KEYS = [
-  ...PRE_P31_SERVER_KEYS,
-  "present_summary",
-  "schedule_task",
-  "stop_auto",
-  "todo_write",
-].sort();
 
 // ─── T-CONTRACT.WORKER ────────────────────────────────────────────────────────
 
 describe("makeAllTools worker mode → 54 tool keys (P-ISSUE-BOARD) (G-P31.12)", () => {
-  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control, undefined, {mode:'worker',workerId}) → 54 keys; set includes present_summary + 17 sales tools + stop_auto", () => {
-    // Given:  makeAllTools called in worker mode with session + persistence (incl. schedulePath) + control
-    // When:   worker mode tool set is built post-P-31
-    // Then:   54 keys; deepEqual to POST_P31_WORKER_KEYS (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE).
+  it("T-CONTRACT.WORKER: makeAllTools(session, {schedulePath}, control) → 51 keys; set includes present_summary + 17 sales tools + stop_auto", () => {
+    // Given:  makeAllTools called with session + persistence (incl. schedulePath) + control
+    // When:   the single-mode App tool set is built post-P-31
+    // Then:   51 keys; deepEqual to POST_P31_WORKER_KEYS (P-OPEN-SOURCE-SPLIT: 54 −
+    //         report_issue − query_lead_globally − publish_event).
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -178,67 +144,30 @@ describe("makeAllTools worker mode → 54 tool keys (P-ISSUE-BOARD) (G-P31.12)",
           schedulePath: join(dir, "schedule.jsonl"),
         },
         mockControl,
-        undefined,
-        { mode: "worker", workerId: "w1" },
       );
 
       const keys = Object.keys(tools).sort();
 
       assert.equal(
         keys.length,
-        54,
-        `worker mode must return exactly 54 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
+        51,
+        `the App registry must return exactly 51 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
       );
       assert.deepEqual(
         keys,
         POST_P31_WORKER_KEYS,
-        "worker tool names must match POST_P31_WORKER_KEYS (P-Y3 rebaseline)",
+        "App tool names must match POST_P31_WORKER_KEYS (single-mode inventory)",
       );
     } finally {
       cleanup();
     }
   });
 });
+
+// ─── T-CONTRACT.SERVER ─── RETIRED with the fleet server mode ────────────────
+// (server mode and POST_P31_SERVER_KEYS are deleted per T-RETIRE.Fleet.1.)
 
 // ─── T-CONTRACT.SERVER ────────────────────────────────────────────────────────
-
-describe("makeAllTools server mode → 27 tool keys (P-ISSUE-BOARD) (G-P31.12)", () => {
-  it("T-CONTRACT.SERVER: makeAllTools(undefined, {schedulePath}, control, undefined, {mode:'server'}) → 27 keys; set includes present_summary + stop_auto", () => {
-    // Given:  makeAllTools called in server mode with persistence (incl. schedulePath) + control
-    // When:   server mode tool set is built post-P-31
-    // Then:   27 keys; deepEqual to POST_P31_SERVER_KEYS (P-73: suggest_card/suggest_next_actions worker-only; P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const tools = makeAllTools(
-        undefined,
-        {
-          memoryDbPath: join(dir, "memory.sqlite"),
-          identityPath: join(dir, "identity.json"),
-          schedulePath: join(dir, "schedule.jsonl"),
-        },
-        mockControl,
-        undefined,
-        { mode: "server" },
-      );
-
-      const keys = Object.keys(tools).sort();
-
-      assert.equal(
-        keys.length,
-        27,
-        `server mode must return exactly 27 tools (got ${keys.length}): ${JSON.stringify(keys)}`,
-      );
-      assert.deepEqual(
-        keys,
-        POST_P31_SERVER_KEYS,
-        "server tool names must match POST_P31_SERVER_KEYS (P-Y3 inventory)",
-      );
-    } finally {
-      cleanup();
-    }
-  });
-});
 
 // ─── T-CONTRACT.NO-BASH ──────────────────────────────────────────────────────
 

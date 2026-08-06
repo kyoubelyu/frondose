@@ -41,7 +41,7 @@ let openSalesDatabase: AnyFn | null = null;
 let endAutoRun: AnyFn | null = null;
 
 before(async () => {
-  const cronMod = await import("../../../../src/cli/subcommands/serve/cron.js").catch(() => null);
+  const cronMod = await import("../../../../src/app/backend/cron.js").catch(() => null);
   // biome-ignore lint/suspicious/noExplicitAny: dynamic import
   createCronDriver = (cronMod as any)?.createCronDriver ?? null;
   const dbMod = await import("../../../../src/persistence/salesDb.js").catch(() => null);
@@ -102,7 +102,9 @@ function makeMockDeps(schedulePath: string, salesDbPath: string, emittedFrames: 
     auditPath: "/dev/null",
     expectedToken: Buffer.from("test"),
     workflow: { handleEndpoint: () => ({ status: 200, response: { ok: true } }) },
-    emitFrame: (frame: unknown) => { emittedFrames.push(frame); },
+    emitFrame: (frame: unknown) => {
+      emittedFrames.push(frame);
+    },
     emitOverlayEvent: () => {},
   };
 }
@@ -133,8 +135,9 @@ describe("T-CronNoProgress.12: duration cap takes precedence — reaper ends row
     const runId = randomUUID();
     const now = Date.now();
     // Seed an active run
-    db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`)
-      .run(runId, now);
+    db.prepare(
+      `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`,
+    ).run(runId, now);
 
     state.autoRunId = runId;
     state.cronNoProgressRunId = runId;
@@ -163,8 +166,11 @@ describe("T-CronNoProgress.12: duration cap takes precedence — reaper ends row
     // Exactly 1 auto-run-completed frame (from the existing else-if branch)
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
     const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed");
-    assert.equal(completedFrames.length, 1,
-      `Must emit exactly 1 auto-run-completed (from cron else-if, NOT from no-progress); got ${completedFrames.length}`);
+    assert.equal(
+      completedFrames.length,
+      1,
+      `Must emit exactly 1 auto-run-completed (from cron else-if, NOT from no-progress); got ${completedFrames.length}`,
+    );
 
     const cf = completedFrames[0] as any;
     assert.equal(cf.runId, runId);
@@ -182,8 +188,11 @@ describe("T-CronNoProgress.12: duration cap takes precedence — reaper ends row
     // The counter should still be 9 (or 0 if state was cleared by the else-if — the spec says
     // the else-if does NOT reset cronNoProgressTurns; that resets only on the NEXT tick's run-id change).
     // Either way it must NOT be 10 (threshold was not tripped by no-progress code on this tick).
-    assert.notEqual(state.cronNoProgressTurns, 10,
-      "cronNoProgressTurns must NOT reach 10 via no-progress path on a duration-cap tick (code was skipped)");
+    assert.notEqual(
+      state.cronNoProgressTurns,
+      10,
+      "cronNoProgressTurns must NOT reach 10 via no-progress path on a duration-cap tick (code was skipped)",
+    );
   });
 });
 
@@ -205,15 +214,19 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
     // biome-ignore lint/suspicious/noExplicitAny: test DB
     const db: any = openSalesDatabase!(salesDbPath);
     const runId = randomUUID();
-    db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`)
-      .run(runId, Date.now());
+    db.prepare(
+      `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`,
+    ).run(runId, Date.now());
     state.autoRunId = runId;
 
     writeDueSchedule(schedulePath);
     const deps = makeMockDeps(schedulePath, salesDbPath, emittedFrames);
     const turn = {
       runOneTurn: async () => {
-        endAutoRun!(openSalesDatabase!(salesDbPath), runId, { status: "stopped_by_agent", summary: "Duration cap reached by server safety net" });
+        endAutoRun!(openSalesDatabase!(salesDbPath), runId, {
+          status: "stopped_by_agent",
+          summary: "Duration cap reached by server safety net",
+        });
         // reaper skips clearing state.autoRunId → stays set
       },
     };
@@ -222,7 +235,9 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
     await driver.tick();
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
-    const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed" && f.runId === runId);
+    const completedFrames = (emittedFrames as any[]).filter(
+      (f: any) => f.type === "auto-run-completed" && f.runId === runId,
+    );
     assert.equal(completedFrames.length, 1, `Scenario A: expected 1 auto-run-completed; got ${completedFrames.length}`);
 
     const row = db.prepare("SELECT ended_at FROM auto_runs WHERE id = ?").get(runId) as any;
@@ -248,8 +263,9 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
       // biome-ignore lint/suspicious/noExplicitAny: test DB
       const db: any = openSalesDatabase!(salesDbPath);
       const runId = randomUUID();
-      db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`)
-        .run(runId, Date.now());
+      db.prepare(
+        `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`,
+      ).run(runId, Date.now());
       state.autoRunId = runId;
       state.cronNoProgressRunId = runId;
       state.cronNoProgressTurns = 0;
@@ -262,8 +278,14 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
       await driver.tick();
 
       // biome-ignore lint/suspicious/noExplicitAny: frame type check
-      const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed" && f.runId === runId);
-      assert.equal(completedFrames.length, 1, `Scenario B: expected 1 auto-run-completed; got ${completedFrames.length}`);
+      const completedFrames = (emittedFrames as any[]).filter(
+        (f: any) => f.type === "auto-run-completed" && f.runId === runId,
+      );
+      assert.equal(
+        completedFrames.length,
+        1,
+        `Scenario B: expected 1 auto-run-completed; got ${completedFrames.length}`,
+      );
       const cf = completedFrames[0] as any;
       assert.equal(cf.status, "stopped_by_agent", "Scenario B: status must be stopped_by_agent");
 
@@ -290,15 +312,19 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
     // biome-ignore lint/suspicious/noExplicitAny: test DB
     const db: any = openSalesDatabase!(salesDbPath);
     const runId = randomUUID();
-    db.prepare(`INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`)
-      .run(runId, Date.now());
+    db.prepare(
+      `INSERT INTO auto_runs (id, started_at, ended_at, max_duration_minutes, max_connects, status, summary, counters) VALUES (?, ?, NULL, 480, 20, 'running', NULL, NULL)`,
+    ).run(runId, Date.now());
     state.autoRunId = runId;
 
     writeDueSchedule(schedulePath);
     const deps = makeMockDeps(schedulePath, salesDbPath, emittedFrames);
     const turn = {
       runOneTurn: async () => {
-        endAutoRun!(openSalesDatabase!(salesDbPath), runId, { status: "completed", summary: "Agent completed the run" });
+        endAutoRun!(openSalesDatabase!(salesDbPath), runId, {
+          status: "completed",
+          summary: "Agent completed the run",
+        });
       },
     };
 
@@ -306,7 +332,9 @@ describe("T-CronNoProgress.18: across all four closure scenarios, exactly 1 auto
     await driver.tick();
 
     // biome-ignore lint/suspicious/noExplicitAny: frame type check
-    const completedFrames = (emittedFrames as any[]).filter((f: any) => f.type === "auto-run-completed" && f.runId === runId);
+    const completedFrames = (emittedFrames as any[]).filter(
+      (f: any) => f.type === "auto-run-completed" && f.runId === runId,
+    );
     assert.equal(completedFrames.length, 1, `Scenario C: expected 1 auto-run-completed; got ${completedFrames.length}`);
     const cf = completedFrames[0] as any;
     assert.equal(cf.status, "completed", "Scenario C: status must be completed");

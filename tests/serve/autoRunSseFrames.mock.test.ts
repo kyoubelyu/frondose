@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 // SseFrame type import: compile-safe via type-only import (exists pre-builder).
-import type { SseFrame } from "../../src/cli/subcommands/serve/context.js";
+import type { SseFrame } from "../../src/app/backend/context.js";
 
 describe("T-E.Sse — SseFrame union accepts 3 new auto-run frame types (P-SP-E Sketch F)", () => {
   // ─── T-E.Sse.1 ───────────────────────────────────────────────────────────────

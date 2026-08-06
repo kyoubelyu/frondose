@@ -25,21 +25,19 @@ describe("T-SP-B.Methodology — distill.ts methodology-repertoire block (§6.4(
   // ─── T-SP-B.Methodology.1 ────────────────────────────────────────────────────
 
   it("T-SP-B.Methodology.1: METHODOLOGY_DISTILLATION contains all 4 methodology names AND stays within ≤800 tok budget", () => {
-    // Given: src/methodology/distill.ts METHODOLOGY_DISTILLATION after P-SP-B §6.4(F) slim-then-add edit
-    //        (remove qualify_profile habit anchor −81 tok; add methodology repertoire block +68 tok; net 776 tok)
+    // Given: src/methodology/distill.ts METHODOLOGY_DISTILLATION after the P-OPEN-SOURCE-SPLIT §5.4
+    //        public-doctrine rewrite (slim-then-add; the private header "Solution Selling® distillation"
+    //        is RETIRED — T-OS.Sales.7 bans "solution selling" from the public doctrine, so the
+    //        capitalized header form is superseded by the same §5.4 rewrite)
     // When:  the exported METHODOLOGY_DISTILLATION string is inspected
-    // Then:  includes "Solution Selling" (capitalized, present in header line 23);
-    //        includes "solution_selling" (the methodUsed key name for that method — lowercase);
+    // Then:  includes "solution_selling" (the methodUsed key name for that method — lowercase);
     //        includes "spin" (plan said "SPIN" but builder used lowercase — NIT D-SP-B.Method.1);
     //        includes "challenger"; includes "meddic";
     //        Math.ceil(METHODOLOGY_DISTILLATION.length / 4) <= 800 (≤800-tok budget guard)
 
-    // 1. "Solution Selling" appears in the header: "Methodology (Solution Selling® distillation..."
-    assert.ok(
-      METHODOLOGY_DISTILLATION.includes("Solution Selling"),
-      `METHODOLOGY_DISTILLATION must contain "Solution Selling" (capitalized form in distill header). ` +
-        `Current length: ${METHODOLOGY_DISTILLATION.length} chars.`,
-    );
+    // 1. (retired) the capitalized header form "Solution Selling" was removed by the §5.4
+    //    public-doctrine rewrite — see the Sales.7 banned-token contract; the methodUsed
+    //    identifier form below is the surviving pin.
 
     // 2. "solution_selling" — the methodUsed identifier form, present in the methodology repertoire block
     assert.ok(

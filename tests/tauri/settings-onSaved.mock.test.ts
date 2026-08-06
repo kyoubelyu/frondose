@@ -40,7 +40,6 @@ const SETTINGS_IDS = [
   "settings-baseurl",
   "settings-model",
   "settings-key",
-  "settings-brave-key",
   "settings-fullname",
   "settings-company",
   "settings-role",

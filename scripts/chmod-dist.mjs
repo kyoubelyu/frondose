@@ -4,11 +4,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const entrypoints = [
-  "dist/cli/main.js",
-  "dist/app/sidecarMain.js",
-  "dist/app/updateServerMain.js",
-];
+// P-OPEN-SOURCE-SPLIT: the legacy CLI entry (dist/cli/main.js) and the retired
+// update-server entry (dist/app/updateServerMain.js) are deleted with their
+// sources; the App sidecar is the only executable dist entrypoint.
+const entrypoints = ["dist/app/sidecarMain.js"];
 
 export function chmodDistEntrypoints({ platform = process.platform, root = repoRoot } = {}) {
   if (platform === "win32") {

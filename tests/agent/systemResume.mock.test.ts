@@ -55,14 +55,15 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const BOUNDARY_TS = readFileSync(join(REPO, "src/agent/systemPrompt/boundary.ts"), "utf-8");
 const CHECKPOINT_TS = readFileSync(join(REPO, "src/agent/systemPrompt/checkpoint.ts"), "utf-8");
-const TURN_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn.ts"), "utf-8");
+const TURN_TS = readFileSync(join(REPO, "src/app/backend/turn.ts"), "utf-8");
 // P-72 slice 7: isWorkflowResume + deps.systemResume moved to turn/runOne.ts; steerThenTrigger(prompt, true) moved to turn/steer.ts.
 // P-AUTO-8: deps.systemResume further extracted to turn/selectSystem.ts (pure helper for 3-branch system select).
-const TURN_RUN_ONE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"), "utf-8");
-const TURN_SELECT_SYSTEM_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/selectSystem.ts"), "utf-8");
-const TURN_STEER_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/turn/steer.ts"), "utf-8");
-const CONTEXT_TS = readFileSync(join(REPO, "src/cli/subcommands/serve/context.ts"), "utf-8");
-const SERVE_TS = readFileSync(join(REPO, "src/cli/subcommands/serve.ts"), "utf-8");
+// P-OPEN-SOURCE-SPLIT: serve/** re-homed to src/app/backend/**.
+const TURN_RUN_ONE_TS = readFileSync(join(REPO, "src/app/backend/turn/runOne.ts"), "utf-8");
+const TURN_SELECT_SYSTEM_TS = readFileSync(join(REPO, "src/app/backend/turn/selectSystem.ts"), "utf-8");
+const TURN_STEER_TS = readFileSync(join(REPO, "src/app/backend/turn/steer.ts"), "utf-8");
+const CONTEXT_TS = readFileSync(join(REPO, "src/app/backend/context.ts"), "utf-8");
+const SERVE_TS = readFileSync(join(REPO, "src/app/backend/index.ts"), "utf-8");
 
 // ── Ritual-phrase golden anchors (from current source — EXACT substrings per §9.5 T-Resume.4b) ────
 // boundary.ts L27 and checkpoint.ts L22 are template literals — inside a TS template literal,
@@ -77,7 +78,7 @@ const CHECKPOINT_RITUAL_PHRASE = "FIRST tool call MUST be \\`search_memory\\`";
 
 describe("turn.ts — isWorkflowResume flag threads resume path to deps.systemResume (FIX-1 v2-rev §9.4(e) D-Dn1)", () => {
   it("T-Resume.4: TurnArgs has isWorkflowResume?: boolean; runOneTurn selects deps.systemResume; resumeWorkflowTurn calls steerThenTrigger(prompt, true); context.ts ServeDeps declares systemResume: string (V5+V4 required — FAILS pre-builder)", () => {
-    // Given: src/cli/subcommands/serve/turn.ts and context.ts sources
+    // Given: src/app/backend/turn.ts and context.ts sources
     // When: scanned for isWorkflowResume flag threading + system selection + ServeDeps field
     // Then: all four wiring points are present — all currently absent → FAIL
 

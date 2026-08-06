@@ -53,29 +53,29 @@ const SALES_TOOL_NAMES = [
 
 describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier gating", () => {
   // ─── T-SP-A.Wiring.1 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.1: worker power tier returns 54 tools including all 17 sales-kernel tools", async () => {
+  it("T-SP-A.Wiring.1: single-mode App power tier returns 51 tools including all 17 sales-kernel tools", async () => {
     // Given: makeAllTools called with a minimal mock session + :memory: salesDbPath + control + tier='power'
     // When:  Object.keys(tools) enumerated
-    // Then:  length === 54; the 17 sales-kernel tool names all present;
+    // Then:  length === 51 (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event);
+    //        the 17 sales-kernel tool names all present;
     closeSalesDatabase(":memory:");
 
     const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
-      mode: "worker",
       tier: "power",
     });
     const keys = Object.keys(tools);
 
     assert.strictEqual(
       keys.length,
-      54,
-      `worker+power must have 54 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
+      51,
+      `App power tier must have 51 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
     );
 
     for (const name of SALES_TOOL_NAMES) {
-      assert.ok(keys.includes(name), `Sales kernel tool '${name}' must be present in worker+power makeAllTools`);
+      assert.ok(keys.includes(name), `Sales kernel tool '${name}' must be present in the App registry`);
     }
 
-    // Spot-check some pre-existing worker tools are still present
+    // Spot-check some pre-existing tools are still present
     for (const existing of [
       "echo",
       "remember",
@@ -86,86 +86,9 @@ describe("T-SP-A.Wiring — makeAllTools factory tool-count + server/worker/tier
       "telegram_notify",
       "gh_issue",
     ]) {
-      assert.ok(keys.includes(existing), `Pre-existing worker tool '${existing}' must still be present`);
+      assert.ok(keys.includes(existing), `Pre-existing App tool '${existing}' must still be present`);
     }
   });
 
-  // ─── T-SP-A.Wiring.2 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.2: server power tier does NOT register any sales-kernel tools", async () => {
-    // Given: makeAllTools called with mode:'server', tier:'power', no session (server ignores session)
-    // When:  Object.keys(tools) enumerated
-    // Then:  length === 27; none of the 17 sales-kernel tool names appear in the set
-    closeSalesDatabase(":memory:");
-
-    const tools = makeAllTools(undefined, PERSISTENCE, CONTROL, undefined, {
-      mode: "server",
-      tier: "power",
-    });
-    const keys = Object.keys(tools);
-
-    assert.strictEqual(
-      keys.length,
-      27,
-      `server+power must have 27 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
-    );
-
-    for (const name of SALES_TOOL_NAMES) {
-      assert.ok(!keys.includes(name), `Sales kernel tool '${name}' must NOT appear in server mode tool set`);
-    }
-
-    // Verify server-only tools are present
-    for (const serverTool of [
-      "list_workers",
-      "send_worker_message",
-      "provision_worker",
-      "revoke_worker",
-      "list_personas",
-      "dispatch_google_login",
-    ]) {
-      assert.ok(keys.includes(serverTool), `Server-mode tool '${serverTool}' must be present in server+power mode`);
-    }
-
-    // Verify worker-only tools are absent
-    for (const workerOnly of [
-      "inspect",
-      "click",
-      "launch",
-      "qualify_profile",
-      "query_lead_globally",
-      "publish_event",
-    ]) {
-      assert.ok(!keys.includes(workerOnly), `Worker-only tool '${workerOnly}' must NOT appear in server mode tool set`);
-    }
-  });
-
-  // ─── T-SP-A.Wiring.3 ─────────────────────────────────────────────────────────
-  it("T-SP-A.Wiring.3: consumer tier subtracts telegram_notify + gh_issue + report_issue, still includes all 17 sales-kernel tools", async () => {
-    // Given: makeAllTools called with worker mode + tier:'consumer' + :memory: salesDbPath + mock session
-    // When:  Object.keys(tools) enumerated
-    // Then:  length === 51 (54 power − 3 operator-output);
-    //        17 sales-kernel tool names all present; 'telegram_notify'/'gh_issue' absent
-    closeSalesDatabase(":memory:");
-
-    const tools = makeAllTools(MOCK_SESSION, PERSISTENCE, CONTROL, undefined, {
-      mode: "worker",
-      tier: "consumer",
-    });
-    const keys = Object.keys(tools);
-
-    assert.strictEqual(
-      keys.length,
-      51,
-      `worker+consumer must have 51 tools; got ${keys.length}: ${keys.sort().join(", ")}`,
-    );
-
-    // All 17 sales-kernel tools must still be present in consumer tier
-    for (const name of SALES_TOOL_NAMES) {
-      assert.ok(keys.includes(name), `Sales kernel tool '${name}' must be present in worker+consumer mode`);
-    }
-
-    // telegram_notify + gh_issue must be absent in consumer tier
-    assert.ok(!keys.includes("telegram_notify"), "telegram_notify must be absent in consumer tier");
-    assert.ok(!keys.includes("gh_issue"), "gh_issue must be absent in consumer tier");
-    assert.ok(!keys.includes("report_issue"), "report_issue must be absent in consumer tier");
-  });
+  // ─── T-SP-A.Wiring.2/3 ─── RETIRED with the fleet server mode ─────────────
 });

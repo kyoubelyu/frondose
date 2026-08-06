@@ -33,10 +33,7 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const MODEL_TS_SRC = readFileSync(join(REPO, "src/agent/pi/model.ts"), "utf-8");
 const LOOP_TS_SRC = readFileSync(join(REPO, "src/agent/pi/loop.ts"), "utf-8");
-const RUN_ONE_TS_SRC = readFileSync(
-  join(REPO, "src/cli/subcommands/serve/turn/runOne.ts"),
-  "utf-8",
-);
+const RUN_ONE_TS_SRC = readFileSync(join(REPO, "src/app/backend/turn/runOne.ts"), "utf-8");
 
 // ─── A2 — complete() timeoutMs ────────────────────────────────────────────────
 
@@ -55,31 +52,36 @@ describe("A2 — complete() timeoutMs: loop passes timeoutMs:120000 as defense-i
     const modelHasConstant =
       MODEL_TS_SRC.includes("LLM_COMPLETE_TIMEOUT_MS") &&
       (MODEL_TS_SRC.includes("120_000") || MODEL_TS_SRC.includes("120000"));
-    const modelHasTimeoutMs =
-      MODEL_TS_SRC.includes("timeoutMs") && MODEL_TS_SRC.includes("PiModelResolution");
-    const loopPassesTimeoutMs =
-      LOOP_TS_SRC.includes("timeoutMs") && LOOP_TS_SRC.includes("complete(");
+    const modelHasTimeoutMs = MODEL_TS_SRC.includes("timeoutMs") && MODEL_TS_SRC.includes("PiModelResolution");
+    const loopPassesTimeoutMs = LOOP_TS_SRC.includes("timeoutMs") && LOOP_TS_SRC.includes("complete(");
 
     // (a) model.ts must export LLM_COMPLETE_TIMEOUT_MS = 120_000
-    assert.ok(modelHasConstant,
+    assert.ok(
+      modelHasConstant,
       "model.ts must export LLM_COMPLETE_TIMEOUT_MS with value 120_000 (or 120000). " +
-      `modelHasConstant=${modelHasConstant}`);
+        `modelHasConstant=${modelHasConstant}`,
+    );
 
     // (b) model.ts must include timeoutMs in PiModelResolution interface
-    assert.ok(modelHasTimeoutMs,
-      "model.ts must include timeoutMs field in PiModelResolution. " +
-      `modelHasTimeoutMs=${modelHasTimeoutMs}`);
+    assert.ok(
+      modelHasTimeoutMs,
+      "model.ts must include timeoutMs field in PiModelResolution. " + `modelHasTimeoutMs=${modelHasTimeoutMs}`,
+    );
 
     // (c) loop.ts must pass timeoutMs in the complete() call
-    assert.ok(loopPassesTimeoutMs,
+    assert.ok(
+      loopPassesTimeoutMs,
       "loop.ts must destructure timeoutMs from resolvePiModel() and pass it to complete(). " +
-      `loopPassesTimeoutMs=${loopPassesTimeoutMs}`);
+        `loopPassesTimeoutMs=${loopPassesTimeoutMs}`,
+    );
 
     // Extra structural pin: loop.ts destructures timeoutMs from resolvePiModel() return value
     const loopDestructuresTimeoutMs = LOOP_TS_SRC.includes("{ model,") && LOOP_TS_SRC.includes("timeoutMs }");
-    assert.ok(loopDestructuresTimeoutMs,
+    assert.ok(
+      loopDestructuresTimeoutMs,
       "loop.ts must destructure timeoutMs from resolvePiModel() result. " +
-      `loopDestructuresTimeoutMs=${loopDestructuresTimeoutMs}`);
+        `loopDestructuresTimeoutMs=${loopDestructuresTimeoutMs}`,
+    );
   });
 
   // ─── T-Timeout.2 ────────────────────────────────────────────────────────────
@@ -100,12 +102,15 @@ describe("A2 — complete() timeoutMs: loop passes timeoutMs:120000 as defense-i
       (RUN_ONE_TS_SRC.includes("180_000") || RUN_ONE_TS_SRC.includes("180000"));
 
     // The ordering invariant: HTTP timeout fires BEFORE D-27 watcher → cleaner stop.
-    assert.ok(llmCompleteTimeoutMs < silentHangMs,
-      `LLM_COMPLETE_TIMEOUT_MS (${llmCompleteTimeoutMs}) must be < SILENT_HANG_MS (${silentHangMs})`);
+    assert.ok(
+      llmCompleteTimeoutMs < silentHangMs,
+      `LLM_COMPLETE_TIMEOUT_MS (${llmCompleteTimeoutMs}) must be < SILENT_HANG_MS (${silentHangMs})`,
+    );
 
     // Regression pin: SILENT_HANG_MS in runOne.ts must still be 180_000
-    assert.ok(runOneHasSilentHang180,
-      "runOne.ts must still declare SILENT_HANG_MS=180_000. " +
-      `runOneHasSilentHang180=${runOneHasSilentHang180}`);
+    assert.ok(
+      runOneHasSilentHang180,
+      "runOne.ts must still declare SILENT_HANG_MS=180_000. " + `runOneHasSilentHang180=${runOneHasSilentHang180}`,
+    );
   });
 });

@@ -46,30 +46,9 @@ describe("WIN-6C serve turn test harness residuals", () => {
   });
 });
 
-describe("WIN-6C server web static routing residuals", () => {
-  it("T-WIN6C.Web.1: server web static index serves from assetRoot on Windows", () => {
-    // Given: assetRoot contains index.html.
-    // When: GET / routes through serveStatic on Windows.
-    // Then: the response is 200 with the file body instead of a false traversal 404.
-    const source = readRepo("src/cli/serverWeb.ts");
-    assert.match(source, /relative\(assetRoot,\s*resolved\)/, "serveStatic must use path.relative for containment");
-    assert.doesNotMatch(
-      source,
-      /startsWith\(`\$\{assetRoot\}\/`\)/,
-      "serveStatic must not use POSIX slash string-prefix containment",
-    );
-  });
-
-  it("T-WIN6C.Web.2: server web traversal remains blocked after cross-platform containment fix", () => {
-    // Given: a request path attempts to escape assetRoot, including encoded traversal.
-    // When: GET routes through serveStatic.
-    // Then: the response remains 404 on both Windows and POSIX.
-    const source = readRepo("src/cli/serverWeb.ts");
-    assert.match(source, /assetRelative\.startsWith\(""\.\."\)|assetRelative\.startsWith\("\.\."\)/, "guard must reject .. relative paths");
-    assert.match(source, /isAbsolute\(assetRelative\)/, "guard must reject absolute relative results");
-    assert.match(source, /decodeURIComponent\(urlPath\)/, "guard must still decode URL paths before resolution");
-  });
-});
+// WIN-6C server web static routing residuals — RETIRED with the fleet server
+// web console (src/cli/serverWeb.ts + src/web/** are deleted per the
+// P-OPEN-SOURCE-SPLIT ledger; T-RETIRE.Fleet.1 requires zero fleet-Web bytes).
 
 describe("WIN-6C telegram media-group residuals", () => {
   it("T-WIN6C.Telegram.1: Windows absolute media-group paths attach as multipart files", () => {
@@ -88,7 +67,11 @@ describe("WIN-6C telegram media-group residuals", () => {
     // When: telegram_notify builds the sendMediaGroup request.
     // Then: the JSON media entry remains the original remote reference and no local file read is attempted.
     const source = readRepo("src/tools/operatorOutput/telegram.ts");
-    assert.match(source, /\^https\?:\\\/\\\/\)\|i\.test\(media\)|\^https\?:\\\/\\\//, "predicate must keep HTTP(S) URLs remote");
+    assert.match(
+      source,
+      /\^https\?:\\\/\\\/\)\|i\.test\(media\)|\^https\?:\\\/\\\//,
+      "predicate must keep HTTP(S) URLs remote",
+    );
     assert.match(source, /return \{ type: item\.type, media: item\.media/, "remote refs must remain item.media");
   });
 });
@@ -103,7 +86,10 @@ describe("WIN-6C live gate residuals", () => {
     assert.ok(existsSync(logPath), `WIN6C_WINDOWS_LIVE_LOG must exist: ${logPath}`);
     const log = readFileSync(logPath, "utf8");
     assert.match(log, /ℹ fail 17\b/, "Windows full suite must return to the locked 17-failure baseline");
-    assert.doesNotMatch(log, /tests\\cli\\subcommands\\serve\\(?:per-turn-mode-fragment|turn-characterization)\.mock\.test\.ts/);
+    assert.doesNotMatch(
+      log,
+      /tests\\cli\\subcommands\\serve\\(?:per-turn-mode-fragment|turn-characterization)\.mock\.test\.ts/,
+    );
     assert.doesNotMatch(log, /tests\\cli\\serverWeb\.mock\.test\.ts/);
     assert.doesNotMatch(log, /tests\\tools\\operatorOutput\\telegram-extended\.test\.ts/);
   });

@@ -76,10 +76,10 @@ describe("no-bash boundary — P-30 new/edited files (G-P30.17)", () => {
 // ─── T-CONTRACT.TOOLS ─────────────────────────────────────────────────────────
 
 describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () => {
-  it("T-CONTRACT.TOOLS (worker): makeAllTools worker mode → exactly 54 tools", () => {
-    // Given: makeAllTools(session, persistence, control, undefined, {mode:'worker'})
+  it("T-CONTRACT.TOOLS (single-mode): makeAllTools → exactly 51 tools", () => {
+    // Given: makeAllTools(session, persistence, control) (single-mode App registry)
     // When:  Object.keys(tools).length
-    // Then:  53 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
+    // Then:  51 (P-OPEN-SOURCE-SPLIT: 54 − report_issue − query_lead_globally − publish_event)
 
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -87,50 +87,29 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
         memoryDbPath: join(dir, "memory.sqlite"),
         identityPath: join(dir, "identity.json"),
       };
-      const tools = makeAllTools(mockSession, persistence, mockControl, undefined, { mode: "worker" });
+      const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;
       assert.equal(
         count,
-        54,
-        `T-CONTRACT.TOOLS worker: expected 54 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
+        51,
+        `T-CONTRACT.TOOLS: expected 51 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
       );
     } finally {
       cleanup();
     }
   });
 
-  it("T-CONTRACT.TOOLS (server): makeAllTools server mode → exactly 27 tools", () => {
-    // Given: makeAllTools(undefined, persistence, control, undefined, {mode:'server'})
-    // When:  Object.keys(tools).length
-    // Then:  26 (P-REBASE-TOOL-COUNT: stop_auto added at P-AUTO-ISOLATE)
-
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const persistence = {
-        memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
-      };
-      const tools = makeAllTools(undefined, persistence, mockControl, undefined, { mode: "server" });
-      const count = Object.keys(tools).length;
-      assert.equal(
-        count,
-        27,
-        `T-CONTRACT.TOOLS server: expected 27 tools; got ${count}. Keys: ${Object.keys(tools).sort().join(", ")}`,
-      );
-    } finally {
-      cleanup();
-    }
-  });
+  // (T-CONTRACT.TOOLS (server) — retired with the fleet server mode.)
 });
 
 // ─── T-CONTRACT.DEPS ─────────────────────────────────────────────────────────
 
 describe("package.json dependency check — P-30 new deps (G-P30.1)", () => {
-  it("T-CONTRACT.DEPS: ssh2 + ws are in dependencies; @types/ssh2, @types/ws, @xterm/xterm, @xterm/addon-fit are in devDependencies", () => {
+  it("T-CONTRACT.DEPS: ssh2, ws, react, react-dom, xterm, tailwind and noVNC have NO direct/root ownership (P-OPEN-SOURCE-SPLIT §15.2)", () => {
     // Given: package.json at project root
     // When:  parse JSON; check dependencies + devDependencies
-    // Then:  ssh2 and ws under dependencies; the 4 type/xterm packages under devDependencies
-
+    // Then:  the retired fleet packages are absent from both; ws may remain only
+    //        as a transitive dependency owned by Pi/MCP/CDP (verified in the lockfile)
     const projectRoot = resolve(process.cwd());
     const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8")) as {
       dependencies?: Record<string, string>;
@@ -139,16 +118,25 @@ describe("package.json dependency check — P-30 new deps (G-P30.1)", () => {
 
     const deps = pkg.dependencies ?? {};
     const devDeps = pkg.devDependencies ?? {};
-
-    assert.ok(
-      "ssh2" in deps,
-      `T-CONTRACT.DEPS: 'ssh2' must be in dependencies; found: ${Object.keys(deps).join(", ")}`,
-    );
-    assert.ok("ws" in deps, `T-CONTRACT.DEPS: 'ws' must be in dependencies; found: ${Object.keys(deps).join(", ")}`);
-    assert.ok("@types/ssh2" in devDeps, `T-CONTRACT.DEPS: '@types/ssh2' must be in devDependencies`);
-    assert.ok("@types/ws" in devDeps, `T-CONTRACT.DEPS: '@types/ws' must be in devDependencies`);
-    assert.ok("@xterm/xterm" in devDeps, `T-CONTRACT.DEPS: '@xterm/xterm' must be in devDependencies`);
-    assert.ok("@xterm/addon-fit" in devDeps, `T-CONTRACT.DEPS: '@xterm/addon-fit' must be in devDependencies`);
+    for (const retired of [
+      "ssh2",
+      "ws",
+      "react",
+      "react-dom",
+      "@xterm/xterm",
+      "@xterm/addon-fit",
+      "@tailwindcss/cli",
+      "@novnc/novnc",
+    ]) {
+      assert.ok(
+        !(retired in deps),
+        `T-CONTRACT.DEPS: '${retired}' must NOT be a direct dependency (retired fleet package)`,
+      );
+      assert.ok(
+        !(retired in devDeps),
+        `T-CONTRACT.DEPS: '${retired}' must NOT be a devDependency (retired fleet package)`,
+      );
+    }
   });
 });
 

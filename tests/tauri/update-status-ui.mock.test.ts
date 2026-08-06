@@ -64,7 +64,6 @@ const SETTINGS_IDS = [
   "settings-baseurl",
   "settings-model",
   "settings-key",
-  "settings-brave-key",
   "settings-fullname",
   "settings-company",
   "settings-role",
@@ -145,7 +144,7 @@ const SAMPLE_GET = {
   llm: { baseUrl: "https://x/v1", model: "m", hasKey: true, maskedKey: "sk-***1", provider: "deepseek" },
   identity: { fullName: "A" },
   soul: { override: null },
-  updateServerUrl: "http://192.0.2.105:4875",
+  updateServerUrl: "https://github.com/kyoubelyu/frondose/releases/latest/download",
 };
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));

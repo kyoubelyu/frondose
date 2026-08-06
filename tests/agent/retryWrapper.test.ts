@@ -7,8 +7,8 @@
  * T-Retry.2 — non-wrapped tool throws → 1 call, re-throws (pass-through)
  * T-Retry.3 — withRetry exhausts maxAttempts → re-throws last error
  * T-Retry.4 — error envelope (ok:false) NOT retried (returned, not thrown)
- * T-Retry.5 — IDEMPOTENT_TOOLS set membership: 16 members; analyze_screenshot absent
- * T-Retry.6 — IDEMPOTENT_TOOLS set membership: all 16 expected names present
+ * T-Retry.5 — IDEMPOTENT_TOOLS set membership: 14 members; analyze_screenshot absent
+ * T-Retry.6 — IDEMPOTENT_TOOLS set membership: all 14 expected names present
  * T-Retry.7 — tool with no execute returns unchanged (guard)
  * T-Retry.8 — withRetry preserves tool.description and tool.parameters
  *
@@ -116,14 +116,14 @@ test("T-Retry.4: error envelope (ok:false) is NOT retried — it is returned, no
 
 // ─── T-Retry.5: IDEMPOTENT_TOOLS count ───────────────────────────────────────
 
-test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 16 members (11 existing + web_fetch + web_search + query_lead_globally + navigate_to_url + clear_cookies)", () => {
+test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 14 members (11 existing + web_fetch + web_search + navigate_to_url)", () => {
   // P-26: +query_lead_globally (14). P-28.5: +navigate_to_url +clear_cookies (16).
-  // clear_cookies remains in IDEMPOTENT_TOOLS even though it is no longer registered
-  // in makeBrowserTools — the retry set is harmlessly superset of the active tool set.
+  // P-OPEN-SOURCE-SPLIT: query_lead_globally + clear_cookies removed with the
+  // retired fleet/clear-cookies verticals (their owners are deleted).
   assert.equal(
     IDEMPOTENT_TOOLS.size,
-    16,
-    `expected 16, got ${IDEMPOTENT_TOOLS.size}: ${[...IDEMPOTENT_TOOLS].join(", ")}`,
+    14,
+    `expected 14, got ${IDEMPOTENT_TOOLS.size}: ${[...IDEMPOTENT_TOOLS].join(", ")}`,
   );
 
   // analyze_screenshot MUST NOT be in the set (D-13: vision-token cost per call)
@@ -151,7 +151,8 @@ test("T-Retry.5: IDEMPOTENT_TOOLS has exactly 16 members (11 existing + web_fetc
 // ─── T-Retry.6: IDEMPOTENT_TOOLS exact membership ────────────────────────────
 
 test("T-Retry.6: IDEMPOTENT_TOOLS contains all expected idempotent tool names", () => {
-  // P-44: updated from 13 to 16 (adding query_lead_globally from P-26, navigate_to_url + clear_cookies from P-28.5)
+  // P-44: updated from 13 to 16 (adding query_lead_globally from P-26, navigate_to_url + clear_cookies from P-28.5).
+  // P-OPEN-SOURCE-SPLIT: query_lead_globally + clear_cookies retired with their owners (14 members).
   const expected = [
     "echo",
     "getMemory",
@@ -166,9 +167,7 @@ test("T-Retry.6: IDEMPOTENT_TOOLS contains all expected idempotent tool names", 
     "sleep",
     "web_fetch",
     "web_search",
-    "query_lead_globally",
     "navigate_to_url",
-    "clear_cookies",
   ];
 
   for (const name of expected) {

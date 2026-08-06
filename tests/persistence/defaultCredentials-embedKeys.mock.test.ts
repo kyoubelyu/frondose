@@ -1,11 +1,3 @@
-/**
- * P-EMBED-KEYS — build-time-embedded DEFAULT credentials (LLM + Brave) for internal-test
- * (内测) installs. Test names follow BDD-light: "T-Component.N: when <preconditions>, <action>
- * → <expected>".
- *
- * No Chrome, no LLM required.
- */
-
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,498 +5,610 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { readAuth } from "../../src/persistence/auth.js";
+import vm from "node:vm";
+import ts from "typescript";
 import { DEFAULT_CREDENTIALS_PATH, readDefaultCredentials } from "../../src/persistence/defaultCredentials.js";
-import { readSearchConfig } from "../../src/persistence/search.js";
-import { legacyMerged, readSecrets } from "../../src/persistence/secrets.js";
+import { readSecrets, writeSecrets } from "../../src/persistence/secrets.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const GENERATOR_ALLOWED_MODULES = ["node:fs", "node:path"] as const;
+const READER_ALLOWED_MODULES = ["node:fs", "node:path", "node:url", "./jsonFile.js"] as const;
 
-function makeTmpDir() {
-  const dir = mkdtempSync(join(tmpdir(), "frondose-embed-keys-"));
+function tempDir(): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "frondose-default-creds-scope-"));
   return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
-/** Restore env var helper (mirrors tests/persistence/secrets.mock.test.ts). */
-function saveEnv(...keys: string[]): Record<string, string | undefined> {
+function isolateLegacy(dir: string): Record<string, string | undefined> {
+  const keys = ["FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH"];
   const saved: Record<string, string | undefined> = {};
-  for (const k of keys) saved[k] = process.env[k];
+  for (const key of keys) {
+    saved[key] = process.env[key];
+    process.env[key] = join(dir, `missing-${key}.json`);
+  }
   return saved;
 }
+
 function restoreEnv(saved: Record<string, string | undefined>): void {
-  for (const [k, v] of Object.entries(saved)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
   }
 }
 
-const NO_LEGACY_ENV_KEYS = ["FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH"];
+function credentialAssignments(source: string, allowedModules: readonly string[] = []): string[] {
+  const sourceFile = ts.createSourceFile("credential-source.ts", source, ts.ScriptTarget.Latest, true);
+  const bindings = new Map<string, ts.Expression>();
+  const destinations: Array<{ name: string; expression: ts.Expression }> = [];
+  const shadowedBindings: string[] = [];
+  const bindingNames = new Set<string>();
+  const registerBinding = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) {
+      if (bindingNames.has(name.text)) shadowedBindings.push(name.text);
+      bindingNames.add(name.text);
+      return;
+    }
+    for (const element of name.elements) {
+      if (!ts.isOmittedExpression(element)) registerBinding(element.name);
+    }
+  };
+  const staticText = (expression: ts.Expression, seen = new Set<string>()): string | undefined => {
+    if (ts.isStringLiteralLike(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text;
+    if (ts.isParenthesizedExpression(expression)) return staticText(expression.expression, seen);
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = staticText(expression.left, seen);
+      const right = staticText(expression.right, seen);
+      return left === undefined || right === undefined ? undefined : left + right;
+    }
+    if (ts.isIdentifier(expression) && !seen.has(expression.text)) {
+      const initializer = bindings.get(expression.text);
+      if (!initializer) return undefined;
+      const nextSeen = new Set(seen);
+      nextSeen.add(expression.text);
+      return staticText(initializer, nextSeen);
+    }
+    if (ts.isTemplateExpression(expression)) {
+      let value = expression.head.text;
+      for (const span of expression.templateSpans) {
+        const resolved = staticText(span.expression, seen);
+        if (resolved === undefined) return undefined;
+        value += resolved + span.literal.text;
+      }
+      return value;
+    }
+    return undefined;
+  };
 
-/** Point every legacy source at nonexistent files in `dir`, isolating the test from the
- *  operator's real ~/.frondose files (mirrors the pattern in secrets.mock.test.ts). */
-function blockLegacyFallback(dir: string): void {
-  process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-  process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-  process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
+  const collect = (node: ts.Node): void => {
+    if (ts.isBindingElement(node) && node.propertyName && !ts.isIdentifier(node.propertyName)) {
+      shadowedBindings.push("forbidden-nonidentifier-binding-property");
+    }
+    if (ts.isPropertyAssignment(node) && !ts.isIdentifier(node.name)) {
+      shadowedBindings.push("forbidden-nonidentifier-property");
+    }
+    if (ts.isImportDeclaration(node)) {
+      const moduleName = ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier.text : "";
+      if (!allowedModules.includes(moduleName)) {
+        shadowedBindings.push(`forbidden-module:${moduleName || "dynamic"}`);
+      }
+    }
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+      const moduleName = ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier.text : "";
+      if (!allowedModules.includes(moduleName)) {
+        shadowedBindings.push(`forbidden-reexport:${moduleName || "dynamic"}`);
+      }
+    }
+    if (ts.isImportEqualsDeclaration(node)) shadowedBindings.push("forbidden-import-equals");
+    if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
+      shadowedBindings.push("forbidden-dynamic-import");
+    }
+    if (
+      ts.isIdentifier(node) &&
+      /^(?:Object|Reflect|globalThis|constructor|prototype|__proto__|eval|Function|vm|module|require|getBuiltinModule|Script|runInContext|runInNewContext|runInThisContext|compileFunction)$/.test(
+        node.text,
+      )
+    ) {
+      shadowedBindings.push(`forbidden-reflective-owner:${node.text}`);
+    }
+    if (ts.isElementAccessExpression(node)) shadowedBindings.push("forbidden-element-access");
+    if (ts.isVariableDeclaration(node)) {
+      registerBinding(node.name);
+      if (ts.isIdentifier(node.name) && node.initializer) bindings.set(node.name.text, node.initializer);
+      if (ts.isIdentifier(node.name) && node.initializer && /key|token|secret|credential/i.test(node.name.text)) {
+        destinations.push({ name: node.name.text, expression: node.initializer });
+      }
+    }
+    if (ts.isParameter(node)) {
+      registerBinding(node.name);
+      if (ts.isIdentifier(node.name) && node.initializer) bindings.set(node.name.text, node.initializer);
+    }
+    if (ts.isCatchClause(node) && node.variableDeclaration) registerBinding(node.variableDeclaration.name);
+    if (ts.isImportClause(node)) {
+      if (node.name) registerBinding(node.name);
+      if (node.namedBindings && ts.isNamespaceImport(node.namedBindings)) registerBinding(node.namedBindings.name);
+      if (node.namedBindings && ts.isNamedImports(node.namedBindings)) {
+        for (const element of node.namedBindings.elements) registerBinding(element.name);
+      }
+    }
+    if (ts.isPropertyAssignment(node)) {
+      const name =
+        ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)
+          ? node.name.text
+          : ts.isComputedPropertyName(node.name)
+            ? (staticText(node.name.expression) ?? "dynamicCredentialDestination")
+            : "";
+      if (/key|token|secret|credential/i.test(name)) destinations.push({ name, expression: node.initializer });
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "Object" &&
+      node.expression.name.text === "defineProperty"
+    ) {
+      const name = node.arguments[1] ? (staticText(node.arguments[1]) ?? "dynamicCredentialDestination") : "";
+      const descriptor = node.arguments[2];
+      if (/key|token|secret|credential/i.test(name) && descriptor && ts.isObjectLiteralExpression(descriptor)) {
+        const valueProperty = descriptor.properties.find(
+          (property): property is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(property) &&
+            (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)) &&
+            property.name.text === "value",
+        );
+        if (valueProperty) destinations.push({ name, expression: valueProperty.initializer });
+        else shadowedBindings.push("dynamicCredentialDestination");
+      }
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const name = ts.isPropertyAccessExpression(node.left)
+        ? node.left.name.text
+        : ts.isElementAccessExpression(node.left)
+          ? (staticText(node.left.argumentExpression) ?? "dynamicCredentialDestination")
+          : "";
+      if (/key|token|secret|credential/i.test(name)) destinations.push({ name, expression: node.right });
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+
+  type Constant = string | Constant[] | Record<string, Constant>;
+  const resolveConstant = (expression: ts.Expression, seen = new Set<string>()): Constant | undefined => {
+    if (
+      ts.isStringLiteralLike(expression) ||
+      ts.isNoSubstitutionTemplateLiteral(expression) ||
+      ts.isNumericLiteral(expression)
+    ) {
+      return expression.text;
+    }
+    if (ts.isParenthesizedExpression(expression)) return resolveConstant(expression.expression, seen);
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = resolveConstant(expression.left, seen);
+      const right = resolveConstant(expression.right, seen);
+      return typeof left === "string" && typeof right === "string" ? left + right : undefined;
+    }
+    if (ts.isIdentifier(expression) && !seen.has(expression.text)) {
+      const initializer = bindings.get(expression.text);
+      if (!initializer) return undefined;
+      const nextSeen = new Set(seen);
+      nextSeen.add(expression.text);
+      return resolveConstant(initializer, nextSeen);
+    }
+    if (ts.isArrayLiteralExpression(expression)) {
+      const values = expression.elements.map((entry) => resolveConstant(entry, seen));
+      return values.every((value) => value !== undefined) ? (values as Constant[]) : undefined;
+    }
+    if (ts.isObjectLiteralExpression(expression)) {
+      const value: Record<string, Constant> = {};
+      for (const property of expression.properties) {
+        if (!ts.isPropertyAssignment(property)) return undefined;
+        const name =
+          ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)
+            ? property.name.text
+            : ts.isComputedPropertyName(property.name)
+              ? resolveConstant(property.name.expression, seen)
+              : undefined;
+        const resolved = resolveConstant(property.initializer, seen);
+        if (typeof name !== "string" || resolved === undefined) return undefined;
+        value[name] = resolved;
+      }
+      return value;
+    }
+    if (ts.isPropertyAccessExpression(expression)) {
+      const owner = resolveConstant(expression.expression, seen);
+      return owner && !Array.isArray(owner) && typeof owner === "object" ? owner[expression.name.text] : undefined;
+    }
+    if (ts.isElementAccessExpression(expression)) {
+      const owner = resolveConstant(expression.expression, seen);
+      const key = resolveConstant(expression.argumentExpression, seen);
+      if (Array.isArray(owner) && typeof key === "string" && /^\d+$/.test(key)) return owner[Number(key)];
+      return owner && !Array.isArray(owner) && typeof owner === "object" && typeof key === "string"
+        ? owner[key]
+        : undefined;
+    }
+    if (
+      ts.isCallExpression(expression) &&
+      ts.isPropertyAccessExpression(expression.expression) &&
+      expression.expression.name.text === "join"
+    ) {
+      const owner = resolveConstant(expression.expression.expression, seen);
+      const separator = expression.arguments.length === 0 ? "," : resolveConstant(expression.arguments[0], seen);
+      return Array.isArray(owner) && owner.every((entry) => typeof entry === "string") && typeof separator === "string"
+        ? owner.join(separator)
+        : undefined;
+    }
+    if (ts.isTemplateExpression(expression)) {
+      let value = expression.head.text;
+      for (const span of expression.templateSpans) {
+        const resolved = resolveConstant(span.expression, seen);
+        if (typeof resolved !== "string") return undefined;
+        value += resolved + span.literal.text;
+      }
+      return value;
+    }
+    return undefined;
+  };
+
+  return [
+    ...shadowedBindings.map((name) => `shadowed-binding:${name}`),
+    ...destinations
+      .map(({ name, expression }) => {
+        const value = resolveConstant(expression);
+        return typeof value === "string" && value.length >= 16 ? `${name}:${value}` : undefined;
+      })
+      .filter((value): value is string => value !== undefined),
+  ];
 }
 
-// ─── readDefaultCredentials — the reader ────────────────────────────────────
+function executeGeneratorInSandbox(source: string): {
+  envReads: string[];
+  writes: Array<{ path: string; content: string; encoding: string | undefined }>;
+} {
+  const output = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const envReads: string[] = [];
+  const writes: Array<{ path: string; content: string; encoding: string | undefined }> = [];
+  const envValues: Record<string, string> = {
+    FRONDOSE_DEFAULT_LLM_BASEURL: "https://llm.example.test/v1",
+    FRONDOSE_DEFAULT_LLM_MODEL: "provider:model/test-1",
+    FRONDOSE_DEFAULT_LLM_KEY: "sk-test_!@#$%^&*()-+=:punctuation",
+  };
+  const env = new Proxy(envValues, {
+    get(target, property) {
+      if (typeof property === "string") envReads.push(property);
+      return Reflect.get(target, property);
+    },
+    ownKeys(target) {
+      envReads.push("<ownKeys>");
+      return Reflect.ownKeys(target);
+    },
+    has(target, property) {
+      if (typeof property === "string") envReads.push(property);
+      return Reflect.has(target, property);
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (typeof property === "string") envReads.push(property);
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+  });
+  const processStub = {
+    cwd: () => "/virtual/frondose",
+    env,
+    stderr: { write: () => true },
+  };
+  const fsStub = {
+    existsSync: () => false,
+    mkdirSync: () => undefined,
+    writeFileSync: (path: string, content: string, encoding?: string) => writes.push({ path, content, encoding }),
+  };
+  const moduleStub = { exports: {} as Record<string, unknown> };
+  vm.runInNewContext(output, {
+    console: { log: () => undefined },
+    exports: moduleStub.exports,
+    module: moduleStub,
+    process: processStub,
+    require: (specifier: string) => {
+      if (specifier === "node:fs") return fsStub;
+      if (specifier === "node:path") return { resolve: (...parts: string[]) => parts.join("/") };
+      throw new Error(`unexpected generator dependency: ${specifier}`);
+    },
+  });
+  return { envReads, writes };
+}
 
-describe("readDefaultCredentials — reads the gitignored generated JSON sidecar", () => {
-  it("T-DEFCRED.1: when the generated file has all four fields, readDefaultCredentials returns them verbatim", () => {
-    // Given: a fixture JSON with llmBaseUrl/llmModel/llmKey/braveKey all set
-    // When:  readDefaultCredentials(path) is called with that fixture path
-    // Then:  all four fields round-trip exactly
-    const { dir, cleanup } = makeTmpDir();
+describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1 }, () => {
+  // Given the production no-argument reader seam, when its path resolves, then it remains co-located with this module.
+  it("T-MCP-SCOPE.7h: zero-argument reader resolves the co-located generated sidecar", () => {
+    const expectedPath = join(REPO, "src", "persistence", "defaultCredentials.generated.json");
+    assert.equal(DEFAULT_CREDENTIALS_PATH(), expectedPath);
+    assert.deepEqual(readDefaultCredentials(), readDefaultCredentials(expectedPath));
+  });
+
+  // Given generated JSON with three LLM defaults plus a stale Brave field, when read, then only the three current fields survive.
+  it("T-MCP-SCOPE.7i: default-credential reader exposes exactly the three LLM fields", () => {
+    const { dir, cleanup } = tempDir();
     try {
-      const path = join(dir, "defaultCredentials.generated.json");
+      const path = join(dir, "defaults.json");
       writeFileSync(
         path,
         JSON.stringify({
-          llmBaseUrl: "https://api.example-provider.test/v1",
-          llmModel: "placeholder-model",
-          llmKey: "placeholder-llm",
-          braveKey: "placeholder-brave",
+          llmBaseUrl: "https://llm.example/v1",
+          llmModel: "deepseek-chat",
+          llmKey: "llm-key",
+          braveKey: "stale-brave",
         }),
-        "utf-8",
       );
-      const result = readDefaultCredentials(path);
-      assert.deepEqual(result, {
-        llmBaseUrl: "https://api.example-provider.test/v1",
-        llmModel: "placeholder-model",
-        llmKey: "placeholder-llm",
-        braveKey: "placeholder-brave",
+      assert.deepEqual(readDefaultCredentials(path), {
+        llmBaseUrl: "https://llm.example/v1",
+        llmModel: "deepseek-chat",
+        llmKey: "llm-key",
+      });
+      assert.deepEqual(readDefaultCredentials(join(dir, "missing.json")), {
+        llmBaseUrl: null,
+        llmModel: null,
+        llmKey: null,
+      });
+      const corruptPath = join(dir, "corrupt.json");
+      writeFileSync(corruptPath, "{not-json");
+      assert.deepEqual(readDefaultCredentials(corruptPath), {
+        llmBaseUrl: null,
+        llmModel: null,
+        llmKey: null,
+      });
+      const blankPath = join(dir, "blank.json");
+      writeFileSync(blankPath, JSON.stringify({ llmBaseUrl: " ", llmModel: "\t", llmKey: "" }));
+      assert.deepEqual(readDefaultCredentials(blankPath), {
+        llmBaseUrl: null,
+        llmModel: null,
+        llmKey: null,
       });
     } finally {
       cleanup();
     }
   });
 
-  it("T-DEFCRED.2: when the generated file is absent, readDefaultCredentials returns all-null (no throw)", () => {
-    // Given: a path that does not exist on disk
-    // When:  readDefaultCredentials(path) is called
-    // Then:  {llmBaseUrl:null, llmModel:null, llmKey:null, braveKey:null}; no throw
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const path = join(dir, "does-not-exist.json");
-      const result = readDefaultCredentials(path);
-      assert.deepEqual(result, { llmBaseUrl: null, llmModel: null, llmKey: null, braveKey: null });
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-DEFCRED.3: when the generated file is corrupt JSON, readDefaultCredentials returns all-null (no throw)", () => {
-    // Given: a file containing invalid JSON
-    // When:  readDefaultCredentials(path) is called
-    // Then:  all-null defaults; the corrupt read is swallowed, never thrown to the caller
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const path = join(dir, "corrupt.json");
-      writeFileSync(path, "{not valid json", "utf-8");
-      const result = readDefaultCredentials(path);
-      assert.deepEqual(result, { llmBaseUrl: null, llmModel: null, llmKey: null, braveKey: null });
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-DEFCRED.4: when a field is blank/whitespace-only, readDefaultCredentials normalizes it to null", () => {
-    // Given: braveKey is an empty string, llmModel is whitespace-only
-    // When:  readDefaultCredentials(path) is called
-    // Then:  both normalize to null (empty-string env vars must never masquerade as configured)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const path = join(dir, "blank-fields.json");
-      writeFileSync(path, JSON.stringify({ llmBaseUrl: "https://x.test/v1", llmModel: "   ", llmKey: "k", braveKey: "" }), "utf-8");
-      const result = readDefaultCredentials(path);
-      assert.equal(result.llmModel, null, "T-DEFCRED.4: whitespace-only llmModel must normalize to null");
-      assert.equal(result.braveKey, null, "T-DEFCRED.4: empty-string braveKey must normalize to null");
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-DEFCRED.5: real shipped reader — when the co-located generated file is absent in this checkout, readDefaultCredentials() (no args) returns all-null; skips with reason when a prior local build left the file on disk", (t) => {
-    // Given: the REAL default path (co-located with src/persistence/defaultCredentials.ts). The
-    //        generated file is gitignored and never committed (T-NOKEY.1/2), but a local checkout
-    //        that has run scripts/gen-default-credentials.ts (directly, or via scripts/release.sh —
-    //        see docs/issue-test-debt-15-intake.md item 4) leaves it on disk permanently. That is a
-    //        build-history-dependent per-machine artifact, not a code defect, so this test SKIPS
-    //        with an explicit reason on such a machine rather than failing or silently passing.
-    // When:  readDefaultCredentials() is called with no override — the actual production path
-    // Then:  on a fresh checkout (file absent) the reader returns all-null, proving
-    //        "absent-defaults => behaves like today" for the real code path, not just an injected
-    //        test path; on a machine where the file pre-exists, this assertion is skipped (T-DEFCRED.2
-    //        already covers absent-file reader behavior hermetically via an injected fixture path).
-    if (existsSync(DEFAULT_CREDENTIALS_PATH())) {
-      t.skip(
-        "T-DEFCRED.5: skipped — src/persistence/defaultCredentials.generated.json already exists on " +
-          "this checkout (build history, e.g. scripts/release.sh has run here before; gitignored, never " +
-          "committed — see docs/issue-test-debt-15-intake.md item 4). Absent-file behavior is covered " +
-          "hermetically by T-DEFCRED.2.",
-      );
-      return;
-    }
-    assert.equal(existsSync(DEFAULT_CREDENTIALS_PATH()), false, "T-DEFCRED.5: generated file must not be committed/present");
-    assert.deepEqual(readDefaultCredentials(), { llmBaseUrl: null, llmModel: null, llmKey: null, braveKey: null });
-  });
-});
-
-// ─── First-run seeding via legacyMerged / readSecrets ───────────────────────
-
-describe("default-seeding — fresh/unconfigured install + embedded defaults present → auth + search seeded", () => {
-  it("T-SEED.1: when secrets.json is absent, no legacy files exist, and defaults are fully set with a non-DeepSeek custom baseUrl, readSecrets seeds a 'custom' provider + brave key and persists them", () => {
-    // Given: no secrets.json; no legacy auth/github/search; a generated-defaults fixture with a
-    //        non-DeepSeek custom OpenAI-compatible baseUrl + LLM key/model + Brave key
-    // When:  readSecrets(secretsPath, { defaultCredentialsPath: fixture })
-    // Then:  providers.custom = {key, baseUrl, type:'openai'}; default = 'custom:<model>';
-    //        search.braveApiKey set; secrets.json written to disk (persisted, not just in-memory)
-    const { dir, cleanup } = makeTmpDir();
-    const saved = saveEnv(...NO_LEGACY_ENV_KEYS);
-    try {
-      blockLegacyFallback(dir);
-      const secretsPath = join(dir, "secrets.json");
-      const defaultsPath = join(dir, "defaultCredentials.generated.json");
-      writeFileSync(
-        defaultsPath,
-        JSON.stringify({
-          llmBaseUrl: "https://api.example-provider.test/v1",
-          llmModel: "placeholder-model",
-          llmKey: "placeholder-llm",
-          braveKey: "placeholder-brave",
-        }),
-        "utf-8",
-      );
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
-      assert.equal(result.providers?.custom?.key, "placeholder-llm", "T-SEED.1: seeded key must match the default");
-      assert.equal(
-        result.providers?.custom?.baseUrl,
-        "https://api.example-provider.test/v1",
-        "T-SEED.1: seeded baseUrl must match the default",
-      );
-      assert.equal(result.providers?.custom?.type, "openai", "T-SEED.1: seeded provider type must be 'openai' (P-57d)");
-      assert.equal(result.default, "custom:placeholder-model", "T-SEED.1: default spec must point at the seeded provider");
-      assert.equal(result.search?.braveApiKey, "placeholder-brave", "T-SEED.1: brave key must be seeded");
-
-      assert.ok(existsSync(secretsPath), "T-SEED.1: secrets.json must be persisted to disk (one-shot write)");
-      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
-      assert.equal(onDisk.providers.custom.key, "placeholder-llm", "T-SEED.1: on-disk file must contain the seeded key");
-      assert.equal(onDisk.search.braveApiKey, "placeholder-brave", "T-SEED.1: on-disk file must contain the seeded brave key");
-
-      // Cross-check via the readAuth/readSearchConfig shims a caller (Settings, modelResolver) actually uses.
-      const auth = readAuth(join(dir, "auth.json"));
-      assert.equal(auth?.providers?.custom?.key, "placeholder-llm", "T-SEED.1: readAuth shim must see the seeded provider");
-      const search = readSearchConfig(join(dir, "search.json"));
-      assert.equal(search.braveApiKey, "placeholder-brave", "T-SEED.1: readSearchConfig shim must see the seeded brave key");
-    } finally {
-      restoreEnv(saved);
-      cleanup();
-    }
-  });
-
-  it("T-SEED.2: when the default llmBaseUrl is DeepSeek's official host, the seeded provider name is 'deepseek' not 'custom'", () => {
-    // Given: defaults with llmBaseUrl = https://api.deepseek.com/v1
-    // When:  legacyMerged(..., defaultsPath) is called (via readSecrets' first-run path)
-    // Then:  providers.deepseek is set (chooseSettingsProvider's own isDeepSeekBaseUrl detection,
-    //        mirrored here so a DeepSeek default and a Settings-saved DeepSeek key land on the
-    //        same provider key instead of splitting into two configured providers)
-    const { dir, cleanup } = makeTmpDir();
-    const saved = saveEnv(...NO_LEGACY_ENV_KEYS);
-    try {
-      blockLegacyFallback(dir);
-      const secretsPath = join(dir, "secrets.json");
-      const defaultsPath = join(dir, "defaultCredentials.generated.json");
-      writeFileSync(
-        defaultsPath,
-        JSON.stringify({
-          llmBaseUrl: "https://api.deepseek.com/v1",
-          llmModel: "deepseek-v4-flash",
-          llmKey: "placeholder-deepseek",
-          braveKey: null,
-        }),
-        "utf-8",
-      );
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
-      assert.equal(result.providers?.deepseek?.key, "placeholder-deepseek", "T-SEED.2: must seed under the 'deepseek' provider name");
-      assert.equal(result.default, "deepseek:deepseek-v4-flash");
-      assert.equal(result.providers?.custom, undefined, "T-SEED.2: must NOT also create a 'custom' entry");
-    } finally {
-      restoreEnv(saved);
-      cleanup();
-    }
-  });
-
-  it("T-SEED.3: when the default llmBaseUrl is an official reserved-vendor host (scope-lock), the LLM default is refused but Brave still seeds", () => {
-    // Given: defaults with llmBaseUrl = https://api.anthropic.com/v1 (official Anthropic host)
-    //        + a Brave key
-    // When:  readSecrets(...) runs the first-run seed path
-    // Then:  NO providers are seeded (scope-lock refusal — mirrors buildModel's own
-    //        isOfficialDirectProviderBaseUrl guard); search.braveApiKey is still seeded
-    //        independently (the two defaults are applied/rejected independently)
-    const { dir, cleanup } = makeTmpDir();
-    const saved = saveEnv(...NO_LEGACY_ENV_KEYS);
-    try {
-      blockLegacyFallback(dir);
-      const secretsPath = join(dir, "secrets.json");
-      const defaultsPath = join(dir, "defaultCredentials.generated.json");
-      writeFileSync(
-        defaultsPath,
-        JSON.stringify({
-          llmBaseUrl: "https://api.anthropic.com/v1",
-          llmModel: "claude-x",
-          llmKey: "placeholder-anthropic",
-          braveKey: "placeholder-brave",
-        }),
-        "utf-8",
-      );
-
-      const stderrChunks: string[] = [];
-      const origWrite = process.stderr.write.bind(process.stderr);
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      (process.stderr as any).write = (chunk: string | Buffer) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return true;
-      };
-      let result: ReturnType<typeof readSecrets>;
+  // Given DeepSeek and reserved official-host defaults, when first-run seeds, then DeepSeek is named correctly and reserved hosts are refused.
+  it("T-MCP-SCOPE.7j2: three-field seeding preserves provider-scope classification", () => {
+    for (const fixture of [
+      {
+        baseUrl: "https://api.deepseek.com/v1",
+        expectedProvider: "deepseek",
+      },
+      {
+        baseUrl: "https://api.openai.com/v1",
+        expectedProvider: null,
+      },
+      {
+        baseUrl: "https://api.anthropic.com/v1",
+        expectedProvider: null,
+      },
+    ]) {
+      const { dir, cleanup } = tempDir();
+      const saved = isolateLegacy(dir);
       try {
-        result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
+        const defaultsPath = join(dir, "defaults.json");
+        writeFileSync(
+          defaultsPath,
+          JSON.stringify({ llmBaseUrl: fixture.baseUrl, llmModel: "model", llmKey: "llm-key" }),
+        );
+        const loaded = readSecrets(join(dir, "secrets.json"), { defaultCredentialsPath: defaultsPath });
+        if (fixture.expectedProvider) {
+          assert.equal(loaded.providers?.[fixture.expectedProvider]?.key, "llm-key");
+          assert.equal(loaded.default, `${fixture.expectedProvider}:model`);
+        } else {
+          assert.deepEqual(loaded.providers ?? {}, {});
+          assert.equal(loaded.default, undefined);
+        }
+        assert.equal(loaded.search, undefined);
       } finally {
-        // biome-ignore lint/suspicious/noExplicitAny: restore
-        (process.stderr as any).write = origWrite;
+        restoreEnv(saved);
+        cleanup();
       }
+    }
+  });
 
-      assert.equal(result.providers, undefined, "T-SEED.3: scope-locked baseUrl must NOT seed any provider");
-      assert.equal(result.search?.braveApiKey, "placeholder-brave", "T-SEED.3: brave key must still seed independently");
-      assert.ok(
-        stderrChunks.join("").includes("reserved direct-vendor"),
-        "T-SEED.3: a scope-lock refusal warning must be emitted to stderr",
+  // Given first-run defaults containing a stale Brave field, when secrets seed, then LLM seeds and search remains absent.
+  it("T-MCP-SCOPE.7j: first-run default seeding never creates search.braveApiKey", () => {
+    const { dir, cleanup } = tempDir();
+    const saved = isolateLegacy(dir);
+    try {
+      const defaultsPath = join(dir, "defaults.json");
+      const secretsPath = join(dir, "secrets.json");
+      writeFileSync(
+        defaultsPath,
+        JSON.stringify({
+          llmBaseUrl: "https://llm.example/v1",
+          llmModel: "model",
+          llmKey: "llm-key",
+          braveKey: "stale-brave",
+        }),
       );
+      const seeded = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
+      assert.equal(seeded.providers?.custom?.key, "llm-key");
+      assert.equal(seeded.default, "custom:model");
+      assert.equal(seeded.search, undefined);
+      assert.equal(JSON.parse(readFileSync(secretsPath, "utf8")).search, undefined);
     } finally {
       restoreEnv(saved);
       cleanup();
     }
   });
-});
 
-describe("no-overwrite — a user's own configured secrets.json is never touched by embedded defaults", () => {
-  it("T-NOOVERWRITE.1: when secrets.json already exists with a user-configured provider + brave key, readSecrets returns it unchanged even though embedded defaults are present", () => {
-    // Given: secrets.json ALREADY exists on disk with the user's own provider + brave key
-    // When:  readSecrets(secretsPath, { defaultCredentialsPath: fixture-with-different-values })
-    // Then:  the happy path (file exists) still consults applyDefaultCredentials (P-EMBED-KEYS
-    //        bugfix — see T-BACKFILL below) but its per-field guard is a no-op here since BOTH
-    //        fields are already configured, so the user's own values pass through byte-for-byte
-    //        and no rewrite occurs
-    const { dir, cleanup } = makeTmpDir();
+  // Given no secrets, legacy files, or generated defaults, when readSecrets runs, then it preserves the schema-bearing empty state without writing a file.
+  it("T-MCP-SCOPE.7j1: absent defaults preserve no-write first-run behavior", () => {
+    const { dir, cleanup } = tempDir();
+    const saved = isolateLegacy(dir);
     try {
       const secretsPath = join(dir, "secrets.json");
-      const userSecrets = {
-        schema_version: 1,
-        default: "custom:users-own-model",
-        providers: { custom: { key: "users-own-key", baseUrl: "https://users-own-endpoint.test/v1", type: "openai" } },
-        search: { braveApiKey: "users-own-brave-key" },
-      };
-      writeFileSync(secretsPath, JSON.stringify(userSecrets), "utf-8");
-
-      const defaultsPath = join(dir, "defaultCredentials.generated.json");
-      writeFileSync(
-        defaultsPath,
-        JSON.stringify({
-          llmBaseUrl: "https://should-not-be-used.test/v1",
-          llmModel: "should-not-be-used-model",
-          llmKey: "should-not-be-used-key",
-          braveKey: "should-not-be-used-brave",
-        }),
-        "utf-8",
-      );
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
-      assert.equal(result.providers?.custom?.key, "users-own-key", "T-NOOVERWRITE.1: user's own key must survive");
-      assert.equal(
-        result.providers?.custom?.baseUrl,
-        "https://users-own-endpoint.test/v1",
-        "T-NOOVERWRITE.1: user's own baseUrl must survive",
-      );
-      assert.equal(result.search?.braveApiKey, "users-own-brave-key", "T-NOOVERWRITE.1: user's own brave key must survive");
-
-      // On-disk file must be byte-identical in the fields that matter (no rewrite occurred).
-      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
-      assert.equal(onDisk.providers.custom.key, "users-own-key");
+      const loaded = readSecrets(secretsPath, { defaultCredentialsPath: join(dir, "missing-defaults.json") });
+      assert.deepEqual(loaded, { schema_version: 1 });
+      assert.equal(existsSync(secretsPath), false);
     } finally {
+      restoreEnv(saved);
       cleanup();
     }
   });
-});
 
-// ─── Backfill on an EXISTING secrets.json (the real-box bug) ────────────────
-//
-// Root-cause correction: the box symptom ("LLM seeded, Brave did not") was NOT
-// caused by readSearchConfig() reading a different store than the seed writes to
-// (it reads the identical secrets.json via readSecrets, verified by T-SEED.1 above
-// passing end-to-end through readSearchConfig). The real cause: applyDefaultCredentials
-// was only ever invoked from readSecrets' whole-file-ABSENT branch. Any install where
-// secrets.json already exists — e.g. an upgrade, or the LLM key having been configured
-// by some other prior means — skips that branch entirely via the "happy path" short
-// circuit, so a field that's still unset (Brave) never gets backfilled even though its
-// default is embedded. These tests cover the fixed behavior: applyDefaultCredentials is
-// now also consulted on the happy path, per-field, never overwriting a configured field.
-describe("backfill — an existing secrets.json missing one field still gets that field seeded", () => {
-  it("T-BACKFILL.1: when secrets.json already exists with LLM configured but no search field, and a default Brave key is embedded, readSecrets backfills search without touching the existing LLM config", () => {
-    // Given: secrets.json exists on disk with providers/default set (as if configured before
-    //        this feature shipped, or by any other means) but NO search field at all
-    // When:  readSecrets(secretsPath, { defaultCredentialsPath: fixture-with-a-brave-key })
-    // Then:  search.braveApiKey is now seeded from the default AND persisted to disk; the
-    //        pre-existing LLM config is untouched
-    const { dir, cleanup } = makeTmpDir();
+  // Given existing legacy search data and stale embedded Brave defaults, when read/backfill runs, then operator data is unchanged.
+  it("T-MCP-SCOPE.7k: default backfill preserves existing legacy search data and never adds provider search", () => {
+    const { dir, cleanup } = tempDir();
+    const saved = isolateLegacy(dir);
     try {
+      const defaultsPath = join(dir, "defaults.json");
       const secretsPath = join(dir, "secrets.json");
-      writeFileSync(
-        secretsPath,
-        JSON.stringify({
+      writeSecrets(
+        {
           schema_version: 1,
-          default: "deepseek:deepseek-v4-flash",
+          default: "deepseek:deepseek-chat",
+          visionModel: "custom:vision-model",
           providers: {
-            deepseek: { key: "pre-existing-llm-key", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+            deepseek: { key: "operator-key", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+            custom: { key: "operator-custom-key", baseUrl: "https://llm.example.test/v1", type: "openai" },
           },
-        }),
-        "utf-8",
+          search: {
+            braveApiKey: "legacy-operator-brave",
+            tavilyApiKey: "legacy-operator-tavily",
+          },
+          github: { token: "operator-github-token", repo: "operator/private-repo" },
+          server: { token: "operator-server-token", webToken: "operator-web-token" },
+        },
+        secretsPath,
       );
-
-      const defaultsPath = join(dir, "defaultCredentials.generated.json");
       writeFileSync(
         defaultsPath,
         JSON.stringify({
-          llmBaseUrl: "https://should-not-be-used.test/v1",
-          llmModel: "should-not-be-used-model",
-          llmKey: "should-not-be-used-key",
-          braveKey: "placeholder-brave",
+          llmBaseUrl: "https://ignored.example/v1",
+          llmModel: "ignored",
+          llmKey: "ignored",
+          braveKey: "stale-brave",
         }),
-        "utf-8",
       );
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
-      assert.equal(result.search?.braveApiKey, "placeholder-brave", "T-BACKFILL.1: brave key must be backfilled");
-      assert.equal(
-        result.providers?.deepseek?.key,
-        "pre-existing-llm-key",
-        "T-BACKFILL.1: pre-existing LLM key must be untouched (embedded LLM default must NOT override it)",
-      );
-      assert.equal(result.default, "deepseek:deepseek-v4-flash", "T-BACKFILL.1: pre-existing default spec untouched");
-
-      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
-      assert.equal(onDisk.search?.braveApiKey, "placeholder-brave", "T-BACKFILL.1: backfilled brave key must be persisted to disk");
-      assert.equal(onDisk.providers.deepseek.key, "pre-existing-llm-key", "T-BACKFILL.1: on-disk LLM key must be untouched");
-
-      // Cross-check via the actual shim the app reads (Settings' readSettings()).
-      const search = readSearchConfig(join(dir, "search.json"));
-      assert.equal(search.braveApiKey, "placeholder-brave", "T-BACKFILL.1: readSearchConfig shim must see the backfilled key");
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("T-BACKFILL.2: when secrets.json already exists fully configured (LLM + search) and no default is embedded, readSecrets does not rewrite the file", () => {
-    // Given: secrets.json exists with BOTH fields already configured; no defaultCredentialsPath
-    //        fixture exists on disk (absent-defaults case, applied to an existing file)
-    // When:  readSecrets(secretsPath, { defaultCredentialsPath: nonexistentFixture })
-    // Then:  result is unchanged; on-disk mtime-equivalent content is identical (no spurious write)
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const secretsPath = join(dir, "secrets.json");
-      const before = {
-        schema_version: 1,
-        default: "custom:users-own-model",
-        providers: { custom: { key: "users-own-key", baseUrl: "https://users-own-endpoint.test/v1", type: "openai" } },
-        search: { braveApiKey: "users-own-brave-key" },
-      };
-      writeFileSync(secretsPath, JSON.stringify(before), "utf-8");
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: join(dir, "does-not-exist.json") });
-      assert.deepEqual(result, before, "T-BACKFILL.2: result must equal the on-disk file verbatim");
-
-      const onDisk = JSON.parse(readFileSync(secretsPath, "utf-8"));
-      assert.deepEqual(onDisk, before, "T-BACKFILL.2: on-disk file must be untouched");
-    } finally {
-      cleanup();
-    }
-  });
-});
-
-describe("absent-defaults — no generated file / env unset → nothing seeded, identical to today", () => {
-  it("T-ABSENT.1: when secrets.json is absent, no legacy files exist, and the defaultCredentialsPath fixture does not exist on disk, readSecrets returns {schema_version:1} and writes NOTHING (today's exact behavior)", () => {
-    // Given: no secrets.json; no legacy files; defaultCredentialsPath points at a nonexistent file
-    // When:  readSecrets(secretsPath, { defaultCredentialsPath: nonexistentFixture })
-    // Then:  returns {schema_version:1} exactly (T-SECRETS.1's own contract, unmodified);
-    //        no secrets.json is written — this is the CI/dev-build safety net: a normal build
-    //        with no FRONDOSE_DEFAULT_* env vars never seeds anything.
-    const { dir, cleanup } = makeTmpDir();
-    const saved = saveEnv(...NO_LEGACY_ENV_KEYS);
-    try {
-      blockLegacyFallback(dir);
-      const secretsPath = join(dir, "secrets.json");
-      const defaultsPath = join(dir, "defaultCredentials.generated.json"); // never written
-
-      const result = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
-      assert.deepEqual(result, { schema_version: 1 }, "T-ABSENT.1: must match today's exact empty-defaults shape");
-      assert.ok(!existsSync(secretsPath), "T-ABSENT.1: no secrets.json must be written when defaults are absent");
+      const beforeBytes = readFileSync(secretsPath, "utf8");
+      const beforeObject = JSON.parse(beforeBytes);
+      const loaded = readSecrets(secretsPath, { defaultCredentialsPath: defaultsPath });
+      assert.deepEqual(loaded, beforeObject);
+      assert.ok(!JSON.stringify(loaded).includes("stale-brave"));
+      assert.equal(readFileSync(secretsPath, "utf8"), beforeBytes);
     } finally {
       restoreEnv(saved);
       cleanup();
     }
   });
 
-  it("T-ABSENT.2: when defaultCredentialsPath is omitted entirely (production call shape) and the real generated file is absent, legacyMerged behaves exactly as before this feature existed", () => {
-    // Given: no secrets.json; no legacy files; NO defaultCredentialsPath override at all
-    //        (exercises the exact call shape production code uses)
-    // When:  legacyMerged(authPath, githubPath, searchPath) — 3-arg call, pre-P-EMBED-KEYS shape
-    // Then:  returns {schema_version:1} — the real co-located generated file is absent in this
-    //        checkout (T-DEFCRED.5), so behavior is byte-identical to the pre-feature baseline
-    const { dir, cleanup } = makeTmpDir();
-    try {
-      const result = legacyMerged(join(dir, "no-auth.json"), join(dir, "no-github.json"), join(dir, "no-search.json"));
-      assert.deepEqual(result, { schema_version: 1 });
-    } finally {
-      cleanup();
-    }
-  });
-});
-
-describe("no-key-in-source — the generated file is never tracked by git; the reader has no embedded literals", () => {
-  it("T-NOKEY.1: defaultCredentials.generated.json is listed in .gitignore", () => {
-    // Given: the repo's .gitignore
-    // When:  scanned for the generated-file path
-    // Then:  src/persistence/defaultCredentials.generated.json is present (never committed)
-    const gitignore = readFileSync(join(REPO_ROOT, ".gitignore"), "utf-8");
-    assert.ok(
-      gitignore.includes("src/persistence/defaultCredentials.generated.json"),
-      "T-NOKEY.1: .gitignore must list the generated credentials file",
+  // Given the generator, when source is scanned, then exactly the three LLM env inputs exist and no Brave input remains.
+  it("T-MCP-SCOPE.7l: default generator has no Brave input", () => {
+    const generator = readFileSync(join(REPO, "scripts", "gen-default-credentials.ts"), "utf8");
+    const reader = readFileSync(join(REPO, "src", "persistence", "defaultCredentials.ts"), "utf8");
+    const canonicalEnvAccess = /process\.env\.(FRONDOSE_DEFAULT_[A-Z0-9_]+)/g;
+    const defaultEnvFields = [...generator.matchAll(canonicalEnvAccess)].map((match) => match[1]);
+    assert.deepEqual(defaultEnvFields.sort(), [
+      "FRONDOSE_DEFAULT_LLM_BASEURL",
+      "FRONDOSE_DEFAULT_LLM_KEY",
+      "FRONDOSE_DEFAULT_LLM_MODEL",
+    ]);
+    const withoutCanonicalEnvAccess = generator.replace(canonicalEnvAccess, "");
+    assert.doesNotMatch(
+      withoutCanonicalEnvAccess,
+      /\bprocess\s*(?:\.env|\[\s*["']env["']\s*\])|=\s*process\.env\b/,
+      "generator must not use bracket, destructured, aliased, or dynamic environment access",
     );
-  });
-
-  it("T-NOKEY.2: git does not track any defaultCredentials.generated.* file in this checkout", () => {
-    // Given: `git ls-files` over the repo
-    // When:  filtered for the generated-credentials filename
-    // Then:  zero tracked matches — the file has never been committed, by construction
-    const tracked = execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf-8" })
-      .split("\n")
-      .filter((f) => f.includes("defaultCredentials.generated"));
-    assert.deepEqual(tracked, [], `T-NOKEY.2: generated credentials file must never be git-tracked; found: ${tracked.join(", ")}`);
-  });
-
-  it("T-NOKEY.3: the committed reader/gen-script source contains no hardcoded key-shaped literal (only env-var reads + null defaults)", () => {
-    // Given: the committed source of defaultCredentials.ts + gen-default-credentials.ts
-    // When:  scanned for a real-looking API key literal (long opaque token assigned to a
-    //        llmKey/braveKey-shaped field, NOT via process.env)
-    // Then:  no match — the only way a key value reaches these files is process.env.FRONDOSE_DEFAULT_*
-    const readerSrc = readFileSync(join(REPO_ROOT, "src/persistence/defaultCredentials.ts"), "utf-8");
-    const genSrc = readFileSync(join(REPO_ROOT, "scripts/gen-default-credentials.ts"), "utf-8");
-    const suspiciousKeyLiteral = /(llmKey|braveKey)\s*[:=]\s*["'][A-Za-z0-9_-]{16,}["']/;
-    assert.equal(suspiciousKeyLiteral.test(readerSrc), false, "T-NOKEY.3: reader source must not hardcode a key literal");
-    assert.equal(suspiciousKeyLiteral.test(genSrc), false, "T-NOKEY.3: gen-script source must not hardcode a key literal");
-    assert.ok(genSrc.includes("process.env.FRONDOSE_DEFAULT_LLM_KEY"), "T-NOKEY.3: gen-script must read the key from env, not a literal");
-    assert.ok(genSrc.includes("process.env.FRONDOSE_DEFAULT_BRAVE_KEY"), "T-NOKEY.3: gen-script must read the brave key from env, not a literal");
+    assert.deepEqual(
+      [...new Set([...generator.matchAll(/\bFRONDOSE_DEFAULT_[A-Z0-9_]+\b/g)].map((match) => match[0]))].sort(),
+      ["FRONDOSE_DEFAULT_LLM_BASEURL", "FRONDOSE_DEFAULT_LLM_KEY", "FRONDOSE_DEFAULT_LLM_MODEL"],
+    );
+    assert.doesNotMatch(generator, /FRONDOSE_DEFAULT_BRAVE_KEY|braveKey/);
+    const gitignore = readFileSync(join(REPO, ".gitignore"), "utf8");
+    assert.match(gitignore, /defaultCredentials\.generated\.json/);
+    const tracked = execFileSync("git", ["ls-files", "src/persistence/defaultCredentials.generated.json"], {
+      cwd: REPO,
+      encoding: "utf8",
+    }).trim();
+    assert.equal(tracked, "");
+    assert.doesNotMatch(
+      `${generator}\n${reader}`,
+      /(?:sk-|bsa_|tvly-|ghp_|Bearer )[A-Za-z0-9_-]{12,}/,
+      "generator and reader must not contain direct or indirect credential-shaped literals",
+    );
+    const longQuotedLiterals = [...`${generator}\n${reader}`.matchAll(/["'`]([A-Za-z0-9_=-]{24,})["'`]/g)]
+      .map((match) => match[1])
+      .filter((value) => !value.startsWith("FRONDOSE_") && value !== "defaultCredentials.generated.json");
+    assert.deepEqual(
+      longQuotedLiterals,
+      [],
+      "generator and reader must not hide long credential literals in variables",
+    );
+    assert.deepEqual(
+      [
+        ...credentialAssignments(generator, GENERATOR_ALLOWED_MODULES),
+        ...credentialAssignments(reader, READER_ALLOWED_MODULES),
+      ],
+      [],
+      "key/token/secret destinations must not resolve direct, indirect, or split credential literals",
+    );
+    const acquisitionMutations = [
+      'const destination=["llm","Key"].join(""); const secret=["sk-punct_!@#$%^&*()", "-credential"].join(""); const value = {[destination]: secret};',
+      'const destination=["llm","Key"].join(""); const secret=["sk-punct_!@#$%^&*()", "-credential"].join(""); Object.defineProperty({}, destination, {value: secret});',
+      'const parts=["sk-punct_!@#$%^&*()", "-credential"]; const assembled=parts.join(""); const define=Object.defineProperty; define({}, ["llm","Key"].join(""), {value: assembled});',
+      'const parts=["sk-punct_!@#$%^&*()", "-credential"]; const assembled=parts.join(""); globalThis["Reflect"]["defineProperty"]({}, ["llm","Key"].join(""), {value: assembled});',
+      'const parts=["sk-punct_!@#$%^&*()", "-credential"]; const assembled=parts.join(""); const define=({}).constructor["defineProperty"]; define({}, ["llm","Key"].join(""), {value: assembled});',
+      'const parts=["sk-punct_!@#$%^&*()", "-credential"]; const assembled=parts.join(""); const owner=({}).constructor; owner["defineProperty"]({}, ["llm","Key"].join(""), {value: assembled});',
+      'import vm from "node:vm"; const parts=["sk-punct_!@#$%^&*()", "-credential"]; const assembled=parts.join(""); vm.runInNewContext("void 0", {assembled});',
+      'export {Script as Runner} from "node:vm";',
+      'export * from "node:vm";',
+      'const runtime=import("node:vm");',
+      'const runtime=require("node:vm");',
+      'const loader=module.require; const runtime=loader("node:vm");',
+      'const {["run"+"InNewContext"]:execute}=process.getBuiltinModule("node:"+"vm"); execute("void 0", {});',
+      'const runtime=process.getBuiltinModule("node:vm"); const Runner=runtime.Script; const task=new Runner("void 0"); task.runInContext({});',
+      'const {["get"+"BuiltinModule"]:load}=process; const runtime=load("node:"+"vm"); const {["Scr"+"ipt"]:Runner}=runtime; const task=new Runner("void 0"); const {["run"+"InContext"]:execute}=task; execute({});',
+      'let load,runtime,Runner,task,execute; ({["get"+"BuiltinModule"]:load}=process); runtime=load("node:"+"vm"); ({["Scr"+"ipt"]:Runner}=runtime); task=new Runner("void 0"); ({["run"+"InContext"]:execute}=task); execute({});',
+      'const {"getBuiltinModule":load}=process; const runtime=load("node:"+"vm"); const {"Script":Runner,"createContext":makeContext}=runtime; const task=new Runner("globalThis.proof=42"); const {"runInContext":execute}=task; const context=makeContext({}); execute.call(task,context);',
+      'let load,runtime,Runner,makeContext,task,execute; ({"getBuiltinModule":load}=process); runtime=load("node:"+"vm"); ({"Script":Runner,"createContext":makeContext}=runtime); task=new Runner("globalThis.proof=42"); ({"runInContext":execute}=task); const context=makeContext({}); execute.call(task,context);',
+    ];
+    for (const [owner, allowedModules] of [
+      ["generator", GENERATOR_ALLOWED_MODULES],
+      ["reader", READER_ALLOWED_MODULES],
+    ] as const) {
+      for (const mutation of acquisitionMutations) {
+        assert.ok(
+          credentialAssignments(mutation, allowedModules).length > 0,
+          `${owner} must fail closed on dynamic credential or module-acquisition mutation`,
+        );
+      }
+    }
+    const sandbox = executeGeneratorInSandbox(generator);
+    assert.deepEqual(sandbox.envReads.sort(), [
+      "FRONDOSE_DEFAULT_LLM_BASEURL",
+      "FRONDOSE_DEFAULT_LLM_KEY",
+      "FRONDOSE_DEFAULT_LLM_MODEL",
+    ]);
+    assert.equal(sandbox.writes.length, 2);
+    const expectedBytes = `${JSON.stringify(
+      {
+        _generated: "GENERATED by scripts/gen-default-credentials.ts — DO NOT COMMIT (gitignored).",
+        llmBaseUrl: "https://llm.example.test/v1",
+        llmModel: "provider:model/test-1",
+        llmKey: "sk-test_!@#$%^&*()-+=:punctuation",
+      },
+      null,
+      2,
+    )}\n`;
+    assert.deepEqual(sandbox.writes, [
+      {
+        path: "/virtual/frondose/src/persistence/defaultCredentials.generated.json",
+        content: expectedBytes,
+        encoding: "utf-8",
+      },
+      {
+        path: "/virtual/frondose/dist/persistence/defaultCredentials.generated.json",
+        content: expectedBytes,
+        encoding: "utf-8",
+      },
+    ]);
   });
 });

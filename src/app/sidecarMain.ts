@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // P-APP-6 — Dedicated app sidecar entrypoint. Decouples Frondose.app's backend
-// from the public CLI command program. main.rs spawn_mai_serve() points here
-// (not at dist/cli/main.js). The CLI `serve` subcommand stays in parallel during
-// migration; this entry is the long-term boot path for the app.
+// from the retired public CLI command program. main.rs spawn_frondose_serve()
+// points here (never at the retired CLI entry — T-RETIRE.CLI.1).
+// P-OPEN-SOURCE-SPLIT: the backend graph lives under src/app/backend/** and is
+// booted through ./backend.js#runAppBackend.
 //
 // Bootstrap surface kept INTENTIONALLY MINIMAL — see docs/phase-app-6-plan.md §2
 // for the dependency trace justifying each include/exclude. In particular:
@@ -13,18 +14,99 @@
 //   - NO runStartupAutoUpdate (the Tauri updater owns app updates).
 // What we DO need:
 //   - registerCrashHandlers() (static import) so any throw — including a
-//     subsequent import-time throw inside the serve graph — hits
+//     subsequent import-time throw inside the backend graph — hits
 //     ~/.frondose/agent/logs/crash.log [CONCERN-MR-1].
-//   - argv/env parse for --sock / --token (parseArgs exported for unit tests
+//   - argv/env parse for --port-file / --token (parseArgs exported for unit tests
 //     [CONCERN-MR-3]).
-//   - DYNAMIC import + call runServeSubcommand({sockPath, bearerToken}).
+//   - DYNAMIC import + call runAppBackend({portFile, bearerToken}).
 
 // Static import scope is INTENTIONALLY minimal — only the crash logger.
 // The serve graph is dynamic-imported below to keep it OUT of the static
 // import order [CONCERN-MR-1].
 import { pathToFileURL } from "node:url";
-import { registerCrashHandlers } from "../cli/crashLogger.js";
 import { frondoseEnv } from "../env.js";
+import { type RuntimeTurnInput, runRuntimeTurn } from "./backend/scheduler.js";
+import { createTelegramChannel, type TelegramChannel } from "./backend/telegramChannel.js";
+import { registerCrashHandlers } from "./crashLogger.js";
+
+const APP_ROUTE_NAMES = [
+  "abort",
+  "audit",
+  "chrome/ensure",
+  "cron",
+  "events",
+  "health",
+  "identity",
+  "passive",
+  "retry",
+  "settings",
+  "turn",
+  "workflow/approve",
+  "workflow/cancel",
+  "workflow/decline",
+] as const;
+
+type SidecarRuntimeDeps = {
+  telegramConfigured: boolean;
+  pollTelegram(signal: AbortSignal, offset: number): Promise<Array<{ updateId: number; text: string }>>;
+  sendTelegramReply(text: string, signal: AbortSignal): Promise<void>;
+  readTelegramOffset(): number;
+  commitTelegramOffset(offset: number): void;
+  writeAudit(event: { type: string }): void;
+  releaseResources(): void;
+};
+
+export function createSidecarRuntime(deps: SidecarRuntimeDeps) {
+  let activeTurn = false;
+  const submitTurn = async (input: RuntimeTurnInput): Promise<{ finalText: string }> => {
+    if (activeTurn) throw new Error("turn_busy");
+    activeTurn = true;
+    try {
+      return await runRuntimeTurn(input);
+    } finally {
+      activeTurn = false;
+    }
+  };
+  let telegram: TelegramChannel | undefined;
+  if (deps.telegramConfigured) {
+    telegram = createTelegramChannel({
+      configured: true,
+      readOffset: deps.readTelegramOffset,
+      commitOffset: deps.commitTelegramOffset,
+      pollUpdates: deps.pollTelegram,
+      downloadMedia: async (media) => media.fileId,
+      submitTurn,
+      sendReply: deps.sendTelegramReply,
+      writeAudit: (event) => deps.writeAudit(event),
+      waitForNextPoll: (signal) =>
+        new Promise((resolve) => {
+          const timer = setTimeout(resolve, 1_000);
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+    });
+  }
+  return {
+    start: async () => {
+      await telegram?.start();
+    },
+    submitTurn,
+    pollTelegramOnce: async () => {
+      await telegram?.pollOnce();
+    },
+    stop: async () => {
+      await telegram?.stop();
+      deps.releaseResources();
+    },
+    routeNames: () => [...APP_ROUTE_NAMES],
+  };
+}
 
 export function parseArgs(argv: string[]): { portFile: string; bearerToken: string } {
   let portFile: string | undefined;
@@ -45,7 +127,6 @@ export function parseArgs(argv: string[]): { portFile: string; bearerToken: stri
     }
     if (a !== undefined && a.startsWith("--token=")) {
       bearerToken = a.slice("--token=".length);
-      continue;
     }
   }
   portFile ??= frondoseEnv("PORT_FILE");
@@ -68,9 +149,9 @@ export async function main(): Promise<void> {
   //    the registered handlers + the unhandled-rejection sink).
   const { portFile, bearerToken } = parseArgs(process.argv.slice(2));
   registerCrashHandlers();
-  const { runServeSubcommand } = await import("../cli/subcommands/serve.js");
-  await runServeSubcommand({ portFile, bearerToken });
-  // runServeSubcommand returns when the server exits (SIGTERM/SIGINT).
+  const { runAppBackend } = await import("./backend.js");
+  await runAppBackend({ portFile, bearerToken });
+  // runAppBackend returns when the server exits (SIGTERM/SIGINT).
   process.exit(0);
 }
 
