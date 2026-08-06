@@ -71,7 +71,7 @@ const FILES = [
   "tests/tauri/updater-ui-p58d1.mock.test.ts",
   "tests/tools/browser/connectSurfaceIntegrity-pAuto6.mock.test.ts",
   "tests/tools/methodology/qualifyProfile-staleCache.mock.test.ts",
-  "tests/tools/sales/pAuto7-reaper.mock.test.ts"
+  "tests/tools/sales/pAuto7-reaper.mock.test.ts",
 ] as const;
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
