@@ -768,6 +768,35 @@ function topLevelOwner(packagePath: string): string {
   return nested >= 0 ? packagePath.slice(0, nested) : packagePath;
 }
 
+// Climb a direct owner's lock edges up to the ROOT-declared package (§16.1: "Pi,
+// MCP and CDP as three independent top-level owners of transitive ws" — the real
+// graph has intermediates like @google/genai under @earendil-works/pi-ai).
+function climbToRootOwner(
+  packages: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>,
+  lockRootDeps: Record<string, string>,
+  directOwnerKey: string,
+): string {
+  let current = directOwnerKey;
+  const seen = new Set<string>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const pkgName = current.slice("node_modules/".length);
+    if (pkgName in lockRootDeps) return pkgName;
+    let parent: string | undefined;
+    for (const [key, meta] of Object.entries(packages)) {
+      if (key === "" || key === current) continue;
+      const deps = { ...meta?.dependencies, ...meta?.devDependencies };
+      if (pkgName in deps) {
+        parent = key;
+        break;
+      }
+    }
+    if (!parent) return pkgName;
+    current = parent;
+  }
+  return current.slice("node_modules/".length);
+}
+
 /**
  * Read and reconcile the root manifest, lockfile root, and installed package
  * metadata for retired dependency provenance. Callers cannot supply provenance.
@@ -796,16 +825,19 @@ export function validateInstalledDependencyBoundary(
     if (name in lockRootDeps) {
       throw new Error(`retired dependency ${name} is root-owned in the lockfile`);
     }
-    const lockOwners = new Map<string, string>(); // top-level owner -> package key
+    const lockOwners = new Map<string, string>(); // root owner -> package key
     for (const [key, meta] of Object.entries(packages)) {
       if (key === "" || key.startsWith("node_modules/") === false) continue;
       const deps = { ...meta?.dependencies, ...meta?.devDependencies };
-      if (name in deps) lockOwners.set(topLevelOwner(key.slice("node_modules/".length)), key);
+      if (name in deps) lockOwners.set(climbToRootOwner(packages, lockRootDeps, key), key);
     }
     const installedOwners = new Map<string, string>();
     for (const [pkgName, meta] of installed) {
       if (pkgName === name) continue;
-      if (name in meta.dependencies) installedOwners.set(topLevelOwner(meta.path), pkgName);
+      if (name in meta.dependencies) {
+        const directKey = `node_modules/${meta.path}`;
+        installedOwners.set(climbToRootOwner(packages, lockRootDeps, directKey), pkgName);
+      }
     }
     for (const [owner, key] of lockOwners) {
       if (!installedOwners.has(owner)) {
