@@ -44,6 +44,7 @@ src/persistence/defaultCredentials.generated.json
 
 # P-56a M-1 Tauri scaffold
 src/tauri/src-tauri/target/
+scripts/updater-verifier/target/
 src/tauri/src-tauri/gen/
 src/tauri/ui/app.js
 src/tauri/ui/app.js.map

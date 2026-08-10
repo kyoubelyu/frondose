@@ -1,0 +1,205 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
+
+type PolicyResult = { ok: boolean; findings: Array<{ kind: string; path?: string; message: string }> };
+type ReleasePolicyModule = {
+  inspectReleaseCandidate(root: string, canaries: string[]): Promise<PolicyResult>;
+  verifyUpdaterSignatures(
+    root: string,
+    publicKey: string,
+    tools?: { run(command: string, args: string[]): Promise<{ status: number; stdout: string; stderr: string }> },
+  ): Promise<PolicyResult>;
+  inspectPlatformSignatures(
+    root: string,
+    tools?: { run(command: string, args: string[]): Promise<{ status: number; stdout: string; stderr: string }> },
+  ): Promise<PolicyResult>;
+};
+
+const REPO = process.cwd();
+const POLICY = join(REPO, "scripts", "public-release-policy.mjs");
+const temporaryDirectories: string[] = [];
+
+function missingGateInputs(...names: string[]): false | string {
+  const missing = names.filter((name) => !process.env[name]);
+  return missing.length === 0 ? false : `external gate inputs missing: ${missing.join(", ")}`;
+}
+
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const path = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(path);
+  return path;
+}
+
+function run(command: string, args: string[]) {
+  return spawnSync(command, args, { encoding: "utf8" });
+}
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
+
+describe("one exact artifact set reaches inspection, attestation and draft", () => {
+  it(
+    "T-OS.Release.1c: the real updater EXE pair is required and cryptographically byte-bound",
+    { skip: missingGateInputs("FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR") },
+    async () => {
+      // Given a real signed candidate, when either updater side is renamed, omitted, substituted, mismatched or zip-shaped, then inspection rejects it.
+      const fixture = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
+      assert.ok(fixture, "set FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR to real native-signed Tauri outputs");
+      const policy = (await import(`${pathToFileURL(POLICY).href}?native-pair`)) as ReleasePolicyModule;
+      assert.deepEqual(await policy.inspectReleaseCandidate(fixture, []), { ok: true, findings: [] });
+      for (const mutation of [
+        "missing-exe",
+        "missing-exe-sig",
+        "renamed-exe",
+        "renamed-exe-sig",
+        "substituted-exe",
+        "foreign-exe-sig",
+        "foreign-mac-sig",
+        "stale-latest-url",
+        "wrong-latest-signature",
+        "missing-checksum",
+        "missing-provenance",
+        "missing-sbom",
+        "zip-reintroduced",
+      ]) {
+        const root = await temporaryDirectory(`frondose-native-pair-${mutation}-`);
+        await cp(fixture, root, { recursive: true });
+        const mutator = join(REPO, "tests", "fixtures", "public-release", "mutate-candidate.mjs");
+        const changed = run(process.execPath, [mutator, mutation, root]);
+        assert.equal(changed.status, 0, `${mutation}: ${changed.stderr}`);
+        assert.equal((await policy.inspectReleaseCandidate(root, [])).ok, false, mutation);
+      }
+    },
+  );
+
+  it("T-OS.Release.1d: the pinned updater key verifies each exact archive-sidecar pair", async () => {
+    // Given both updater archives and sidecars, when Tauri verification sees a changed key, sidecar, archive or command failure, then that exact pair is red.
+    const policy = (await import(`${pathToFileURL(POLICY).href}?updater-crypto`)) as ReleasePolicyModule;
+    for (const mutation of [
+      "green",
+      "changed-key",
+      "mac-archive",
+      "mac-signature",
+      "windows-exe",
+      "windows-signature",
+      "command-failure",
+    ] as const) {
+      const root = await temporaryDirectory(`frondose-updater-crypto-${mutation}-`);
+      await writeFile(join(root, "Frondose.app.tar.gz"), "mac archive bytes\n");
+      await writeFile(join(root, "Frondose.app.tar.gz.sig"), "mac signature bytes\n");
+      await writeFile(join(root, "Frondose.nsis.exe"), "windows installer bytes\n");
+      await writeFile(join(root, "Frondose.nsis.exe.sig"), "windows signature bytes\n");
+      const publicKey = mutation === "changed-key" ? "changed-public-key" : "pinned-public-key";
+      if (mutation === "mac-archive") await writeFile(join(root, "Frondose.app.tar.gz"), "changed mac bytes\n");
+      if (mutation === "mac-signature")
+        await writeFile(join(root, "Frondose.app.tar.gz.sig"), "foreign mac signature\n");
+      if (mutation === "windows-exe") await writeFile(join(root, "Frondose.nsis.exe"), "changed windows bytes\n");
+      if (mutation === "windows-signature")
+        await writeFile(join(root, "Frondose.nsis.exe.sig"), "foreign windows signature\n");
+      const commands: string[] = [];
+      const result = await policy.verifyUpdaterSignatures(root, publicKey, {
+        async run(command, args) {
+          commands.push(`${command} ${args.join(" ")}`);
+          const isMac = args.some((arg) => arg.endsWith("Frondose.app.tar.gz"));
+          const changed =
+            mutation === "changed-key" ||
+            mutation === "command-failure" ||
+            ((mutation === "mac-archive" || mutation === "mac-signature") && isMac) ||
+            ((mutation === "windows-exe" || mutation === "windows-signature") && !isMac);
+          return { status: changed ? 1 : 0, stdout: "", stderr: changed ? `injected ${mutation}` : "" };
+        },
+      });
+      assert.equal(result.ok, mutation === "green", mutation);
+      assert.deepEqual(commands, [
+        `verify-updater-signature ${publicKey} ${join(root, "Frondose.app.tar.gz")} ${join(root, "Frondose.app.tar.gz.sig")}`,
+        ...(["green", "windows-exe", "windows-signature"].includes(mutation)
+          ? [
+              `verify-updater-signature ${publicKey} ${join(root, "Frondose.nsis.exe")} ${join(root, "Frondose.nsis.exe.sig")}`,
+            ]
+          : []),
+      ]);
+    }
+  });
+
+  it("T-OS.Release.4b: empty, partial, unstapled or non-Authenticode candidates fail native verification", async () => {
+    // Given exact native candidates and observable platform commands, when one native operation fails, then its own finding blocks promotion.
+    const policy = (await import(`${pathToFileURL(POLICY).href}?native-verifier`)) as ReleasePolicyModule;
+    for (const partial of ["empty", "app-only", "dmg-only", "exe-only"] as const) {
+      const root = await temporaryDirectory(`frondose-native-partial-${partial}-`);
+      if (partial === "app-only") await mkdir(join(root, "Frondose.app", "Contents"), { recursive: true });
+      if (partial === "dmg-only") await writeFile(join(root, "Frondose.dmg"), "dmg");
+      if (partial === "exe-only") await writeFile(join(root, "Frondose.nsis.exe"), "exe");
+      const commands: string[] = [];
+      const result = await policy.inspectPlatformSignatures(root, {
+        async run(command, args) {
+          commands.push(`${command} ${args.join(" ")}`);
+          return { status: 0, stdout: "", stderr: "" };
+        },
+      });
+      assert.equal(result.ok, false, partial);
+      assert.ok(
+        result.findings.some((finding) => finding.kind === "signed_candidate"),
+        partial,
+      );
+      assert.deepEqual(commands, [], `${partial} must fail before native commands`);
+    }
+    for (const mutation of ["codesign", "gatekeeper", "stapler", "mounted-app", "authenticode"] as const) {
+      const root = await temporaryDirectory(`frondose-native-operation-${mutation}-`);
+      const app = join(root, "Frondose.app");
+      await mkdir(join(app, "Contents", "Resources"), { recursive: true });
+      await writeFile(join(app, "Contents", "Resources", "payload.txt"), "verified app bytes\n");
+      await writeFile(join(root, "Frondose.dmg"), "fixture dmg bytes\n");
+      await writeFile(join(root, "Frondose.nsis.exe"), "fixture exe bytes\n");
+      const commands: string[] = [];
+      const result = await policy.inspectPlatformSignatures(root, {
+        async run(command, args) {
+          const invocation = `${command} ${args.join(" ")}`;
+          commands.push(invocation);
+          if (command === "hdiutil" && args[0] === "attach") {
+            const mountPoint = args.at(args.indexOf("-mountpoint") + 1);
+            assert.ok(mountPoint, "mountpoint must be supplied to hdiutil attach");
+            await cp(app, join(mountPoint, "Frondose.app"), { recursive: true });
+            if (mutation === "mounted-app") {
+              await writeFile(join(mountPoint, "Frondose.app", "Contents", "Resources", "payload.txt"), "different\n");
+            }
+          }
+          const fails =
+            (mutation === "codesign" && command === "codesign") ||
+            (mutation === "gatekeeper" && command === "spctl") ||
+            (mutation === "stapler" && command === "xcrun" && args[0] === "stapler") ||
+            (mutation === "authenticode" && command === "osslsigncode");
+          return { status: fails ? 1 : 0, stdout: "", stderr: fails ? `injected ${mutation} failure` : "" };
+        },
+      });
+      assert.equal(result.ok, false, mutation);
+      const findingNeedle = mutation === "mounted-app" ? "mounted app" : mutation;
+      assert.ok(
+        result.findings.some((finding) => finding.message.toLowerCase().includes(findingNeedle)),
+        mutation,
+      );
+      const requiredCommand = {
+        codesign: "codesign --verify --deep --strict",
+        gatekeeper: "spctl -a -vv --type open",
+        stapler: "xcrun stapler validate",
+        "mounted-app": "hdiutil attach",
+        authenticode: "osslsigncode verify -in",
+      }[mutation];
+      assert.ok(
+        commands.some((command) => command.includes(requiredCommand)),
+        mutation,
+      );
+      if (commands.some((command) => command.includes("hdiutil attach"))) {
+        assert.ok(
+          commands.some((command) => command.includes("hdiutil detach")),
+          `${mutation} must detach in finally`,
+        );
+      }
+    }
+  });
+});

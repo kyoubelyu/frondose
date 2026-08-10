@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-// P-OPEN-SOURCE-SPLIT — deterministic two-project exporter and publication boundary.
-//
-// Reads an immutable Git tree, classifies every path as App/Web/private/retired,
-// rejects unknown paths, symlinks, gitlinks, executable entries, normalization
-// collisions and output-inside-input, and emits sorted path/size/SHA-256
-// manifests for each project. The same source commit always produces
-// byte-identical trees and manifests. It performs no network or GitHub mutation.
-//
 // This module is the single planned exporter (plan §10.1): every open-source
 // carrier imports its API; no other exporter implementation exists.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -26,6 +18,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
+import {
+  APPROVED_WS_OWNERS,
+  checkExportedDependencySurface,
+  RETIRED_ROOT_DEPENDENCIES,
+  validateInstalledDependencyBoundary,
+  validatePublishedArtifactDependencyBoundary,
+} from "./project-dependency-boundary.ts";
+
+export { validateInstalledDependencyBoundary, validatePublishedArtifactDependencyBoundary };
 
 const WEB_ROOT = "projects/web";
 
@@ -79,14 +80,14 @@ const PRIVATE_SCRIPTS = new Set([
   "scripts/com.kyoube.frondose.updateserver.plist",
   "scripts/gen-latest-json.mjs",
   "scripts/gen-default-credentials.ts",
-  "scripts/chmod-dist.mjs",
-  "scripts/build-runtime-windows.mjs",
   "scripts/app-validation-preflight.ts",
   "scripts/integration-manifest.json",
 ]);
 const PUBLIC_SCRIPTS = new Set([
   "scripts/project-manifest.ts",
+  "scripts/project-dependency-boundary.ts",
   "scripts/public-release-policy.mjs",
+  "scripts/public-release-governance.mjs",
   "scripts/public-sales-contract.mjs",
   "scripts/gen-public-default-credentials.ts",
   "scripts/public-source-snapshot.mjs",
@@ -94,6 +95,15 @@ const PUBLIC_SCRIPTS = new Set([
   "scripts/assert-dist.ts",
   "scripts/public-scan.mjs",
   "scripts/test-fast.mjs",
+  "scripts/chmod-dist.mjs",
+  "scripts/build-runtime-windows.mjs",
+  "scripts/build-runtime-macos.sh",
+  "scripts/build-public-macos.sh",
+  "scripts/build-public-windows.ps1",
+  "scripts/assemble-public-release.mjs",
+  "scripts/updater-verifier/Cargo.toml",
+  "scripts/updater-verifier/Cargo.lock",
+  "scripts/updater-verifier/src/main.rs",
 ]);
 
 const APP_ROOT_PREFIXES = ["src/", "tests/", ".github/", "native/"];
@@ -118,18 +128,6 @@ const APP_ROOT_FILES = new Set([
   ".npmrc",
   ".nvmrc",
 ]);
-
-const RETIRED_ROOT_DEPENDENCIES = [
-  "ssh2",
-  "ws",
-  "react",
-  "react-dom",
-  "@xterm/xterm",
-  "@xterm/addon-fit",
-  "@tailwindcss/cli",
-  "@novnc/novnc",
-];
-const APPROVED_WS_OWNERS = ["@earendil-works/pi-ai", "@modelcontextprotocol/sdk", "chrome-remote-interface"];
 
 const UNSUPPORTED_MODES = new Set(["120000", "160000", "100755"]);
 const MEDIA_POLICY = [
@@ -522,72 +520,6 @@ function isUnclassifiedMedia(path: string): boolean {
   return !MEDIA_POLICY.some((policy) => policy.pattern.test(path));
 }
 
-function containsDependencyToken(text: string, dependency: string): boolean {
-  const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^A-Za-z0-9@/._-])${escaped}($|[^A-Za-z0-9@/._-])`).test(text);
-}
-
-function checkExportedDependencySurface(
-  packageJsonBytes: Uint8Array | undefined,
-  lockBytes: Uint8Array | undefined,
-): void {
-  if (packageJsonBytes) {
-    const pkg = JSON.parse(Buffer.from(packageJsonBytes).toString("utf8")) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    const rootDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-    for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
-      if (dependency in rootDeps) {
-        throw new Error(`exported package.json declares retired dependency ${dependency}`);
-      }
-    }
-  }
-  if (lockBytes) {
-    const lock = JSON.parse(Buffer.from(lockBytes).toString("utf8")) as {
-      packages?: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>;
-    };
-    const packages = lock.packages ?? {};
-    const lockRoot = packages[""] ?? {};
-    const rootDeps = { ...lockRoot.dependencies, ...lockRoot.devDependencies };
-    for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
-      if (dependency in rootDeps) {
-        throw new Error(`exported package-lock.json root declares retired dependency ${dependency}`);
-      }
-    }
-    // §15.2 carve-out (mirrors the Fleet.3 carrier): `ws` may resolve only as a
-    // transitive of retained Pi/MCP/CDP packages; the react family may resolve only
-    // as peer/transitive of the retained Vercel AI SDK family (`ai` / `@ai-sdk/react`
-    // and its direct peer chain). Everything else must be absent from the export.
-    const retainedPeerOwners = new Set([
-      "node_modules/ai",
-      "node_modules/@ai-sdk/react",
-      "node_modules/swr",
-      "node_modules/use-sync-external-store",
-    ]);
-    const reactFamily = new Set(["react", "react-dom", "@types/react", "@types/react-dom"]);
-    for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
-      if (dependency === "ws") continue;
-      if (reactFamily.has(dependency)) {
-        const resolved = `node_modules/${dependency}`;
-        if (!(resolved in packages)) continue;
-        const owners = Object.entries(packages).filter(
-          ([, entry]) => entry?.peerDependencies?.[dependency] ?? entry?.dependencies?.[dependency],
-        );
-        for (const [owner] of owners) {
-          if (!retainedPeerOwners.has(owner)) {
-            throw new Error(`exported package-lock.json resolves retired dependency ${dependency} under ${owner}`);
-          }
-        }
-        continue;
-      }
-      if (`node_modules/${dependency}` in packages) {
-        throw new Error(`exported package-lock.json resolves retired dependency ${dependency}`);
-      }
-    }
-  }
-}
-
 type TreeEntry = { mode: string; type: string; sha: string; path: string };
 
 function readTree(repoRoot: string, commit: string): TreeEntry[] {
@@ -708,7 +640,10 @@ export function validatePublicationContract(input: { projectRoot: string; requir
   if (typeof script !== "string" || script.length === 0) {
     throw new Error(`publication contract requires a check:publication script`);
   }
-  const words = script.split(/\s+/).filter(Boolean).map((word) => word.replace(/^['"]|['"]$/g, ""));
+  const words = script
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.replace(/^['"]|['"]$/g, ""));
   if (/^\s*(?:echo|true|:|exit|printf)(?=\s|$)/.test(script) || !words.includes("node") || !words.includes("--test")) {
     throw new Error(`check:publication is not a node --test command: ${script}`);
   }
@@ -723,156 +658,6 @@ export function validatePublicationContract(input: { projectRoot: string; requir
   for (const carrier of requiredCarriers) {
     if (!existsSync(join(projectRoot, carrier))) {
       throw new Error(`required carrier missing: ${carrier}`);
-    }
-  }
-}
-
-function installedPackages(projectRoot: string): Map<string, { dependencies: Record<string, string>; path: string }> {
-  const installed = new Map<string, { dependencies: Record<string, string>; path: string }>();
-  const modulesRoot = join(projectRoot, "node_modules");
-  if (!existsSync(modulesRoot)) return installed;
-  const walk = (dir: string, relativePath: string): void => {
-    for (const name of readdirSync(dir)) {
-      if (name.startsWith(".")) continue;
-      const full = join(dir, name);
-      const stat = statSync(full);
-      if (!stat.isDirectory()) continue;
-      const packageJsonPath = join(full, "package.json");
-      const hasManifest = existsSync(packageJsonPath);
-      if (hasManifest) {
-        const meta = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
-          name?: string;
-          dependencies?: Record<string, string>;
-        };
-        const pkgName = meta.name ?? (relativePath ? `${relativePath}/${name}` : name);
-        installed.set(pkgName, {
-          dependencies: meta.dependencies ?? {},
-          path: relativePath ? `${relativePath}/${name}` : name,
-        });
-      }
-      const nestedModules = join(full, "node_modules");
-      if (existsSync(nestedModules)) {
-        walk(nestedModules, relativePath ? `${relativePath}/${name}` : name);
-      } else if (!hasManifest) {
-        // Scoped packages nest one level deeper without a parent manifest.
-        walk(full, relativePath ? `${relativePath}/${name}` : name);
-      }
-    }
-  };
-  walk(modulesRoot, "");
-  return installed;
-}
-
-function topLevelOwner(packagePath: string): string {
-  const nested = packagePath.indexOf("/node_modules/");
-  return nested >= 0 ? packagePath.slice(0, nested) : packagePath;
-}
-
-// Climb a direct owner's lock edges up to the ROOT-declared package (§16.1: "Pi,
-// MCP and CDP as three independent top-level owners of transitive ws" — the real
-// graph has intermediates like @google/genai under @earendil-works/pi-ai).
-function climbToRootOwner(
-  packages: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>,
-  lockRootDeps: Record<string, string>,
-  directOwnerKey: string,
-): string {
-  let current = directOwnerKey;
-  const seen = new Set<string>();
-  while (!seen.has(current)) {
-    seen.add(current);
-    const pkgName = current.slice("node_modules/".length);
-    if (pkgName in lockRootDeps) return pkgName;
-    let parent: string | undefined;
-    for (const [key, meta] of Object.entries(packages)) {
-      if (key === "" || key === current) continue;
-      const deps = { ...meta?.dependencies, ...meta?.devDependencies };
-      if (pkgName in deps) {
-        parent = key;
-        break;
-      }
-    }
-    if (!parent) return pkgName;
-    current = parent;
-  }
-  return current.slice("node_modules/".length);
-}
-
-/**
- * Read and reconcile the root manifest, lockfile root, and installed package
- * metadata for retired dependency provenance. Callers cannot supply provenance.
- */
-export function validateInstalledDependencyBoundary(
-  projectRoot: string,
-  dependencyNames: string[],
-): Record<string, Array<{ topLevelOwner: string; direct: boolean }>> {
-  const rootPkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8")) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  };
-  const rootDeps = { ...rootPkg.dependencies, ...rootPkg.devDependencies };
-  const lock = JSON.parse(readFileSync(join(projectRoot, "package-lock.json"), "utf8")) as {
-    packages?: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>;
-  };
-  const packages = lock.packages ?? {};
-  const lockRoot = packages[""] ?? {};
-  const lockRootDeps = { ...lockRoot.dependencies, ...lockRoot.devDependencies };
-  const installed = installedPackages(projectRoot);
-  const result: Record<string, Array<{ topLevelOwner: string; direct: boolean }>> = {};
-  for (const name of dependencyNames) {
-    if (name in rootDeps) {
-      throw new Error(`retired dependency ${name} is directly owned by the root manifest`);
-    }
-    if (name in lockRootDeps) {
-      throw new Error(`retired dependency ${name} is root-owned in the lockfile`);
-    }
-    const lockOwners = new Map<string, string>(); // root owner -> package key
-    for (const [key, meta] of Object.entries(packages)) {
-      if (key === "" || key.startsWith("node_modules/") === false) continue;
-      const deps = { ...meta?.dependencies, ...meta?.devDependencies };
-      if (name in deps) lockOwners.set(climbToRootOwner(packages, lockRootDeps, key), key);
-    }
-    const installedOwners = new Map<string, string>();
-    for (const [pkgName, meta] of installed) {
-      if (pkgName === name) continue;
-      if (name in meta.dependencies) {
-        const directKey = `node_modules/${meta.path}`;
-        installedOwners.set(climbToRootOwner(packages, lockRootDeps, directKey), pkgName);
-      }
-    }
-    for (const [owner, key] of lockOwners) {
-      if (!installedOwners.has(owner)) {
-        throw new Error(`lockfile edge for ${name} has no matching installed owner: ${key}`);
-      }
-    }
-    for (const [owner, pkgName] of installedOwners) {
-      if (!lockOwners.has(owner)) {
-        throw new Error(`installed edge for ${name} has no matching lockfile edge: ${pkgName}`);
-      }
-    }
-    if (name === "ws") {
-      const rows = [...lockOwners.keys()].sort().map((owner) => ({ topLevelOwner: owner, direct: false }));
-      for (const row of rows) {
-        if (!APPROVED_WS_OWNERS.includes(row.topLevelOwner)) {
-          throw new Error(`transitive ws owner ${row.topLevelOwner} is not approved`);
-        }
-      }
-      result.ws = rows;
-    } else if (lockOwners.size > 0 || installedOwners.size > 0) {
-      throw new Error(`retired dependency ${name} has resolved owners in the installed graph`);
-    }
-  }
-  return result;
-}
-
-/** One byte-scanning seam for compiled and unpacked-App artifacts at accepted paths. */
-export function validatePublishedArtifactDependencyBoundary(input: {
-  artifacts: Array<{ path: string; text: string }>;
-}): void {
-  for (const artifact of input.artifacts) {
-    for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
-      if (containsDependencyToken(artifact.text, dependency)) {
-        throw new Error(`retired dependency ${dependency} present in published artifact ${artifact.path}`);
-      }
     }
   }
 }

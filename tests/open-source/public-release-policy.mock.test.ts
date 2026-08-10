@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, it, mock } from "node:test";
@@ -28,6 +28,13 @@ const POLICY = join(process.cwd(), "scripts", "public-release-policy.mjs");
 const PROJECT_MANIFEST = join(process.cwd(), "scripts", "project-manifest.ts");
 const temporaryDirectories: string[] = [];
 
+function missingGateInputs(...names: string[]): false | string {
+  const missing = names.filter((name) => !process.env[name]);
+  return missing.length === 0 ? false : `external gate inputs missing: ${missing.join(", ")}`;
+}
+
+const TEST_MAKENSIS = process.env.FRONDOSE_TEST_MAKENSIS;
+
 async function loadPolicy(cacheKey = ""): Promise<ReleasePolicyModule> {
   const suffix = cacheKey ? `?test=${encodeURIComponent(cacheKey)}` : "";
   return (await import(`${pathToFileURL(POLICY).href}${suffix}`)) as ReleasePolicyModule;
@@ -52,7 +59,13 @@ async function sha256(path: string): Promise<string> {
 }
 
 async function refreshIntegrityMetadata(root: string): Promise<void> {
-  const artifacts = ["Frondose.dmg", "Frondose.nsis.exe", "Frondose.app.tar.gz", "Frondose.nsis.zip"];
+  const artifacts = [
+    "Frondose.dmg",
+    "Frondose.app.tar.gz",
+    "Frondose.app.tar.gz.sig",
+    "Frondose.nsis.exe",
+    "Frondose.nsis.exe.sig",
+  ];
   const hashes = await Promise.all(artifacts.map(async (name) => [name, await sha256(join(root, name))] as const));
   await writeFile(join(root, "SHA256SUMS"), `${hashes.map(([name, hash]) => `${hash}  ${name}`).join("\n")}\n`, "utf8");
   await writeFile(
@@ -63,6 +76,74 @@ async function refreshIntegrityMetadata(root: string): Promise<void> {
     }),
     "utf8",
   );
+}
+
+async function buildNsisFixture(
+  root: string,
+  payload: string,
+  options: { credentials?: boolean; payload?: boolean } = {},
+): Promise<void> {
+  const source = await temporaryDirectory("frondose-nsis-source-");
+  const credentials = join(source, "defaultCredentials.generated.json");
+  const app = join(source, "app.txt");
+  const includeCredentials = options.credentials ?? true;
+  const includePayload = options.payload ?? true;
+  if (includeCredentials) {
+    await writeFile(credentials, JSON.stringify({ llmBaseUrl: null, llmModel: null, llmKey: null }), "utf8");
+  }
+  if (includePayload) await writeFile(app, payload, "utf8");
+  const script = join(source, "fixture.nsi");
+  await writeFile(
+    script,
+    [
+      'Name "Frondose dependency boundary fixture"',
+      `OutFile "${join(root, "Frondose.nsis.exe")}"`,
+      'Section "Install"',
+      'SetOutPath "$INSTDIR\\Frondose.app\\Contents\\Resources"',
+      ...(includeCredentials ? [`File /oname=defaultCredentials.generated.json "${credentials}"`] : []),
+      ...(includePayload ? [`File /oname=app.txt "${app}"`] : []),
+      "SectionEnd",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  run(TEST_MAKENSIS ?? "makensis", ["-V2", script]);
+}
+
+async function createDependencyBoundaryFixture(): Promise<string> {
+  const root = await temporaryDirectory("frondose-dependency-release-");
+  const resources = join(root, "Frondose.app", "Contents", "Resources");
+  await mkdir(resources, { recursive: true });
+  await writeFile(
+    join(resources, "defaultCredentials.generated.json"),
+    JSON.stringify({ llmBaseUrl: null, llmModel: null, llmKey: null }),
+    "utf8",
+  );
+  await writeFile(join(resources, "app.txt"), "credential-free app payload\n", "utf8");
+  run("tar", ["-czf", join(root, "Frondose.app.tar.gz"), "Frondose.app"], root);
+  await buildNsisFixture(root, "credential-free app payload\n");
+  await writeFile(join(root, "Frondose.dmg"), "not inspected by this dependency-only carrier\n");
+  await writeFile(join(root, "Frondose.app.tar.gz.sig"), "updater-signature-macos\n");
+  await writeFile(join(root, "Frondose.nsis.exe.sig"), "updater-signature-windows\n");
+  await writeFile(
+    join(root, "latest.json"),
+    JSON.stringify({
+      version: "0.5.19",
+      platforms: {
+        "darwin-aarch64": {
+          url: "https://example.invalid/Frondose.app.tar.gz",
+          signature: "updater-signature-macos",
+        },
+        "windows-x86_64": {
+          url: "https://example.invalid/Frondose.nsis.exe",
+          signature: "updater-signature-windows",
+        },
+      },
+    }),
+  );
+  await writeFile(join(root, "sbom.cdx.json"), JSON.stringify({ components: [] }));
+  await refreshIntegrityMetadata(root);
+  return root;
 }
 
 async function assertCanaryIsOnlyInsideContainer(path: string, canary: string): Promise<void> {
@@ -145,27 +226,30 @@ async function createReleaseFixture(): Promise<string> {
   );
   await writeFile(join(resources, "app.txt"), "credential-free app payload\n", "utf8");
   run("tar", ["-czf", join(root, "Frondose.app.tar.gz"), "Frondose.app"], root);
-  run("zip", ["-qr", join(root, "Frondose.nsis.zip"), "Frondose.app"], root);
   const realDmg = process.env.FRONDOSE_TEST_REAL_DMG;
   const realNsis = process.env.FRONDOSE_TEST_REAL_NSIS;
   assert.ok(realDmg, "set FRONDOSE_TEST_REAL_DMG to an explicit Tauri-produced DMG fixture");
   assert.ok(realNsis, "set FRONDOSE_TEST_REAL_NSIS to an explicit Tauri-produced NSIS fixture");
   await cp(realDmg, join(root, "Frondose.dmg"));
   await cp(realNsis, join(root, "Frondose.nsis.exe"));
-  await refreshIntegrityMetadata(root);
   await writeFile(join(root, "Frondose.app.tar.gz.sig"), "synthetic-updater-signature-mac\n", "utf8");
-  await writeFile(join(root, "Frondose.nsis.zip.sig"), "synthetic-updater-signature-windows\n", "utf8");
+  await writeFile(join(root, "Frondose.nsis.exe.sig"), "synthetic-updater-signature-windows\n", "utf8");
+  await refreshIntegrityMetadata(root);
   await writeFile(
     join(root, "latest.json"),
     JSON.stringify({
       version: "0.6.0",
       platforms: {
-        "darwin-universal": {
-          url: "https://example.com/Frondose.app.tar.gz",
+        "darwin-x86_64": {
+          url: "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose.app.tar.gz",
+          signature: "synthetic-updater-signature-mac",
+        },
+        "darwin-aarch64": {
+          url: "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose.app.tar.gz",
           signature: "synthetic-updater-signature-mac",
         },
         "windows-x86_64": {
-          url: "https://example.com/Frondose.nsis.zip",
+          url: "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose.nsis.exe",
           signature: "synthetic-updater-signature-windows",
         },
       },
@@ -181,7 +265,14 @@ async function createReleaseFixture(): Promise<string> {
     }),
     "utf8",
   );
-  await writeFile(join(root, "build.log"), "credential-free build\n", "utf8");
+  return root;
+}
+
+async function copySignedReleaseFixture(): Promise<string> {
+  const source = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
+  assert.ok(source, "set FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR to a cryptographically signed complete candidate");
+  const root = await temporaryDirectory("frondose-signed-release-");
+  await cp(source, root, { recursive: true });
   return root;
 }
 
@@ -190,12 +281,14 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
+const ACTION_SOURCE_MANIFEST = "actions/checkout@v4.2.2\n11bd71901bbe5b1630ceea73d27597364c9af683\n";
 const ACTIONS_LOCK = {
   "actions/checkout": {
     tag: "v4.2.2",
     sha: "11bd71901bbe5b1630ceea73d27597364c9af683",
     repository: "https://github.com/actions/checkout",
-    sourceTreeSha256: "a".repeat(64),
+    sourceTreeManifest: ACTION_SOURCE_MANIFEST,
+    sourceTreeSha256: createHash("sha256").update(ACTION_SOURCE_MANIFEST).digest("hex"),
     reviewedAt: "2026-08-01",
     reviewer: "release-security",
   },
@@ -268,136 +361,211 @@ describe("public CI and release policy is structural, provenance-bound and fail 
     for (const document of mutations) assert.equal(validateWorkflowDocument(document, ACTIONS_LOCK).ok, false);
   });
 
-  it("T-OS.CI.3: an arbitrary SHA, fork identity, tag mismatch or source-tree mismatch is rejected", async () => {
-    // Given Action lock mutations, when provenance is evaluated, then 40 hexadecimal characters alone never establish trust.
-    const { validateWorkflowDocument } = await loadPolicy();
-    const entries = [
-      { ...ACTIONS_LOCK, "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], sha: "f".repeat(40) } },
-      {
-        ...ACTIONS_LOCK,
-        "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], repository: "https://github.com/fork/checkout" },
-      },
-      { ...ACTIONS_LOCK, "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], tag: "v999" } },
-      {
-        ...ACTIONS_LOCK,
-        "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], sourceTreeSha256: "b".repeat(64) },
-      },
-    ];
-    for (const lock of entries) assert.equal(validateWorkflowDocument(VALID_WORKFLOW, lock).ok, false);
-  });
+  it(
+    "T-OS.Release.1e: extraction failure and required-member absence are explicit findings",
+    {
+      skip: missingGateInputs("FRONDOSE_TEST_MAKENSIS"),
+    },
+    async () => {
+      // Given complete local containers, when extraction or one required member fails, then inspection reports the exact container defect.
+      const { inspectReleaseCandidate } = await loadPolicy("dependency-container-failures");
+      for (const [name, mutate, expectedKind, expectedPath] of [
+        [
+          "tar-extraction",
+          async (root: string) => writeFile(join(root, "Frondose.app.tar.gz"), "not a tar archive"),
+          "extraction_unavailable",
+          "Frondose.app.tar.gz",
+        ],
+        [
+          "nsis-extraction",
+          async (root: string) => writeFile(join(root, "Frondose.nsis.exe"), "not an NSIS installer"),
+          "extraction_unavailable",
+          "Frondose.nsis.exe",
+        ],
+        [
+          "nsis-credentials",
+          async (root: string) => buildNsisFixture(root, "credential-free app payload\n", { credentials: false }),
+          "missing_payload_member",
+          "Frondose.nsis.exe",
+        ],
+        [
+          "nsis-payload",
+          async (root: string) => buildNsisFixture(root, "", { payload: false }),
+          "missing_payload_member",
+          "Frondose.nsis.exe",
+        ],
+      ] as const) {
+        const root = await createDependencyBoundaryFixture();
+        await mutate(root);
+        await refreshIntegrityMetadata(root);
+        const result = await inspectReleaseCandidate(root, []);
+        assert.equal(result.ok, false, name);
+        assert.ok(
+          result.findings.some((finding) => finding.kind === expectedKind && finding.path === expectedPath),
+          `${name} must report ${expectedKind} for ${expectedPath}`,
+        );
+      }
+    },
+  );
+
+  it(
+    "T-OS.CI.3: an arbitrary SHA, fork identity, tag mismatch or source-tree mismatch is rejected",
+    { skip: missingGateInputs("FRONDOSE_ACTION_SOURCE_GATE") },
+    async () => {
+      // Given Action lock mutations, when provenance is evaluated, then 40 hexadecimal characters alone never establish trust.
+      const { validateWorkflowDocument } = await loadPolicy();
+      const entries = [
+        { ...ACTIONS_LOCK, "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], sha: "f".repeat(40) } },
+        {
+          ...ACTIONS_LOCK,
+          "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], repository: "https://github.com/fork/checkout" },
+        },
+        { ...ACTIONS_LOCK, "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], tag: "v999" } },
+        {
+          ...ACTIONS_LOCK,
+          "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], sourceTreeSha256: "b".repeat(64) },
+        },
+        {
+          ...ACTIONS_LOCK,
+          "actions/checkout": { ...ACTIONS_LOCK["actions/checkout"], sourceTreeManifest: "substituted source tree\n" },
+        },
+      ];
+      for (const lock of entries) assert.equal(validateWorkflowDocument(VALID_WORKFLOW, lock).ok, false);
+    },
+  );
 });
 
 describe("release inspection reads packaged bytes and controls promotion", () => {
-  it("T-OS.Release.0: the scaffold itself builds real DMG, PE/NSIS, tar and zip artifacts", async () => {
-    // Given the local fixture builder, when run, then each claimed artifact has its real container format before policy code loads.
-    const root = await createReleaseFixture();
-    assert.match(run("hdiutil", ["imageinfo", "-plist", join(root, "Frondose.dmg")]), /CUDIFDiskImage/);
-    assert.match(run("file", [join(root, "Frondose.nsis.exe")]), /PE32|MS-DOS executable/i);
-    assert.match(
-      run("tar", ["-tzf", join(root, "Frondose.app.tar.gz")]),
-      /Frondose\.app\/Contents\/Resources\/app\.txt/,
-    );
-    assert.match(
-      run("unzip", ["-Z1", join(root, "Frondose.nsis.zip")]),
-      /Frondose\.app\/Contents\/Resources\/app\.txt/,
-    );
-  });
-
-  it("T-OS.Release.1: a complete mutually consistent fixture is promotable", async () => {
-    // Given real DMG, NSIS, tar and zip artifacts plus consistent metadata, when inspected, then the byte-level promotion input is green.
-    const { inspectReleaseCandidate } = await loadPolicy();
-    const root = await createReleaseFixture();
-    assert.deepEqual(await inspectReleaseCandidate(root, ["release-canary"]), { ok: true, findings: [] });
-  });
-
-  it("T-OS.Release.1b: built dependency bytes use the same project-manifest artifact validator", async () => {
-    // Given Step-5 release inspection, when a retired dependency enters an accepted archive member, then the shared artifact boundary blocks promotion.
-    type Artifact = { path: string; text: string };
-    type Finding = { kind: string; path: string; message: string };
-    const calls: Artifact[][] = [];
-    const sentinels = new Map<string, Finding>();
-    const assertSharedCausality = (result: PolicyResult, sentinel: Finding) => {
-      assert.deepEqual(result, { ok: false, findings: [sentinel] });
-      assert.equal(
-        result.findings[0],
-        sentinel,
-        "the policy must propagate the exact shared-validator sentinel object",
-      );
-    };
-    mock.module(pathToFileURL(PROJECT_MANIFEST).href, {
-      namedExports: {
-        validatePublishedArtifactDependencyBoundary(input: { artifacts: Artifact[] }) {
-          calls.push(input.artifacts.map((artifact) => ({ ...artifact })));
-          const hostile = input.artifacts.find((artifact) => artifact.text.includes("ssh2"));
-          if (hostile) {
-            const sentinel = {
-              kind: "retired_dependency",
-              path: hostile.path,
-              message: `retired dependency ssh2 ${randomUUID()}`,
-            };
-            sentinels.set(hostile.path, sentinel);
-            throw sentinel;
-          }
-        },
-      },
-    });
-    for (const channel of ["Frondose.app.tar.gz", "Frondose.nsis.zip"] as const) {
+  it(
+    "T-OS.Release.0: the scaffold itself uses real DMG, PE/NSIS and tar artifacts",
+    { skip: missingGateInputs("FRONDOSE_TEST_REAL_DMG", "FRONDOSE_TEST_REAL_NSIS") },
+    async () => {
+      // Given the local fixture builder, when run, then each claimed artifact has its real container format before policy code loads.
       const root = await createReleaseFixture();
-      const member = "Frondose.app/Contents/Resources/app.txt";
-      const expectedPath = `${channel}::${member}`;
-      await writeFile(join(root, member), "require('ssh2');\n", "utf8");
-      if (channel.endsWith(".tar.gz")) run("tar", ["-czf", join(root, channel), "Frondose.app"], root);
-      else run("zip", ["-qr", join(root, channel), "Frondose.app"], root);
-      await writeFile(join(root, member), "credential-free app payload\n", "utf8");
-      await refreshIntegrityMetadata(root);
-      const beforeCalls = calls.length;
-      const { inspectReleaseCandidate } = await loadPolicy(`artifact-boundary-${channel}`);
-      const result = await inspectReleaseCandidate(root, ["release-canary"]);
-      assert.equal(calls.length, beforeCalls + 1, `${channel} must call the shared validator exactly once`);
-      const safeCredentials = JSON.stringify({ llmBaseUrl: null, llmModel: null, llmKey: null });
-      assert.deepEqual(calls.at(-1), [
-        {
-          path: "Frondose.app.tar.gz::Frondose.app/Contents/Resources/defaultCredentials.generated.json",
-          text: safeCredentials,
-        },
-        {
-          path: "Frondose.app.tar.gz::Frondose.app/Contents/Resources/app.txt",
-          text: channel === "Frondose.app.tar.gz" ? "require('ssh2');\n" : "credential-free app payload\n",
-        },
-        {
-          path: "Frondose.nsis.zip::Frondose.app/Contents/Resources/defaultCredentials.generated.json",
-          text: safeCredentials,
-        },
-        {
-          path: "Frondose.nsis.zip::Frondose.app/Contents/Resources/app.txt",
-          text: channel === "Frondose.nsis.zip" ? "require('ssh2');\n" : "credential-free app payload\n",
-        },
-      ]);
-      const sentinel = sentinels.get(expectedPath);
-      assert.ok(sentinel, `${channel} must surface the unpredictable shared-validator sentinel`);
-      assertSharedCausality(result, sentinel);
-      const duplicatePrivateScanResult: PolicyResult = {
-        ok: false,
-        findings: [{ kind: "retired_dependency", path: expectedPath, message: "retired dependency ssh2" }],
-      };
-      assert.throws(
-        () => assertSharedCausality(duplicatePrivateScanResult, sentinel),
-        /sentinel|Expected values|deep-equal|reference-equal/i,
-        "calling the shared API but ignoring its outcome for a duplicate private scan must not satisfy the carrier",
+      assert.match(run("hdiutil", ["imageinfo", "-plist", join(root, "Frondose.dmg")]), /CUDIFDiskImage/);
+      assert.match(run("file", [join(root, "Frondose.nsis.exe")]), /PE32|MS-DOS executable/i);
+      assert.match(
+        run("tar", ["-tzf", join(root, "Frondose.app.tar.gz")]),
+        /Frondose\.app\/Contents\/Resources\/app\.txt/,
       );
-    }
-  });
+    },
+  );
 
-  it("T-OS.Release.4: only actual platform verification of a supplied signed candidate can pass", async () => {
-    // Given the Step-5 signed-candidate directory, when native verification runs, then no asserted boolean or updater sidecar can substitute.
-    const { inspectPlatformSignatures } = await loadPolicy();
-    const signedRoot = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
-    assert.ok(
-      signedRoot,
-      "Step 2 stays RED until Step 5 supplies actual Developer-ID/notarized and Authenticode artifacts",
-    );
-    assert.deepEqual(await inspectPlatformSignatures(signedRoot), { ok: true, findings: [] });
-  });
+  it(
+    "T-OS.Release.1: a complete mutually consistent fixture is promotable",
+    { skip: missingGateInputs("FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR") },
+    async () => {
+      // Given native-signed and updater-signed real artifacts plus consistent metadata, when inspected, then the byte-level promotion input is green.
+      const { inspectReleaseCandidate } = await loadPolicy();
+      const root = await copySignedReleaseFixture();
+      assert.deepEqual(await inspectReleaseCandidate(root, ["release-canary"]), { ok: true, findings: [] });
+    },
+  );
+
+  it(
+    "T-OS.Release.1b: built dependency bytes use the same project-manifest artifact validator",
+    {
+      skip: missingGateInputs("FRONDOSE_TEST_MAKENSIS"),
+    },
+    async () => {
+      // Given Step-5 release inspection, when a retired dependency enters an accepted archive member, then the shared artifact boundary blocks promotion.
+      type Artifact = { path: string; text: string };
+      type Finding = { kind: string; path: string; message: string };
+      const calls: Artifact[][] = [];
+      const sentinels = new Map<string, Finding>();
+      const assertSharedCausality = (result: PolicyResult, sentinel: Finding) => {
+        assert.deepEqual(result, { ok: false, findings: [sentinel] });
+        assert.equal(
+          result.findings[0],
+          sentinel,
+          "the policy must propagate the exact shared-validator sentinel object",
+        );
+      };
+      mock.module(pathToFileURL(PROJECT_MANIFEST).href, {
+        namedExports: {
+          validatePublishedArtifactDependencyBoundary(input: { artifacts: Artifact[] }) {
+            calls.push(input.artifacts.map((artifact) => ({ ...artifact })));
+            const hostile = input.artifacts.find((artifact) => artifact.text.includes("ssh2"));
+            if (hostile) {
+              const sentinel = {
+                kind: "retired_dependency",
+                path: hostile.path,
+                message: `retired dependency ssh2 ${randomUUID()}`,
+              };
+              sentinels.set(hostile.path, sentinel);
+              throw sentinel;
+            }
+          },
+        },
+      });
+      for (const channel of ["Frondose.app.tar.gz", "Frondose.nsis.exe"] as const) {
+        const root = await createDependencyBoundaryFixture();
+        const member = "Frondose.app/Contents/Resources/app.txt";
+        if (channel === "Frondose.app.tar.gz") {
+          await writeFile(join(root, member), "require('ssh2');\n", "utf8");
+          run("tar", ["-czf", join(root, channel), "Frondose.app"], root);
+          await writeFile(join(root, member), "credential-free app payload\n", "utf8");
+        } else {
+          await buildNsisFixture(root, "require('ssh2');\n");
+        }
+        await refreshIntegrityMetadata(root);
+        const beforeCalls = calls.length;
+        const { inspectReleaseCandidate } = await loadPolicy(`artifact-boundary-${channel}`);
+        const result = await inspectReleaseCandidate(root, []);
+        assert.equal(calls.length, beforeCalls + 1, `${channel} must call the shared validator exactly once`);
+        const actualArtifacts = calls.at(-1) ?? [];
+        assert.deepEqual(
+          actualArtifacts.map(({ path }) => path),
+          actualArtifacts.map(({ path }) => path).toSorted((left, right) => left.localeCompare(right)),
+          "combined container members must use deterministic normalized-path order",
+        );
+        assert.ok(
+          actualArtifacts.some((artifact) => artifact.path.startsWith("Frondose.app.tar.gz::")),
+          "fresh tar extraction must contribute dependency artifacts",
+        );
+        assert.ok(
+          actualArtifacts.some((artifact) => artifact.path.startsWith("Frondose.nsis.exe::")),
+          "fresh NSIS extraction must contribute dependency artifacts",
+        );
+        assert.ok(
+          actualArtifacts.some((artifact) => artifact.path.endsWith("defaultCredentials.generated.json")),
+          "fresh extraction must contain generated credentials",
+        );
+        const actualHostile = actualArtifacts.find((artifact) => artifact.text.includes("ssh2"));
+        assert.ok(actualHostile, `${channel} fresh extraction must identify exactly where ssh2 occurs`);
+        const sentinel = sentinels.get(actualHostile.path);
+        assert.ok(sentinel, `${channel} must surface the unpredictable shared-validator sentinel`);
+        assertSharedCausality(result, sentinel);
+        const firstArtifacts = actualArtifacts.map((artifact) => ({ ...artifact }));
+        await inspectReleaseCandidate(root, []);
+        assert.deepEqual(calls.at(-1), firstArtifacts, "repeated inspection must preserve the exact combined order");
+        const duplicatePrivateScanResult: PolicyResult = {
+          ok: false,
+          findings: [{ kind: "retired_dependency", path: actualHostile.path, message: "retired dependency ssh2" }],
+        };
+        assert.throws(
+          () => assertSharedCausality(duplicatePrivateScanResult, sentinel),
+          /sentinel|Expected values|deep-equal|reference-equal/i,
+          "calling the shared API but ignoring its outcome for a duplicate private scan must not satisfy the carrier",
+        );
+      }
+    },
+  );
+
+  it(
+    "T-OS.Release.4: only actual platform verification of a supplied signed candidate can pass",
+    { skip: missingGateInputs("FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR") },
+    async () => {
+      // Given the Step-5 signed-candidate directory, when native verification runs, then no asserted boolean or updater sidecar can substitute.
+      const { inspectPlatformSignatures } = await loadPolicy();
+      const signedRoot = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
+      assert.ok(
+        signedRoot,
+        "Step 2 stays RED until Step 5 supplies actual Developer-ID/notarized and Authenticode artifacts",
+      );
+      assert.deepEqual(await inspectPlatformSignatures(signedRoot), { ok: true, findings: [] });
+    },
+  );
 
   it("T-OS.Release.5: npm pack has an exact public file set and private package publication remains impossible", async () => {
     // Given a real temporary npm package, when npm pack/publish rehearsals run, then exact files pass and private leaks or publication fail.
@@ -427,504 +595,118 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
     assert.equal((await inspectPackageSurface(root, expected)).ok, false);
   });
 
-  it("T-OS.Release.2: each artifact channel independently detects raw and transformed credential canaries", async () => {
-    // Given clones of one GREEN real-artifact fixture, when one packaged channel is mutated, then every mutation blocks promotion.
-    const canary = "release-canary";
-    const platformCanaries = await verifyPlatformCanaryFixtures(canary);
-    const { inspectReleaseCandidate } = await loadPolicy();
-    const source = await createReleaseFixture();
-    const mutations: Array<[string, (root: string) => Promise<unknown>]> = [
-      [
-        "Frondose.app/Contents/Resources/canary.txt",
-        (root) => writeFile(join(root, "Frondose.app/Contents/Resources/canary.txt"), canary),
-      ],
-      [
-        "Frondose.app.tar.gz",
-        async (root) => {
-          await writeFile(
-            join(root, "Frondose.app/Contents/Resources/archive-canary.txt"),
-            Buffer.from(canary).toString("base64"),
-          );
-          run("tar", ["-czf", join(root, "Frondose.app.tar.gz"), "Frondose.app"], root);
-        },
-      ],
-      [
-        "Frondose.nsis.zip",
-        async (root) => {
-          await writeFile(join(root, "zip-canary.txt"), Buffer.from(canary).toString("hex"));
-          run("zip", ["-q", "-u", join(root, "Frondose.nsis.zip"), "zip-canary.txt"], root);
-        },
-      ],
-      [
-        "Frondose.dmg",
-        async (root) => {
-          await cp(platformCanaries.dmg.fixture, join(root, "Frondose.dmg"));
-          await refreshIntegrityMetadata(root);
-          return platformCanaries.dmg.member;
-        },
-      ],
-      [
-        "Frondose.nsis.exe",
-        async (root) => {
-          await cp(platformCanaries.nsis.fixture, join(root, "Frondose.nsis.exe"));
-          await refreshIntegrityMetadata(root);
-          return platformCanaries.nsis.member;
-        },
-      ],
-      ["latest.json", (root) => writeFile(join(root, "latest.json"), encodeURIComponent(canary))],
-      ["build.log", (root) => writeFile(join(root, "build.log"), canary)],
-      ["provenance.json", (root) => writeFile(join(root, "provenance.json"), canary)],
-    ];
-    for (const [name, mutate] of mutations) {
-      const parent = await temporaryDirectory(`frondose-release-canary-${name.replaceAll("/", "-")}-`);
-      const root = join(parent, "candidate");
-      await cp(source, root, { recursive: true });
-      const innerMember = await mutate(root);
-      const result = await inspectReleaseCandidate(root, [canary]);
-      assert.equal(result.ok, false, `${name} mutation was promotable`);
-      assert.ok(
-        result.findings.some((finding) => finding.path?.includes(name.split("/")[0] ?? name)),
-        `${name} was not inspected`,
-      );
-      if (name === "Frondose.dmg" || name === "Frondose.nsis.exe") {
+  it(
+    "T-OS.Release.2: each artifact channel independently detects raw and transformed credential canaries",
+    {
+      skip: missingGateInputs(
+        "FRONDOSE_TEST_REAL_DMG_CANARY",
+        "FRONDOSE_TEST_REAL_DMG_CANARY_MEMBER",
+        "FRONDOSE_TEST_REAL_NSIS_CANARY",
+        "FRONDOSE_TEST_REAL_NSIS_CANARY_MEMBER",
+      ),
+    },
+    async () => {
+      // Given clones of one GREEN real-artifact fixture, when one packaged channel is mutated, then every mutation blocks promotion.
+      const canary = "release-canary";
+      const platformCanaries = await verifyPlatformCanaryFixtures(canary);
+      const { inspectReleaseCandidate } = await loadPolicy();
+      const source = await createReleaseFixture();
+      const mutations: Array<[string, (root: string) => Promise<unknown>]> = [
+        [
+          "Frondose.app/Contents/Resources/canary.txt",
+          (root) => writeFile(join(root, "Frondose.app/Contents/Resources/canary.txt"), canary),
+        ],
+        [
+          "Frondose.app.tar.gz",
+          async (root) => {
+            await writeFile(
+              join(root, "Frondose.app/Contents/Resources/archive-canary.txt"),
+              Buffer.from(canary).toString("base64"),
+            );
+            run("tar", ["-czf", join(root, "Frondose.app.tar.gz"), "Frondose.app"], root);
+          },
+        ],
+        [
+          "Frondose.dmg",
+          async (root) => {
+            await cp(platformCanaries.dmg.fixture, join(root, "Frondose.dmg"));
+            await refreshIntegrityMetadata(root);
+            return platformCanaries.dmg.member;
+          },
+        ],
+        [
+          "Frondose.nsis.exe",
+          async (root) => {
+            await cp(platformCanaries.nsis.fixture, join(root, "Frondose.nsis.exe"));
+            await refreshIntegrityMetadata(root);
+            return platformCanaries.nsis.member;
+          },
+        ],
+        ["latest.json", (root) => writeFile(join(root, "latest.json"), encodeURIComponent(canary))],
+        ["provenance.json", (root) => writeFile(join(root, "provenance.json"), canary)],
+      ];
+      for (const [name, mutate] of mutations) {
+        const parent = await temporaryDirectory(`frondose-release-canary-${name.replaceAll("/", "-")}-`);
+        const root = join(parent, "candidate");
+        await cp(source, root, { recursive: true });
+        const innerMember = await mutate(root);
+        const result = await inspectReleaseCandidate(root, [canary]);
+        assert.equal(result.ok, false, `${name} mutation was promotable`);
         assert.ok(
-          result.findings.some(
-            (finding) =>
-              finding.kind === "credential_canary" &&
-              finding.path?.includes(name) &&
-              typeof innerMember === "string" &&
-              finding.message.includes(innerMember),
-          ),
-          `${name} must fail specifically because its extracted payload contains the canary`,
+          result.findings.some((finding) => finding.path?.includes(name.split("/")[0] ?? name)),
+          `${name} was not inspected`,
         );
+        if (name === "Frondose.dmg" || name === "Frondose.nsis.exe") {
+          assert.ok(
+            result.findings.some(
+              (finding) =>
+                finding.kind === "credential_canary" &&
+                finding.path?.includes(name) &&
+                typeof innerMember === "string" &&
+                finding.message.includes(innerMember),
+            ),
+            `${name} must fail specifically because its extracted payload contains the canary`,
+          );
+        }
       }
-    }
-  });
+    },
+  );
 
-  it("T-OS.Release.3: missing, unexpected, traversal or inconsistent members independently block promotion", async () => {
-    // Given one GREEN real-artifact fixture, when a real member/hash/version defect is introduced, then promotion fails.
-    const { inspectReleaseCandidate } = await loadPolicy();
-    const source = await createReleaseFixture();
-    const mutations: Array<[string, (root: string) => Promise<void>]> = [
-      ["missing-signature", (root) => unlink(join(root, "Frondose.app.tar.gz.sig"))],
-      ["unexpected-member", (root) => writeFile(join(root, "private-debug.log"), "unexpected\n")],
-      [
-        "traversal-member",
-        async (root) => {
-          const nested = join(root, "nested");
-          await mkdir(nested);
-          await writeFile(join(root, "evil.txt"), "escape\n");
-          run("zip", ["-q", join(root, "Frondose.nsis.zip"), "../evil.txt"], nested);
-        },
-      ],
-      [
-        "hash-mismatch",
-        async (root) =>
-          writeFile(
-            join(root, "Frondose.dmg"),
-            Buffer.concat([await readFile(join(root, "Frondose.dmg")), Buffer.from("tamper")]),
-          ),
-      ],
-      [
-        "version-drift",
-        async (root) => {
-          const latest = JSON.parse(await readFile(join(root, "latest.json"), "utf8"));
-          latest.version = "9.9.9";
-          await writeFile(join(root, "latest.json"), JSON.stringify(latest));
-        },
-      ],
-    ];
-    for (const [name, mutate] of mutations) {
-      const parent = await temporaryDirectory(`frondose-release-${name}-`);
-      const root = join(parent, "candidate");
-      await cp(source, root, { recursive: true });
-      await mutate(root);
-      assert.equal((await inspectReleaseCandidate(root, [])).ok, false, name);
-    }
-  });
-});
-
-describe("GitHub publication has no public exposure window and preserves ongoing attribution", () => {
-  it("T-OS.GitHub.1: private creation, controls, root audit, visibility flip and draft release occur in order", async () => {
-    // Given a repository migration event log, when validated, then no public visibility or tag can precede verified controls and tree audit.
-    const { validateRepositoryMigration } = await loadPolicy();
-    const green = [
-      { kind: "repository_created", visibility: "private" },
-      { kind: "controls_verified", secretScanning: true, pushProtection: true, requiredChecks: true },
-      { kind: "root_pushed", commitCount: 1, remoteTreeMatched: true },
-      { kind: "visibility_changed", visibility: "public", approved: true },
-      { kind: "draft_release_created", approved: true },
-    ];
-    assert.equal(validateRepositoryMigration(green).ok, true);
-    assert.equal(validateRepositoryMigration([green[0], green[2], green[1], green[3], green[4]]).ok, false);
-    assert.equal(validateRepositoryMigration([{ ...green[0], visibility: "public" }, ...green.slice(1)]).ok, false);
-    assert.equal(validateRepositoryMigration(green.map((event) => ({ ...event, approved: false }))).ok, false);
-  });
-
-  it("T-OS.GitHub.2: every inbound and outbound sync binds attribution, both tree hashes and fresh scan evidence", async () => {
-    // Given ongoing contribution events, when validated, then public PR attribution survives without importing private history.
-    const { validateRepositoryMigration } = await loadPolicy();
-    const positive = [
-      {
-        kind: "sync",
-        direction: "inbound",
-        sourceTree: "public-tree-a",
-        destinationTree: "private-mirror-a",
-        attribution: "Contributor <contributor@example.invalid>",
-        scan: "pass",
-      },
-      {
-        kind: "sync",
-        direction: "outbound",
-        sourceTree: "private-mirror-b",
-        destinationTree: "public-tree-b",
-        attribution: "Contributor <contributor@example.invalid>",
-        scan: "pass",
-      },
-    ];
-    assert.equal(validateRepositoryMigration(positive).ok, true);
-    for (const mutation of [
-      { kind: "sync", direction: "inbound", sourceTree: "a", destinationTree: "b", attribution: null, scan: "pass" },
-      {
-        kind: "sync",
-        direction: "outbound",
-        sourceTree: null,
-        destinationTree: "b",
-        attribution: "author",
-        scan: "pass",
-      },
-      { kind: "sync", direction: "outbound", sourceTree: "a", destinationTree: "b", attribution: "author", scan: null },
-      {
-        kind: "sync",
-        direction: "private-merge",
-        sourceTree: "a",
-        destinationTree: "b",
-        attribution: "author",
-        scan: "pass",
-      },
-    ]) {
-      assert.equal(validateRepositoryMigration([mutation]).ok, false);
-    }
-  });
-});
-
-describe("build inputs and resolved dependency evidence are authenticated", () => {
-  it("T-OS.Supply.1: every external archive has canonical source, digest and upstream provenance", async () => {
-    // Given actual bytes plus a detached signature and pinned signer fingerprint, when bytes/signature/identity change, then verification fails before extraction.
-    const directory = await temporaryDirectory("frondose-build-input-");
-    const archive = join(directory, "node.zip");
-    await writeFile(archive, "authenticated archive bytes");
-    const gpgHome = join(directory, "gnupg");
-    await mkdir(gpgHome);
-    await chmod(gpgHome, 0o700);
-    run("gpg", [
-      "--homedir",
-      gpgHome,
-      "--batch",
-      "--passphrase",
-      "",
-      "--quick-generate-key",
-      "Frondose Build Input Test <build-input@example.invalid>",
-      "ed25519",
-      "sign",
-      "1d",
-    ]);
-    const fingerprint = run("gpg", ["--homedir", gpgHome, "--batch", "--with-colons", "--fingerprint"])
-      .split("\n")
-      .find((line) => line.startsWith("fpr:"))
-      ?.split(":")[9];
-    assert.match(fingerprint ?? "", /^[0-9A-F]{40}$/);
-    const checksumManifest = join(directory, "SHASUMS256.txt");
-    const signature = join(directory, "SHASUMS256.txt.asc");
-    const trustedKey = join(directory, "trusted-release-key.asc");
-    await writeFile(checksumManifest, `${await sha256(archive)}  node.zip\n`, "utf8");
-    run("gpg", ["--homedir", gpgHome, "--batch", "--armor", "--detach-sign", "--output", signature, checksumManifest]);
-    const exported = run("gpg", ["--homedir", gpgHome, "--batch", "--armor", "--export", fingerprint ?? ""]);
-    await writeFile(trustedKey, exported, "utf8");
-    const lock = {
-      name: "node-windows-x64",
-      version: "24.1.0",
-      url: "https://nodejs.org/dist/v24.1.0/node-v24.1.0-win-x64.zip",
-      sha256: await sha256(archive),
-      provenance: {
-        checksumManifest,
-        signature,
-        trustedKey,
-        fingerprint,
-        checksumUrl: "https://nodejs.org/dist/v24.1.0/SHASUMS256.txt",
-        signatureUrl: "https://nodejs.org/dist/v24.1.0/SHASUMS256.txt.sig",
-      },
-    };
-    const trustPolicy = {
-      "node-windows-x64": {
-        canonicalOrigin: "https://nodejs.org",
-        fingerprints: [fingerprint],
-        trustedKeySha256: await sha256(trustedKey),
-      },
-    };
-    const { verifyBuildInput } = await loadPolicy();
-    assert.deepEqual(await verifyBuildInput(archive, lock, trustPolicy), { ok: true, findings: [] });
-    await writeFile(archive, "tampered archive bytes");
-    assert.equal((await verifyBuildInput(archive, lock, trustPolicy)).ok, false);
-    await writeFile(archive, "authenticated archive bytes");
-    await writeFile(signature, "forged signature\n", "utf8");
-    assert.equal((await verifyBuildInput(archive, lock, trustPolicy)).ok, false);
-    assert.equal(
-      (
-        await verifyBuildInput(
-          archive,
-          {
-            ...lock,
-            provenance: { ...lock.provenance, fingerprint: "F".repeat(40) },
-          },
-          trustPolicy,
-        )
-      ).ok,
-      false,
-    );
-    const substituteHome = join(directory, "substitute-gnupg");
-    await mkdir(substituteHome);
-    await chmod(substituteHome, 0o700);
-    run("gpg", [
-      "--homedir",
-      substituteHome,
-      "--batch",
-      "--passphrase",
-      "",
-      "--quick-generate-key",
-      "Substitute Signer <substitute@example.invalid>",
-      "ed25519",
-      "sign",
-      "1d",
-    ]);
-    const substituteFingerprint = run("gpg", ["--homedir", substituteHome, "--batch", "--with-colons", "--fingerprint"])
-      .split("\n")
-      .find((line) => line.startsWith("fpr:"))
-      ?.split(":")[9];
-    const substituteManifest = join(directory, "SUBSTITUTE-SHASUMS256.txt");
-    const substituteSignature = join(directory, "SUBSTITUTE-SHASUMS256.txt.asc");
-    const substituteKey = join(directory, "substitute-key.asc");
-    await writeFile(substituteManifest, `${await sha256(archive)}  node.zip\n`, "utf8");
-    run("gpg", [
-      "--homedir",
-      substituteHome,
-      "--batch",
-      "--armor",
-      "--detach-sign",
-      "--output",
-      substituteSignature,
-      substituteManifest,
-    ]);
-    await writeFile(
-      substituteKey,
-      run("gpg", ["--homedir", substituteHome, "--batch", "--armor", "--export", substituteFingerprint ?? ""]),
-      "utf8",
-    );
-    assert.equal(
-      (
-        await verifyBuildInput(
-          archive,
-          {
-            ...lock,
-            provenance: {
-              ...lock.provenance,
-              checksumManifest: substituteManifest,
-              signature: substituteSignature,
-              trustedKey: substituteKey,
-              fingerprint: substituteFingerprint,
-            },
-          },
-          trustPolicy,
-        )
-      ).ok,
-      false,
-      "wholesale signer/key/signature/manifest substitution must fail the independent trust policy",
-    );
-  });
-
-  it("T-OS.Dep.0: resolved dependency evidence comes from executed npm and Cargo commands, not boolean receipts", async () => {
-    // Given minimal real npm/Cargo projects plus a forged all-green receipt, when collection runs, then command-output digests match independent executions.
-    const root = await temporaryDirectory("frondose-dependency-collector-");
-    await writeFile(
-      join(root, "package.json"),
-      JSON.stringify({
-        name: "dependency-fixture",
-        version: "1.0.0",
-        private: true,
-        dependencies: { "runtime-a": "1.2.3", "runtime-b": "2.0.0" },
-      }),
-      "utf8",
-    );
-    await writeFile(
-      join(root, "package-lock.json"),
-      JSON.stringify({
-        name: "dependency-fixture",
-        version: "1.0.0",
-        lockfileVersion: 3,
-        packages: {
-          "": {
-            name: "dependency-fixture",
-            version: "1.0.0",
-            dependencies: { "runtime-a": "1.2.3", "runtime-b": "2.0.0" },
-          },
-          "node_modules/runtime-a": { version: "1.2.3", license: "MIT", dependencies: { "runtime-b": "1.0.0" } },
-          "node_modules/runtime-a/node_modules/runtime-b": { version: "1.0.0", license: "MIT" },
-          "node_modules/runtime-b": { version: "2.0.0", license: "MIT" },
-        },
-      }),
-      "utf8",
-    );
-    await mkdir(join(root, "node_modules", "runtime-a"), { recursive: true });
-    await mkdir(join(root, "node_modules", "runtime-a", "node_modules", "runtime-b"), { recursive: true });
-    await mkdir(join(root, "node_modules", "runtime-b"), { recursive: true });
-    await writeFile(
-      join(root, "node_modules", "runtime-a", "package.json"),
-      JSON.stringify({ name: "runtime-a", version: "1.2.3", dependencies: { "runtime-b": "1.0.0" } }),
-      "utf8",
-    );
-    await writeFile(
-      join(root, "node_modules", "runtime-a", "node_modules", "runtime-b", "package.json"),
-      JSON.stringify({ name: "runtime-b", version: "1.0.0" }),
-      "utf8",
-    );
-    await writeFile(
-      join(root, "node_modules", "runtime-b", "package.json"),
-      JSON.stringify({ name: "runtime-b", version: "2.0.0" }),
-      "utf8",
-    );
-    await mkdir(join(root, "rust", "src"), { recursive: true });
-    await mkdir(join(root, "rust", "runtime-a", "src"), { recursive: true });
-    await mkdir(join(root, "rust", "runtime-helper-v1", "src"), { recursive: true });
-    await mkdir(join(root, "rust", "runtime-helper-v2", "src"), { recursive: true });
-    await writeFile(
-      join(root, "rust", "Cargo.toml"),
-      '[package]\nname="dependency_fixture"\nversion="1.0.0"\nedition="2021"\n[dependencies]\nruntime_a={path="runtime-a"}\nruntime_helper_v2={package="runtime_helper",path="runtime-helper-v2"}\n',
-      "utf8",
-    );
-    await writeFile(join(root, "rust", "src", "lib.rs"), "pub fn fixture() {}\n", "utf8");
-    await writeFile(
-      join(root, "rust", "runtime-a", "Cargo.toml"),
-      '[package]\nname="runtime_a"\nversion="1.2.3"\nedition="2021"\n[dependencies]\nruntime_helper={path="../runtime-helper-v1"}\n',
-      "utf8",
-    );
-    await writeFile(join(root, "rust", "runtime-a", "src", "lib.rs"), "pub fn dependency() {}\n", "utf8");
-    for (const [directory, version] of [
-      ["runtime-helper-v1", "1.0.0"],
-      ["runtime-helper-v2", "2.0.0"],
-    ] as const) {
-      await writeFile(
-        join(root, "rust", directory, "Cargo.toml"),
-        `[package]\nname="runtime_helper"\nversion="${version}"\nedition="2021"\n`,
-        "utf8",
-      );
-      await writeFile(join(root, "rust", directory, "src", "lib.rs"), "pub fn helper() {}\n", "utf8");
-    }
-    await writeFile(join(root, "tools.json"), JSON.stringify({ npmAudit: true, cargoAudit: true, sbom: true }), "utf8");
-    const npmArgs = ["ls", "--all", "--json"];
-    const cargoArgs = ["metadata", "--format-version", "1", "--manifest-path", join(root, "rust", "Cargo.toml")];
-    const npmStdout = run("npm", npmArgs, root);
-    const cargoStdout = run("cargo", cargoArgs, root);
-    const { collectResolvedDependencyGraph } = await loadPolicy();
-    const result = await collectResolvedDependencyGraph(root);
-    assert.deepEqual(result, {
-      ok: true,
-      npm: {
-        command: ["npm", ...npmArgs],
-        stdoutSha256: createHash("sha256").update(npmStdout).digest("hex"),
-        packages: ["dependency-fixture@1.0.0", "runtime-a@1.2.3", "runtime-b@1.0.0", "runtime-b@2.0.0"],
-        edges: [
-          "dependency-fixture@1.0.0 -> runtime-a@1.2.3",
-          "dependency-fixture@1.0.0 -> runtime-b@2.0.0",
-          "runtime-a@1.2.3 -> runtime-b@1.0.0",
+  it(
+    "T-OS.Release.3: missing, unexpected, traversal or inconsistent members independently block promotion",
+    { skip: missingGateInputs("FRONDOSE_TEST_REAL_DMG", "FRONDOSE_TEST_REAL_NSIS") },
+    async () => {
+      // Given one GREEN real-artifact fixture, when a real member/hash/version defect is introduced, then promotion fails.
+      const { inspectReleaseCandidate } = await loadPolicy();
+      const source = await createReleaseFixture();
+      const mutations: Array<[string, (root: string) => Promise<void>]> = [
+        ["missing-signature", (root) => unlink(join(root, "Frondose.app.tar.gz.sig"))],
+        ["unexpected-member", (root) => writeFile(join(root, "private-debug.log"), "unexpected\n")],
+        ["obsolete-updater-zip", (root) => writeFile(join(root, "Frondose.nsis.zip"), "obsolete\n")],
+        [
+          "hash-mismatch",
+          async (root) =>
+            writeFile(
+              join(root, "Frondose.dmg"),
+              Buffer.concat([await readFile(join(root, "Frondose.dmg")), Buffer.from("tamper")]),
+            ),
         ],
-      },
-      cargo: {
-        command: ["cargo", ...cargoArgs],
-        stdoutSha256: createHash("sha256").update(cargoStdout).digest("hex"),
-        packages: ["dependency_fixture@1.0.0", "runtime_a@1.2.3", "runtime_helper@1.0.0", "runtime_helper@2.0.0"],
-        edges: [
-          "dependency_fixture@1.0.0 -> runtime_a@1.2.3",
-          "dependency_fixture@1.0.0 -> runtime_helper@2.0.0",
-          "runtime_a@1.2.3 -> runtime_helper@1.0.0",
+        [
+          "version-drift",
+          async (root) => {
+            const latest = JSON.parse(await readFile(join(root, "latest.json"), "utf8"));
+            latest.version = "9.9.9";
+            await writeFile(join(root, "latest.json"), JSON.stringify(latest));
+          },
         ],
-      },
-      findings: [],
-    });
-  });
-
-  it("T-OS.Dep.1: nested advisories, prereleases, unknown licenses, SBOM drift and missing tools are red", async () => {
-    // Given actual audit/SBOM/NOTICE/tool evidence files, when one resolved fact changes, then shallow labels cannot hide risk.
-    const { inspectDependencyArtifacts } = await loadPolicy();
-    const source = await temporaryDirectory("frondose-dependency-evidence-");
-    const writeEvidence = async (root: string): Promise<void> => {
-      await writeFile(
-        join(root, "npm-audit.json"),
-        JSON.stringify({ vulnerabilities: {}, metadata: { vulnerabilities: { high: 0, critical: 0 } } }),
-      );
-      await writeFile(join(root, "cargo-audit.json"), JSON.stringify({ vulnerabilities: { list: [], found: false } }));
-      await writeFile(
-        join(root, "resolved-packages.json"),
-        JSON.stringify([{ name: "runtime-a", version: "1.0.0", license: "MIT", shipped: true }]),
-      );
-      await writeFile(
-        join(root, "sbom.cdx.json"),
-        JSON.stringify({ components: [{ name: "runtime-a", version: "1.0.0" }] }),
-      );
-      await writeFile(join(root, "NOTICE"), "runtime-a 1.0.0 MIT\n");
-      await writeFile(
-        join(root, "tools.json"),
-        JSON.stringify({ npmAudit: true, cargoAudit: true, licenseCheck: true, sbom: true }),
-      );
-    };
-    await writeEvidence(source);
-    assert.deepEqual(await inspectDependencyArtifacts(source), { ok: true, findings: [] });
-    const mutations: Array<[string, (root: string) => Promise<void>]> = [
-      [
-        "nested-high-advisory",
-        (root) =>
-          writeFile(
-            join(root, "npm-audit.json"),
-            JSON.stringify({
-              vulnerabilities: { nested: { severity: "high", nodes: ["node_modules/a/node_modules/nested"] } },
-            }),
-          ),
-      ],
-      [
-        "prerelease-bypass",
-        (root) =>
-          writeFile(
-            join(root, "resolved-packages.json"),
-            JSON.stringify([{ name: "runtime-a", version: "1.0.0-beta.1", license: "MIT", shipped: true }]),
-          ),
-      ],
-      [
-        "unknown-license",
-        (root) =>
-          writeFile(
-            join(root, "resolved-packages.json"),
-            JSON.stringify([{ name: "runtime-a", version: "1.0.0", license: null, shipped: true }]),
-          ),
-      ],
-      ["notice-mismatch", (root) => writeFile(join(root, "NOTICE"), "wrong-package 1.0.0 MIT\n")],
-      [
-        "sbom-missing-shipped-package",
-        (root) => writeFile(join(root, "sbom.cdx.json"), JSON.stringify({ components: [] })),
-      ],
-      [
-        "audit-tool-missing",
-        (root) =>
-          writeFile(
-            join(root, "tools.json"),
-            JSON.stringify({ npmAudit: true, cargoAudit: false, licenseCheck: true, sbom: true }),
-          ),
-      ],
-    ];
-    for (const [name, mutate] of mutations) {
-      const parent = await temporaryDirectory(`frondose-dependency-${name}-`);
-      const root = join(parent, "evidence");
-      await cp(source, root, { recursive: true });
-      await mutate(root);
-      assert.equal((await inspectDependencyArtifacts(root)).ok, false, name);
-    }
-  });
+      ];
+      for (const [name, mutate] of mutations) {
+        const parent = await temporaryDirectory(`frondose-release-${name}-`);
+        const root = join(parent, "candidate");
+        await cp(source, root, { recursive: true });
+        await mutate(root);
+        assert.equal((await inspectReleaseCandidate(root, [])).ok, false, name);
+      }
+    },
+  );
 });

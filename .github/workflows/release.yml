@@ -1,4 +1,4 @@
-name: Release
+name: Public Release
 
 on:
   push:
@@ -8,66 +8,149 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
+    environment: public-release
+    outputs:
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+      dmg-sha256: ${{ steps.verified.outputs.dmg-sha256 }}
+      app-tar-sha256: ${{ steps.verified.outputs.app-tar-sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
         with:
-          node-version: 22
+          node-version: 22.22.0
           cache: npm
       - run: npm ci
-      - run: npm run build:tauri
-      - uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+      - name: Verify pinned build tools
+        run: |
+          node --version
+          npx --no-install tauri --version
+          npm exec --offline -- cyclonedx-npm --version
+          7z --help >/dev/null
+      - name: Build and verify native candidate
+        run: bash scripts/build-public-macos.sh
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FRONDOSE_PUBLIC_OUTPUT_DIR: build/public-macos
+      - id: verified
+        name: Verify native candidate
+        run: |
+          test -f build/public-macos/verified-producer-manifest.json
+          echo "dmg-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.dmg')" >> "$GITHUB_OUTPUT"
+          echo "app-tar-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.appTar')" >> "$GITHUB_OUTPUT"
+      - id: upload
+        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
         with:
-          name: release-macos
-          path: |
-            target/release/bundle/dmg/*.dmg
-            target/release/bundle/macos/*.app
+          name: public-macos-producer
+          path: build/public-macos
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
-    needs: build
+    environment: public-release
+    outputs:
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+      windows-exe-sha256: ${{ steps.verified.outputs.windows-exe-sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
         with:
-          node-version: 22
+          node-version: 22.22.0
           cache: npm
       - run: npm ci
-      - run: npm run build:release:win
-      - uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+      - name: Verify pinned build tools
+        shell: pwsh
+        run: |
+          node --version
+          npx.cmd --no-install tauri --version
+          npm.cmd exec --offline -- cyclonedx-npm --version
+          Get-Command Import-PfxCertificate, Get-AuthenticodeSignature, Get-FileHash | Out-Null
+          7z --help | Out-Null
+      - name: Build and verify native candidate
+        shell: pwsh
+        run: ./scripts/build-public-windows.ps1
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: https://timestamp.digicert.com
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FRONDOSE_PUBLIC_OUTPUT_DIR: build/public-windows
+      - id: verified
+        name: Verify native candidate
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build/public-windows/verified-producer-manifest.json)) { throw "producer manifest missing" }
+          $manifest = Get-Content -Raw build/public-windows/verified-producer-manifest.json | ConvertFrom-Json
+          "windows-exe-sha256=$($manifest.sha256.windowsExe)" >> $env:GITHUB_OUTPUT
+      - id: upload
+        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
         with:
-          name: release-windows
-          path: target/release/bundle/nsis/*.exe
+          name: public-windows-producer
+          path: build/public-windows
+          if-no-files-found: error
 
   inspect:
     runs-on: ubuntu-latest
-    needs: [build, build-windows]
+    needs: [build-macos, build-windows]
+    outputs:
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+        with:
+          node-version: 22.22.0
+          cache: npm
+      - run: npm ci
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          path: artifacts
-      - run: npm ci
-      - run: node scripts/public-release-policy.mjs inspect
-        env:
-          FRONDOSE_RELEASE_DIR: artifacts
-      - run: sha256sum artifacts/release-macos/*.dmg artifacts/release-windows/*.exe > SHA256SUMS
-      - run: node scripts/gen-latest-json.mjs
-      - run: npx @cyclonedx/cyclonedx-npm --output-file sbom.cdx.json
-      - name: Sign updater metadata
-        run: minisign -S -s ~/.tauri/frondose.key -m latest.json -x latest.json.sig
-      - name: Verify artifact signatures
-        run: minisign -V -p ~/.tauri/frondose.pub -m latest.json -x latest.json.sig
-      - uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+          name: public-macos-producer
+          path: artifacts/macos
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          name: release-metadata
-          path: |
-            SHA256SUMS
-            latest.json
-            latest.json.sig
-            sbom.cdx.json
+          name: public-windows-producer
+          path: artifacts/windows
+      - name: Bind producer manifests to downloaded artifact digests
+        run: |
+          node -e 'const fs=require("fs"); fs.writeFileSync("artifacts/verified-producers.json", JSON.stringify({sha256:{dmg:process.env.DMG_SHA,appTar:process.env.APP_TAR_SHA,windowsExe:process.env.WINDOWS_EXE_SHA},artifactDigests:{macos:process.env.MAC_DIGEST,windows:process.env.WINDOWS_DIGEST}},null,2));'
+        env:
+          MAC_DIGEST: ${{ needs.build-macos.outputs.artifact-digest }}
+          WINDOWS_DIGEST: ${{ needs.build-windows.outputs.artifact-digest }}
+          DMG_SHA: ${{ needs.build-macos.outputs.dmg-sha256 }}
+          APP_TAR_SHA: ${{ needs.build-macos.outputs.app-tar-sha256 }}
+          WINDOWS_EXE_SHA: ${{ needs.build-windows.outputs.windows-exe-sha256 }}
+      - name: Assemble exact public release
+        run: node scripts/assemble-public-release.mjs
+        env:
+          FRONDOSE_MACOS_PRODUCER_DIR: artifacts/macos
+          FRONDOSE_WINDOWS_PRODUCER_DIR: artifacts/windows
+          FRONDOSE_VERIFIED_PRODUCER_MANIFEST: artifacts/verified-producers.json
+          FRONDOSE_PUBLIC_OUTPUT_DIR: build/public-release
+          FRONDOSE_RELEASE_VERSION: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Verify native candidate handoff
+        run: |
+          cargo build --release --manifest-path scripts/updater-verifier/Cargo.toml
+          key="$(node -e 'const c=require("./src/tauri/src-tauri/tauri.conf.json"); process.stdout.write(Buffer.from(c.plugins.updater.pubkey,"base64").toString("utf8").trim().split(/\r?\n/)[1])')"
+          scripts/updater-verifier/target/release/frondose-updater-verifier "$key" build/public-release/Frondose.app.tar.gz build/public-release/Frondose.app.tar.gz.sig
+          scripts/updater-verifier/target/release/frondose-updater-verifier "$key" build/public-release/Frondose.nsis.exe build/public-release/Frondose.nsis.exe.sig
+          node scripts/public-release-policy.mjs inspect
+        env:
+          FRONDOSE_RELEASE_DIR: build/public-release
+      - id: upload
+        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+        with:
+          name: public-release-candidate
+          path: build/public-release
+          if-no-files-found: error
 
   attest:
     runs-on: ubuntu-latest
@@ -77,36 +160,40 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          path: artifacts
+          name: public-release-candidate
+          path: release
+      - name: Confirm attestation-subjects.txt is canonical
+        run: test "$(wc -l < release/attestation-subjects.txt)" -eq 9
       - uses: actions/attest-build-provenance@520d128c1650ba5e8d51c3d2e39e6b4e5f1e4c4f
         with:
           subject-path: |
-            artifacts/release-macos/*.dmg
-            artifacts/release-windows/*.exe
+            release/Frondose.dmg
+            release/Frondose.app.tar.gz
+            release/Frondose.app.tar.gz.sig
+            release/Frondose.nsis.exe
+            release/Frondose.nsis.exe.sig
+            release/latest.json
+            release/SHA256SUMS
+            release/sbom.cdx.json
+            release/provenance.json
 
   draft:
     runs-on: ubuntu-latest
-    needs: attest
-    environment: public-release
+    needs: [inspect, attest]
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          path: artifacts
-      - run: npm ci
-      - run: node scripts/public-release-policy.mjs inspect
+          name: public-release-candidate
+          path: release
+      - name: Create draft from draft-inputs.txt
+        shell: bash
+        run: |
+          mapfile -t assets < release/draft-inputs.txt
+          for index in "${!assets[@]}"; do assets[$index]="release/${assets[$index]}"; done
+          gh release create "${GITHUB_REF#refs/tags/}" "${assets[@]}" --draft --verify-tag --title "${GITHUB_REF#refs/tags/}"
         env:
-          FRONDOSE_RELEASE_DIR: artifacts
-      - run: |
-          gh release create "${GITHUB_REF#refs/tags/}" artifacts/release-macos/* artifacts/release-windows/* \
-            --draft \
-            --verify-tag \
-            --title "${GITHUB_REF#refs/tags/}" \
-            --notes "Auto-generated by .github/workflows/release.yml on tag push."
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
