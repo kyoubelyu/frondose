@@ -103,7 +103,8 @@ async function verifyDmgCanaryMember(fixture: string, canary: string, expectedMe
 async function verifyNsisCanaryMember(fixture: string, canary: string, expectedMember: string): Promise<string> {
   await assertCanaryIsOnlyInsideContainer(fixture, canary);
   const extracted = await temporaryDirectory("frondose-nsis-canary-extracted-");
-  run("unar", ["-quiet", "-force-overwrite", "-output-directory", extracted, fixture]);
+  const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
+  run(sevenZip, ["x", "-y", `-o${extracted}`, fixture]);
   const member = findExtractedCanary(extracted, canary);
   assert.equal(member, expectedMember, "NSIS canary must occupy the declared packaged-app member");
   return member;

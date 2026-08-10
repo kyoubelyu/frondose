@@ -330,10 +330,15 @@ async function scanPlatformContainer(containerPath, containerName, canaries) {
     }
   } else {
     const extracted = mkdtempSync(join(tmpdir(), "frondose-release-nsis-"));
-    const unar = run("unar", ["-quiet", "-force-overwrite", "-output-directory", extracted, containerPath]);
-    if (unar.status !== 0) {
+    const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
+    const extraction = run(sevenZip, ["x", "-y", `-o${extracted}`, containerPath]);
+    if (extraction.status !== 0) {
       rmSync(extracted, { recursive: true, force: true });
-      findings.push({ kind: "extraction_unavailable", path: containerName, message: "NSIS extraction failed" });
+      findings.push({
+        kind: "extraction_unavailable",
+        path: containerName,
+        message: `7-Zip NSIS extraction failed (${sevenZip})`,
+      });
       return findings;
     }
     try {
