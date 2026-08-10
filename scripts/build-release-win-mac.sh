@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -n "${FRONDOSE_PUBLIC_BUILD:-}" || -n "${FRONDOSE_REQUIRE_NATIVE_SIGNING:-}" ]]; then
+  echo "[build-release-win-mac] private-only cross-build; public native release is forbidden" >&2
+  exit 64
+fi
 # P-RELEASE-SH-WIN-GAP — cross-compile the SIGNED Windows NSIS installer entirely on
 # macOS (cargo-xwin), so `release.sh` needs no Windows build host. Spike-proven +
 # box-smoke-tested 2026-07-04: a Mac-cross-built setup.exe installs + runs full-stack

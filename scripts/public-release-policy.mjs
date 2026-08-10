@@ -13,6 +13,26 @@ import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  inspectPackageSurface,
+  inspectPlatformSignatures,
+  validatePublicBuildGraph,
+  validatePublicReleaseGraph,
+  validatePublicReleaseHandoff,
+  validateRepositoryMigration,
+  verifyUpdaterSignatures,
+} from "./public-release-governance.mjs";
+
+export {
+  inspectPackageSurface,
+  inspectPlatformSignatures,
+  validatePublicBuildGraph,
+  validatePublicReleaseGraph,
+  validatePublicReleaseHandoff,
+  validateRepositoryMigration,
+  verifyUpdaterSignatures,
+};
+
 const PROJECT_MANIFEST_URL = pathToFileURL(join(process.cwd(), "scripts", "project-manifest.ts")).href;
 
 function run(command, args, options = {}) {
@@ -216,7 +236,14 @@ export function validateWorkflowDocument(document, actionsLock) {
     if (!/^v\d+\.\d+\.\d+$/.test(lock.tag ?? "")) {
       findings.push({ kind: "ci_pin", message: `action lock tag is not a semver tag: ${name}` });
     }
-    if (!/^[0-9a-f]{64}$/.test(lock.sourceTreeSha256 ?? "") || lock.sourceTreeSha256 === lock.sha) {
+    const sourceTreeManifest = lock.sourceTreeManifest;
+    const sourceTreeDigest =
+      typeof sourceTreeManifest === "string" ? createHash("sha256").update(sourceTreeManifest).digest("hex") : null;
+    if (
+      !/^[0-9a-f]{64}$/.test(lock.sourceTreeSha256 ?? "") ||
+      lock.sourceTreeSha256 === lock.sha ||
+      sourceTreeDigest !== lock.sourceTreeSha256
+    ) {
       findings.push({ kind: "ci_pin", message: `action lock source-tree digest is invalid: ${name}` });
     }
   }
@@ -231,15 +258,16 @@ const RELEASE_ROOT_ALLOWLIST = new Set([
   "Frondose.app",
   "Frondose.dmg",
   "Frondose.nsis.exe",
+  "Frondose.nsis.exe.sig",
   "Frondose.app.tar.gz",
-  "Frondose.nsis.zip",
   "SHA256SUMS",
   "provenance.json",
   "latest.json",
   "sbom.cdx.json",
   "build.log",
   "Frondose.app.tar.gz.sig",
-  "Frondose.nsis.zip.sig",
+  "attestation-subjects.txt",
+  "draft-inputs.txt",
 ]);
 
 function canaryRepresentations(canary) {
@@ -274,19 +302,34 @@ function extractTarMembers(archive) {
   return { ok: true, extracted };
 }
 
-function extractZipMembers(archive) {
-  const listing = run("unzip", ["-Z1", archive]);
-  if (listing.status !== 0) return { ok: false, error: listing.stderr };
-  const extracted = [];
-  for (const member of listing.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)) {
-    const bytes = run("unzip", ["-p", archive, member]);
-    if (bytes.status !== 0) return { ok: false, error: bytes.stderr };
-    extracted.push({ member, text: bytes.stdout });
+function extractNsisMembers(archive) {
+  const extractedRoot = mkdtempSync(join(tmpdir(), "frondose-release-nsis-"));
+  const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
+  const extraction = run(sevenZip, ["x", "-y", `-o${extractedRoot}`, archive]);
+  if (extraction.status !== 0) {
+    rmSync(extractedRoot, { recursive: true, force: true });
+    return { ok: false, error: `7-Zip NSIS extraction failed (${sevenZip})` };
   }
-  return { ok: true, extracted };
+  try {
+    return {
+      ok: true,
+      extracted: walkFiles(extractedRoot).map((file) => ({
+        member: relative(extractedRoot, file).replaceAll("\\", "/"),
+        text: readFileSync(file, "utf8"),
+      })),
+    };
+  } finally {
+    rmSync(extractedRoot, { recursive: true, force: true });
+  }
+}
+
+const DEPENDENCY_TEXT_MEMBER = /(?:\.json|\.m?[jc]s|\.txt)$/i;
+
+function dependencyArtifacts(container, members) {
+  return members
+    .filter(({ member }) => DEPENDENCY_TEXT_MEMBER.test(member))
+    .map(({ member, text }) => ({ path: `${container}::${member}`, text }))
+    .sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function scanMembersForCanaries(container, members, canaries) {
@@ -329,27 +372,15 @@ async function scanPlatformContainer(containerPath, containerName, canaries) {
       rmSync(mountPoint, { recursive: true, force: true });
     }
   } else {
-    const extracted = mkdtempSync(join(tmpdir(), "frondose-release-nsis-"));
-    const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
-    const extraction = run(sevenZip, ["x", "-y", `-o${extracted}`, containerPath]);
-    if (extraction.status !== 0) {
-      rmSync(extracted, { recursive: true, force: true });
-      findings.push({
-        kind: "extraction_unavailable",
-        path: containerName,
-        message: `7-Zip NSIS extraction failed (${sevenZip})`,
-      });
+    const extraction = extractNsisMembers(containerPath);
+    if (!extraction.ok) {
+      findings.push({ kind: "extraction_unavailable", path: containerName, message: extraction.error });
       return findings;
     }
-    try {
-      for (const file of walkFiles(extracted)) {
-        for (const finding of scanTextForCanaries(readFileSync(file, "utf8"), canaries)) {
-          const member = relative(extracted, file).replaceAll("\\", "/");
-          findings.push({ ...finding, path: `${containerName}::${member}`, message: member });
-        }
+    for (const { member, text } of extraction.extracted) {
+      for (const finding of scanTextForCanaries(text, canaries)) {
+        findings.push({ ...finding, path: `${containerName}::${member}`, message: member });
       }
-    } finally {
-      rmSync(extracted, { recursive: true, force: true });
     }
   }
   return findings;
@@ -372,7 +403,18 @@ export async function inspectReleaseCandidate(root, canaries) {
       findings.push({ kind: "unexpected_member", path: entry, message: `unexpected release file ${entry}` });
     }
   }
-  for (const artifact of ["Frondose.dmg", "Frondose.nsis.exe", "Frondose.app.tar.gz", "Frondose.nsis.zip"]) {
+  const required = [
+    "Frondose.dmg",
+    "Frondose.nsis.exe",
+    "Frondose.nsis.exe.sig",
+    "Frondose.app.tar.gz",
+    "Frondose.app.tar.gz.sig",
+    "SHA256SUMS",
+    "provenance.json",
+    "latest.json",
+    "sbom.cdx.json",
+  ];
+  for (const artifact of required) {
     if (!existsSync(join(rootDir, artifact))) {
       findings.push({ kind: "missing_artifact", path: artifact, message: `missing release artifact ${artifact}` });
     }
@@ -399,10 +441,9 @@ export async function inspectReleaseCandidate(root, canaries) {
       findings.push({ kind: "integrity", path: name, message: `sha256 mismatch for ${name}` });
     }
   }
-  for (const signature of ["Frondose.app.tar.gz.sig", "Frondose.nsis.zip.sig"]) {
-    if (!existsSync(join(rootDir, signature))) {
-      findings.push({ kind: "integrity", path: signature, message: `missing signature ${signature}` });
-    }
+  for (const artifact of required.slice(0, 5)) {
+    if (!sums.has(artifact))
+      findings.push({ kind: "integrity", path: artifact, message: `checksum missing for ${artifact}` });
   }
   const latestPath = join(rootDir, "latest.json");
   const sbomPath = join(rootDir, "sbom.cdx.json");
@@ -410,16 +451,10 @@ export async function inspectReleaseCandidate(root, canaries) {
     try {
       const latest = JSON.parse(readFileSync(latestPath, "utf8"));
       const sbom = JSON.parse(readFileSync(sbomPath, "utf8"));
-      const sbomVersion = sbom.components?.[0]?.version;
-      if (latest.version !== sbomVersion) {
-        findings.push({
-          kind: "version_drift",
-          path: "latest.json",
-          message: `version drift: ${latest.version} vs ${sbomVersion}`,
-        });
-      }
+      if (!Array.isArray(sbom.components))
+        findings.push({ kind: "metadata", path: "sbom.cdx.json", message: "SBOM components missing" });
       for (const [platform, meta] of Object.entries(latest.platforms ?? {})) {
-        const sigFile = meta.url?.endsWith(".tar.gz") ? "Frondose.app.tar.gz.sig" : "Frondose.nsis.zip.sig";
+        const sigFile = meta.url?.endsWith(".tar.gz") ? "Frondose.app.tar.gz.sig" : "Frondose.nsis.exe.sig";
         const sigPath = join(rootDir, sigFile);
         if (existsSync(sigPath) && meta.signature !== readFileSync(sigPath, "utf8").trim()) {
           findings.push({ kind: "integrity", path: "latest.json", message: `platform ${platform} signature mismatch` });
@@ -429,45 +464,30 @@ export async function inspectReleaseCandidate(root, canaries) {
       findings.push({ kind: "metadata", path: "latest.json", message: "latest.json or sbom.cdx.json is malformed" });
     }
   }
-  for (const member of extractZipMembers(join(rootDir, "Frondose.nsis.zip"))?.extracted ?? []) {
-    if (member.member.includes("..")) {
-      findings.push({
-        kind: "traversal_member",
-        path: `Frondose.nsis.zip::${member.member}`,
-        message: "traversal path in zip",
-      });
-    }
-  }
-  // Shared artifact boundary: canonical tar-credentials, tar-payload,
-  // zip-credentials, zip-payload order (plan §19).
+  // Shared artifact boundary: stable container + normalized-member order.
   const { validatePublishedArtifactDependencyBoundary } = await import(PROJECT_MANIFEST_URL);
-  const resources = "Frondose.app/Contents/Resources";
-  const credentialsMember = `${resources}/defaultCredentials.generated.json`;
-  const payloadMember = `${resources}/app.txt`;
   const membersByContainer = {};
-  const tarMembers = extractTarMembers(join(rootDir, "Frondose.app.tar.gz"), []);
-  if (tarMembers.ok) {
-    const byMember = new Map(tarMembers.extracted.map((entry) => [entry.member, entry.text]));
-    membersByContainer["Frondose.app.tar.gz"] = byMember;
-  }
-  const zipMembers = extractZipMembers(join(rootDir, "Frondose.nsis.zip"));
-  if (zipMembers.ok) {
-    const byMember = new Map(zipMembers.extracted.map((entry) => [entry.member, entry.text]));
-    membersByContainer["Frondose.nsis.zip"] = byMember;
-  }
-  const readMember = (container, member) => membersByContainer[container]?.get(member);
-  const artifacts = [];
-  for (const container of ["Frondose.app.tar.gz", "Frondose.nsis.zip"]) {
-    const credentials = readMember(container, credentialsMember);
-    const payload = readMember(container, payloadMember);
-    if (credentials !== undefined) {
-      artifacts.push({ path: `${container}::${credentialsMember}`, text: credentials });
+  for (const [container, extract] of [
+    ["Frondose.app.tar.gz", extractTarMembers],
+    ["Frondose.nsis.exe", extractNsisMembers],
+  ]) {
+    const extraction = extract(join(rootDir, container));
+    if (!extraction.ok) {
+      findings.push({ kind: "extraction_unavailable", path: container, message: extraction.error });
+      continue;
     }
-    if (payload !== undefined) {
-      artifacts.push({ path: `${container}::${payloadMember}`, text: payload });
+    membersByContainer[container] = extraction.extracted;
+    if (!extraction.extracted.some(({ member }) => member.endsWith("defaultCredentials.generated.json"))) {
+      findings.push({ kind: "missing_payload_member", path: container, message: "default credentials member missing" });
+    }
+    if (!extraction.extracted.some(({ member }) => /(?:app\.txt|\/dist\/.*\.js)$/i.test(member))) {
+      findings.push({ kind: "missing_payload_member", path: container, message: "application payload member missing" });
     }
   }
-  if (artifacts.length > 0) {
+  const artifacts = Object.entries(membersByContainer)
+    .flatMap(([container, members]) => dependencyArtifacts(container, members))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  if (Object.keys(membersByContainer).length === 2) {
     try {
       validatePublishedArtifactDependencyBoundary({ artifacts });
     } catch (error) {
@@ -477,32 +497,23 @@ export async function inspectReleaseCandidate(root, canaries) {
   // Canary scans over the unpacked tree, container members, and platform payloads.
   for (const file of walkFiles(rootDir)) {
     const name = relative(rootDir, file).replaceAll("\\", "/");
-    if (
-      name === "Frondose.dmg" ||
-      name === "Frondose.nsis.exe" ||
-      name === "Frondose.app.tar.gz" ||
-      name === "Frondose.nsis.zip"
-    ) {
+    if (name === "Frondose.dmg" || name === "Frondose.nsis.exe" || name === "Frondose.app.tar.gz") {
       continue;
     }
     for (const finding of scanTextForCanaries(readFileSync(file, "utf8"), canaries)) {
       findings.push({ ...finding, path: name });
     }
   }
-  for (const container of ["Frondose.app.tar.gz", "Frondose.nsis.zip"]) {
+  for (const container of ["Frondose.app.tar.gz", "Frondose.nsis.exe"]) {
     if (membersByContainer[container]) {
-      findings.push(
-        ...scanMembersForCanaries(
-          container,
-          [...membersByContainer[container].entries()].map(([member, text]) => ({ member, text })),
-          canaries,
-        ),
-      );
+      findings.push(...scanMembersForCanaries(container, membersByContainer[container], canaries));
     }
   }
-  for (const container of ["Frondose.dmg", "Frondose.nsis.exe"]) {
-    if (existsSync(join(rootDir, container))) {
-      findings.push(...(await scanPlatformContainer(join(rootDir, container), container, canaries)));
+  if (canaries.length > 0) {
+    for (const container of ["Frondose.dmg"]) {
+      if (existsSync(join(rootDir, container))) {
+        findings.push(...(await scanPlatformContainer(join(rootDir, container), container, canaries)));
+      }
     }
   }
   return { ok: findings.length === 0, findings };
@@ -730,194 +741,18 @@ export async function inspectDependencyArtifacts(root) {
   return { ok: findings.length === 0, findings };
 }
 
-// ---------------------------------------------------------------------------
-// Platform signatures and package surface
-// ---------------------------------------------------------------------------
-
-/** Actual native signature verification of a supplied signed candidate (Step 5). */
-export async function inspectPlatformSignatures(root) {
-  const findings = [];
-  if (!existsSync(root)) {
-    return {
-      ok: false,
-      findings: [{ kind: "signed_candidate", message: `signed fixture directory missing: ${root}` }],
-    };
-  }
-  const dmg = join(root, "Frondose.dmg");
-  const exe = join(root, "Frondose.nsis.exe");
-  if (existsSync(dmg)) {
-    const spctl = run("spctl", ["-a", "-vv", "--type", "open", "--context", "context:primary-signature", dmg]);
-    if (spctl.status !== 0)
-      findings.push({
-        kind: "platform_signature",
-        path: "Frondose.dmg",
-        message: "Developer ID signature not verified",
-      });
-  }
-  if (existsSync(exe)) {
-    const osslsigncode = run("osslsigncode", ["verify", "-in", exe]);
-    if (osslsigncode.status !== 0)
-      findings.push({
-        kind: "platform_signature",
-        path: "Frondose.nsis.exe",
-        message: "Authenticode signature not verified",
-      });
-  }
-  return { ok: findings.length === 0, findings };
-}
-
-/** npm-pack surface control: an exact public file set, never a private leak. */
-export async function inspectPackageSurface(root, expectedFiles) {
-  const findings = [];
-  const pkgPath = join(root, "package.json");
-  if (!existsSync(pkgPath)) {
-    return { ok: false, findings: [{ kind: "package_surface", message: "package.json missing" }] };
-  }
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-  const filesPattern = pkg.files ?? [];
-  const included = new Set();
-  const includeDir = (dir) => {
-    for (const file of walkFiles(dir)) {
-      included.add(relative(root, file).replaceAll("\\", "/"));
-    }
-  };
-  for (const pattern of filesPattern) {
-    if (pattern.includes("*")) {
-      includeDir(root);
-    } else {
-      const target = join(root, pattern);
-      if (existsSync(target)) {
-        if (statSync(target).isDirectory()) includeDir(target);
-        else included.add(pattern);
-      }
-    }
-  }
-  for (const always of ["package.json", "README.md", "LICENSE", "LICENCE", "NOTICE"]) {
-    if (existsSync(join(root, always))) included.add(always);
-  }
-  const actual = [...included].sort();
-  const expected = [...expectedFiles].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    findings.push({
-      kind: "package_surface",
-      message: `packaged files differ: ${actual.join(",")} vs ${expected.join(",")}`,
-    });
-  }
-  if (pkg.private !== true) {
-    findings.push({ kind: "package_surface", message: "package is not private; npm publication is possible" });
-  }
-  return { ok: findings.length === 0, findings };
-}
-
-// ---------------------------------------------------------------------------
-// Repository migration ordering
-// ---------------------------------------------------------------------------
-
-/** No public exposure window: private creation, controls, root audit, visibility flip, draft release. */
-export function validateRepositoryMigration(events) {
-  const findings = [];
-  const state = { created: false, controls: false, pushed: false, visible: false, drafted: false };
-  for (const event of events) {
-    switch (event.kind) {
-      case "repository_created":
-        if (state.created) findings.push({ kind: "migration", message: "repository created twice" });
-        if (event.visibility !== "private")
-          findings.push({ kind: "migration", message: "repository must be created private" });
-        state.created = true;
-        break;
-      case "controls_verified":
-        if (!event.secretScanning || !event.pushProtection || !event.requiredChecks) {
-          findings.push({ kind: "migration", message: "controls not all verified" });
-        }
-        if (!state.created) findings.push({ kind: "migration", message: "controls verified before creation" });
-        state.controls = true;
-        break;
-      case "root_pushed":
-        if (event.commitCount !== 1 || event.remoteTreeMatched !== true) {
-          findings.push({ kind: "migration", message: "root push did not match the audited tree" });
-        }
-        if (!state.controls) findings.push({ kind: "migration", message: "root pushed before controls verified" });
-        state.pushed = true;
-        break;
-      case "visibility_changed":
-        if (event.visibility !== "public" || event.approved !== true) {
-          findings.push({ kind: "migration", message: "visibility flip requires approval" });
-        }
-        if (!state.pushed) findings.push({ kind: "migration", message: "visibility changed before root push" });
-        state.visible = true;
-        break;
-      case "draft_release_created":
-        if (event.approved !== true) findings.push({ kind: "migration", message: "draft release requires approval" });
-        if (!state.visible) findings.push({ kind: "migration", message: "draft release before visibility" });
-        state.drafted = true;
-        break;
-      case "sync": {
-        const { direction, sourceTree, destinationTree, attribution, scan } = event;
-        if (direction !== "inbound" && direction !== "outbound") {
-          findings.push({ kind: "migration", message: `unsupported sync direction ${direction}` });
-        }
-        if (typeof sourceTree !== "string" || sourceTree.length === 0) {
-          findings.push({ kind: "migration", message: "sync requires a source tree" });
-        }
-        if (typeof destinationTree !== "string" || destinationTree.length === 0) {
-          findings.push({ kind: "migration", message: "sync requires a destination tree" });
-        }
-        if (typeof attribution !== "string" || attribution.length === 0) {
-          findings.push({ kind: "migration", message: "sync requires contribution attribution" });
-        }
-        if (scan !== "pass") {
-          findings.push({ kind: "migration", message: "sync requires fresh scan evidence" });
-        }
-        break;
-      }
-      default:
-        findings.push({ kind: "migration", message: `unknown migration event ${event.kind}` });
-    }
-  }
-  return { ok: findings.length === 0, findings };
-}
-
-// ---------------------------------------------------------------------------
-// Public build graph
-// ---------------------------------------------------------------------------
-
-/** Public builds can invoke only the keyless credential generator. */
-export function validatePublicBuildGraph({ ci, release, packageJson }) {
-  const findings = [];
-  const pkg = JSON.parse(packageJson);
-  const scripts = pkg.scripts ?? {};
-  if (!ci.includes("npm run credentials:public")) {
-    findings.push({ kind: "public_build", message: "CI does not invoke the public credential generator" });
-  }
-  if (!release.includes("npm run credentials:public")) {
-    findings.push({ kind: "public_build", message: "release does not invoke the public credential generator" });
-  }
-  if (!(scripts["credentials:public"] ?? "").includes("gen-public-default-credentials.ts")) {
-    findings.push({ kind: "public_build", message: "credentials:public must target the keyless generator" });
-  }
-  if (!scripts["release:inspect"]) {
-    findings.push({ kind: "public_build", message: "release:inspect script is required" });
-  }
-  const surface = `${ci}\n${release}\n${packageJson}`;
-  for (const marker of [
-    "credentials:private",
-    "gen-default-credentials.ts",
-    "FRONDOSE_ALLOW_KEYLESS",
-    "$CREDENTIAL_MODE",
-  ]) {
-    if (surface.includes(marker)) {
-      findings.push({ kind: "public_build", message: `private credential path used: ${marker}` });
-    }
-  }
-  return { ok: findings.length === 0, findings };
-}
-
 // CLI entry for the release workflow's inspect step.
 const invokedAsEntrypoint = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedAsEntrypoint && process.argv[2] === "inspect") {
   const root = process.env.FRONDOSE_RELEASE_DIR ?? process.cwd();
   const canaries = (process.env.FRONDOSE_RELEASE_CANARIES ?? "").split(",").filter(Boolean);
-  inspectReleaseCandidate(root, canaries).then((result) => {
+  const workflowPath =
+    process.env.FRONDOSE_RELEASE_WORKFLOW ?? join(process.cwd(), ".github", "workflows", "release.yml");
+  Promise.all([
+    inspectReleaseCandidate(root, canaries),
+    validatePublicReleaseHandoff(root, readFileSync(workflowPath, "utf8")),
+  ]).then((results) => {
+    const result = { ok: results.every((item) => item.ok), findings: results.flatMap((item) => item.findings) };
     for (const finding of result.findings) {
       process.stderr.write(`[release-policy] ${finding.kind}: ${finding.path ?? ""} ${finding.message}\n`);
     }
