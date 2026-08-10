@@ -46,7 +46,7 @@ describe("build-release.ps1 — update-server site population", () => {
     assert.match(PS1, /\$env:WINDOWS_SIG_PATH = \$publishedUpdaterSig/);
     assert.match(PS1, /\$env:WINDOWS_MANIFEST_URL = "\$updateServerUrl\/downloads\/\$publishedUpdaterName"/);
     assert.match(PS1, /node "\$PSScriptRoot\\gen-latest-json\.mjs"/);
-    assert.match(PS1, /frondose-landing\.html/);
+    assert.match(PS1, /projects\\web\\index\.html/);
   });
 
   it("T-WIN5.PS1.4: UPDATE_SERVER_URL remains configurable while defaulting to the existing localhost:4875 flow", () => {

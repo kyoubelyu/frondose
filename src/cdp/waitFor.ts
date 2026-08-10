@@ -24,22 +24,57 @@ export async function waitForUrl(client: CdpHandle, pattern: string | RegExp, op
   });
 }
 
+export interface LoadEventWaiter {
+  /** Resolves on Page.loadEventFired; rejects with WaitTimeoutError after the timeout. */
+  promise: Promise<void>;
+  /** Detach the listener, clear the timer, and resolve — for callers that learn
+   *  mid-wait that no load event will come (same-document navigation, navigate error). */
+  cancel: () => void;
+}
+
+/**
+ * [P-OPEN-SOURCE-SPLIT 5a] Subscribe to Page.loadEventFired NOW and return the wait
+ * handle. CdpClient.navigate creates this BEFORE Page.navigate so a same-URL or
+ * cache-warm navigation whose load completes before a post-navigate subscription
+ * would exist can no longer miss the event (the missed-event full-timeout stall).
+ * Safe for "load" only: loadEventFired is a plain edge event with no state replay
+ * (unlike lifecycleEvent, which replays current state on setLifecycleEventsEnabled).
+ */
+export function createLoadEventWaiter(client: CdpHandle, opts: WaitOptions = {}): LoadEventWaiter {
+  const timeout = opts.timeout ?? DEFAULT_TIMEOUT;
+  let unsubscribe: (() => void) | undefined;
+  let settled = false;
+  let cancel: () => void = () => {};
+  const promise = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsubscribe?.();
+      reject(new WaitTimeoutError(`waitForLoad("load") timeout after ${timeout}ms`));
+    }, timeout);
+    unsubscribe = client.Page.loadEventFired(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe?.();
+      resolve();
+    });
+    cancel = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe?.();
+      resolve();
+    };
+  });
+  return { promise, cancel };
+}
+
 /** Wait for window.onload, OR for Page.lifecycleEvent name="networkIdle". */
 export async function waitForLoad(client: CdpHandle, state: WaitState = "load", opts: WaitOptions = {}): Promise<void> {
   const timeout = opts.timeout ?? DEFAULT_TIMEOUT;
   if (state === "load") {
-    return new Promise<void>((resolve, reject) => {
-      let unsubscribe: (() => void) | undefined;
-      const timer = setTimeout(() => {
-        unsubscribe?.();
-        reject(new WaitTimeoutError(`waitForLoad("load") timeout after ${timeout}ms`));
-      }, timeout);
-      unsubscribe = client.Page.loadEventFired(() => {
-        clearTimeout(timer);
-        unsubscribe?.();
-        resolve();
-      });
-    });
+    return createLoadEventWaiter(client, opts).promise;
   }
   // state === "networkidle"
   await client.Page.setLifecycleEventsEnabled({ enabled: true });
