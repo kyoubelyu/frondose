@@ -15,7 +15,7 @@ import type {
   WaitForOpts,
   WaitState,
 } from "./types.js";
-import { waitForFn, waitForLoad, waitForText, waitForUrl } from "./waitFor.js";
+import { createLoadEventWaiter, waitForFn, waitForLoad, waitForText, waitForUrl } from "./waitFor.js";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -181,12 +181,29 @@ export class CdpClient {
       throw new Error("navigate: stealth not injected — call injectStealth(client) first");
     }
     await this.race(this.client.Page.enable(), "Page.enable");
-    const r = await this.race(this.client.Page.navigate({ url }), "Page.navigate");
-    if (r.errorText) throw new Error(`navigate failed: ${r.errorText}`);
     const isPreload = CdpClient.isPreloadInviteUrl(url);
     const effectiveWait: WaitState = isPreload ? "networkidle" : (waitUntil ?? "load");
     const waitOpts = isPreload ? { timeout: 60_000 } : undefined;
-    await this.race(waitForLoad(this.client, effectiveWait, waitOpts), "waitForLoad");
+    // [P-OPEN-SOURCE-SPLIT 5a] Subscribe to the load event BEFORE navigating: a same-URL or
+    // cache-warm navigation can fire Page.loadEventFired before a post-navigate subscription
+    // would exist (the missed-event full-timeout stall). Only for "load" — loadEventFired is
+    // an edge event with no replay; lifecycleEvent replays current state on enable, so the
+    // networkidle subscription must stay AFTER the navigate response.
+    const waiter = effectiveWait === "load" ? createLoadEventWaiter(this.client, waitOpts) : undefined;
+    try {
+      const r = await this.race(this.client.Page.navigate({ url }), "Page.navigate");
+      if (r.errorText) throw new Error(`navigate failed: ${r.errorText}`);
+      // loaderId is omitted for same-document navigation (fragment/anchor) — no load event
+      // follows, so waiting would stall for the full timeout.
+      if (r.loaderId === undefined) return;
+      if (waiter) {
+        await this.race(waiter.promise, "waitForLoad");
+      } else {
+        await this.race(waitForLoad(this.client, effectiveWait, waitOpts), "waitForLoad");
+      }
+    } finally {
+      waiter?.cancel();
+    }
   }
 
   /** [P-75 D-17] Verify that the AX node behind a ref still has the expected role/name.

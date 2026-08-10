@@ -27,7 +27,7 @@ function makeFakeSession(overrides: { currentUrl?: string }) {
   const fakeHandle = {
     Page: {
       enable: async () => {},
-      navigate: async (_args: unknown) => ({}),
+      navigate: async (_args: unknown) => ({ loaderId: "fake-loader" }), // loaderId = real cross-document nav (5a fix skips the load wait when CDP omits it)
       // waitForLoad("load") subscribes to loadEventFired; fire immediately to simulate page load
       loadEventFired: (cb: () => void) => {
         Promise.resolve().then(() => cb());

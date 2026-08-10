@@ -615,7 +615,9 @@ describe("B2 — preload navigate: networkidle wait for custom-invite URL, load 
     const networkIdleHandlers: Array<(ev: { name: string }) => void> = [];
     const client = CdpClient.fromHandle(makeFullFakeHandle({
       pageEnable: () => Promise.resolve({}),
-      pageNavigate: (_args: { url: string }) => Promise.resolve({ errorText: undefined }),
+      // loaderId present: real cross-document navigation (5a fix skips the wait only when
+      // CDP omits loaderId = same-document navigation) so this test still exercises the wait.
+      pageNavigate: (_args: { url: string }) => Promise.resolve({ errorText: undefined, loaderId: "L1" }),
       pageLoadEventFired: (_cb: () => void) => () => {}, // never fires
       pageSetLifecycleEventsEnabled: (_args: unknown) => Promise.resolve({}),
       pageLifecycleEvent: (cb: (ev: { name: string }) => void) => {
@@ -651,7 +653,8 @@ describe("B2 — preload navigate: networkidle wait for custom-invite URL, load 
         loadHandlers.push(cb);
         return () => {};
       },
-      pageNavigate: (_args: { url: string }) => Promise.resolve({ errorText: undefined }),
+      // loaderId present: real cross-document navigation (5a fix) so the load wait still runs.
+      pageNavigate: (_args: { url: string }) => Promise.resolve({ errorText: undefined, loaderId: "L1" }),
       runtimeEvaluate: (_args: unknown) =>
         Promise.resolve({ result: { value: "https://www.linkedin.com/in/foo/" } }),
     }));
