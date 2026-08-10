@@ -225,7 +225,9 @@ describe("T-Stealth: F-1 navigation invariant (mock)", () => {
         },
         navigate: async (_args: { url: string }) => {
           callLog.push("Page.navigate");
-          return { errorText: undefined };
+          // loaderId present: real cross-document navigation (5a fix skips the load
+          // wait only when CDP omits loaderId = same-document navigation).
+          return { errorText: undefined, loaderId: "L1" };
         },
         // [Step 5] Added: waitForLoad("load") needs Page.loadEventFired to resolve immediately.
         loadEventFired: (cb: (params?: unknown) => void): (() => void) => {

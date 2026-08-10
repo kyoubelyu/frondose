@@ -1001,7 +1001,10 @@ export class FakeLinkedInWorld {
         navigate: async (args: { url: string }) => {
           this._callLog.push({ method: "Page.navigate", args });
           this.navigateTo(args.url);
-          return {};
+          // loaderId present: every fake-world transition is a full cross-document
+          // navigation (CDP omits loaderId only for same-document navigation; the 5a
+          // navigate fix skips the load wait in that case).
+          return { loaderId: "fake-loader" };
         },
         // Event subscriptions: chrome-remote-interface event methods return a no-op
         // unsubscribe function. In the fake world, page transitions are synchronous,
