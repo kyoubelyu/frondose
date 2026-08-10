@@ -18,7 +18,9 @@ describe("CdpClient native-port primitives", () => {
         navigate: async (args: { url: string }) => {
           calls.push("Page.navigate");
           navigatedUrl = args.url;
-          return {};
+          // loaderId present: real cross-document navigation (CDP omits it only for
+          // same-document navigation; the 5a fix skips the load wait in that case).
+          return { loaderId: "L1" };
         },
         loadEventFired: (callback: () => void) => {
           calls.push("Page.loadEventFired");
@@ -34,7 +36,9 @@ describe("CdpClient native-port primitives", () => {
     await client.navigate("https://www.linkedin.com/feed/");
 
     assert.equal(navigatedUrl, "https://www.linkedin.com/feed/");
-    assert.deepEqual(calls.slice(0, 3), ["Page.enable", "Page.navigate", "Page.loadEventFired"]);
+    // [5a] The load-event subscription now happens BEFORE Page.navigate (subscribe-first
+    // removes the missed-event stall on same-URL/cache-warm navigations).
+    assert.deepEqual(calls.slice(0, 3), ["Page.enable", "Page.loadEventFired", "Page.navigate"]);
   });
 
   it("T-CdpNative.2: getElementText(selector) evaluates querySelector text readback", async () => {

@@ -40,7 +40,9 @@ function makeFakeHandle(opts: { navigateShouldThrow?: boolean } = {}) {
       navigate: async (args: { url: string }) => {
         if (opts.navigateShouldThrow) throw new Error("fake navigate error");
         navigateCalls.push({ url: args.url });
-        return { frameId: "fake" };
+        // loaderId present: a real cross-document navigation (CDP omits loaderId only
+        // for same-document navigation) — the 5a navigate fix skips the load wait without it.
+        return { frameId: "fake", loaderId: "fake-loader" };
       },
       // waitForLoad("load") calls client.Page.loadEventFired(cb) — callback style.
       // Must return an unsubscribe fn () => {} and synchronously invoke cb so the
