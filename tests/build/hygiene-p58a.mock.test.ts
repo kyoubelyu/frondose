@@ -95,13 +95,19 @@ describe("assert-dist core — findMissingDistMarkers (G-P58a.2)", () => {
 
 describe("release.yml — gh release create invocation (G-P58a.3)", () => {
   // Given: release.yml. When: inspected. Then: the workflow creates a draft release
-  //        with --verify-tag and the tag title; prerelease flagging is decided at
-  //        publish time by scripts/release.sh (the local ops tool), not the workflow.
+  //        from the inspected nine-file manifest, after attestation, with --verify-tag
+  //        and the tag title; publishing remains an operator action.
   it("T-Release.1: release.yml creates a draft, verify-tag release named after the pushed tag", () => {
     assert.match(
       RELEASE_YML,
-      /gh release create "\$\{GITHUB_REF#refs\/tags\/\}" artifacts\/release-macos\/\* artifacts\/release-windows\/\*/,
-      "gh release create attaches both platform artifact globs",
+      /draft:\n[\s\S]*needs: \[inspect, attest\]/,
+      "draft waits for inspection and attestation",
+    );
+    assert.match(RELEASE_YML, /mapfile -t assets < release\/draft-inputs\.txt/, "draft reads the inspected asset list");
+    assert.match(
+      RELEASE_YML,
+      /gh release create "\$\{GITHUB_REF#refs\/tags\/\}" "\$\{assets\[@\]\}"/,
+      "draft attaches only listed assets",
     );
     assert.match(RELEASE_YML, /--draft/, "releases are created as drafts (never auto-published by CI)");
     assert.match(RELEASE_YML, /--verify-tag/, "the pushed tag is verified before the release is created");
