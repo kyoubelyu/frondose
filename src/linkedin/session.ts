@@ -33,10 +33,9 @@ const VISUAL_DWELL_MS = 500; // P-Y2.3 (OQ-Y2.3.6): pre-click cursor-travel dwel
 /**
  * ISSUE-ENSURECHROME-ORPHAN: reap a THIS-CALL-spawned Chrome (handle.launched
  * === true) after a post-spawn boot failure (CdpClient.connect / injectStealth
- * / overlay install all reject). ensureChrome() itself never orphans — it
- * returns the handle synchronously right after spawning — but the caller
- * previously dropped that handle on the floor on any subsequent throw, so the
- * spawned process was never killed.
+ * / overlay install all reject). `ensureChrome()` owns and reaps failures before
+ * its exact handle is returned; this helper owns only later setup failures where
+ * the caller would otherwise drop that returned handle.
  *
  * MUST NOT touch a reused Chrome (handle.launched === false, kill ===
  * undefined) — that's the operator's already-running browser. Exported for
