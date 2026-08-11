@@ -21,9 +21,6 @@ export const DEFAULT_CONFIG_PATH = (): string => join(getHomeBase(), DATA_DIR_NA
 // P-OPEN-SOURCE-SPLIT §13.1: public GitHub Releases default (mirrors updater.rs).
 // Explicit null or blank disables updates; any other explicit URL is an operator override.
 const DEFAULT_UPDATE_SERVER_URL = "https://github.com/kyoubelyu/frondose/releases/latest/download";
-// Historical baked intranet default (P-UPDATE-INTRANET) — assembled from parts so the
-// public source tree carries no private host literal. Migrates to the public URL on read.
-const LEGACY_UPDATE_SERVER_URL = `http://${["192","0","2","105"].join(".")}:4875`;
 
 // Step-3b round-2 C-1: server.token MOVED to secrets.json. config.json.server
 // holds only the public URL.
@@ -79,8 +76,8 @@ export const configJsonSchemaV2 = z.object({
   // reset all other config. URL shape is validated where it matters:
   // serve/settings.ts settingsPatchSchema (.url(), write-time) + the Rust
   // endpoint.parse() guard. .trim() drops stray whitespace; readConfig maps blank →
-  // null (disabled) and the legacy baked default → the public URL. No schema_version
-  // bump (default-value-only change; old configs Zod-fill the public URL).
+  // null (disabled). No schema_version bump (default-value-only change; old configs
+  // Zod-fill the public URL).
   updateServerUrl: z.string().trim().nullable().default(DEFAULT_UPDATE_SERVER_URL),
   // P-ZH-1: operator-picked language for the UI chrome + agent reply-language override.
   // "auto" (default) = today's behavior (navigator-detected UI locale, mirror-the-operator
@@ -151,11 +148,8 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
 
   try {
     const parsed = configJsonSchemaV2.parse(raw);
-    // P-OPEN-SOURCE-SPLIT §13.1: the historical baked intranet value migrates to the
-    // public default; blank (after trim) means the operator cleared the field → disabled.
-    if (parsed.updateServerUrl === LEGACY_UPDATE_SERVER_URL) {
-      parsed.updateServerUrl = DEFAULT_UPDATE_SERVER_URL;
-    } else if (parsed.updateServerUrl === "") {
+    // Blank (after trim) means the operator cleared the field → disabled.
+    if (parsed.updateServerUrl === "") {
       parsed.updateServerUrl = null;
     }
     return parsed;
