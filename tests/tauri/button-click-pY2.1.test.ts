@@ -26,8 +26,8 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { launch } from "chrome-launcher";
 import CDP from "chrome-remote-interface";
+import { type BrowserOwner, openOwnedChrome, runIndependentCleanups } from "../_helpers/ownedBrowser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const UI_DIR = join(__dirname, "..", "..", "src", "tauri", "ui");
@@ -56,7 +56,7 @@ const SPY_STUB = `
 `;
 
 // biome-ignore lint/suspicious/noExplicitAny: CDP client + chrome handle are untyped (no @types).
-let chrome: any;
+let browserOwner: BrowserOwner<any> | undefined;
 // biome-ignore lint/suspicious/noExplicitAny: CDP client is untyped.
 let client: any;
 let httpUi: ChildProcess;
@@ -100,24 +100,31 @@ before(async () => {
     stdio: "ignore",
   });
   await sleep(800);
-  chrome = await launch({ chromeFlags: ["--headless=new", "--disable-gpu"] });
-  client = await CDP({ port: chrome.port });
-  await client.Page.enable();
-  await client.Runtime.enable();
-  await client.Page.addScriptToEvaluateOnNewDocument({ source: SPY_STUB });
-  await client.Page.navigate({ url: `http://127.0.0.1:${PORT}/index.html` });
-  await client.Page.loadEventFired();
-  await sleep(700); // let boot() run: event.listen + loadIdentity + applyMode("manual")
+  try {
+    browserOwner = await openOwnedChrome({
+      chromeOptions: { chromeFlags: ["--headless=new", "--disable-gpu"] },
+      connect: (browser) => CDP({ port: browser.handle.port }),
+      setup: async (connected) => {
+        await connected.Page.enable();
+        await connected.Runtime.enable();
+        await connected.Page.addScriptToEvaluateOnNewDocument({ source: SPY_STUB });
+        await connected.Page.navigate({ url: `http://127.0.0.1:${PORT}/index.html` });
+        await connected.Page.loadEventFired();
+        await sleep(700);
+      },
+      close: (connected) => connected.close(),
+    });
+    client = browserOwner.client;
+  } catch (error) {
+    await runIndependentCleanups("button-click setup cleanup failed", [() => httpUi?.kill("SIGKILL")], error);
+  }
 });
 
 after(async () => {
-  try {
-    await client?.close();
-  } catch {}
-  try {
-    await chrome?.kill();
-  } catch {}
-  httpUi?.kill();
+  await runIndependentCleanups("button-click suite cleanup failed", [
+    () => browserOwner?.finish(),
+    () => httpUi?.kill("SIGKILL"),
+  ]);
 });
 
 describe("button click-through — boot wiring (G-PY2.1.9)", () => {
