@@ -856,12 +856,17 @@ dependencies = [
 
 [[package]]
 name = "frondose"
-version = "0.5.22"
+version = "0.5.23"
 dependencies = [
+ "block2",
  "bytes",
  "dirs",
  "hyper 0.14.32",
  "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-web-kit",
  "rand",
  "semver",
  "serde",
