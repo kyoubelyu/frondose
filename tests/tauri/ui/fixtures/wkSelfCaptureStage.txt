@@ -1,0 +1,151 @@
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const deadline = Date.now() + timeoutMs;
+const waitFor = async (label, predicate) => {
+  while (Date.now() < deadline) {
+    const error = document.getElementById("error-banner");
+    if (error && !isHidden(error)) throw new Error(`product-error:${error.textContent || "visible"}`);
+    const value = predicate();
+    if (value) return value;
+    await sleep(20);
+  }
+  throw new Error(`timeout:${label}`);
+};
+const requireElement = (id) => {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`missing:#${id}`);
+  return element;
+};
+const isHidden = (element) => element.classList.contains("hidden");
+const ids = [
+  "settings-axis-painchain",
+  "settings-axis-leadrole",
+  "settings-axis-discovery",
+  "settings-axis-story",
+];
+const gear = requireElement("settings-gear");
+const panel = requireElement("settings-panel");
+const language = requireElement("settings-language");
+const save = requireElement("settings-save");
+const toast = requireElement("save-toast");
+const error = requireElement("error-banner");
+
+gear.click();
+await waitFor("settings-load", () => {
+  if (isHidden(panel) || language.value !== loadedLanguage) return false;
+  return ids.every((id, index) => requireElement(id).value === loadedValues[index]);
+});
+if (!isHidden(error)) throw new Error(`error-before-save:${error.textContent || "visible"}`);
+if (!isHidden(toast) || (toast.textContent || "") !== staleToast) {
+  throw new Error(`stale-toast-baseline:${toast.textContent || "<empty>"}`);
+}
+
+const controls = ids.map((id) => requireElement(id));
+const assignmentCounts = new Map();
+for (const control of controls) {
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value");
+  if (!descriptor?.get || !descriptor?.set) throw new Error("select-value-witness-unavailable");
+  assignmentCounts.set(control, 0);
+  Object.defineProperty(control, "value", {
+    configurable: true,
+    get: () => descriptor.get.call(control),
+    set: (value) => {
+      assignmentCounts.set(control, assignmentCounts.get(control) + 1);
+      descriptor.set.call(control, value);
+    },
+  });
+}
+
+ids.forEach((id, index) => {
+  const element = requireElement(id);
+  element.value = targetValues[index];
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+});
+language.value = targetLanguage;
+language.dispatchEvent(new Event("input", { bubbles: true }));
+language.dispatchEvent(new Event("change", { bubbles: true }));
+save.click();
+
+await waitFor("settings-save", () => {
+  if (isHidden(toast) || toast.textContent !== expectedToast) return false;
+  if (language.value !== targetLanguage || document.documentElement.lang !== expectedDocumentLang) return false;
+  return ids.every((id, index) =>
+    requireElement(id).value === targetValues[index] && assignmentCounts.get(requireElement(id)) >= 2
+  );
+});
+if (!isHidden(error)) throw new Error(`error-after-save:${error.textContent || "visible"}`);
+
+const group = controls[0].closest(".settings-group");
+if (!group || !controls.every((control) => control.closest(".settings-group") === group)) {
+  throw new Error("methodology-group-ownership");
+}
+group.scrollIntoView({ block: "start" });
+await new Promise((resolve) => {
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    resolve();
+  };
+  setTimeout(finish, 300);
+  requestAnimationFrame(() => requestAnimationFrame(finish));
+});
+const viewport = {
+  width: innerWidth,
+  height: innerHeight,
+  scale: devicePixelRatio,
+};
+const horizontalOffsets = [scrollX, document.documentElement.scrollLeft, document.body?.scrollLeft || 0];
+if (horizontalOffsets.some((offset) => offset !== 0)) throw new Error("horizontal-scroll-offset");
+const groupBounds = group.getBoundingClientRect();
+const controlBounds = controls.map((control) => control.getBoundingClientRect());
+const groupLabels = controls.map((control) => control.previousElementSibling);
+if (groupLabels.some((label) => !label)) throw new Error("methodology-group-label-missing");
+const groupLabelBounds = groupLabels.map((label) => label.getBoundingClientRect());
+const inside = (bounds, outer = { top: 0, left: 0, bottom: viewport.height, right: viewport.width }) =>
+  Number.isFinite(bounds.width) && Number.isFinite(bounds.height) && bounds.width > 0 && bounds.height > 0 &&
+  bounds.top >= outer.top && bounds.left >= outer.left && bounds.bottom <= outer.bottom && bounds.right <= outer.right;
+const visiblyOwned = (element, bounds) => {
+  for (let current = element; current; current = current.parentElement) {
+    const style = getComputedStyle(current);
+    if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) <= 0) return false;
+    if (current !== element && style.overflow !== "visible" && !inside(bounds, current.getBoundingClientRect())) return false;
+  }
+  const stack = document.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2);
+  const top = stack[0];
+  return Boolean(top && (top === element || element.contains(top)));
+};
+if (isHidden(panel) || !visiblyOwned(panel, panel.getBoundingClientRect()) || !visiblyOwned(group, groupBounds) ||
+    !inside(groupBounds) || !controlBounds.every((bounds, index) => inside(bounds) && visiblyOwned(controls[index], bounds)) ||
+    !groupLabelBounds.every((bounds, index) => inside(bounds) && visiblyOwned(groupLabels[index], bounds))) {
+  throw new Error("methodology-not-visible");
+}
+const groupLabelTexts = groupLabels.map((label) => label.textContent || "");
+if (groupLabelTexts.some((label, index) => label !== expectedGroupLabels[index])) {
+  throw new Error(`unexpected-group-labels:${JSON.stringify(groupLabelTexts)}`);
+}
+const labels = controls.map((control) => control.selectedOptions[0]?.textContent || "");
+if (labels.length !== expectedLabels.length || labels.some((label, index) => label !== expectedLabels[index])) {
+  throw new Error(`unexpected-labels:${JSON.stringify(labels)}`);
+}
+
+return JSON.stringify({
+  nonce,
+  stage,
+  loadedLanguage,
+  loadedValues,
+  language: language.value,
+  documentLanguage: document.documentElement.lang,
+  values: controls.map((control) => control.value),
+  labels,
+  regetAssignments: controls.map((control) => assignmentCounts.get(control)),
+  toast: toast.textContent || "",
+  panelVisible: !isHidden(panel),
+  errorHidden: isHidden(error),
+  viewport,
+  horizontalOffsets,
+  groupLabelTexts,
+  groupBounds,
+  groupLabelBounds,
+  controlBounds,
+});

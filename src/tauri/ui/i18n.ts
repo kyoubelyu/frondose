@@ -35,6 +35,7 @@ const en = {
   "ticker.retrying": "retrying last prompt...",
   "ticker.done": "done ({reason})",
   "ticker.cronActive": "cron active",
+  "reason.aborted": "aborted",
   // transient status-line messages
   "status.overlayReconnected": "overlay reconnected",
   "status.suggestionCard": "suggestion card rendered in-page",
@@ -53,6 +54,7 @@ const en = {
   "error.retryInvokeFailed": "retry invoke failed: {msg}",
   "error.agent": "agent error: {msg}",
   "error.noTauri": "__TAURI__ missing - not running inside Tauri shell",
+  "error.unknown": "unknown",
   "error.autoStartEmpty": "Type a standing prompt in the composer before switching to Auto.",
   "retry.button": "Retry",
   // surfaceError action labels
@@ -62,6 +64,7 @@ const en = {
   "action.decline": "Decline",
   "action.handoff": "Hand off to Auto",
   "action.pauseAbort": "Pause/abort",
+  "action.turn": "Run turn",
   "action.openSettings": "Open settings",
   "action.saveSettings": "Save settings",
   "action.checkUpdate": "Check for updates",
@@ -145,6 +148,31 @@ const en = {
   "settings.axisLeadRole": "Key Players entry point",
   "settings.axisDiscovery": "Discovery pacing",
   "settings.axisStory": "Spark-interest story shape",
+  "settings.axisPainChain.causeFirst": "cause-first",
+  "settings.axisPainChain.economicBuyerFirst": "economic-buyer-first",
+  "settings.axisPainChain.speculativeChainBuilt": "speculative-chain-built",
+  "settings.axisPainChain.admittedPainStart": "admitted-pain-start",
+  "settings.axisPainChain.lateralStakeholderFirst": "lateral-stakeholder-first",
+  "settings.axisPainChain.causeConfirmedThenUp": "cause-confirmed-then-up",
+  "settings.axisLeadRole.painOwnerFirst": "pain-owner first",
+  "settings.axisLeadRole.economicBuyerFirst": "economic-buyer first",
+  "settings.axisLeadRole.technicalEvaluatorFirst": "technical-evaluator first",
+  "settings.axisLeadRole.practitionerFirst": "practitioner first",
+  "settings.axisLeadRole.championLed": "champion-led",
+  "settings.axisLeadRole.multiThreadParallel": "multi-thread-parallel",
+  "settings.axisDiscovery.rLean": "R-lean",
+  "settings.axisDiscovery.iLean": "I-lean",
+  "settings.axisDiscovery.cLean": "C-lean",
+  "settings.axisDiscovery.ratioDisciplined": "ratio-disciplined",
+  "settings.axisDiscovery.precallThorough": "precall-thorough",
+  "settings.axisDiscovery.validateCloseFast": "validate-close-fast",
+  "settings.axisDiscovery.sparkInterestFocused": "spark-interest-focused",
+  "settings.axisStory.referenceStoryLed": "reference-story led",
+  "settings.axisStory.initialValuePropLed": "initial-value-prop led",
+  "settings.axisStory.causeNamedDirect": "cause-named direct",
+  "settings.axisStory.painQuestionFirst": "pain-question first",
+  "settings.axisStory.numberAnchoredOpener": "number-anchored opener",
+  "settings.axisStory.c3ShapedCloser": "C3-shaped closer",
   "settings.groupSoul": "Soul override (advanced)",
   "settings.soulPlaceholder": "Leave blank to use the default soul band.",
   "settings.groupUpdates": "Updates",
@@ -190,6 +218,7 @@ const zhCN: Record<I18nKey, string> = {
   "ticker.retrying": "正在重试上一条指令…",
   "ticker.done": "已完成（{reason}）",
   "ticker.cronActive": "定时任务进行中",
+  "reason.aborted": "已中止",
   // transient status-line messages
   "status.overlayReconnected": "悬浮层已重连",
   "status.suggestionCard": "建议卡片已在页面中显示",
@@ -208,6 +237,7 @@ const zhCN: Record<I18nKey, string> = {
   "error.retryInvokeFailed": "重试调用失败：{msg}",
   "error.agent": "智能体出错：{msg}",
   "error.noTauri": "未检测到 __TAURI__——应用未在 Tauri 壳内运行",
+  "error.unknown": "未知错误",
   "error.autoStartEmpty": "请先在输入框中写下自动模式的常驻指令，再切换到自动。",
   "retry.button": "重试",
   // surfaceError action labels
@@ -217,6 +247,7 @@ const zhCN: Record<I18nKey, string> = {
   "action.decline": "拒绝",
   "action.handoff": "交给自动模式",
   "action.pauseAbort": "暂停/中止",
+  "action.turn": "执行任务",
   "action.openSettings": "打开设置",
   "action.saveSettings": "保存设置",
   "action.checkUpdate": "检查更新",
@@ -300,6 +331,31 @@ const zhCN: Record<I18nKey, string> = {
   "settings.axisLeadRole": "Key Players 切入角色",
   "settings.axisDiscovery": "9-block 节奏",
   "settings.axisStory": "首次触达故事形态",
+  "settings.axisPainChain.causeFirst": "从原因切入",
+  "settings.axisPainChain.economicBuyerFirst": "先找经济决策者",
+  "settings.axisPainChain.speculativeChainBuilt": "先构建假设痛点链",
+  "settings.axisPainChain.admittedPainStart": "从已承认的痛点开始",
+  "settings.axisPainChain.lateralStakeholderFirst": "先找同级利益相关者",
+  "settings.axisPainChain.causeConfirmedThenUp": "确认原因后向上推进",
+  "settings.axisLeadRole.painOwnerFirst": "痛点负责人优先",
+  "settings.axisLeadRole.economicBuyerFirst": "经济决策者优先",
+  "settings.axisLeadRole.technicalEvaluatorFirst": "技术评估者优先",
+  "settings.axisLeadRole.practitionerFirst": "一线使用者优先",
+  "settings.axisLeadRole.championLed": "由内部支持者带动",
+  "settings.axisLeadRole.multiThreadParallel": "多线并行",
+  "settings.axisDiscovery.rLean": "偏重回应",
+  "settings.axisDiscovery.iLean": "偏重探索",
+  "settings.axisDiscovery.cLean": "偏重确认",
+  "settings.axisDiscovery.ratioDisciplined": "严格遵循比例",
+  "settings.axisDiscovery.precallThorough": "通话前充分准备",
+  "settings.axisDiscovery.validateCloseFast": "快速验证并收口",
+  "settings.axisDiscovery.sparkInterestFocused": "聚焦激发兴趣",
+  "settings.axisStory.referenceStoryLed": "以参考故事开场",
+  "settings.axisStory.initialValuePropLed": "以初始价值主张开场",
+  "settings.axisStory.causeNamedDirect": "直接点明原因",
+  "settings.axisStory.painQuestionFirst": "先问痛点",
+  "settings.axisStory.numberAnchoredOpener": "以数字锚点开场",
+  "settings.axisStory.c3ShapedCloser": "C3 式收尾",
   "settings.groupSoul": "灵魂设定覆盖（高级）",
   "settings.soulPlaceholder": "留空则使用默认灵魂设定。",
   "settings.groupUpdates": "更新",
@@ -351,6 +407,11 @@ export function t(key: I18nKey, params?: Record<string, string | number>): strin
     for (const [name, value] of Object.entries(params)) s = s.split(`{${name}}`).join(String(value));
   }
   return s;
+}
+
+export function formatActionFailure(label: string, error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  return t("error.actionFailed", { label, msg });
 }
 
 export function isI18nKey(key: string): key is I18nKey {

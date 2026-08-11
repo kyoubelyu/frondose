@@ -1,6 +1,6 @@
 [package]
 name = "frondose"
-version = "0.5.22"
+version = "0.5.23"
 description = "frondose v0.5 hover-pivot Tauri shell (M-1 demo skeleton)"
 edition = "2021"
 rust-version = "1.75"
@@ -11,6 +11,10 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+ui-validation = ["dep:block2", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-web-kit"]
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "devtools"] } # P-75 D-19: devtools enables WKInspectable for Safari Web Inspector attach (release build orchestrator UI introspection)
@@ -24,3 +28,10 @@ libc = "0.2"  # rev-1 Step 3b NIT-N1 / CONCERN-LR-2 fix: explicit direct dep for
 dirs = "6"
 semver = "1"
 tauri-plugin-updater = { version = "2", features = [] }  # P-58d.1: app-native self-update (desktop-only build; no target qualifier needed — this app never targets mobile).
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = { version = "=0.6.2", optional = true, default-features = false }
+objc2 = { version = "=0.6.4", optional = true, default-features = false }
+objc2-app-kit = { version = "=0.3.2", optional = true, default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep"] }
+objc2-foundation = { version = "=0.3.2", optional = true, default-features = false, features = ["NSData", "NSDictionary", "NSError", "NSObject", "NSString"] }
+objc2-web-kit = { version = "=0.3.2", optional = true, default-features = false, features = ["WKContentWorld", "WKFrameInfo", "WKSnapshotConfiguration", "WKWebView", "block2", "objc2-app-kit"] }

@@ -1,3 +1,5 @@
+import type { I18nKey } from "../i18n.js";
+
 type AppState = "idle" | "running" | "error";
 type TurnResponse = { ok: true; turnId: string } | { ok: false; reason: string };
 type LifecycleFrame = { type: "turn-started"; turnId: string; source: string };
@@ -19,7 +21,7 @@ export function createAssistantAppDependencies(deps: {
   setRetryVisible: (visible: boolean) => void;
   setCommand: (text: string) => void;
   transition: (state: AppState) => void;
-  translate: (key: string, vars?: Record<string, string>) => string;
+  translate: (key: I18nKey, vars?: Record<string, string | number>) => string;
   surfaceFailure: (label: string, error: unknown) => void;
 }) {
   function settleOwned(turnId: string): void {
@@ -32,7 +34,7 @@ export function createAssistantAppDependencies(deps: {
   function appendStoppedText(text: string): void {
     deps.appendUserBubble(text);
     deps.endAgentBubble();
-    deps.setTicker(deps.translate("ticker.done", { reason: "aborted" }));
+    deps.setTicker(deps.translate("ticker.done", { reason: deps.translate("reason.aborted") }));
     deps.setCommand("");
     deps.transition("idle");
   }
@@ -41,7 +43,7 @@ export function createAssistantAppDependencies(deps: {
     const result = await deps.invoke<TurnResponse>("frondose_agent_turn", { prompt: text });
     if (!result.ok) {
       const error = new Error(result.reason);
-      deps.surfaceFailure("action.turn", error);
+      deps.surfaceFailure(deps.translate("action.turn"), error);
       throw error;
     }
     deps.setCurrentTurnId(result.turnId);
@@ -60,13 +62,14 @@ export function createAssistantAppDependencies(deps: {
     settleOwned,
     appendStoppedText,
     startReplacement,
-    reportFailure: (error: unknown) => deps.surfaceFailure("action.pauseAbort", error),
+    reportFailure: (error: unknown) => deps.surfaceFailure(deps.translate("action.pauseAbort"), error),
     onTurnStartedView: (frame: LifecycleFrame) => {
       deps.setTicker(deps.translate(frame.source === "cron" ? "ticker.cronRunning" : "ticker.starting"));
       deps.transition("running");
     },
     onDoneView: (frame: DoneFrame) => {
-      deps.setTicker(deps.translate("ticker.done", { reason: frame.finishReason }));
+      const reason = frame.aborted ? deps.translate("reason.aborted") : frame.finishReason;
+      deps.setTicker(deps.translate("ticker.done", { reason }));
       if (frame.aborted) {
         deps.transition("idle");
         return;
