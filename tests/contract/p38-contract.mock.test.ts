@@ -236,7 +236,7 @@ describe("tool counts: worker 54 / server 27 (G-P38.8/.11, rebaselined)", () => 
     const { dir, cleanup } = makeTmpDir();
     try {
       const session = makeFakeSession();
-      const persistence = { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") };
+      const persistence = { memoryDbPath: join(dir, "memory.sqlite"), configPath: join(dir, "config.json") };
       process.env.FRONDOSE_TIER = "power";
       const powerKeys = Object.keys(makeAllTools(session, persistence, mockControl)).sort();
       assert.equal(

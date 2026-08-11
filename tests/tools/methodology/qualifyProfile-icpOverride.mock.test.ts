@@ -38,7 +38,7 @@ import { cleanupTmpDir } from "../../_helpers/tmp";
 function makeIdentityPath(suffix: string): string {
   const dir = join(tmpdir(), `frondose-icp-precision-qp-override-${process.pid}-${suffix}`);
   mkdirSync(dir, { recursive: true });
-  return join(dir, "identity.json");
+  return join(dir, "config.json");
 }
 
 function withIsolatedHome<T>(fn: () => Promise<T>): Promise<T> {
@@ -56,14 +56,13 @@ function withIsolatedHome<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-function writeIdentityFixture(identityPath: string, icp: Record<string, unknown>): void {
+function writeIdentityFixture(configPath: string, icp: Record<string, unknown>): void {
   writeFileSync(
-    identityPath,
+    configPath,
     JSON.stringify({
-      fullName: "TestOperator",
-      company: "Mastars",
-      icp,
-      updatedAt: new Date().toISOString(),
+      schema_version: 2,
+      identity: { fullName: "TestOperator", company: "Mastars", icp, updatedAt: new Date().toISOString() },
+      updateServerUrl: null,
     }),
     "utf-8",
   );
@@ -85,10 +84,10 @@ async function callQualify(
 describe("qualify_profile icp override — operator's live-turn ICP overrides the standing ICP (plan §5 T-Qualify.OverrideICP.1, design A)", () => {
   it("T-Qualify.OverrideICP.1: given a standing identity ICP {targetRole:['VP Sales'], region:['Europe','United States']}, when qualify_profile is called with icp override {targetRole:['Procurement Manager'], region:['Hong Kong']} AND role='Procurement Manager', region='Hong Kong', then data.qualification is 'qualified' — the standing ICP is NOT consulted; the override wins entirely", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t1");
+      const configPath = makeIdentityPath("t1");
       try {
-        writeIdentityFixture(identityPath, { targetRole: ["VP Sales"], region: ["Europe", "United States"] });
-        const tool = makeQualifyProfileTool({ identityPath });
+        writeIdentityFixture(configPath, { targetRole: ["VP Sales"], region: ["Europe", "United States"] });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called WITH an icp override naming an
         //       out-of-standing-region target (Hong Kong).
@@ -106,7 +105,7 @@ describe("qualify_profile icp override — operator's live-turn ICP overrides th
           `icp override must win over standing ICP; got ${JSON.stringify(envelope)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });
@@ -119,10 +118,10 @@ describe("qualify_profile icp override — operator's live-turn ICP overrides th
 describe("qualify_profile icp override — off by default, standing ICP applies with no override param (plan §5 T-Qualify.OverrideICP.2)", () => {
   it("T-Qualify.OverrideICP.2: given the SAME standing identity ICP as T-Qualify.OverrideICP.1, when qualify_profile is called with NO icp param and role='Procurement Manager', region='Hong Kong', then data.qualification is 'disqualified' (region mismatch under the standing 欧美 ICP) — proves the override mechanism is off-by-default, not always-on", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t2");
+      const configPath = makeIdentityPath("t2");
       try {
-        writeIdentityFixture(identityPath, { targetRole: ["VP Sales"], region: ["Europe", "United States"] });
-        const tool = makeQualifyProfileTool({ identityPath });
+        writeIdentityFixture(configPath, { targetRole: ["VP Sales"], region: ["Europe", "United States"] });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called with NO icp override — a Hong Kong
         //       procurement candidate that mismatches the standing 欧美 ICP.
@@ -139,7 +138,7 @@ describe("qualify_profile icp override — off by default, standing ICP applies 
           `no override → standing ICP must fire (role/region mismatch); got ${JSON.stringify(envelope)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });

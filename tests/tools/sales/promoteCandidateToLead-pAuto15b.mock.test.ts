@@ -3,7 +3,7 @@
  *
  * Covers:
  *   G-A15b.4   — empty evidence + ICP targetRole configured → promote fails with re-inspect message
- *   G-A15b.5   — empty evidence + NO ICP → promote skips the gate, succeeds (backward compat)
+ *   G-A15b.5   — empty evidence + NO ICP → evidence gate is not applicable, promote succeeds
  *   G-A15b.5a  — empty evidence + ICP + bypassPersonaCheck:true STILL fails the QS-7.a gate
  *               (bypassPersonaCheck bypasses D-29 token-overlap only, NOT the evidence gate)
  *   G-A15b.5b  — non-empty evidence + ICP → passes the evidence gate, promote succeeds
@@ -53,16 +53,12 @@ const toolOpts = { messages: [] as never[], toolCallId: "test" };
  * Canonical temp-HOME isolation pattern (CONCERN-MR-3).
  * Mirror of tests/tools/methodology/qualifyProfile.mock.test.ts:40-44.
  *
- * D-A15b.1 fix: write the legacy `identity.json` directly at
- *   <tmpHome>/.frondose/agent/identity.json
- * rather than config.json. config.json requires schema_version:2 + a full v2
- * envelope; without it, readConfig() rejects the file and readIdentity() falls
- * back to the legacy identity.json reader — which is the correct fallback path.
+ * Current-only fixture: write schema-v2 `config.json.identity` at the isolated
+ * default path and a contradictory `identity.json` hostile canary.
  *
  * identityRecord shape must satisfy identityRecordSchema (all fields optional
  * except updatedAt; icp.targetRole must have ≥1 element to pass Zod validation).
- * For the no-ICP tests, pass identityRecord=null — no identity.json is written
- * so readIdentity() returns null and the QS-7.a gate skips (backward-compat).
+ * For no-ICP tests, pass identityRecord=null so neither identity source is seeded.
  *
  * Returns: { tmpHome, restore }
  *   tmpHome — the temp directory path (also used as FRONDOSE_HOME_BASE)
@@ -75,14 +71,26 @@ function setupTempHome(identityRecord: Record<string, unknown> | null): { tmpHom
   process.env.HOME = tmpHome;
   process.env.FRONDOSE_HOME_BASE = tmpHome;
 
-  // Write the identity.json into the legacy fallback path.
-  // readIdentity() checks config.json first; if absent/invalid, falls back to
-  // identity.json. Writing only identity.json exercises the fallback path cleanly.
+  // Seed the current schema-v2 authority plus a contradictory hostile sidecar.
+  // Every behavior below therefore reaches promote_candidate_to_lead's real
+  // default-path readIdentity() and proves the sidecar cannot influence it.
   mkdirSync(join(tmpHome, ".frondose", "agent"), { recursive: true });
   if (identityRecord !== null) {
     writeFileSync(
+      join(tmpHome, ".frondose", "agent", "config.json"),
+      JSON.stringify({
+        schema_version: 2,
+        identity: { ...identityRecord, updatedAt: new Date().toISOString() },
+        updateServerUrl: null,
+      }),
+    );
+    writeFileSync(
       join(tmpHome, ".frondose", "agent", "identity.json"),
-      JSON.stringify({ ...identityRecord, updatedAt: new Date().toISOString() }),
+      JSON.stringify({
+        fullName: "Hostile Legacy",
+        icp: { targetRole: ["Hostile Legacy Role"] },
+        updatedAt: new Date().toISOString(),
+      }),
     );
   }
 
@@ -145,7 +153,7 @@ describe("G-A15b.4 — QS-7.a: empty evidence + ICP configured → promote fails
     //        no leads row written; raw_candidates.status stays 'scored'
     const path = tmpPath("qs7a-fail-icp");
     const db = openSalesDatabase(path) as AnyDb;
-    // D-A15b.1: write flat identityRecord to identity.json (legacy fallback path)
+    // Current schema-v2 config contains an identity with ICP; the sidecar is only a hostile canary.
     const { restore } = setupTempHome({
       fullName: "Test BD",
       role: "BD",
@@ -173,17 +181,17 @@ describe("G-A15b.4 — QS-7.a: empty evidence + ICP configured → promote fails
   });
 });
 
-// ─── G-A15b.5: empty evidence + NO ICP → skip (backward compat) ────────────
+// ─── G-A15b.5: empty evidence + NO ICP → gate is not applicable ───────────
 
 describe("G-A15b.5 — QS-7.a: empty evidence + NO ICP → gate skips, promote succeeds", () => {
   it("G-A15b.5: when evidence_summary IS NULL and identity has NO targetRole (empty ICP), promote succeeds (D-29 mirror skip)", async () => {
     // Given: candidate with evidence_summary=NULL status='scored';
-    //        tmp-HOME isolation seeds config.json with identity.icp.targetRole=[] (no ICP)
+    //        tmp-HOME isolation leaves config.json.identity absent (no ICP)
     // When:  promote_candidate_to_lead({candidateId})
     // Then:  {ok:true}; leads row written; raw_candidates.status='promoted'
     const path = tmpPath("qs7a-no-icp");
     const db = openSalesDatabase(path) as AnyDb;
-    // D-A15b.1: no identity.json written → readIdentity() returns null → gate skips
+    // Current config has no identity → readIdentity() returns null → gate is not applicable.
     const { restore } = setupTempHome(null);
     try {
       const candidateId = await seedScoredCandidate(path, db, { evidenceSummary: undefined });
@@ -218,7 +226,7 @@ describe("G-A15b.5a — QS-7.a: bypassPersonaCheck:true does NOT bypass the QS-7
     //        error mentions evidence_summary / re-inspect
     const path = tmpPath("qs7a-bypass-still-fails");
     const db = openSalesDatabase(path) as AnyDb;
-    // D-A15b.1: flat identityRecord with ICP to identity.json
+    // Current schema-v2 config contains an identity with ICP.
     const { restore } = setupTempHome({
       fullName: "Test BD",
       role: "BD",
@@ -259,7 +267,7 @@ describe("G-A15b.5b — QS-7.a: non-empty evidence + ICP passes the evidence gat
     // Then:  {ok:true}; leads row written; status='promoted'
     const path = tmpPath("qs7a-evidence-pass");
     const db = openSalesDatabase(path) as AnyDb;
-    // D-A15b.1: flat identityRecord with ICP to identity.json
+    // Current schema-v2 config contains an identity with ICP.
     const { restore } = setupTempHome({
       fullName: "Test BD",
       role: "BD",
@@ -309,7 +317,7 @@ describe("G-A15b.5c — QS-7.a: readIdentity() hoist — called exactly ONCE per
     //   Step 5 TODO: assert readIdentity call count === 1 via module spy
     const path = tmpPath("qs7a-hoist");
     const db = openSalesDatabase(path) as AnyDb;
-    // D-A15b.1: flat identityRecord with ICP to identity.json
+    // Current schema-v2 config contains an identity with ICP.
     const { restore } = setupTempHome({
       fullName: "Test BD",
       role: "BD",

@@ -165,7 +165,7 @@ test("T-M121: makeAllTools(undefined, persistence) returns 31 keys (base 23 + 8 
   // P-OPEN-SOURCE-SPLIT: 33 → 31 (publish_event + query_lead_globally retired).
   const persistence = {
     memoryDbPath: join(tmpdir(), "p4-t121-memory.sqlite"),
-    identityPath: join(tmpdir(), "p4-t121-identity.json"),
+    configPath: join(tmpdir(), "p4-t121-config.json"),
   };
   const t = makeAllTools(undefined, persistence);
   const keys = Object.keys(t).sort();
@@ -214,7 +214,7 @@ test("T-M122: makeAllTools(session, persistence) returns 42 keys — single-mode
   };
   const persistence = {
     memoryDbPath: join(tmpdir(), "p4-t122-memory.sqlite"),
-    identityPath: join(tmpdir(), "p4-t122-identity.json"),
+    configPath: join(tmpdir(), "p4-t122-config.json"),
   };
 
   const t = makeAllTools(session, persistence);
@@ -281,7 +281,7 @@ test("T-M_p5.18: makeAllTools(session, persistence) returns 42 keys including 'q
   };
   const persistence = {
     memoryDbPath: join(tmpdir(), "p5-t-m-p5-18-memory.sqlite"),
-    identityPath: join(tmpdir(), "p5-t-m-p5-18-identity.json"),
+    configPath: join(tmpdir(), "p5-t-m-p5-18-config.json"),
   };
 
   const t = makeAllTools(session, persistence);
@@ -322,7 +322,7 @@ test("T-M_p6.21: makeAllTools(session, persistence, control) returns 51 keys (si
   };
   const persistence = {
     memoryDbPath: join(tmpdir(), "p6-t-m-p6-21-memory.sqlite"),
-    identityPath: join(tmpdir(), "p6-t-m-p6-21-identity.json"),
+    configPath: join(tmpdir(), "p6-t-m-p6-21-config.json"),
   };
   const control = { requestStop: () => {} };
 
@@ -621,7 +621,7 @@ test("T-F.Wire.2: single-mode App registry — power 51 / consumer 49, delta tel
   };
   const persistence = {
     memoryDbPath: join(tmpdir(), "p6-t-m-p6-21-memory.sqlite"),
-    identityPath: join(tmpdir(), "p6-t-m-p6-21-identity.json"),
+    configPath: join(tmpdir(), "p6-t-m-p6-21-config.json"),
   };
   const control = { requestStop: () => {} };
 

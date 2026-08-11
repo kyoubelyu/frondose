@@ -36,7 +36,7 @@ export type ToolKey = keyof typeof tools;
 
 export interface PersistencePaths {
   memoryDbPath: string;
-  identityPath: string;
+  configPath: string;
   schedulePath?: string;
   salesDbPath?: string;
 }
@@ -60,8 +60,8 @@ export function makeAllTools(
 
   if (persistence) {
     Object.assign(out, makeMemoryTools(persistence.memoryDbPath));
-    Object.assign(out, makeIdentityTools(persistence.identityPath));
-    Object.assign(out, makeMethodologyTools({ identityPath: persistence.identityPath }));
+    Object.assign(out, makeIdentityTools(persistence.configPath));
+    Object.assign(out, makeMethodologyTools({ configPath: persistence.configPath }));
   }
   if (session) {
     Object.assign(out, makeBrowserTools(session));

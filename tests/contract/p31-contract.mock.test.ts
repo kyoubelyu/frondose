@@ -140,7 +140,7 @@ describe("makeAllTools worker mode → 54 tool keys (P-ISSUE-BOARD) (G-P31.12)",
         session,
         {
           memoryDbPath: join(dir, "memory.sqlite"),
-          identityPath: join(dir, "identity.json"),
+          configPath: join(dir, "config.json"),
           schedulePath: join(dir, "schedule.jsonl"),
         },
         mockControl,

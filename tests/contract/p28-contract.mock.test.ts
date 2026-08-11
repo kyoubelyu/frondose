@@ -51,7 +51,7 @@ describe("makeAllTools P-28 tool-count contract — worker mode (G-P28.29)", () 
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
+        configPath: join(dir, "config.json"),
       };
       const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;

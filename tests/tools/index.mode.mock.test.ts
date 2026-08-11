@@ -22,11 +22,11 @@ process.env.FRONDOSE_TIER = "power"; // P-58a: assert the FULL (power-tier) tool
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function makeTmpDir(): { memoryDbPath: string; identityPath: string; cleanup: () => void } {
+function makeTmpDir(): { memoryDbPath: string; configPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p25-tools-"));
   return {
     memoryDbPath: join(dir, "memory.sqlite"),
-    identityPath: join(dir, "identity.json"),
+    configPath: join(dir, "config.json"),
     cleanup: () => cleanupTmpDir(dir),
   };
 }

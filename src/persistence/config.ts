@@ -1,19 +1,12 @@
 /** P-24: non-secret operator config at ~/.frondose/agent/config.json (plan §6.2).
  *
- * Migration: on first read where config.json is absent, reads
- * ~/.frondose/agent/telegram.json for {enabled, boundUserId, proxyUrl} and writes
- * config.json with those values (only if any of the three is non-default).
- * Legacy telegram.json is NOT deleted (P-25 GC).
- *
- * P-28: config.json schema v1 → v2. v2 absorbs the worker `identity` record
- * (folded from identity.json) and `soul.override` (folded from the formerly
- * write-only soul_band_override.txt). `readConfig` version-dispatches on the
- * RAW JSON's `schema_version` BEFORE any Zod parse (D-5).
+ * Only the current schema-v2 file is accepted. Missing, invalid, and obsolete
+ * files yield current defaults in memory without read-time writes or migration.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { type IdentityRecord, identityRecordSchema } from "./identitySchema.js";
+import { identityRecordSchema } from "./identitySchema.js";
 import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
 
@@ -53,8 +46,7 @@ const telegramSubSchema = z.object({
   proxyUrl: z.string().nullable().default(null),
 });
 
-// P-28: replaces the write-only soul_band_override.txt. When `override` is
-// non-null, main.ts uses it as the WHOLE soul band instead of composeSoulBand.
+// A non-null override replaces the composed Soul band.
 const soulSubSchema = z.object({
   override: z.string().max(3000).nullable().default(null),
 });
@@ -68,8 +60,8 @@ export const configJsonSchemaV2 = z.object({
   server: serverSubSchema.default({ url: null, bind_address: null, poll_interval_s: 30 }),
   worker: workerSubSchema.default({ id: null, hostname: null, label: null }),
   telegram: telegramSubSchema.default({ enabled: false, boundUserId: null, proxyUrl: null }),
-  identity: identityRecordSchema.optional(), // P-28: folded from identity.json
-  soul: soulSubSchema.default({ override: null }), // P-28: folded from soul_band_override.txt
+  identity: identityRecordSchema.optional(),
+  soul: soulSubSchema.default({ override: null }),
   // P-58d.1 [3b/CMR-1]: app-native update endpoint. Plaintext, NOT a secret. LENIENT
   // here on purpose — NO .url(): operators hand-edit this field, and readConfig falls
   // through to DEFAULT_CONFIG_V2 on ANY schema failure, so a single typo here must NOT
@@ -86,19 +78,6 @@ export const configJsonSchemaV2 = z.object({
   auto: autoSubSchema.optional().default({ intervalMinutes: 15 }),
 });
 export type ConfigJsonV2 = z.infer<typeof configJsonSchemaV2>;
-
-// D-6: deprecated aliases — keep existing `configJsonSchema` / `ConfigJson` imports compiling.
-export const configJsonSchema = configJsonSchemaV2;
-export type ConfigJson = ConfigJsonV2;
-
-// P-28: v1 schema — internal, migration input only.
-const configJsonSchemaV1 = z.object({
-  schema_version: z.literal(1),
-  server: serverSubSchema.default({ url: null, bind_address: null, poll_interval_s: 30 }),
-  worker: workerSubSchema.default({ id: null, hostname: null, label: null }),
-  telegram: telegramSubSchema.default({ enabled: false, boundUserId: null, proxyUrl: null }),
-});
-type ConfigJsonV1 = z.infer<typeof configJsonSchemaV1>;
 
 const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
   schema_version: 2,
@@ -122,12 +101,7 @@ const DEFAULT_CONFIG_V2: ConfigJsonV2 = {
 
 export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
   if (!existsSync(path)) {
-    // First-run: migrate from legacy telegram.json (P-24 path), now returns v2.
-    const migrated = migrateTelegramIntoConfig();
-    if (migrated.telegram.enabled || migrated.telegram.boundUserId !== null || migrated.telegram.proxyUrl !== null) {
-      writeConfig(migrated, path);
-    }
-    return migrated;
+    return DEFAULT_CONFIG_V2;
   }
 
   let raw: unknown;
@@ -136,14 +110,6 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
   } catch (e) {
     process.stderr.write(`[frondose] config.json corrupt or invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
-  }
-
-  // D-5: version-dispatch on RAW JSON before any Zod parse.
-  const ver = (raw as { schema_version?: unknown }).schema_version;
-  if (ver === 1) {
-    const migrated = migrateV1toV2(raw, path);
-    writeConfig(migrated, path); // overwrite on disk with v2 — migration persisted (G-P28.5)
-    return migrated;
   }
 
   try {
@@ -157,70 +123,6 @@ export function readConfig(path: string = DEFAULT_CONFIG_PATH()): ConfigJsonV2 {
     process.stderr.write(`[frondose] config.json invalid: ${e instanceof Error ? e.message : String(e)}\n`);
     return DEFAULT_CONFIG_V2;
   }
-}
-
-/** v1 → v2: fold sibling identity.json + soul_band_override.txt into the config.
- *  Legacy files are NOT deleted (P-29 GC). Identity/soul paths are derived from
- *  the config's OWN directory so worker (~/.frondose/agent) and server (~/.frondose/server)
- *  configs migrate against their own siblings (G-P28.7). */
-function migrateV1toV2(rawV1: unknown, configPath: string): ConfigJsonV2 {
-  // Parse v1 leniently — on failure fall back to a hardcoded default (C-1: do NOT
-  // call .parse() in the fallback — it could itself throw and escape readConfig).
-  const v1 = configJsonSchemaV1.safeParse(rawV1);
-  const base: ConfigJsonV1 = v1.success
-    ? v1.data
-    : {
-        schema_version: 1,
-        server: {
-          url: null,
-          bind_address: null,
-          poll_interval_s: 30,
-          web_port: 8090,
-          ssh_user: null,
-          ssh_port: 22,
-          rest_port: 3031,
-        },
-        worker: { id: null, hostname: null, label: null, input_mode: "cdp" as const },
-        telegram: { enabled: false, boundUserId: null, proxyUrl: null },
-      };
-
-  const dir = dirname(configPath);
-
-  // Fold identity.json (sibling). safeParse → undefined on shape mismatch
-  // (server's identity.json is a ServerIdentity, not an IdentityRecord — G-P28.7).
-  let identity: IdentityRecord | undefined;
-  const identityPath = join(dir, "identity.json");
-  if (existsSync(identityPath)) {
-    try {
-      const parsed = identityRecordSchema.safeParse(readJsonFileSync(identityPath));
-      if (parsed.success) identity = parsed.data;
-    } catch {
-      // leave undefined — corrupt legacy identity.json
-    }
-  }
-
-  // Fold soul_band_override.txt (sibling).
-  let soulOverride: string | null = null;
-  const overridePath = join(dir, "soul_band_override.txt");
-  if (existsSync(overridePath)) {
-    try {
-      soulOverride = readFileSync(overridePath, "utf-8").trim() || null;
-    } catch {
-      // leave null
-    }
-  }
-
-  return {
-    schema_version: 2,
-    server: base.server,
-    worker: base.worker,
-    telegram: base.telegram,
-    identity,
-    soul: { override: soulOverride },
-    updateServerUrl: DEFAULT_UPDATE_SERVER_URL, // P-58d.1: v1 configs never carried it; §13.1 public default
-    language: "auto", // P-ZH-1: v1 configs never carried it
-    auto: { intervalMinutes: 15 },
-  };
 }
 
 export function writeConfig(cfg: ConfigJsonV2, path: string = DEFAULT_CONFIG_PATH()): void {
@@ -238,37 +140,6 @@ export function writeConfig(cfg: ConfigJsonV2, path: string = DEFAULT_CONFIG_PAT
     throw e;
   }
   // No chmod — config.json carries no secrets (server.token lives in secrets.json).
-}
-
-/** Read legacy ~/.frondose/agent/telegram.json and extract {enabled, boundUserId, proxyUrl}.
- *
- * Step-3b C-2 fix: emit stderr warning on parse error (was silent). Mirrors
- * `tryReadJson` in secrets.ts so operators see why their telegram settings
- * could not be migrated.
- *
- * P-28: returns ConfigJsonV2 (spreads DEFAULT_CONFIG_V2).
- */
-export function migrateTelegramIntoConfig(
-  tcPath: string = join(getHomeBase(), DATA_DIR_NAME, "agent", "telegram.json"),
-): ConfigJsonV2 {
-  if (!existsSync(tcPath)) return DEFAULT_CONFIG_V2;
-  try {
-    const raw = readJsonFileSync(tcPath) as Record<string, unknown>;
-    return {
-      ...DEFAULT_CONFIG_V2,
-      telegram: {
-        enabled: typeof raw.enabled === "boolean" ? raw.enabled : false,
-        boundUserId: typeof raw.boundUserId === "number" ? raw.boundUserId : null,
-        proxyUrl: typeof raw.proxyUrl === "string" ? raw.proxyUrl : null,
-      },
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(
-      `[frondose] telegram.json migration parse error: ${msg}; settings not migrated — run \`mai telegram\` to reconfigure.\n`,
-    );
-    return DEFAULT_CONFIG_V2;
-  }
 }
 
 /** P-24 NEW: write config-level telegram fields (enabled / boundUserId / proxyUrl).

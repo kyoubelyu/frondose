@@ -54,7 +54,7 @@ export interface MatchResult {
 
 /** Free axis option pool entry — from F-4-revised. */
 export interface FreeAxisOption {
-  key: string; // stable identifier persisted in identity.json
+  key: string; // stable identifier persisted in config.json identity
   meaning: string; // 1-line description shown in Soul + first-run prompt
 }
 
