@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import CDP from "chrome-remote-interface";
+import { withOwnedChrome } from "../../_helpers/ownedBrowser.js";
 
 type Frame =
   | { type: "assistant-progress"; turnId: string; text: string }
@@ -596,24 +598,23 @@ describe("compiled builder and complete shipped stylesheet enforce the physical 
     bubbleModule.buildAgentBubble(doc, list);
     const productionMarkup = list.__fake.children.map(serialize).join("");
 
-    const [{ launch }, criModule] = await Promise.all([
-      import("chrome-launcher"),
-      // @ts-expect-error chrome-remote-interface intentionally ships without TypeScript declarations.
-      import("chrome-remote-interface"),
-    ]);
-    const chrome = await launch({ chromeFlags: ["--headless=new", "--disable-gpu", "--no-sandbox"] });
-    const client = await criModule.default({ port: chrome.port });
-    try {
-      const { Page, Runtime } = client;
-      await Page.enable();
-      const loaded = Page.loadEventFired();
-      await Page.navigate({
-        url: `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><style>${shippedStyle}</style><div id="conversation-list">${productionMarkup}</div>`)}`,
-      });
-      await loaded;
-      const result = await Runtime.evaluate({
-        returnByValue: true,
-        expression: `(() => {
+    await withOwnedChrome(
+      {
+        chromeOptions: { chromeFlags: ["--headless=new", "--disable-gpu", "--no-sandbox"] },
+        connect: (browser) => CDP({ port: browser.handle.port }),
+        setup: async (connected) => connected.Page.enable(),
+        close: (connected) => connected.close(),
+      },
+      async ({ client }) => {
+        const { Page, Runtime } = client;
+        const loaded = Page.loadEventFired();
+        await Page.navigate({
+          url: `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><style>${shippedStyle}</style><div id="conversation-list">${productionMarkup}</div>`)}`,
+        });
+        await loaded;
+        const result = await Runtime.evaluate({
+          returnByValue: true,
+          expression: `(() => {
           const progress = document.querySelector(".assistant-progress");
           const progressText = document.querySelector(".assistant-progress-text");
           const body = document.querySelector(".msg-agent-body");
@@ -712,88 +713,86 @@ describe("compiled builder and complete shipped stylesheet enforce the physical 
             finalStrong: answer.querySelectorAll("strong").length
           };
         })()`,
-      });
-      const value = result.result.value as {
-        tops: number[];
-        height: number;
-        lineHeight: number;
-        display: string;
-        visibility: string;
-        initialText: string;
-        initialTextHeight: number;
-        initialMetrics: {
+        });
+        const value = result.result.value as {
+          tops: number[];
+          height: number;
+          lineHeight: number;
           display: string;
           visibility: string;
-          opacity: number;
-          effectiveOpacity: number;
-          ancestorsVisible: boolean;
-          color: string;
-          width: number;
-          visibleGlyphWidth: number;
-          renderedLineRects: number;
+          initialText: string;
+          initialTextHeight: number;
+          initialMetrics: {
+            display: string;
+            visibility: string;
+            opacity: number;
+            effectiveOpacity: number;
+            ancestorsVisible: boolean;
+            color: string;
+            width: number;
+            visibleGlyphWidth: number;
+            renderedLineRects: number;
+          };
+          replacementText: string;
+          replacementTextHeight: number;
+          replacementMetrics: {
+            display: string;
+            visibility: string;
+            opacity: number;
+            effectiveOpacity: number;
+            ancestorsVisible: boolean;
+            color: string;
+            width: number;
+            visibleGlyphWidth: number;
+            renderedLineRects: number;
+          };
+          positionedWithinBody: {
+            left: boolean;
+            right: boolean;
+            top: boolean;
+            bottom: boolean;
+            answerLeft: boolean;
+            answerTop: boolean;
+          };
+          finalStrong: number;
         };
-        replacementText: string;
-        replacementTextHeight: number;
-        replacementMetrics: {
-          display: string;
-          visibility: string;
-          opacity: number;
-          effectiveOpacity: number;
-          ancestorsVisible: boolean;
-          color: string;
-          width: number;
-          visibleGlyphWidth: number;
-          renderedLineRects: number;
-        };
-        positionedWithinBody: {
-          left: boolean;
-          right: boolean;
-          top: boolean;
-          bottom: boolean;
-          answerLeft: boolean;
-          answerTop: boolean;
-        };
-        finalStrong: number;
-      };
-      assert.equal(new Set(value.tops).size, 1, `answer moved: ${value.tops.join(",")}`);
-      assert.ok(value.height >= value.lineHeight, "visible progress must expose at least one readable line box");
-      assert.ok(value.height <= value.lineHeight * 2 + 1);
-      assert.notEqual(value.display, "none");
-      assert.equal(value.visibility, "visible");
-      assert.equal(
-        value.initialText,
-        "one two three four five six seven eight nine ten eleven twelve thirteen fourteen",
-      );
-      assert.ok(value.initialTextHeight >= value.lineHeight);
-      assert.ok(value.initialTextHeight <= value.lineHeight * 2 + 1);
-      assert.equal(value.replacementText, "replacement content intentionally longer than two rendered lines");
-      assert.ok(value.replacementTextHeight >= value.lineHeight);
-      assert.ok(value.replacementTextHeight <= value.lineHeight * 2 + 1);
-      for (const metrics of [value.initialMetrics, value.replacementMetrics]) {
-        assert.notEqual(metrics.display, "none");
-        assert.equal(metrics.visibility, "visible");
-        assert.ok(metrics.opacity > 0);
-        assert.ok(metrics.effectiveOpacity > 0);
-        assert.equal(metrics.ancestorsVisible, true);
-        assert.notEqual(metrics.color, "transparent");
-        assert.notEqual(metrics.color, "rgba(0, 0, 0, 0)");
-        assert.ok(metrics.width > 0);
-        assert.ok(metrics.visibleGlyphWidth > 0);
-        assert.ok(metrics.renderedLineRects >= 1);
-        assert.ok(metrics.renderedLineRects <= 2);
-      }
-      assert.deepEqual(value.positionedWithinBody, {
-        left: true,
-        right: true,
-        top: true,
-        bottom: true,
-        answerLeft: true,
-        answerTop: true,
-      });
-      assert.equal(value.finalStrong, 1);
-    } finally {
-      await client.close();
-      await chrome.kill();
-    }
+        assert.equal(new Set(value.tops).size, 1, `answer moved: ${value.tops.join(",")}`);
+        assert.ok(value.height >= value.lineHeight, "visible progress must expose at least one readable line box");
+        assert.ok(value.height <= value.lineHeight * 2 + 1);
+        assert.notEqual(value.display, "none");
+        assert.equal(value.visibility, "visible");
+        assert.equal(
+          value.initialText,
+          "one two three four five six seven eight nine ten eleven twelve thirteen fourteen",
+        );
+        assert.ok(value.initialTextHeight >= value.lineHeight);
+        assert.ok(value.initialTextHeight <= value.lineHeight * 2 + 1);
+        assert.equal(value.replacementText, "replacement content intentionally longer than two rendered lines");
+        assert.ok(value.replacementTextHeight >= value.lineHeight);
+        assert.ok(value.replacementTextHeight <= value.lineHeight * 2 + 1);
+        for (const metrics of [value.initialMetrics, value.replacementMetrics]) {
+          assert.notEqual(metrics.display, "none");
+          assert.equal(metrics.visibility, "visible");
+          assert.ok(metrics.opacity > 0);
+          assert.ok(metrics.effectiveOpacity > 0);
+          assert.equal(metrics.ancestorsVisible, true);
+          assert.notEqual(metrics.color, "transparent");
+          assert.notEqual(metrics.color, "rgba(0, 0, 0, 0)");
+          assert.ok(metrics.width > 0);
+          assert.ok(metrics.visibleGlyphWidth > 0);
+          assert.ok(metrics.renderedLineRects >= 1);
+          assert.ok(metrics.renderedLineRects <= 2);
+        }
+        assert.deepEqual(value.positionedWithinBody, {
+          left: true,
+          right: true,
+          top: true,
+          bottom: true,
+          answerLeft: true,
+          answerTop: true,
+        });
+        assert.equal(value.finalStrong, 1);
+      },
+    );
   });
 });

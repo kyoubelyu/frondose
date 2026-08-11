@@ -29,16 +29,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { launch } from "chrome-launcher";
 import CDP from "chrome-remote-interface";
+import { type BrowserOwner, openOwnedChrome, runIndependentCleanups } from "../_helpers/ownedBrowser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, "..", "..");
 const UI_DIR = join(REPO, "src", "tauri", "ui");
 const APP_TS = readFileSync(join(UI_DIR, "app.ts"), "utf-8");
 const INDEX_HTML = readFileSync(join(UI_DIR, "index.html"), "utf-8");
-const ROUTES_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve", "routes.ts"), "utf-8");
-const SERVE_TS = readFileSync(join(REPO, "src", "cli", "subcommands", "serve.ts"), "utf-8");
+const ROUTES_TS = readFileSync(join(REPO, "src", "app", "backend", "routes.ts"), "utf-8");
+const SERVE_TS = readFileSync(join(REPO, "src", "app", "backend", "index.ts"), "utf-8");
 const SESSION_TS = readFileSync(join(REPO, "src", "linkedin", "session.ts"), "utf-8");
 const PORT = 8782;
 
@@ -64,7 +64,7 @@ const SPY_STUB = `
 `;
 
 // biome-ignore lint/suspicious/noExplicitAny: CDP client + chrome handle are untyped (no @types).
-let chrome: any;
+let browserOwner: BrowserOwner<any> | undefined;
 // biome-ignore lint/suspicious/noExplicitAny: CDP client is untyped.
 let client: any;
 let httpUi: ChildProcess;
@@ -99,21 +99,28 @@ before(async () => {
     stdio: "ignore",
   });
   await sleep(800);
-  chrome = await launch({ chromeFlags: ["--headless=new", "--disable-gpu"] });
-  client = await CDP({ port: chrome.port });
-  await client.Page.enable();
-  await client.Runtime.enable();
-  await client.Page.addScriptToEvaluateOnNewDocument({ source: SPY_STUB });
+  try {
+    browserOwner = await openOwnedChrome({
+      chromeOptions: { chromeFlags: ["--headless=new", "--disable-gpu"] },
+      connect: (browser) => CDP({ port: browser.handle.port }),
+      setup: async (connected) => {
+        await connected.Page.enable();
+        await connected.Runtime.enable();
+        await connected.Page.addScriptToEvaluateOnNewDocument({ source: SPY_STUB });
+      },
+      close: (connected) => connected.close(),
+    });
+    client = browserOwner.client;
+  } catch (error) {
+    await runIndependentCleanups("entry-flow setup cleanup failed", [() => httpUi?.kill("SIGKILL")], error);
+  }
 });
 
 after(async () => {
-  try {
-    await client?.close();
-  } catch {}
-  try {
-    await chrome?.kill();
-  } catch {}
-  httpUi?.kill();
+  await runIndependentCleanups("entry-flow suite cleanup failed", [
+    () => browserOwner?.finish(),
+    () => httpUi?.kill("SIGKILL"),
+  ]);
 });
 
 // ─── (A) DOM-harness: boot state machine (§6.1) ──────────────────────────────
@@ -180,7 +187,11 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
     // identity-gate stays visible (still informational); composer surface now VISIBLE + ENABLED
     // so the operator has something to talk into on first contact.
     assert.equal(snap.gateHidden, false, "identity-gate must be VISIBLE when identity missing");
-    assert.equal(snap.composerHidden, false, "composer must be VISIBLE when identity missing (first-contact conversation)");
+    assert.equal(
+      snap.composerHidden,
+      false,
+      "composer must be VISIBLE when identity missing (first-contact conversation)",
+    );
     assert.equal(snap.cmdHidden, false, "command-input must be VISIBLE when identity missing");
     assert.equal(snap.cmdDisabled, false, "command-input must be ENABLED when identity missing");
     assert.equal(snap.sendHidden, false, "send-btn must be VISIBLE when identity missing");
@@ -193,7 +204,10 @@ describe("entry-flow — boot state machine (conversation-first, no Start gate)"
     // When:  the operator types into #command-input and clicks #send-btn
     // Then:  frondose_agent_turn appears in the recorded invokes (sendCommand()'s guard must
     //        permit dispatch from 'identity-missing', not only 'idle')
-    await bootWith({ ok: false, reason: "identity not set yet — say hello to get started (or set it in Frondose → Settings)" });
+    await bootWith({
+      ok: false,
+      reason: "identity not set yet — say hello to get started (or set it in Frondose → Settings)",
+    });
     await evalIn(`(() => {
       const cmd = document.getElementById('command-input');
       cmd.value = 'Hi Frondose';
@@ -265,10 +279,7 @@ describe("entry-flow — overlay re-home structural wiring (§6.2)", () => {
     //        /chrome/ensure handler (no inline subscribe/attach block left behind);
     //        serve.ts passes onClientBooted: to createLinkedinSession delegating to ensureOverlaySubscription;
     //        session.ts's CreateLinkedinSessionOpts declares onClientBooted?
-    const ROUTES_CDP_TS = readFileSync(
-      join(REPO, "src", "cli", "subcommands", "serve", "routes", "cdp.ts"),
-      "utf-8",
-    );
+    const ROUTES_CDP_TS = readFileSync(join(REPO, "src", "app", "backend", "routes", "cdp.ts"), "utf-8");
     // barrel re-exports the helper (semantic contract: symbol is publicly accessible via routes.ts)
     assert.ok(
       ROUTES_TS.includes("ensureOverlaySubscription") && ROUTES_TS.includes("routes/cdp"),
