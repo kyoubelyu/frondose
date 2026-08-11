@@ -254,6 +254,143 @@ function hasEmptyTargetRole(
   return found;
 }
 
+type CurrentHostSkip = {
+  path: string;
+  title: string;
+  mechanism: "skip-unless-win32";
+};
+
+function unwrapExpression(
+  node: ts.Expression,
+  values: ReadonlyMap<string, ts.Expression>,
+  seen = new Set<string>(),
+): ts.Expression {
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  ) {
+    return unwrapExpression(node.expression, values, seen);
+  }
+  if (ts.isIdentifier(node) && !seen.has(node.text)) {
+    const initializer = values.get(node.text);
+    if (initializer) return unwrapExpression(initializer, values, new Set(seen).add(node.text));
+  }
+  return node;
+}
+
+function isProcessPlatform(node: ts.Expression, values: ReadonlyMap<string, ts.Expression>): boolean {
+  const value = unwrapExpression(node, values);
+  return (
+    ts.isPropertyAccessExpression(value) &&
+    value.name.text === "platform" &&
+    ts.isIdentifier(value.expression) &&
+    value.expression.text === "process"
+  );
+}
+
+function platformSkipKind(
+  node: ts.Expression,
+  values: ReadonlyMap<string, ts.Expression>,
+): "skip-unless-win32" | "skip-on-win32" | undefined {
+  const value = unwrapExpression(node, values);
+  if (ts.isPrefixUnaryExpression(value) && value.operator === ts.SyntaxKind.ExclamationToken) {
+    const nested = platformSkipKind(value.operand, values);
+    if (nested === "skip-unless-win32") return "skip-on-win32";
+    if (nested === "skip-on-win32") return "skip-unless-win32";
+  }
+  if (!ts.isBinaryExpression(value)) return undefined;
+  const leftIsPlatform = isProcessPlatform(value.left, values);
+  const rightIsPlatform = isProcessPlatform(value.right, values);
+  const other = leftIsPlatform
+    ? unwrapExpression(value.right, values)
+    : rightIsPlatform
+      ? unwrapExpression(value.left, values)
+      : undefined;
+  if (!other || !ts.isStringLiteralLike(other) || other.text !== "win32") return undefined;
+  if (
+    value.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+    value.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
+  ) {
+    return "skip-unless-win32";
+  }
+  if (
+    value.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+    value.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken
+  ) {
+    return "skip-on-win32";
+  }
+  return undefined;
+}
+
+function expressionMentionsPlatform(
+  node: ts.Node,
+  values: ReadonlyMap<string, ts.Expression>,
+  seen = new Set<string>(),
+): boolean {
+  if (ts.isIdentifier(node) && !seen.has(node.text)) {
+    const initializer = values.get(node.text);
+    if (initializer && expressionMentionsPlatform(initializer, values, new Set(seen).add(node.text))) return true;
+  }
+  if (ts.isExpression(node) && isProcessPlatform(node, values)) return true;
+  let found = false;
+  ts.forEachChild(node, (child) => {
+    if (!found && expressionMentionsPlatform(child, values, seen)) found = true;
+  });
+  return found;
+}
+
+function propertyText(name: ts.PropertyName): string | undefined {
+  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
+  return undefined;
+}
+
+function currentHostSkipInventory(sources: ReadonlyArray<{ path: string; source: string }>): CurrentHostSkip[] {
+  const entries: CurrentHostSkip[] = [];
+  for (const { path, source } of sources) {
+    const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+    const values = constInitializers(sourceFile);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && node.arguments.length >= 2) {
+        const title = staticText(node.arguments[0], values);
+        const options = unwrapExpression(node.arguments[1], values);
+        if (title && ts.isObjectLiteralExpression(options)) {
+          for (const property of options.properties) {
+            if (!ts.isPropertyAssignment(property) || propertyText(property.name) !== "skip") continue;
+            const kind = platformSkipKind(property.initializer, values);
+            if (!kind && expressionMentionsPlatform(property.initializer, values)) {
+              throw new Error(`${path}: unresolved process.platform-derived skip predicate for ${title}`);
+            }
+            if (kind === "skip-unless-win32") entries.push({ path, title, mechanism: kind });
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return entries.sort((a, b) => `${a.path}\0${a.title}`.localeCompare(`${b.path}\0${b.title}`));
+}
+
+const expectedCurrentHostSkips: CurrentHostSkip[] = [
+  {
+    path: "tests/build/build-runtime-windows-win7.mock.test.ts",
+    title: "T-WIN7.Runtime.2: when bundled node reports ABI 137, buildRuntimeWindows fails before npm ci",
+    mechanism: "skip-unless-win32",
+  },
+  {
+    path: "tests/build/build-runtime-windows-win7.mock.test.ts",
+    title: "T-WIN7.Runtime.4: after install, buildRuntimeWindows verifies better-sqlite3 with build/runtime/node.exe",
+    mechanism: "skip-unless-win32",
+  },
+];
+
+function assertExactCurrentHostSkips(sources: ReadonlyArray<{ path: string; source: string }>): void {
+  assert.deepEqual(currentHostSkipInventory(sources), expectedCurrentHostSkips);
+}
+
 describe("schema-v2 config is the only identity and config authority", () => {
   it("T-NO-ID-LEGACY.1: missing current config ignores every hostile sibling and performs no migration write", async () => {
     // Given hostile identity, Soul, and Telegram siblings with no config; When current state is read; Then defaults are returned without touching bytes.
@@ -541,30 +678,37 @@ describe("obsolete source, fixture, and skip ownership is closed", () => {
     assert.deepEqual(hits, []);
   });
 
-  it("T-NO-ID-LEGACY.9: T-IW.2 is removed while the exact six current non-live fence members remain", () => {
-    // Given the maintained skip owners; When exact declarations are inventoried; Then only T-IW.2 is removed from this phase's fence.
+  it("T-NO-ID-LEGACY.9: retired unified-runtime skips are absent while the exact two current-host Windows skips remain", () => {
+    // Given every maintained test and hostile syntax variants; When skip predicates are parsed; Then only the exact two current Windows-host owners remain.
     const identityTest = readFileSync(join(process.cwd(), "tests/persistence/identity.mock.test.ts"), "utf8");
     assert.doesNotMatch(identityTest, /T-IW\.2|test\.skip/);
-    const runtime = readFileSync(join(process.cwd(), "tests/build/build-runtime.test.ts"), "utf8");
-    const titles = [
-      "darwin produces expected tree",
-      "win32 produces expected tree",
-      "pinned version constants match macOS contract",
-      "wrong-ABI node binary causes ABI mismatch error",
-    ];
-    assert.equal((runtime.match(/describe\.skip\(/g) ?? []).length, 4);
-    for (const title of titles) assert.match(runtime, new RegExp(`describe\\.skip\\([^\\n]*${title}`));
-    const win = readFileSync(join(process.cwd(), "tests/build/build-runtime-windows-win7.mock.test.ts"), "utf8");
-    for (const id of ["T-WIN7.Runtime.2", "T-WIN7.Runtime.4"]) {
-      const start = win.indexOf(id);
-      assert.notEqual(start, -1);
-      assert.match(win.slice(start, start + 300), /skip: process\.platform !== "win32"/);
-    }
-    const allTests = maintainedTsFiles(join(process.cwd(), "tests"))
-      .filter((file) => !file.endsWith("identityLegacyFallbackRemoval.mock.test.ts"))
-      .map((file) => readFileSync(file, "utf8"))
-      .join("\n");
-    assert.equal((allTests.match(/skip: process\.platform !== "win32"/g) ?? []).length, 2);
-    assert.doesNotMatch(allTests, /T-DEFCRED\.5/);
+    assert.equal(existsSync(join(process.cwd(), "tests/build/build-runtime.test.ts")), false);
+    const sources = maintainedTsFiles(join(process.cwd(), "tests"))
+      .filter((file) => file.endsWith(".test.ts"))
+      .map((file) => ({
+        path: relative(process.cwd(), file).replaceAll("\\", "/"),
+        source: readFileSync(file, "utf8"),
+      }));
+    assertExactCurrentHostSkips(sources);
+
+    const quoteWhitespace = `it('T-WIN7.Runtime.2: when bundled node reports ABI 137, buildRuntimeWindows fails before npm ci', { 'skip': process . platform !== 'win32' }, () => {});`;
+    assert.deepEqual(currentHostSkipInventory([{ path: expectedCurrentHostSkips[0]!.path, source: quoteWhitespace }]), [
+      expectedCurrentHostSkips[0],
+    ]);
+    const aliased = `const onlyOnWindows = process.platform !== "win32"; it("${expectedCurrentHostSkips[1]!.title}", { skip: onlyOnWindows }, () => {});`;
+    assert.deepEqual(currentHostSkipInventory([{ path: expectedCurrentHostSkips[1]!.path, source: aliased }]), [
+      expectedCurrentHostSkips[1],
+    ]);
+    const third = `it("T-HOSTILE: third current-host skip", { skip: process.platform !== "win32" }, () => {});`;
+    assert.throws(
+      () => assertExactCurrentHostSkips([...sources, { path: "tests/hostile-third.test.ts", source: third }]),
+      /Expected values to be strictly deep-equal/,
+    );
+    const unresolved = `const windowsOnly = process.platform.startsWith("win"); it("T-HOSTILE: unresolved", { skip: windowsOnly }, () => {});`;
+    assert.throws(
+      () => currentHostSkipInventory([{ path: "tests/hostile-unresolved.test.ts", source: unresolved }]),
+      /unresolved process\.platform-derived skip predicate/,
+    );
+    assert.doesNotMatch(sources.map(({ source }) => source).join("\n"), /T-DEFCRED\.5/);
   });
 });

@@ -176,7 +176,6 @@ export function buildRuntimeWindows({ root = repoRoot, execFile = execFileSync }
   // can't reach GitHub releases) — the install then runs with `--ignore-scripts` (no fetch / no
   // node-gyp / no Python needed) and the native binary is injected below. An unseeded
   // cross-build downloads the lockfile-matched Windows prebuild explicitly.
-  // ssh2's native binding is optional (pure-JS fallback), so --ignore-scripts is safe for the bundle.
   let seedPrebuild = process.env.FRONDOSE_WIN_SQLITE_PREBUILD?.trim();
   if (isCrossBuild && !seedPrebuild) {
     const sqliteVersion = betterSqliteVersion(root);
