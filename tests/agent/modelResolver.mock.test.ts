@@ -522,7 +522,6 @@ describe("contract checks — tool count + no-bash boundary (G-P21.8)", () => {
       delete process.env.FRONDOSE_TIER;
       const persistence = {
         memoryDbPath: join(tmpHome, "memory.sqlite"),
-        identityPath: join(tmpHome, "identity.json"),
         configPath: join(tmpHome, "config.json"),
         secretsPath: join(tmpHome, "secrets.json"),
         schedulePath: join(tmpHome, "schedule.jsonl"),

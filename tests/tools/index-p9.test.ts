@@ -52,7 +52,7 @@ function makeFakeSession() {
 
 const FAKE_PERSISTENCE = {
   memoryDbPath: join(tmpdir(), "p9-t-make-tools.sqlite"),
-  identityPath: join(tmpdir(), "p9-t-make-tools-identity.json"),
+  configPath: join(tmpdir(), "p9-t-make-tools-config.json"),
 };
 
 const FAKE_CONTROL = { requestStop: () => {} };

@@ -52,7 +52,7 @@ import { cleanupTmpDir } from "../../_helpers/tmp";
 function makeIdentityPath(suffix: string): string {
   const dir = join(tmpdir(), `frondose-icp-precision-qp-owncompany-${process.pid}-${suffix}`);
   mkdirSync(dir, { recursive: true });
-  return join(dir, "identity.json");
+  return join(dir, "config.json");
 }
 
 /** Isolate readIdentity()'s HOME/config.json lookup from the operator's real config
@@ -72,13 +72,13 @@ function withIsolatedHome<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-function writeIdentityFixture(identityPath: string, fields: { company?: string; icp?: Record<string, unknown> }): void {
+function writeIdentityFixture(configPath: string, fields: { company?: string; icp?: Record<string, unknown> }): void {
   writeFileSync(
-    identityPath,
+    configPath,
     JSON.stringify({
-      fullName: "TestOperator",
-      ...fields,
-      updatedAt: new Date().toISOString(),
+      schema_version: 2,
+      identity: { fullName: "TestOperator", ...fields, updatedAt: new Date().toISOString() },
+      updateServerUrl: null,
     }),
     "utf-8",
   );
@@ -100,13 +100,13 @@ async function callQualify(
 describe("qualify_profile own-company pre-check — name-substring disqualification (plan §5 T-Qualify.OwnCompany.1)", () => {
   it("T-Qualify.OwnCompany.1: given an identity with company='Mastars' and an ICP {targetRole:['VP Sales'], region:['Europe']}, when qualify_profile is called with role='VP Sales', region='London, Europe', companyName='Mastars Prototype Manufacturing', then the envelope's data.qualification is 'disqualified', data.score is 0, data.rationale matches /own_company/i, and data.detail.ownCompany.status is 'match' — EVEN THOUGH role+region individually would be 'match'", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t1");
+      const configPath = makeIdentityPath("t1");
       try {
-        writeIdentityFixture(identityPath, {
+        writeIdentityFixture(configPath, {
           company: "Mastars",
           icp: { targetRole: ["VP Sales"], region: ["Europe"] },
         });
-        const tool = makeQualifyProfileTool({ identityPath });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called with a profile that is a role+region
         //       match but is at the operator's OWN company (name substring).
@@ -133,7 +133,7 @@ describe("qualify_profile own-company pre-check — name-substring disqualificat
           `detail.ownCompany.status must be "match"; got ${JSON.stringify(envelope)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });
@@ -146,13 +146,13 @@ describe("qualify_profile own-company pre-check — name-substring disqualificat
 describe("qualify_profile own-company pre-check — non-match falls through to the ICP matcher, observability mismatch recorded (plan §5 T-Qualify.OwnCompany.2)", () => {
   it("T-Qualify.OwnCompany.2: given the same identity+ICP as T-Qualify.OwnCompany.1, when qualify_profile is called with a legitimate target (companyName='Acme SaaS', role='VP Sales', region='Berlin, Europe'), then data.qualification is 'qualified', data.detail.ownCompany.status is 'mismatch' (observability — the check ran and did not match), data.detail.role.status is 'match', and data.detail.region.status is 'match'", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t2");
+      const configPath = makeIdentityPath("t2");
       try {
-        writeIdentityFixture(identityPath, {
+        writeIdentityFixture(configPath, {
           company: "Mastars",
           icp: { targetRole: ["VP Sales"], region: ["Europe"] },
         });
-        const tool = makeQualifyProfileTool({ identityPath });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called with a genuinely different company.
         const envelope = await callQualify(tool, {
@@ -182,7 +182,7 @@ describe("qualify_profile own-company pre-check — non-match falls through to t
           `detail.region.status must be "match"; got ${JSON.stringify(envelope)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });
@@ -195,13 +195,13 @@ describe("qualify_profile own-company pre-check — non-match falls through to t
 describe("qualify_profile own-company pre-check — skipped entirely when identity has no company signal (plan §5 T-Qualify.OwnCompany.3)", () => {
   it("T-Qualify.OwnCompany.3: given an identity with NO company set (blank), when qualify_profile is called with the SAME params as T-Qualify.OwnCompany.2 (a legitimate 'Acme SaaS' target), then data.detail.ownCompany is ABSENT from the payload entirely (not merely 'mismatch') and the existing ICP-matcher path runs unchanged", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t3");
+      const configPath = makeIdentityPath("t3");
       try {
-        writeIdentityFixture(identityPath, {
+        writeIdentityFixture(configPath, {
           // No `company` at all.
           icp: { targetRole: ["VP Sales"], region: ["Europe"] },
         });
-        const tool = makeQualifyProfileTool({ identityPath });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called with a legitimate-target profile.
         const envelope = await callQualify(tool, {
@@ -219,7 +219,7 @@ describe("qualify_profile own-company pre-check — skipped entirely when identi
           `own-company check must be SKIPPED (key absent), not run-and-mismatch, when identity has no company signal; got detail=${JSON.stringify(detail)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });
@@ -233,16 +233,16 @@ describe("qualify_profile own-company pre-check — skipped entirely when identi
 describe("qualify_profile own-company pre-check — fires even when NO ICP is configured, not 'unknown' (plan §5 T-Qualify.OwnCompany.4)", () => {
   it("T-Qualify.OwnCompany.4: given an identity with company='Mastars' and NO icp block at all (and no icp override on the call), when qualify_profile is called with companyName='Mastars Prototype', then data.qualification is 'disqualified' (NOT 'unknown'), data.score is 0, and data.rationale matches /own_company/i — proving the own-company gate runs BEFORE the `!icp` early return", async () => {
     await withIsolatedHome(async () => {
-      const identityPath = makeIdentityPath("t4-no-icp");
+      const configPath = makeIdentityPath("t4-no-icp");
       try {
-        writeIdentityFixture(identityPath, {
+        writeIdentityFixture(configPath, {
           company: "Mastars",
           // Deliberately NO `icp` field at all — the fixture omits the key
           // entirely (not merely an empty object), matching plan §5's "NO
           // icp block" premise and the operator's own state before the ICP
           // was ever configured.
         });
-        const tool = makeQualifyProfileTool({ identityPath });
+        const tool = makeQualifyProfileTool({ configPath });
 
         // When: qualify_profile is called with NO icp override, against a
         //       profile that is at the operator's OWN company (name match).
@@ -263,7 +263,7 @@ describe("qualify_profile own-company pre-check — fires even when NO ICP is co
           `rationale must mention own_company; got ${JSON.stringify(envelope)}`,
         );
       } finally {
-        cleanupTmpDir(join(identityPath, ".."));
+        cleanupTmpDir(join(configPath, ".."));
       }
     });
   });

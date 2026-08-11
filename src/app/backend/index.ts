@@ -30,7 +30,7 @@ import { frondoseEnv } from "../../env.js";
 import { createLinkedinSession } from "../../linkedin/session.js";
 import { makeAuditWriter, writeWorkflowAudit } from "../../persistence/audit.js";
 import { DEFAULT_CONFIG_PATH, readConfig } from "../../persistence/config.js";
-import { DEFAULT_IDENTITY_PATH, readIdentity } from "../../persistence/identity.js";
+import { readIdentity } from "../../persistence/identity.js";
 import { readMode } from "../../persistence/mode.js";
 import { clearWatchdogKills, DATA_DIR_NAME, getHomeBase, readWatchdogKillTimestamps } from "../../persistence/paths.js";
 import { findDraftForDeclinedStep, findPendingPostDraftId, markDraftRejected } from "../../persistence/sales/drafts.js";
@@ -144,7 +144,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   mkdirSync(dirname(opts.portFile), { recursive: true });
 
   const cfg = readConfig(DEFAULT_CONFIG_PATH());
-  const identity = readIdentity(DEFAULT_IDENTITY_PATH());
+  const identity = readIdentity(DEFAULT_CONFIG_PATH());
   // P-SP-C: derive the boot-time mode from the same two source-of-truth flags
   // used to initialize ServeState below — single read site keeps soul band +
   // initial state consistent. Runtime mode flips (via /agent/passive-mode or
@@ -187,7 +187,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   const maxSteps = resolveMaxSteps(undefined);
   const profileDir = frondoseEnv("PROFILE_DIR") ?? join(getHomeBase(), DATA_DIR_NAME, "agent", "chrome-profile");
   const memoryDbPath = join(getHomeBase(), DATA_DIR_NAME, "agent", "memory.sqlite");
-  const identityPath = DEFAULT_IDENTITY_PATH();
+  const configPath = DEFAULT_CONFIG_PATH();
   const schedulePath = join(getHomeBase(), DATA_DIR_NAME, "agent", "schedule.jsonl");
   const salesDbPath = DEFAULT_SALES_DB_PATH();
   const auditPath = AUDIT_PATH();
@@ -227,7 +227,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
     auditPath,
   };
   const hookRunner = new HookRunner();
-  const tools = makeAllTools(session, { memoryDbPath, identityPath, schedulePath, salesDbPath }, control, hookRunner);
+  const tools = makeAllTools(session, { memoryDbPath, configPath, schedulePath, salesDbPath }, control, hookRunner);
 
   const emitter: ServeEmitter = new EventEmitter();
   const workflow = createWorkflowController({

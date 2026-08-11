@@ -52,7 +52,7 @@ describe("makeAllTools single-mode App inventory (G-P28.5.17, T-RETIRE.Fleet.2)"
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
+        configPath: join(dir, "config.json"),
       };
       const tools = makeAllTools(mockSession, persistence, mockControl);
       const keys = Object.keys(tools);
@@ -74,7 +74,7 @@ describe("makeAllTools single-mode App inventory (G-P28.5.17, T-RETIRE.Fleet.2)"
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
+        configPath: join(dir, "config.json"),
       };
       process.env.FRONDOSE_TIER = "consumer";
       const consumer = Object.keys(makeAllTools(mockSession, persistence, mockControl)).sort();

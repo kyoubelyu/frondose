@@ -66,7 +66,7 @@ describe("makeAllTools() worker mode — PER-TIER inventory snapshot (G-P57d.9 +
     const tmpDir = mkdtempSync(join(tmpdir(), "p57d-inv-"));
     const persistence = {
       memoryDbPath: join(tmpDir, "memory.sqlite"),
-      identityPath: join(tmpDir, "identity.json"),
+      configPath: join(tmpDir, "config.json"),
       schedulePath: join(tmpDir, "schedule.jsonl"),
     };
     const control = {

@@ -29,8 +29,8 @@ describe("qualify_profile reflects a live Settings save without a sidecar restar
     process.env.HOME = tmpHome;
     process.env.FRONDOSE_HOME_BASE = tmpHome;
     try {
-      const identityPath = join(tmpHome, "identity.json"); // never written in this test — legacy fallback also empty
-      const tool = makeQualifyProfileTool({ identityPath });
+      const configPath = join(tmpHome, ".frondose", "agent", "config.json");
+      const tool = makeQualifyProfileTool({ configPath });
 
       const result = await tool.execute(
         { role: "CTO", industry: undefined, region: undefined, companyName: undefined, icp: undefined },
@@ -61,8 +61,8 @@ describe("qualify_profile reflects a live Settings save without a sidecar restar
     process.env.HOME = tmpHome;
     process.env.FRONDOSE_HOME_BASE = tmpHome;
     try {
-      const identityPath = join(tmpHome, "identity.json"); // legacy fallback path; config.json is authoritative
-      const tool = makeQualifyProfileTool({ identityPath }); // built ONCE — never rebuilt below, simulating no restart
+      const configPath = join(tmpHome, ".frondose", "agent", "config.json");
+      const tool = makeQualifyProfileTool({ configPath }); // built ONCE — never rebuilt below, simulating no restart
 
       // Pre-condition: no ICP yet.
       const before = (await tool.execute(

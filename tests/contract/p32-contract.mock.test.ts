@@ -93,7 +93,7 @@ describe("tool count freeze — G-P32.21 / D-6", () => {
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
+        configPath: join(dir, "config.json"),
       };
       const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;

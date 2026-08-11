@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { streamText } from "ai";
 import { resolveModel } from "../../src/agent/modelResolver.js";
@@ -10,9 +12,10 @@ import type { LinkedinSession } from "../../src/linkedin/types.js";
 import { readIdentity } from "../../src/persistence/identity.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
+import { cleanupTmpDir, makeTmpDir } from "../_helpers/tmp.js";
 import { FakeLinkedInWorld } from "./fake-linkedin-world.js";
 
-export const TEST_IDENTITY_PATH = fileURLToPath(new URL("../fixtures/test-identity.json", import.meta.url));
+export const TEST_CONFIG_PATH = fileURLToPath(new URL("../fixtures/test-config.json", import.meta.url));
 
 export interface ScenarioOpts {
   prompt: string;
@@ -46,75 +49,79 @@ export interface ScenarioResult {
 export async function runScenario(opts: ScenarioOpts): Promise<ScenarioResult> {
   const modelSpec = opts.modelSpec ?? process.env.MAI_TEST_MODEL ?? "anthropic:claude-sonnet-4-5";
   const model = resolveModel({ factory: modelSpec });
+  const scenarioRoot = makeTmpDir("frondose-scenario-config");
 
-  // P-FIX-TEST-CONFIG-CLOBBER: readIdentity prefers config.json.identity (authoritative)
-  // over the fixture path — without an explicit configPath it would read the operator's
-  // REAL ~/.frondose/agent/config.json identity and send it to the LLM. Point configPath
-  // at a nonexistent sibling so the fixture file is the only source.
-  const identity = readIdentity(TEST_IDENTITY_PATH, `${TEST_IDENTITY_PATH}.no-config.json`);
-
-  const system = composeSystemPrompt({
-    boundary: BOUNDARY,
-    soul: composeSoulBand(identity),
-    checkpoint: CHECKPOINT,
-  });
-
-  const world = new FakeLinkedInWorld();
-  __setPacingFn(async () => ({ waitedMs: 0, jitterMs: 0, serial: true }));
-  const session: LinkedinSession = world.makeSession();
-
-  const abortController = new AbortController();
-  const control: ControlSignals = {
-    requestStop: () => abortController.abort(),
-    auditPath: "",
-  };
-
-  const tools = makeAllTools(
-    session,
-    {
-      memoryDbPath: ":memory:",
-      identityPath: TEST_IDENTITY_PATH,
-    },
-    control,
-  );
-
-  const capturedCalls: CapturedToolCall[] = [];
-
-  const result = streamText({
-    model,
-    system,
-    messages: [{ role: "user", content: opts.prompt }] as any,
-    tools,
-    maxSteps: opts.maxSteps ?? 15,
-    abortSignal: abortController.signal,
-    onStepFinish: (step: any) => {
-      // Fallback: toolResults preferred, toolCalls if unavailable (SDK version variance)
-      const results = step.toolResults ?? step.toolCalls ?? [];
-      for (const tr of results) {
-        capturedCalls.push({
-          toolName: tr.toolName,
-          args: tr.args ?? tr.input ?? {},
-          result: tr.result ?? tr.output,
-        });
-      }
-    },
-  });
-
-  let textOutput = "";
   try {
-    for await (const chunk of result.textStream) {
-      textOutput += chunk;
-    }
-    // Drain response to finalize last step (may throw AbortError if stop/escalate called)
-    await result.response;
-  } catch (e: any) {
-    if (abortController.signal.aborted) {
-      // Graceful exit — agent called stop/escalate intentionally. textOutput and
-      // capturedCalls are complete up to the abort point.
-    } else {
-      throw e;
-    }
-  }
+    const scenarioConfigPath = join(scenarioRoot, "config.json");
+    writeFileSync(scenarioConfigPath, readFileSync(TEST_CONFIG_PATH));
+    // Read and write only an isolated copy of the tracked schema-v2 fixture.
+    const identity = readIdentity(scenarioConfigPath);
 
-  return { toolCalls: capturedCalls, textOutput };
+    const system = composeSystemPrompt({
+      boundary: BOUNDARY,
+      soul: composeSoulBand(identity),
+      checkpoint: CHECKPOINT,
+    });
+
+    const world = new FakeLinkedInWorld();
+    __setPacingFn(async () => ({ waitedMs: 0, jitterMs: 0, serial: true }));
+    const session: LinkedinSession = world.makeSession();
+
+    const abortController = new AbortController();
+    const control: ControlSignals = {
+      requestStop: () => abortController.abort(),
+      auditPath: "",
+    };
+
+    const tools = makeAllTools(
+      session,
+      {
+        memoryDbPath: ":memory:",
+        configPath: scenarioConfigPath,
+      },
+      control,
+    );
+
+    const capturedCalls: CapturedToolCall[] = [];
+
+    const result = streamText({
+      model,
+      system,
+      messages: [{ role: "user", content: opts.prompt }] as any,
+      tools,
+      maxSteps: opts.maxSteps ?? 15,
+      abortSignal: abortController.signal,
+      onStepFinish: (step: any) => {
+        // Fallback: toolResults preferred, toolCalls if unavailable (SDK version variance)
+        const results = step.toolResults ?? step.toolCalls ?? [];
+        for (const tr of results) {
+          capturedCalls.push({
+            toolName: tr.toolName,
+            args: tr.args ?? tr.input ?? {},
+            result: tr.result ?? tr.output,
+          });
+        }
+      },
+    });
+
+    let textOutput = "";
+    try {
+      for await (const chunk of result.textStream) {
+        textOutput += chunk;
+      }
+      // Drain response to finalize last step (may throw AbortError if stop/escalate called)
+      await result.response;
+    } catch (e: any) {
+      if (abortController.signal.aborted) {
+        // Graceful exit — agent called stop/escalate intentionally. textOutput and
+        // capturedCalls are complete up to the abort point.
+      } else {
+        throw e;
+      }
+    }
+
+    return { toolCalls: capturedCalls, textOutput };
+  } finally {
+    cleanupTmpDir(scenarioRoot);
+  }
 }

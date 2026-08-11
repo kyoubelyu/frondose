@@ -36,7 +36,7 @@ const identityToolParams = z.object({
     ),
 });
 
-export function makeIdentityTool(identityPath: string) {
+export function makeIdentityTool(configPath: string) {
   return tool({
     description:
       "Update the operator's identity record. Pass any subset of fields; existing fields are preserved. " +
@@ -47,13 +47,13 @@ export function makeIdentityTool(identityPath: string) {
     execute: async (input) => {
       try {
         const patch = identityPatchSchema.parse(input);
-        const existing = readIdentity(identityPath) ?? {};
+        const existing = readIdentity(configPath) ?? {};
         const merged = applyIdentityPatch(existing, patch);
         const record = identityRecordSchema.parse({
           ...merged,
           updatedAt: new Date().toISOString(),
         });
-        writeIdentity(record, identityPath);
+        writeIdentity(record, configPath);
         return ok("identity", {
           record,
           missing: missingIdentityFields(record),

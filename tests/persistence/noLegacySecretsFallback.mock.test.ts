@@ -266,9 +266,9 @@ describe("retired secrets fallback surface is deleted", () => {
     }
   });
 
-  it("T-NSLF.8: credential migration tests are deleted while Telegram migration coverage is retained", () => {
-    // Given the final test tree, when inspected, then the mixed migration suite is gone and the retained Telegram carrier remains.
+  it("T-NSLF.8: credential and Telegram compatibility migration tests are deleted", () => {
+    // Given the current-only persistence tree, when inspected, then both obsolete migration suites are gone.
     assert.equal(existsSync(join(repoRoot, "tests/persistence/migration.mock.test.ts")), false);
-    assert.equal(existsSync(join(repoRoot, "tests/persistence/telegramMigration.mock.test.ts")), true);
+    assert.equal(existsSync(join(repoRoot, "tests/persistence/telegramMigration.mock.test.ts")), false);
   });
 });

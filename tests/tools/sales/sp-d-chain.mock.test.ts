@@ -73,8 +73,9 @@ function setupNoIcpHome(): { restore: () => void } {
   writeFileSync(
     join(tmpHome, ".frondose", "agent", "config.json"),
     JSON.stringify({
-      identity: { fullName: "Test BD", role: "BD", icp: { targetRole: [] } },
-      updatedAt: new Date().toISOString(),
+      schema_version: 2,
+      identity: { fullName: "Test BD", role: "BD", updatedAt: new Date().toISOString() },
+      updateServerUrl: null,
     }),
   );
   return {
