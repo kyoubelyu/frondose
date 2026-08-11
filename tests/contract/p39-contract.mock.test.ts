@@ -145,7 +145,7 @@ describe("P-39 tool count: worker 54 (P-ISSUE-BOARD) (G-P39.11)", () => {
       const session = makeFakeSession();
       const workerTools = makeAllTools(
         session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
+        { memoryDbPath: join(dir, "memory.sqlite"), configPath: join(dir, "config.json") },
         mockControl,
       );
       const workerKeys = Object.keys(workerTools).sort();

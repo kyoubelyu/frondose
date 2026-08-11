@@ -25,7 +25,7 @@ const MOCK_SESSION = {} as unknown as LinkedinSession;
 
 const PERSISTENCE = {
   memoryDbPath: ":memory:",
-  identityPath: "/nonexistent/identity.json",
+  configPath: "/nonexistent/config.json",
   salesDbPath: ":memory:",
 };
 

@@ -18,7 +18,7 @@
  * Step-2 suite must be RED regardless of what happens to already work.
  *
  * Gates covered: plan §5 T-Region.1, T-Region.2 — F-10 (drop "Global" from
- * the operator's identity.json ICP.region; NOT a src/ change).
+ * the operator's current config identity ICP.region; NOT a src/ change).
  */
 
 import assert from "node:assert/strict";
@@ -32,7 +32,7 @@ import type { IcpCriteria } from "../../src/persistence/identity.js";
 // ---------------------------------------------------------------------------
 
 describe('matchIcp region dimension — "Global" wildcard leak + its data-fix (plan §5 T-Region.1)', () => {
-  it('T-Region.1a: given icp.region=["United States","Europe","Global"] and evidence.region="Global head of Sales · APAC" (no real geographic overlap with the operator\'s targets), when matchIcp is called, then region.status is "match" — THIS PINS THE CURRENT BUG (token-overlap on the literal word "global"); it is the leak this phase\'s DATA fix (dropping "Global" from identity.json) removes', () => {
+  it('T-Region.1a: given icp.region=["United States","Europe","Global"] and evidence.region="Global head of Sales · APAC" (no real geographic overlap with the operator\'s targets), when matchIcp is called, then region.status is "match" — THIS PINS THE CURRENT BUG (token-overlap on the literal word "global"); it is the leak this phase\'s DATA fix (dropping "Global" from current config identity) removes', () => {
     // Given: standing ICP region list includes the accidental wildcard "Global".
     const icp: IcpCriteria = { targetRole: ["VP Sales"], region: ["United States", "Europe", "Global"] };
     const evidence: IcpEvidence = {

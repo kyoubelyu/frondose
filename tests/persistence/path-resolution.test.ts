@@ -2,10 +2,9 @@
  * P-52 Step 5 — T-Paths.2 + T-Paths.3 (G-P52.1) — assertion bodies filled.
  * Updated for F-REN-4a: data dir renamed .mai → .frondose; DATA_DIR_NAME is now ".frondose".
  *
- * T-Paths.2: 15-factory matrix verifying every `.frondose/...` default factory
- * routes through `getHomeBase()`. 11 exported factories are called directly;
- * 4 module-private getters (crashLogger's `DEFAULT_LOG_PATH`, autoUpdate's
- * `RELEASES_DIR`/`UPDATE_LOCK`/`UPDATE_LOG`) are verified by source-grep —
+ * T-Paths.2: matrix verifying every retained `.frondose/...` default factory
+ * routes through `getHomeBase()`. Exported factories are called directly;
+ * crashLogger's module-private `DEFAULT_LOG_PATH` is verified by source-grep —
  * the file must contain `getHomeBase()` inside the getter body AND must NOT
  * contain a residual `homedir()` call resolving a `.frondose/...` path.
  *
@@ -31,7 +30,7 @@ const REPO_ROOT = path.resolve(HERE, "..", "..");
 type PathGetter = () => string;
 
 /**
- * 11 EXPORTED factories — directly callable from the test.
+ * Retained exported factories — directly callable from the test.
  * Each row: module path + export name + expected `.frondose`-relative suffix.
  * (Updated F-REN-4a: DATA_DIR_NAME changed from ".mai" to ".frondose".)
  */
@@ -43,7 +42,6 @@ async function loadExportedFactories(): Promise<
   const auth = (await import("../../src/persistence/auth.js")) as AnyMod;
   const secrets = (await import("../../src/persistence/secrets.js")) as AnyMod;
   const config = (await import("../../src/persistence/config.js")) as AnyMod;
-  const identity = (await import("../../src/persistence/identity.js")) as AnyMod;
   const memory = (await import("../../src/persistence/memory.js")) as AnyMod;
   const session = (await import("../../src/persistence/session.js")) as AnyMod;
   const search = (await import("../../src/persistence/search.js")) as AnyMod;
@@ -67,12 +65,6 @@ async function loadExportedFactories(): Promise<
       modulePath: "src/persistence/config.ts",
       getter: config.DEFAULT_CONFIG_PATH,
       expectedRelative: ".frondose/agent/config.json",
-    },
-    {
-      name: "DEFAULT_IDENTITY_PATH",
-      modulePath: "src/persistence/identity.ts",
-      getter: identity.DEFAULT_IDENTITY_PATH,
-      expectedRelative: ".frondose/agent/identity.json",
     },
     {
       name: "DEFAULT_MEMORY_DB_PATH",
@@ -112,8 +104,8 @@ async function loadExportedFactories(): Promise<
 }
 
 /**
- * 4 MODULE-PRIVATE getters in crashLogger.ts + autoUpdate.ts — not directly
- * importable. Verified by source-grep: the getter line in the file must
+ * The module-private getter in crashLogger.ts is not directly importable.
+ * Verified by source-grep: the getter line in the file must
  * contain `getHomeBase()` AND the file MUST import `getHomeBase` from
  * `../persistence/paths.js`. The pre-P-52 `homedir()` form must NOT appear
  * in a `.frondose/...` join (the launchd-plist sites are out of scope per plan §6.10).
@@ -135,9 +127,9 @@ const T_PATHS_2_PRIVATE_MATRIX = [
 ] as const;
 
 describe("Default-factory matrix uses getHomeBase() across persistence + cli (G-P52.1, CONCERN-2)", () => {
-  it("T-Paths.2: when FRONDOSE_HOME_BASE='/tmp/p52-b', the 11 exported default factories return paths under '/tmp/p52-b/.frondose…'; when FRONDOSE_HOME_BASE unset / empty, each returns a path under os.homedir() (BLOCKER-5 propagated). The 4 module-private getters (crashLogger.DEFAULT_LOG_PATH + autoUpdate.{RELEASES_DIR,UPDATE_LOCK,UPDATE_LOG}) are verified by source-grep — body contains getHomeBase() AND DATA_DIR_NAME AND file imports both.", async () => {
+  it("T-Paths.2: retained exported default factories follow FRONDOSE_HOME_BASE and the crash-log private getter uses getHomeBase", async () => {
     // Given: FRONDOSE_HOME_BASE set/unset/empty across three env states AND the 15
-    //        factories listed above (11 exported + 4 source-grepped).
+    //        retained factories listed above (exported + source-grepped).
     // When:  each factory is invoked OR its source file is inspected.
     // Then:  every assertion matches the expected redirect/fallback shape.
     // (F-REN-4a: DATA_DIR_NAME = ".frondose" — factories now resolve under .frondose)

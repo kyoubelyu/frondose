@@ -36,7 +36,7 @@ const LINKEDIN_TOOL_NAMES = [
 
 // ─── T-Tools.1 ────────────────────────────────────────────────────
 // Given: FakeLinkedInWorld session + test identity persistence
-// When:  makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "...control })
+// When:  makeAllTools(session, { memoryDbPath: ":memory:", configPath: "...control })
 // Then:  returned ToolSet has exactly 51 keys. All 10 LinkedIn tool names present.
 
 test("T-Tools.1: all 51 tools registered with fake session", async () => {
@@ -47,7 +47,7 @@ test("T-Tools.1: all 51 tools registered with fake session", async () => {
     auditPath: "",
   };
 
-  const tools = makeAllTools(session, { memoryDbPath: ":memory:", identityPath: "" }, control);
+  const tools = makeAllTools(session, { memoryDbPath: ":memory:", configPath: "" }, control);
   const toolNames = Object.keys(tools);
 
   // Total count assertion (P-OPEN-SOURCE-SPLIT single-mode inventory: the three

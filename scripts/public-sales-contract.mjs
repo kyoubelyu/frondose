@@ -46,7 +46,7 @@ const REVIEWED_DISPOSITIONS = new Map([
   ["tests/agent/systemPrompt/soul.test.ts", "retain"],
   ["tests/agent/systemPrompt/todoEncouragement-pY5.mock.test.ts", "revise-with-stronger-carrier"],
   ["tests/contract/p33-contract.mock.test.ts", "revise-with-stronger-carrier"],
-  ["tests/fixtures/test-identity.json", "revise-with-stronger-carrier"],
+  ["tests/fixtures/test-config.json", "revise-with-stronger-carrier"],
   ["tests/tauri/ui/settings-collectPatch.mock.test.ts", "revise-with-stronger-carrier"],
   ["tests/tools/control/suggestCard-p57a.mock.test.ts", "retain"],
   ["tests/tools/identity/identity.mock.test.ts", "retain"],
@@ -59,7 +59,6 @@ const REVIEWED_DISPOSITIONS = new Map([
   ["tests/tauri/ui/i18n-pZhFeFull.mock.test.ts", "revise-with-stronger-carrier"],
   // Private live evidence
   ["tests/live/p-sp-b-live.smoke.ts", "private-excluded"],
-  ["tests/live/p4-memory-identity.smoke.ts", "private-excluded"],
   ["tests/live/p6-control.smoke.ts", "private-excluded"],
   ["tests/live/evidence/p-sp-b/agent-session.txt", "private-excluded"],
   ["tests/live/evidence/p-y2-magical/app-l1-audit-slice.jsonl", "private-excluded"],

@@ -3,7 +3,7 @@
  *
  * Tests:
  *   T-M_p5.14 — Tool returns correct `ok` envelope shape (G-P5.3)
- *   T-M_p5.15 — Tool reads identity.json ICP when `icp` arg omitted; uses override when provided (G-P5.3, OQ-6)
+ *   T-M_p5.15 — Tool reads config.json ICP when `icp` arg omitted; uses override when provided (G-P5.3, OQ-6)
  *
  * No Chrome, no LLM required. Uses OS tmpdir for identity fixture.
  */
@@ -21,7 +21,7 @@ import { cleanupTmpDir } from "../../_helpers/tmp";
 function makeTempPath(suffix: string): string {
   const dir = join(tmpdir(), `mai-p5-qp-${process.pid}-${suffix}`);
   mkdirSync(dir, { recursive: true });
-  return join(dir, "identity.json");
+  return join(dir, "config.json");
 }
 
 function cleanup(path: string): void {
@@ -35,7 +35,7 @@ function cleanup(path: string): void {
 // ─── T-M_p5.14 — Envelope shape ──────────────────────────────────────────────
 
 test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/matched/missing/rationale", async () => {
-  // HOME override: makeQualifyProfileTool calls readIdentity(identityPath) which checks
+  // HOME override: makeQualifyProfileTool calls readIdentity(configPath) which checks
   // DEFAULT_CONFIG_PATH() (HOME-relative) first. Without override, operator's ICP would
   // be used instead of the fixture ICP, making qualification assertions unpredictable.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
@@ -43,21 +43,25 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
   const origHomeBase = process.env.FRONDOSE_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
   process.env.FRONDOSE_HOME_BASE = tmpHome;
-  const identityPath = makeTempPath("envelope");
+  const configPath = makeTempPath("envelope");
   try {
     // Write identity with ICP
     writeFileSync(
-      identityPath,
+      configPath,
       JSON.stringify({
-        fullName: "TestUser",
-        company: "TestCo",
-        icp: { targetRole: ["CTO"] },
-        updatedAt: new Date().toISOString(),
+        schema_version: 2,
+        identity: {
+          fullName: "TestUser",
+          company: "TestCo",
+          icp: { targetRole: ["CTO"] },
+          updatedAt: new Date().toISOString(),
+        },
+        updateServerUrl: null,
       }),
       "utf-8",
     );
 
-    const tool = makeQualifyProfileTool({ identityPath });
+    const tool = makeQualifyProfileTool({ configPath });
     // Invoke the execute function directly (Vercel tool shape)
     const result = await tool.execute(
       { role: "CTO", industry: undefined, region: undefined, companyName: undefined, icp: undefined },
@@ -92,7 +96,7 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
       `T-M_p5.14: qualify_profile envelope correct — qualification=${data.qualification}, score=${data.score} ✓`,
     );
   } finally {
-    cleanup(identityPath);
+    cleanup(configPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
@@ -101,9 +105,9 @@ test("T-M_p5.14: qualify_profile returns ok envelope with qualification/score/ma
   }
 });
 
-// ─── T-M_p5.15 — Default ICP from identity.json; override works ──────────────
+// ─── T-M_p5.15 — Default ICP from config.json; override works ──────────────
 
-test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp override takes precedence", async () => {
+test("T-M_p5.15: qualify_profile uses config.json ICP by default; explicit icp override takes precedence", async () => {
   // HOME override: readIdentity() checks DEFAULT_CONFIG_PATH() (HOME-relative) first.
   // Without override, operator's ICP shadows the fixture ICP, breaking T-M_p5.15a.
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
@@ -111,23 +115,27 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
   const origHomeBase = process.env.FRONDOSE_HOME_BASE; // P-Z2: getHomeBase() prefers MAI_HOME_BASE over homedir()
   process.env.HOME = tmpHome;
   process.env.FRONDOSE_HOME_BASE = tmpHome;
-  const identityPath = makeTempPath("default-icp");
+  const configPath = makeTempPath("default-icp");
   try {
     // Identity has ICP: targetRole = ["VP Engineering"]
     writeFileSync(
-      identityPath,
+      configPath,
       JSON.stringify({
-        fullName: "TestUser",
-        company: "TestCo",
-        icp: { targetRole: ["VP Engineering"] },
-        updatedAt: new Date().toISOString(),
+        schema_version: 2,
+        identity: {
+          fullName: "TestUser",
+          company: "TestCo",
+          icp: { targetRole: ["VP Engineering"] },
+          updatedAt: new Date().toISOString(),
+        },
+        updateServerUrl: null,
       }),
       "utf-8",
     );
 
-    const tool = makeQualifyProfileTool({ identityPath });
+    const tool = makeQualifyProfileTool({ configPath });
 
-    // 1. No explicit icp → reads identity.json ICP (targetRole=VP Engineering)
+    // 1. No explicit icp → reads config.json ICP (targetRole=VP Engineering)
     //    evidence role=VP Engineering → should match → qualified
     const defaultResult = await tool.execute(
       { role: "VP Engineering", icp: undefined },
@@ -137,7 +145,7 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
     assert.equal(
       defaultData.qualification,
       "qualified",
-      `T-M_p5.15a: default ICP from identity.json — expected 'qualified' for VP Engineering matching VP Engineering ICP`,
+      `T-M_p5.15a: default ICP from config.json — expected 'qualified' for VP Engineering matching VP Engineering ICP`,
     );
 
     // 2. explicit icp override → uses override (targetRole=CTO), not identity ICP
@@ -156,20 +164,19 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
       `T-M_p5.15b: explicit ICP override — expected 'disqualified' for VP Engineering against CTO ICP override`,
     );
 
-    // 3. No ICP in identity.json, no explicit icp → returns "unknown" with rationale
+    // 3. No ICP in config.json, no explicit icp → returns "unknown" with rationale
     const noIcpPath = makeTempPath("no-icp");
     try {
       writeFileSync(
         noIcpPath,
         JSON.stringify({
-          fullName: "TestUser",
-          company: "TestCo",
-          updatedAt: new Date().toISOString(),
-          // no icp field
+          schema_version: 2,
+          identity: { fullName: "TestUser", company: "TestCo", updatedAt: new Date().toISOString() },
+          updateServerUrl: null,
         }),
         "utf-8",
       );
-      const toolNoIcp = makeQualifyProfileTool({ identityPath: noIcpPath });
+      const toolNoIcp = makeQualifyProfileTool({ configPath: noIcpPath });
       const noIcpResult = await toolNoIcp.execute(
         { role: "CTO", icp: undefined },
         { toolCallId: "test-t-m-p5-15c", messages: [] },
@@ -186,7 +193,7 @@ test("T-M_p5.15: qualify_profile uses identity.json ICP by default; explicit icp
 
     console.log("T-M_p5.15: qualify_profile ICP default/override behavior verified ✓");
   } finally {
-    cleanup(identityPath);
+    cleanup(configPath);
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
     if (origHomeBase !== undefined) process.env.FRONDOSE_HOME_BASE = origHomeBase;
