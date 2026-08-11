@@ -5,15 +5,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 /// P-OPEN-SOURCE-SPLIT §13.1: public GitHub Releases default so a fresh install
 /// auto-pulls with no per-app config. Explicit null or blank remains the operator
 /// opt-out; any other explicit `updateServerUrl` in config.json is an operator
-/// override. The historical baked intranet default migrates to this URL on read.
+/// override.
 const DEFAULT_UPDATE_SERVER_URL: &str = "https://github.com/kyoubelyu/frondose/releases/latest/download";
-
-/// Historical baked intranet default (P-UPDATE-INTRANET) — assembled from parts so
-/// the public source tree carries no private host literal. Configs still holding the
-/// old baked value migrate to the public default via read_update_server_url.
-fn legacy_update_server_url() -> String {
-    format!("http://{}:{}", ["192","0","2","105"].join("."), "4875")
-}
 
 /// CH-5: cross-platform home dir for the update-config reads. macOS/Unix use
 /// `$HOME`; Windows uses `%USERPROFILE%` (`$HOME` is empty there), matching the
@@ -33,20 +26,15 @@ fn config_home_dir() -> Option<String> {
 
 /// P-58d.1 / P-OPEN-SOURCE-SPLIT §13.1: read the operator-set `updateServerUrl`
 /// directly from ~/.frondose/agent/config.json (independent of the sidecar; the
-/// updater runs around it). Falls back to ~/.mai/agent/config.json for the
-/// first-launch window where Tauri boots before the sidecar migrates the data
-/// dir. Absent file/key, unparseable JSON, or non-string values use the public
-/// default; the historical baked intranet value migrates to it; explicit null or
-/// blank disables the updater.
+/// updater runs around it). Absent file/key, unparseable JSON, or non-string
+/// values use the public default; explicit null or blank disables the updater;
+/// every other explicit string is trimmed and preserved.
 pub(crate) fn read_update_server_url() -> Option<String> {
     let Some(home) = config_home_dir() else {
         return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
     };
-    let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
-    let raw = std::fs::read_to_string(&new_path).or_else(|_| {
-        let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
-        std::fs::read_to_string(legacy)
-    });
+    let path = std::path::Path::new(&home).join(".frondose/agent/config.json");
+    let raw = std::fs::read_to_string(path);
     let Ok(raw) = raw else {
         return Some(DEFAULT_UPDATE_SERVER_URL.to_string());
     };
@@ -58,8 +46,6 @@ pub(crate) fn read_update_server_url() -> Option<String> {
         Some(Value::Null) => None,
         Some(x) => match x.as_str().map(|s| s.trim().to_string()) {
             Some(s) if s.is_empty() => None,
-            // §13.1: the historical baked intranet value migrates to the public default.
-            Some(s) if s == legacy_update_server_url() => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
             Some(s) => Some(s),
             None => Some(DEFAULT_UPDATE_SERVER_URL.to_string()),
         },
@@ -412,9 +398,9 @@ mod tests {
     //! `docs/phase-update-intranet-critics.md` CONCERN-MR-1): scaffolds for
     //! T-Updater.1-4 + T-Updater.2b — the default-URL precedence
     //! `read_update_server_url()` implements. Assertions target §13.1 behavior
-    //! (absent key/file → public default; legacy baked value → migrates to the
-    //! public default; explicit null OR blank → disabled/None; explicit url →
-    //! override). Asserted by literal string value.
+    //! (absent key/file → public default; explicit null OR blank →
+    //! disabled/None; every other explicit string → trimmed override). Asserted
+    //! by literal string value.
     use super::*;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -451,6 +437,12 @@ mod tests {
         /// Writes ~/.frondose/agent/config.json with the given raw JSON body.
         fn write_config(&self, json: &str) {
             let agent_dir = self.dir.join(".frondose/agent");
+            std::fs::create_dir_all(&agent_dir).unwrap();
+            std::fs::write(agent_dir.join("config.json"), json).unwrap();
+        }
+
+        fn write_retired_config(&self, json: &str) {
+            let agent_dir = self.dir.join(".mai/agent");
             std::fs::create_dir_all(&agent_dir).unwrap();
             std::fs::write(agent_dir.join("config.json"), json).unwrap();
         }
@@ -538,18 +530,70 @@ mod tests {
         );
     }
 
-    // T-Updater.5 (P-OPEN-SOURCE-SPLIT §13.1): given a config still holding the
-    // historical baked intranet value, when read, then it migrates to the public
-    // default — never the private host.
+    // T-NURM.2: given a config holding the historical intranet value explicitly,
+    // when read, then it remains the operator's selected override.
     #[test]
-    fn t_updater_5_legacy_baked_value_migrates_to_public_default() {
+    fn t_nurm_2_legacy_baked_value_remains_operator_override() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let home = TempHome::new("legacy-migration");
-        home.write_config(format!(r#"{{"schema_version":2,"updateServerUrl":"{}"}}"#, legacy_update_server_url()).as_str());
+        let home = TempHome::new("legacy-override");
+        let legacy = format!("http://{}:4875", ["192","0","2","105"].join("."));
+        let raw = format!(r#"{{"schema_version":2,"updateServerUrl":"{}"}}"#, legacy);
+        home.write_config(raw.as_str());
+        assert_eq!(read_update_server_url(), Some(legacy));
+        assert_eq!(
+            std::fs::read_to_string(home.dir.join(".frondose/agent/config.json")).unwrap(),
+            raw
+        );
+    }
+
+    // T-NURM.3: given a schema-v2 config with no updater key, when read, then
+    // the compiled default remains the public endpoint.
+    #[test]
+    fn t_nurm_3_absent_key_returns_public_default() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("absent-key");
+        home.write_config(r#"{"schema_version":2}"#);
         assert_eq!(
             read_update_server_url(),
             Some(EXPECTED_DEFAULT_URL.to_string())
         );
+    }
+
+    // T-NURM.3b: given no current config and a retired .mai override, when read,
+    // then the retired file is ignored and the public default wins.
+    #[test]
+    fn t_nurm_3b_absent_current_config_ignores_retired_config() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("retired-only");
+        home.write_retired_config(r#"{"updateServerUrl":"https://retired.example.com"}"#);
+        assert_eq!(
+            read_update_server_url(),
+            Some(EXPECTED_DEFAULT_URL.to_string())
+        );
+    }
+
+    // T-NURM.3c: given an unreadable current config and a retired .mai override,
+    // when read, then the retired file is ignored and the public default wins.
+    #[test]
+    fn t_nurm_3c_unreadable_current_config_ignores_retired_config() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("unreadable-current");
+        std::fs::create_dir_all(home.dir.join(".frondose/agent/config.json")).unwrap();
+        home.write_retired_config(r#"{"updateServerUrl":"https://retired.example.com"}"#);
+        assert_eq!(
+            read_update_server_url(),
+            Some(EXPECTED_DEFAULT_URL.to_string())
+        );
+    }
+
+    // T-NURM.3d: given a whitespace-wrapped opaque operator channel, when read,
+    // then Rust trims it without imposing URL validation.
+    #[test]
+    fn t_nurm_3d_wrapped_opaque_override_is_trimmed() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = TempHome::new("opaque");
+        home.write_config(r#"{"schema_version":2,"updateServerUrl":"  operator-channel  "}"#);
+        assert_eq!(read_update_server_url(), Some("operator-channel".to_string()));
     }
 
     // ── P-FIX-MAC-UPDATER-RELAUNCH Step 5 — T-RELAUNCH.1–7 (docs/phase-mac-relaunch-plan.md §5) ──
