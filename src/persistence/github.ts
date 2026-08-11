@@ -24,20 +24,20 @@ export type GithubConfig = z.infer<typeof githubConfigSchema>;
 
 export const DEFAULT_GITHUB_CONFIG: GithubConfig = {};
 
-/** Derive the secrets path co-located with the given legacy github path. */
+/** Derive the secrets path co-located with the adapter path. */
 function githubPathToSecretsPath(path: string): string {
   if (path === DEFAULT_GITHUB_CONFIG_PATH()) return DEFAULT_SECRETS_PATH();
   return join(dirname(path), "secrets.json");
 }
 
 export function readGithubConfig(path: string = DEFAULT_GITHUB_CONFIG_PATH()): GithubConfig {
-  const s = readSecrets(githubPathToSecretsPath(path), { githubPath: path });
+  const s = readSecrets(githubPathToSecretsPath(path));
   return s.github ?? { ...DEFAULT_GITHUB_CONFIG };
 }
 
 export function writeGithubConfig(cfg: GithubConfig, path: string = DEFAULT_GITHUB_CONFIG_PATH()): void {
   const secretsPath = githubPathToSecretsPath(path);
-  const s = readSecrets(secretsPath, { githubPath: path });
+  const s = readSecrets(secretsPath);
   const merged: SecretsJson = {
     ...s,
     schema_version: 1,

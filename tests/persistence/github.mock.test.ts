@@ -8,7 +8,7 @@
  * T-GitHub.3 — Missing file → DEFAULT_GITHUB_CONFIG without throw
  * T-GitHub.4 — Corrupt file → DEFAULT_GITHUB_CONFIG without throw; stderr receives message
  *
- * Gate coverage: G-P15.1 (github.json persistence)
+ * Gate coverage: G-P15.1 (GitHub fields in consolidated secrets persistence)
  *
  * NOTE: github.ts does NOT exist until builder Step 4b.
  * These scaffolds will fail to compile until then.
@@ -57,7 +57,7 @@ function captureStderr(fn: () => void): string {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("github.json persistence (G-P15.1)", () => {
+describe("GitHub fields in consolidated secrets persistence (G-P15.1)", () => {
   it("T-GitHub.1: githubConfigSchema validates valid config; rejects invalid token/repo", () => {
     // Given: githubConfigSchema
     // When:  safeParse called with valid config (token + repo), empty config, invalid token, bad repo format
@@ -87,7 +87,6 @@ describe("github.json persistence (G-P15.1)", () => {
     // When:  writeGithubConfig({ token: "abc", repo: "own/repo" }, tmpPath) then readGithubConfig(tmpPath)
     // Then:  returns { token: "abc", repo: "own/repo" }; secrets.json is valid JSON with github sub-key
 
-    // HOME override: prevents legacyMerged from reading the real operator auth.json.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
     process.env.HOME = tmpHome;
@@ -119,8 +118,6 @@ describe("github.json persistence (G-P15.1)", () => {
     // When:  readGithubConfig("/nonexistent/path.json")
     // Then:  returns DEFAULT_GITHUB_CONFIG (empty object); no throw
 
-    // HOME override: without this, legacyMerged reads real auth.json → tries to write
-    // secrets.json to /nonexistent/ → mkdirSync("/nonexistent") → EACCES.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
     process.env.HOME = tmpHome;
@@ -138,13 +135,14 @@ describe("github.json persistence (G-P15.1)", () => {
   // ─── T-GitHub.4 — Corrupt file → default ──────────────────────────────────
 
   it("T-GitHub.4: readGithubConfig returns DEFAULT_GITHUB_CONFIG for corrupt file; stderr has path", () => {
-    // Given: a file with invalid JSON content (e.g. "{invalid json")
+    // Given: the co-located current secrets file contains invalid JSON
     // When:  readGithubConfig(corruptPath)
     // Then:  returns DEFAULT_GITHUB_CONFIG; stderr contains file path; no throw
 
     const { path, cleanup } = makeTmpDir();
     try {
-      writeFileSync(path, "{invalid json", "utf-8");
+      const secretsPath = join(dirname(path), "secrets.json");
+      writeFileSync(secretsPath, "{invalid json", "utf-8");
       let result: ReturnType<typeof readGithubConfig> | undefined;
       let stderr = "";
       assert.doesNotThrow(() => {
@@ -155,7 +153,7 @@ describe("github.json persistence (G-P15.1)", () => {
       assert.ok(result, "result must be defined");
       assert.deepEqual(result, DEFAULT_GITHUB_CONFIG, "corrupt file must return DEFAULT_GITHUB_CONFIG");
       assert.ok(
-        stderr.includes(path) || stderr.includes("github.json"),
+        stderr.includes(secretsPath) || stderr.includes("secrets.json"),
         `stderr must contain file reference; got: "${stderr}"`,
       );
     } finally {
