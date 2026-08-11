@@ -18,9 +18,7 @@ export const readAuthJsonKey = readAuthJsonKeyFromAuthJs;
 
 export const DEFAULT_MODEL_SPEC = "deepseek:deepseek-v4-flash";
 
-/** P-24 B-2 fix: pre-P-24 read direct from auth.json via readFileSync.
- *  Now routes through readAuth() shim which reads secrets.json (with legacy
- *  fallback). Function signature preserved for resolveModelSpec's caller. */
+/** Read the current consolidated secrets store through the auth projection. */
 export function readAuthJsonDefault(): string | undefined {
   return readAuth()?.default;
 }
@@ -34,7 +32,7 @@ export interface ResolveModelOpts {
 
 /**
  * Resolve the model SPEC from precedence chain:
- *   factory > cli > FRONDOSE_MODEL env > ~/.frondose/auth.json default > DEFAULT_MODEL_SPEC
+ *   factory > cli > FRONDOSE_MODEL env > secrets.json default > DEFAULT_MODEL_SPEC
  * Pure function (no SDK calls). Tested independently in T-M1..T-M3.
  */
 export function resolveModelSpec(opts: ResolveModelOpts = {}): string {
@@ -63,7 +61,7 @@ export function resolveModelOrNull(opts: ResolveModelOpts = {}): LanguageModel |
 }
 
 /**
- * P-7: returns true if any LLM key is detected — env vars OR auth.json.
+ * P-7: returns true if any LLM key is detected — env vars or current secrets.
  * P-21: iterates ALL configured providers (not just 3 hardcoded names).
  * Used by runIdentityBootstrap before runBootstrapAgent (chicken-and-egg guard per F-3r.4).
  */
@@ -77,7 +75,7 @@ export function detectAnyModelKey(): boolean {
       }
     }
   } catch {
-    // auth.json missing or corrupt — no keys from file
+    // Current secrets missing or corrupt — no keys from file.
   }
   return false;
 }
@@ -167,7 +165,7 @@ function specSource(spec: string): string {
   return spec === frondoseEnv("MODEL")
     ? "the FRONDOSE_MODEL env var"
     : spec === readAuthJsonDefault()
-      ? "the auth.json / secrets.json default"
+      ? "the secrets.json default"
       : "a CLI flag or the built-in default";
 }
 

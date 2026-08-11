@@ -20,23 +20,6 @@ function tempDir(): { dir: string; cleanup: () => void } {
   return { dir, cleanup: () => cleanupTmpDir(dir) };
 }
 
-function isolateLegacy(dir: string): Record<string, string | undefined> {
-  const keys = ["FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH"];
-  const saved: Record<string, string | undefined> = {};
-  for (const key of keys) {
-    saved[key] = process.env[key];
-    process.env[key] = join(dir, `missing-${key}.json`);
-  }
-  return saved;
-}
-
-function restoreEnv(saved: Record<string, string | undefined>): void {
-  for (const [key, value] of Object.entries(saved)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
-
 function credentialAssignments(source: string, allowedModules: readonly string[] = []): string[] {
   const sourceFile = ts.createSourceFile("credential-source.ts", source, ts.ScriptTarget.Latest, true);
   const bindings = new Map<string, ts.Expression>();
@@ -389,7 +372,6 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
       },
     ]) {
       const { dir, cleanup } = tempDir();
-      const saved = isolateLegacy(dir);
       try {
         const defaultsPath = join(dir, "defaults.json");
         writeFileSync(
@@ -406,7 +388,6 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
         }
         assert.equal(loaded.search, undefined);
       } finally {
-        restoreEnv(saved);
         cleanup();
       }
     }
@@ -415,7 +396,6 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
   // Given first-run defaults containing a stale Brave field, when secrets seed, then LLM seeds and search remains absent.
   it("T-MCP-SCOPE.7j: first-run default seeding never creates search.braveApiKey", () => {
     const { dir, cleanup } = tempDir();
-    const saved = isolateLegacy(dir);
     try {
       const defaultsPath = join(dir, "defaults.json");
       const secretsPath = join(dir, "secrets.json");
@@ -434,7 +414,6 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
       assert.equal(seeded.search, undefined);
       assert.equal(JSON.parse(readFileSync(secretsPath, "utf8")).search, undefined);
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });
@@ -442,22 +421,19 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
   // Given no secrets, legacy files, or generated defaults, when readSecrets runs, then it preserves the schema-bearing empty state without writing a file.
   it("T-MCP-SCOPE.7j1: absent defaults preserve no-write first-run behavior", () => {
     const { dir, cleanup } = tempDir();
-    const saved = isolateLegacy(dir);
     try {
       const secretsPath = join(dir, "secrets.json");
       const loaded = readSecrets(secretsPath, { defaultCredentialsPath: join(dir, "missing-defaults.json") });
       assert.deepEqual(loaded, { schema_version: 1 });
       assert.equal(existsSync(secretsPath), false);
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });
 
-  // Given existing legacy search data and stale embedded Brave defaults, when read/backfill runs, then operator data is unchanged.
-  it("T-MCP-SCOPE.7k: default backfill preserves existing legacy search data and never adds provider search", () => {
+  // Given existing current search data and stale embedded Brave defaults, when read/backfill runs, then operator data is unchanged.
+  it("T-MCP-SCOPE.7k: default backfill preserves existing current search data and never adds provider search", () => {
     const { dir, cleanup } = tempDir();
-    const saved = isolateLegacy(dir);
     try {
       const defaultsPath = join(dir, "defaults.json");
       const secretsPath = join(dir, "secrets.json");
@@ -495,7 +471,6 @@ describe("P-WEB-SEARCH-MCP-SCOPE embedded default credentials", { concurrency: 1
       assert.ok(!JSON.stringify(loaded).includes("stale-brave"));
       assert.equal(readFileSync(secretsPath, "utf8"), beforeBytes);
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });

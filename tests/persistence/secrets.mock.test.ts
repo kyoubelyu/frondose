@@ -5,7 +5,6 @@
  * Assertion bodies filled at Step 5.
  *
  * Gate coverage:
- *   G-P24.1 — T-MIGRATE.AUTH.1, T-MIGRATE.GH.1, T-MIGRATE.SEARCH.1 (in migration.mock.test.ts)
  *   G-P24.3 — T-SECRETS.2, T-SECRETS.6, T-SHIM.AUTH.2
  *   G-P24.7 — T-SECRETS.2
  *   G-P24.8 — T-SECRETS.1, T-SECRETS.4, T-SECRETS.5
@@ -37,19 +36,6 @@ function makeTmpDir() {
   };
 }
 
-/** Restore env var helper. */
-function saveEnv(...keys: string[]): Record<string, string | undefined> {
-  const saved: Record<string, string | undefined> = {};
-  for (const k of keys) saved[k] = process.env[k];
-  return saved;
-}
-function restoreEnv(saved: Record<string, string | undefined>): void {
-  for (const [k, v] of Object.entries(saved)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
-}
-
 const posixPermissionsOptions: { skip?: string } =
   process.platform === "win32"
     ? { skip: "POSIX chmod/read-only directory semantics are not portable to Windows." }
@@ -62,19 +48,12 @@ describe("readSecrets — missing file → default empty shape (G-P24.8)", () =>
     // Given: secrets.json does not exist at secretsPath
     // When:  readSecrets(secretsPath) is called
     // Then:  returns {schema_version:1}; no file written to disk
-    const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
+    const { secretsPath, cleanup } = makeTmpDir();
     try {
-      // Prevent fallback reads from real legacy files (operator may have auth.json / github.json)
-      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
-
       const result = readSecrets(secretsPath);
       assert.deepEqual(result, { schema_version: 1 }, "T-SECRETS.1: empty defaults must match {schema_version:1}");
-      assert.ok(!existsSync(secretsPath), "T-SECRETS.1: no secrets.json must be written when no legacy data");
+      assert.ok(!existsSync(secretsPath), "T-SECRETS.1: no secrets.json must be written for empty current state");
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });
@@ -135,14 +114,9 @@ describe("readSecrets — malformed JSON → stderr + defaults (G-P24.8)", () =>
     // Given: secrets.json file contains '{not json'
     // When:  readSecrets(secretsPath) — stderr captured
     // Then:  stderr contains 'secrets.json corrupt or invalid'; returns {schema_version:1}; no throw
-    const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
+    const { secretsPath, cleanup } = makeTmpDir();
     try {
       writeFileSync(secretsPath, "{not json", "utf-8");
-      // Prevent fallback reads from real legacy files
-      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);
@@ -165,7 +139,6 @@ describe("readSecrets — malformed JSON → stderr + defaults (G-P24.8)", () =>
       );
       assert.deepEqual(result!, { schema_version: 1 }, "T-SECRETS.4: must return default {schema_version:1}");
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });
@@ -178,14 +151,9 @@ describe("readSecrets — schema_version forward-compat → stderr + defaults (G
     // Given: secrets.json with schema_version:99 (unsupported future version)
     // When:  readSecrets(secretsPath)
     // Then:  stderr warning emitted; returns {schema_version:1} defaults; no throw
-    const { dir, secretsPath, cleanup } = makeTmpDir();
-    const saved = saveEnv("FRONDOSE_LEGACY_AUTH_PATH", "FRONDOSE_LEGACY_GITHUB_PATH", "FRONDOSE_LEGACY_SEARCH_PATH");
+    const { secretsPath, cleanup } = makeTmpDir();
     try {
       writeFileSync(secretsPath, JSON.stringify({ schema_version: 99, providers: {} }), "utf-8");
-      // Prevent fallback reads from real legacy files
-      process.env.FRONDOSE_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.FRONDOSE_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.FRONDOSE_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
 
       const stderrChunks: string[] = [];
       const origWrite = process.stderr.write.bind(process.stderr);
@@ -205,7 +173,6 @@ describe("readSecrets — schema_version forward-compat → stderr + defaults (G
       assert.ok(stderr.length > 0, `T-SECRETS.5: stderr must contain a warning; got empty string`);
       assert.deepEqual(result!, { schema_version: 1 }, "T-SECRETS.5: must return default {schema_version:1}");
     } finally {
-      restoreEnv(saved);
       cleanup();
     }
   });
@@ -265,7 +232,7 @@ describe("writeSecrets — directory read-only: original unchanged; error propag
 // ─── T-SHIM.AUTH.1 ───────────────────────────────────────────────────────────
 
 describe("readAuth shim — reads secrets.json; returns AuthJson shape (G-P24.10)", () => {
-  it("T-SHIM.AUTH.1: when secrets.json contains providers.anthropic, legacy readAuth() shim returns AuthJson with those providers", () => {
+  it("T-SHIM.AUTH.1: when secrets.json contains providers.anthropic, the auth projection returns those providers", () => {
     // Given: secrets.json with {providers:{anthropic:{key:'k1',baseUrl:'...',type:'anthropic'}}, default:'anthropic:claude-sonnet-4-5'}
     //        authPathToSecretsPath(authPath) = co-located secrets.json in same dir
     // When:  readAuth(authPath) — shim routes to readSecrets(authPathToSecretsPath(authPath))

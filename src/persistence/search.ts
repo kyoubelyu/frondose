@@ -20,20 +20,20 @@ export type SearchConfig = z.infer<typeof searchConfigSchema>;
 
 export const DEFAULT_SEARCH_CONFIG: SearchConfig = {};
 
-/** Derive the secrets path co-located with the given legacy search path. */
+/** Derive the secrets path co-located with the adapter path. */
 function searchPathToSecretsPath(path: string): string {
   if (path === DEFAULT_SEARCH_CONFIG_PATH()) return DEFAULT_SECRETS_PATH();
   return join(dirname(path), "secrets.json");
 }
 
 export function readSearchConfig(path: string = DEFAULT_SEARCH_CONFIG_PATH()): SearchConfig {
-  const s = readSecrets(searchPathToSecretsPath(path), { searchPath: path });
+  const s = readSecrets(searchPathToSecretsPath(path));
   return s.search ?? { ...DEFAULT_SEARCH_CONFIG };
 }
 
 export function writeSearchConfig(cfg: SearchConfig, path: string = DEFAULT_SEARCH_CONFIG_PATH()): void {
   const secretsPath = searchPathToSecretsPath(path);
-  const s = readSecrets(secretsPath, { searchPath: path });
+  const s = readSecrets(secretsPath);
   const merged: SecretsJson = {
     ...s,
     schema_version: 1,

@@ -231,6 +231,12 @@ test("T-MR-FIX1.SET1: DEEPSEEK_THINKING_DEFAULT_MODELS contains deepseek-v4-flas
   assert.ok(!DEEPSEEK_THINKING_DEFAULT_MODELS.has("deepseek-reasoner"), "set must NOT contain deepseek-reasoner");
 });
 
+function seedThinkingSecrets(home: string, providers: Record<string, unknown>): void {
+  const agentDir = join(home, ".frondose", "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(join(agentDir, "secrets.json"), JSON.stringify({ schema_version: 1, providers }), "utf-8");
+}
+
 // ─── T-MR-FIX1.M9: resolveModel smoke (no API call) ─────────────────────────
 
 test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-disabled (use non-reserved 'custom' name instead)", () => {
@@ -246,17 +252,10 @@ test("T-MR-FIX1.M9: P-71 — 'openai' is reserved; resolveModel throws scope-dis
   );
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m9-"));
   try {
-    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
-          custom: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedThinkingSecrets(tmpHome, {
+      openai: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+      custom: { key: "stub-key-for-smoke", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+    });
     setIsolatedHome(tmpHome);
     // 1. Verify 'openai' (reserved) throws scope-disabled
     assert.throws(
@@ -289,16 +288,9 @@ test("T-MR-FIX1.M10: P-71 — 'anthropic' is reserved; resolveModel throws scope
   const restore = saveEnv("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "HOME", "FRONDOSE_HOME_BASE");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m10-"));
   try {
-    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          anthropic: { key: "sk-ant-stub", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
-        },
-      }),
-      "utf-8",
-    );
+    seedThinkingSecrets(tmpHome, {
+      anthropic: { key: "sk-ant-stub", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
+    });
     setIsolatedHome(tmpHome);
     process.env.ANTHROPIC_API_KEY = "sk-ant-stub";
     // P-71 blocks anthropic at the reserved-name guard; throws before any SDK call
@@ -322,17 +314,10 @@ test("T-MR-FIX1.M11: P-71 — 'openai' is reserved; resolveModel throws; non-res
   const restore = saveEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HOME", "FRONDOSE_HOME_BASE");
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-fix1-m11-"));
   try {
-    mkdirSync(join(tmpHome, ".frondose"), { recursive: true });
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" },
-          another: { key: "sk-auth-stub", baseUrl: "https://api.together.xyz/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedThinkingSecrets(tmpHome, {
+      openai: { key: "sk-auth-stub", baseUrl: "https://api.openai.com/v1", type: "openai" },
+      another: { key: "sk-auth-stub", baseUrl: "https://api.together.xyz/v1", type: "openai" },
+    });
     setIsolatedHome(tmpHome);
     // 1. 'openai' (reserved) throws
     assert.throws(

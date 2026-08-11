@@ -15,13 +15,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { writeGithubConfig } from "../../../src/persistence/github.js";
 import { makeGhIssueTool } from "../../../src/tools/operatorOutput/ghIssue.js";
 import { cleanupTmpDir } from "../../_helpers/tmp";
 
-// P-Z2 (bucket 2): isolate HOME so ghIssue's readGithubConfig() fallback reads an
-// empty tmp ~/.mai/agent/github.json instead of the operator's real config (which
-// would make T-M_p6.9's "GH_REPO missing" deterministic only by luck). getHomeBase()
-// prefers FRONDOSE_HOME_BASE; set it for the whole file.
+// P-Z2 (bucket 2): isolate the current secrets store so ghIssue never reads the
+// operator's real config. getHomeBase() prefers FRONDOSE_HOME_BASE; set it for
+// the whole file.
 let pZ2PrevHome: string | undefined;
 let pZ2TmpHome: string;
 before(() => {
@@ -231,38 +231,53 @@ test("T-M_p6.9: gh_issue GH_REPO missing → runtime_error envelope; no fetch ca
   console.log("T-M_p6.9: GH_REPO missing → runtime_error, no fetch ✓");
 });
 
-// ─── T-ConsumerGh.1 — github.json fallback (P-15, G-P15.1) ────────────────────
+// ─── T-ConsumerGh.1 — current secrets precedence (P-15, G-P15.1) ─────────────
 
-test("T-ConsumerGh.1: when GH_TOKEN unset, ghIssue reads token from github.json fallback; env var always wins", async () => {
-  // Given: GH_TOKEN env var unset; github.json exists with { token: "ghp_file_token", repo: "owner/file-repo" }
-  // When:  readGithubConfig returns file token; precedence checked (env > file)
-  // Then:  file token used when env unset; env wins when set
-
-  // Test the precedence logic used by ghIssue.ts:
-  // const ghCfg = readGithubConfig();
-  // const token = process.env.GH_TOKEN ?? ghCfg.token;
-  // const repo = process.env.GH_REPO ?? ghCfg.repo;
-
+test("T-ConsumerGh.1: gh_issue executes with stored-only GitHub credentials and environment fields still override", async () => {
+  // Given current GitHub fields, when the real tool executes with env absent then present, stored-only works and env wins.
   const savedToken = process.env.GH_TOKEN;
   const savedRepo = process.env.GH_REPO;
-
   try {
-    // When env is set, env wins
-    process.env.GH_TOKEN = "ghp_env_token";
-    process.env.GH_REPO = "env/owner";
-    const ghCfg = { token: "ghp_file_token", repo: "owner/file-repo" };
-    const tokenWithEnv = process.env.GH_TOKEN ?? ghCfg.token;
-    const repoWithEnv = process.env.GH_REPO ?? ghCfg.repo;
-    assert.equal(tokenWithEnv, "ghp_env_token", "GH_TOKEN env must win over file token");
-    assert.equal(repoWithEnv, "env/owner", "GH_REPO env must win over file repo");
-
-    // When env is unset, file value used
+    writeGithubConfig({ token: "ghp_file_token", repo: "owner/file-repo" });
     delete process.env.GH_TOKEN;
     delete process.env.GH_REPO;
-    const tokenWithoutEnv = process.env.GH_TOKEN ?? ghCfg.token;
-    const repoWithoutEnv = process.env.GH_REPO ?? ghCfg.repo;
-    assert.equal(tokenWithoutEnv, "ghp_file_token", "file token used when GH_TOKEN unset");
-    assert.equal(repoWithoutEnv, "owner/file-repo", "file repo used when GH_REPO unset");
+    await withFetchMock(
+      async (url, init) => {
+        assert.match(url, /repo:owner\/file-repo/);
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer ghp_file_token");
+        return makeJsonResponse(200, {
+          total_count: 1,
+          items: [{ html_url: "https://github.invalid/stored/1", number: 1 }],
+        });
+      },
+      async () => {
+        const result = await makeGhIssueTool().execute(
+          { ...DEFAULT_PARAMS, dedupKey: "stored-only-consumer" },
+          { toolCallId: "stored-only", messages: [] },
+        );
+        assert.equal((result as { ok: boolean }).ok, true);
+      },
+    );
+
+    process.env.GH_TOKEN = "ghp_env_token";
+    process.env.GH_REPO = "env/owner";
+    await withFetchMock(
+      async (url, init) => {
+        assert.match(url, /repo:env\/owner/);
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer ghp_env_token");
+        return makeJsonResponse(200, {
+          total_count: 1,
+          items: [{ html_url: "https://github.invalid/env/2", number: 2 }],
+        });
+      },
+      async () => {
+        const result = await makeGhIssueTool().execute(
+          { ...DEFAULT_PARAMS, dedupKey: "env-override-consumer" },
+          { toolCallId: "env-override", messages: [] },
+        );
+        assert.equal((result as { ok: boolean }).ok, true);
+      },
+    );
   } finally {
     if (savedToken !== undefined) process.env.GH_TOKEN = savedToken;
     else delete process.env.GH_TOKEN;

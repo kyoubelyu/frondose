@@ -117,8 +117,7 @@ export function migrateProviderEntry(name: string, entry: ProviderEntry): Provid
   };
 }
 
-/** Step-3b B-1 helper: derive the secrets path co-located with the given
- *  legacy auth path. Production calls (`authPath === DEFAULT_AUTH_PATH()`)
+/** Derive the secrets path co-located with the adapter path. Production calls (`authPath === DEFAULT_AUTH_PATH()`)
  *  hit `DEFAULT_SECRETS_PATH()`; test calls (`tmpDir/auth.json`) co-locate
  *  `secrets.json` in the same directory so `writeAuth(data, tmpDir/auth.json)`
  *  writes to `tmpDir/secrets.json`, never the operator's real path. */
@@ -127,11 +126,9 @@ export function authPathToSecretsPath(authPath: string): string {
   return join(dirname(authPath), "secrets.json");
 }
 
-/** Read auth.json — actually reads `secrets.json` via the shim. Missing file → null.
- *  Threads `authPath` as the legacy override so test calls `readAuth(tmpDir/auth.json)`
- *  see tmpDir/auth.json on first-read fallback, never the operator's real auth.json. */
+/** Read auth fields from `secrets.json` via the shim. Missing fields → null. */
 export function readAuth(path: string = DEFAULT_AUTH_PATH()): AuthJson | null {
-  const s = readSecrets(authPathToSecretsPath(path), { authPath: path });
+  const s = readSecrets(authPathToSecretsPath(path));
   if (s.providers === undefined && s.default === undefined && s.visionModel === undefined) {
     return null;
   }
@@ -145,7 +142,7 @@ export function readAuth(path: string = DEFAULT_AUTH_PATH()): AuthJson | null {
 /** Write auth fields atomically via secrets.ts. Preserves github/search/server (C-1 RMW). */
 export function writeAuth(auth: AuthJson, path: string = DEFAULT_AUTH_PATH()): void {
   const secretsPath = authPathToSecretsPath(path);
-  const s = readSecrets(secretsPath, { authPath: path });
+  const s = readSecrets(secretsPath);
   const merged: SecretsJson = {
     schema_version: 1,
     default: auth.default,

@@ -832,9 +832,9 @@ describe("IPC.Frames — SseFrame discriminator union (sidecar=32, UI=28)", () =
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Preseed pattern (§4 [2a] CONCERN-MR-3): write a deterministic auth.json
+ * Preseed pattern (§4 [2a] CONCERN-MR-3): write deterministic current secrets
  * with toy key "abc12345" under a temp MAI_HOME_BASE so readSettings() returns
- * a real masked payload without touching ~/.mai/auth.json.
+ * a real masked payload without touching operator state.
  */
 let _savedHome: string | undefined;
 let _tempHome: string;
@@ -844,17 +844,19 @@ function setupTempHome(): void {
   _tempHome = mkdtempSync(join(tmpdir(), "p-app-7-mask-"));
   mkdirSync(join(_tempHome, ".frondose", "agent"), { recursive: true });
 
-  // Write auth.json with toy key — "abc12345" → mask "***2345" (verified against auth.ts:177-187)
+  // Write secrets.json with toy key — "abc12345" → mask "***2345".
   const authJson = JSON.stringify({
+    schema_version: 1,
     default: "deepseek:deepseek-v4-flash",
     providers: {
       deepseek: {
         key: "abc12345",
-        baseURL: "https://api.deepseek.com/v1",
+        baseUrl: "https://api.deepseek.com/v1",
+        type: "openai",
       },
     },
   });
-  writeFileSync(join(_tempHome, ".frondose", "auth.json"), authJson, "utf-8");
+  writeFileSync(join(_tempHome, ".frondose", "agent", "secrets.json"), authJson, "utf-8");
   process.env.FRONDOSE_HOME_BASE = _tempHome;
 }
 
@@ -871,7 +873,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
   afterEach(teardownTempHome);
 
   it("T-IPC.Mask.1: when GET /settings is called with toy key preseeded, response has no raw key field and JSON does not contain the key string", async () => {
-    // Given: temp HOME with auth.json containing toy key "abc12345" (preseed pattern)
+    // Given: temp HOME with current secrets containing toy key "abc12345" (preseed pattern)
     // When: GET /settings issued with valid bearer
     // Then: body.llm.hasKey===true, body.llm.key===undefined, JSON does not contain "abc12345"
 
@@ -924,7 +926,7 @@ describe("IPC.Mask — GET /settings has no raw key, POST→GET mask shape", () 
   });
 
   it("T-IPC.Mask.2: when GET /settings is called with toy key preseeded, maskedKey === '***2345' (last-4 mask, no prefix)", async () => {
-    // Given: temp HOME with auth.json containing toy key "abc12345" (maskKey: no dash at index 3-8 → ***last4)
+    // Given: temp HOME with current secrets containing toy key "abc12345" (maskKey: no dash at index 3-8 → ***last4)
     // When: GET /settings with valid bearer
     // Then: maskedKey==="***2345", length<8, JSON does not contain raw key
 

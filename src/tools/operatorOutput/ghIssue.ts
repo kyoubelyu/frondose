@@ -28,7 +28,7 @@ function cacheKey(repo: string, dedupKey: string): string {
  * Build the gh_issue Vercel tool. Creates a GitHub issue via REST API, with
  * agent-side dedup against existing open issues whose title contains dedup_key.
  *
- * Reads GH_TOKEN + GH_REPO from process.env (or ~/.frondose/agent/github.json fallback).
+ * Reads GH_TOKEN + GH_REPO from process.env or the current secrets store.
  * Graceful degradation when both unset.
  */
 export function makeGhIssueTool(_opts: GhIssueOpts = {}) {
