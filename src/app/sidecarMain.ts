@@ -8,8 +8,8 @@
 // Bootstrap surface kept INTENTIONALLY MINIMAL — see docs/phase-app-6-plan.md §2
 // for the dependency trace justifying each include/exclude. In particular:
 //   - NO CLI command framework, NO 30-subcommand import graph (the win).
-//   - NO loadDotenv (the .app has no relevant cwd; provider keys flow via
-//     ~/.frondose/auth.json / secrets — see §2.1 [2a, CONCERN-1] for trace).
+//   - NO loadDotenv (the .app has no relevant cwd; provider keys flow via the
+//     current secrets store — see §2.1 [2a, CONCERN-1] for trace).
 //   - NO maybePrintTransitionalBanner (banner already short-circuits on `serve`).
 //   - NO runStartupAutoUpdate (the Tauri updater owns app updates).
 // What we DO need:

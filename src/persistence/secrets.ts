@@ -4,33 +4,24 @@
  * tmp file is also created with mode 0o600 to minimize the visibility window
  * during the brief moment between writeFileSync and the post-rename chmod.
  *
- * Read invariant: if secrets.json exists, it WINS — legacy auth/github/search
- * files are never consulted. If secrets.json is absent, the function migrates
- * in-memory from legacy files (B-3 env-overridable for tests), writes
- * secrets.json atomically, and returns the merged shape. Either way, any
+ * Read invariant: secrets.json is the only persisted credential source. If it
+ * is absent or invalid, reading starts from an empty current schema and does not
+ * write an empty file. Any
  * embedded-default field (P-EMBED-KEYS) still unset on the result is backfilled
  * per-field (never overwriting a configured field) and persisted if it changed.
  */
 import { chmodSync, existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import {
-  type AuthJson,
-  DEFAULT_AUTH_PATH,
-  isDeepSeekBaseUrl,
-  isOfficialDirectProviderBaseUrl,
-  migrateProviderEntry,
-} from "./auth.js";
+import { isDeepSeekBaseUrl, isOfficialDirectProviderBaseUrl, migrateProviderEntry } from "./auth.js";
 import { readDefaultCredentials } from "./defaultCredentials.js";
-import { DEFAULT_GITHUB_CONFIG_PATH } from "./github.js";
 import { readJsonFileSync } from "./jsonFile.js";
 import { DATA_DIR_NAME, getHomeBase } from "./paths.js";
-import { DEFAULT_SEARCH_CONFIG_PATH } from "./search.js";
 
 // Inline provider schema — duplicated from auth.ts to break the secrets.ts ↔
 // auth.ts top-level circular import (TDZ on z.object construction). Identical
-// shape; the function-level imports above (DEFAULT_AUTH_PATH, migrateProviderEntry)
-// are safe because they are not accessed at module-init time.
+// shape; the function-level migrateProviderEntry import is safe because it is
+// not accessed at module-init time.
 const providerEntrySchema = z.object({
   key: z.string().min(1),
   baseUrl: z.string().url().optional(),
@@ -86,110 +77,23 @@ function tryReadJson<T>(path: string, schema: z.ZodType<T>, label: string): T | 
   }
 }
 
-/** Legacy-path overrides forwarded to `legacyMerged()` on first-read fallback.
- *  Used by the auth/github/search shims to thread test-injected legacy paths
- *  through to the migration step — without this, tests that call
- *  `readAuth(tmpDir/auth.json)` would have `legacyMerged` reach back to the
- *  operator's real `~/.frondose/auth.json` (test pollution). */
-export interface LegacyPathOverrides {
-  authPath?: string;
-  githubPath?: string;
-  searchPath?: string;
+export interface ReadSecretsOptions {
   // P-EMBED-KEYS: injectable path for the build-embedded default-credentials JSON (tests only —
   // production always resolves the co-located defaultCredentials.generated.json via import.meta.url).
   defaultCredentialsPath?: string;
 }
 
-/** Read secrets.json with one-shot legacy fallback. */
-export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), legacy?: LegacyPathOverrides): SecretsJson {
-  // (1) Happy path: new file exists.
+/** Read the current consolidated secrets file and approved embedded defaults. */
+export function readSecrets(path: string = DEFAULT_SECRETS_PATH(), options?: ReadSecretsOptions): SecretsJson {
   const fresh = tryReadJson(path, secretsJsonSchema, "secrets.json");
-  if (fresh !== null) {
-    const migrated = migrateProviders(fresh);
-    // P-EMBED-KEYS bugfix: backfill any embedded-default field the EXISTING file is still
-    // missing. Without this, an install where secrets.json already exists (an upgrade, or any
-    // prior partial config — e.g. LLM set manually before this feature shipped) never reaches
-    // the whole-file-absent branch below, so a newer defaultable field (e.g. Brave) could NEVER
-    // get backfilled even though its own default is embedded and unset. applyDefaultCredentials'
-    // per-field guard (`!next.providers` / `!next.search`) means an already-configured field is
-    // never touched — only a field that is genuinely still unset gets filled, exactly once.
-    const withDefaults = applyDefaultCredentials(migrated, legacy?.defaultCredentialsPath);
-    if (withDefaults !== migrated) writeSecrets(withDefaults, path);
-    return withDefaults;
-  }
-
-  // (2) Legacy fallback — gather, merge, write, return.
-  const isolatedLegacyDir = legacy ? dirname(path) : undefined;
-  const merged = legacyMerged(
-    legacy?.authPath ??
-      (isolatedLegacyDir ? join(isolatedLegacyDir, "auth.json") : process.env.FRONDOSE_LEGACY_AUTH_PATH) ??
-      DEFAULT_AUTH_PATH(),
-    legacy?.githubPath ??
-      (isolatedLegacyDir ? join(isolatedLegacyDir, "github.json") : process.env.FRONDOSE_LEGACY_GITHUB_PATH) ??
-      DEFAULT_GITHUB_CONFIG_PATH(),
-    legacy?.searchPath ??
-      (isolatedLegacyDir ? join(isolatedLegacyDir, "search.json") : process.env.FRONDOSE_LEGACY_SEARCH_PATH) ??
-      DEFAULT_SEARCH_CONFIG_PATH(),
-    legacy?.defaultCredentialsPath,
-  );
-  // Check ALL meaningful legacy fields (P-21 `default` / `visionModel` flow
-  // through `default` + `visionModel`; P-15 fields through github/search). If
-  // none, skip the migration write and return empty defaults.
-  if (
-    merged.default === undefined &&
-    merged.visionModel === undefined &&
-    merged.providers === undefined &&
-    merged.github === undefined &&
-    merged.search === undefined
-  ) {
-    return EMPTY_SECRETS;
-  }
-  // One-shot migration write.
-  writeSecrets(merged, path);
-  return merged;
-}
-
-/** Internal: read legacy auth/github/search and synthesize a SecretsJson.
- *
- * Step-3b B-3 DI: each legacy path defaults to its standard location BUT is
- * overridable via FRONDOSE_LEGACY_*_PATH env vars. Test-only mechanism (NOT part
- * of operator contract — see plan §8 N-1).
- */
-export function legacyMerged(
-  authPath: string = process.env.FRONDOSE_LEGACY_AUTH_PATH ?? DEFAULT_AUTH_PATH(),
-  githubPath: string = process.env.FRONDOSE_LEGACY_GITHUB_PATH ?? DEFAULT_GITHUB_CONFIG_PATH(),
-  searchPath: string = process.env.FRONDOSE_LEGACY_SEARCH_PATH ?? DEFAULT_SEARCH_CONFIG_PATH(),
-  defaultCredentialsPath?: string,
-): SecretsJson {
-  const authLegacy = tryReadJson(
-    authPath,
-    z.object({
-      default: z.string().min(1).optional(),
-      visionModel: z.string().min(1).optional(),
-      providers: z.record(z.string().min(1), providerEntrySchema).optional(),
-    }) as z.ZodType<AuthJson>,
-    "auth.json",
-  );
-  const ghLegacy = tryReadJson(githubPath, githubSubSchema, "github.json");
-  const searchLegacy = tryReadJson(searchPath, searchSubSchema, "search.json");
-
-  const out: SecretsJson = { schema_version: 1 };
-  if (authLegacy) {
-    if (authLegacy.default) out.default = authLegacy.default;
-    if (authLegacy.visionModel) out.visionModel = authLegacy.visionModel;
-    if (authLegacy.providers) out.providers = authLegacy.providers;
-  }
-  if (ghLegacy && (ghLegacy.token || ghLegacy.repo)) out.github = ghLegacy;
-  if (searchLegacy && (searchLegacy.braveApiKey || searchLegacy.tavilyApiKey)) {
-    out.search = searchLegacy;
-  }
-  return migrateProviders(applyDefaultCredentials(out, defaultCredentialsPath));
+  const base = fresh === null ? EMPTY_SECRETS : migrateProviders(fresh);
+  const withDefaults = applyDefaultCredentials(base, options?.defaultCredentialsPath);
+  if (withDefaults !== base) writeSecrets(withDefaults, path);
+  return withDefaults;
 }
 
 /** P-EMBED-KEYS: layer in the build-embedded default LLM provider, but ONLY for
- *  fields still unset on `s` — never overrides a user's / legacy config's own values. Called
- *  from BOTH readSecrets branches (the whole-file-absent legacy-merge path, AND the happy path
- *  when secrets.json already exists). */
+ *  fields still unset on `s` — never overrides the current file's values. */
 function applyDefaultCredentials(s: SecretsJson, path?: string): SecretsJson {
   const defaults = readDefaultCredentials(path);
   let next = s;

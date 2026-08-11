@@ -2,9 +2,8 @@
  * F-REN-3 Step 5 — Filled assertions: T-FREN3.7
  *
  * Source-scan guard: asserts that after Step 4 lands, zero raw
- * `process.env.MAI_*` reads remain in production src/ outside the
- * documented Group C allowlist (src/persistence/secrets.ts MAI_LEGACY_* only)
- * and the shim self-reference (src/env.ts).
+ * `process.env.MAI_*` reads remain in production src/ outside the shim
+ * self-reference (src/env.ts) and the server-path documentation exception.
  *
  * PRE-STEP-4 BASELINE (measured 2026-06-12 on main before any F-REN-3 builder edits):
  *   grep -rlE "process\.env\.MAI_[A-Z0-9_]+" src/ --include='*.ts' | grep -v /target/ | wc -l
@@ -33,7 +32,7 @@
  *     src/linkedin/uploadAllowlist.ts
  *     src/overlay/host.ts
  *     src/persistence/paths.ts
- *     src/persistence/secrets.ts          ← Group C — KEEP (MAI_LEGACY_*)
+ *     src/persistence/secrets.ts          ← historical Group C, now deleted
  *     src/persistence/serverPaths.ts      ← docstring only at :3, not a live read — plan §2 excludes
  *     src/tools/webTools/analyzeScreenshot.ts
  *
@@ -45,7 +44,7 @@
  *   it from the rename scope (§2, N-1 corrected totals). The guard below includes it in the
  *   allowlist so a docstring comment does not fail the test.
  *
- *   ROSTER GAP CHECK: All 24 plan §3 Group A files + 1 Group C (secrets.ts) + 1 docstring
+ *   ROSTER GAP CHECK: All 24 plan §3 Group A files + the historical Group C file + 1 docstring
  *   (serverPaths.ts) = 26 files expected in the pre-Step-4 scan. Observed: 25 raw files.
  *   Reconciliation: src/tier.ts is excluded from the raw scan because its read is via the
  *   param-injected `env` argument (env.MAI_TIER), not process.env.MAI_TIER directly — this
@@ -113,15 +112,11 @@ function findRawMaiReads(text: string): Array<{ lineNo: number; match: string }>
  *      a computed access. The regex `process\.env\.MAI_[A-Z]` does NOT match this
  *      pattern. But we include it in the allowlist for safety.)
  *
- *   2. src/persistence/secrets.ts — Group C: MAI_LEGACY_AUTH_PATH / MAI_LEGACY_GITHUB_PATH /
- *      MAI_LEGACY_SEARCH_PATH are KEPT by design (they name the mai-legacy-era paths).
- *
- *   3. src/persistence/serverPaths.ts — docstring at line :3 contains the text
+ *   2. src/persistence/serverPaths.ts — docstring at line :3 contains the text
  *      "process.env.MAI_HOME_BASE" as documentation. Not a live read; kept as-is.
  */
 const ALLOWLISTED_RELATIVE_PATHS = new Set<string>([
   "src/env.ts", // shim self-reference
-  "src/persistence/secrets.ts", // Group C MAI_LEGACY_* (kept by design)
   "src/persistence/serverPaths.ts", // docstring only — not a live read
 ]);
 
@@ -134,7 +129,7 @@ const EXCLUDED_PREFIXES = [
 // ─── T-FREN3.7 ────────────────────────────────────────────────────────────────
 
 describe("source-scan guard — zero raw process.env.MAI_ reads in production src/ (G-FREN3.guard)", () => {
-  it("T-FREN3.7: after Step 4, no production *.ts file outside the Group C allowlist contains process.env.MAI_<NAME>", () => {
+  it("T-FREN3.7: after Step 4, no production *.ts file outside declared non-code exceptions contains process.env.MAI_<NAME>", () => {
     // Given: production src/ tree (*.ts, excluding target/ and tauri/ui/)
     // When:  regex scan for process.env.MAI_[A-Z0-9_]+ in every non-allowlisted file
     // Then:  the match set is empty — every former MAI_* read is now routed through frondoseEnv()

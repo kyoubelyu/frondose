@@ -127,20 +127,16 @@ describe("other readers tolerate a BOM-prefixed file", () => {
   // with src/persistence/serverIdentity.ts, a fleet runtime owner deleted per
   // the P-OPEN-SOURCE-SPLIT ledger.)
 
-  it("T-SecretsBom.1: readSecrets on a BOM-prefixed secrets.json parses it directly (does not fall through to legacy migration)", () => {
+  it("T-SecretsBom.1: readSecrets parses a BOM-prefixed current secrets file directly", () => {
     const dir = makeTmpDir("frondose-bom-secrets-");
     try {
       const path = join(dir, "secrets.json");
       // A minimal but schema-valid secrets.json (schema_version is the only
       // required field) — BOM-prefixed, simulating a hand-edit-on-Windows.
-      // Legacy paths are pointed at nonexistent files so a schema-parse
-      // FAILURE (i.e. the BOM not being stripped) would be visible as a
-      // fall-through to EMPTY_SECRETS rather than a thrown error.
+      // Missing embedded defaults make a schema-parse failure visible as
+      // EMPTY_SECRETS rather than a thrown error.
       writeFileSync(path, `${UTF8_BOM}${JSON.stringify({ schema_version: 1, default: "test-model" })}`, "utf-8");
       const result = readSecrets(path, {
-        authPath: join(dir, "no-such-auth.json"),
-        githubPath: join(dir, "no-such-github.json"),
-        searchPath: join(dir, "no-such-search.json"),
         defaultCredentialsPath: join(dir, "no-such-defaults.json"),
       });
       assert.equal(result.default, "test-model");

@@ -19,7 +19,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, test } from "node:test";
@@ -78,23 +78,23 @@ test(
   "T-Auth1b: writeAuth overwrite enforces mode 0o600 on secrets.json (P-24 shim: write lands on secrets.json)",
   posixPermissionsOptions,
   () => {
-  const { dir, authPath } = tmpAuthPath();
-  try {
-    // P-24 Step 5: pre-create at secrets.json path (authPathToSecretsPath imported from auth.js).
-    const secretsPath = authPathToSecretsPath(authPath);
-    writeFileSync(secretsPath, JSON.stringify({ schema_version: 1, providers: {} }), "utf-8");
-    // Manually set mode to 0o644 (simulates pre-existing file from another tool).
-    chmodSync(secretsPath, 0o644);
-    assert.equal(statSync(secretsPath).mode & 0o777, 0o644, "T-Auth1b: pre-condition: secrets.json must be 0o644");
+    const { dir, authPath } = tmpAuthPath();
+    try {
+      // P-24 Step 5: pre-create at secrets.json path (authPathToSecretsPath imported from auth.js).
+      const secretsPath = authPathToSecretsPath(authPath);
+      writeFileSync(secretsPath, JSON.stringify({ schema_version: 1, providers: {} }), "utf-8");
+      // Manually set mode to 0o644 (simulates pre-existing file from another tool).
+      chmodSync(secretsPath, 0o644);
+      assert.equal(statSync(secretsPath).mode & 0o777, 0o644, "T-Auth1b: pre-condition: secrets.json must be 0o644");
 
-    // writeAuth must upgrade secrets.json to 0o600.
-    writeAuth({ providers: { openai: { key: "sk-openai-overwrite" } } }, authPath);
-    const mode = statSync(secretsPath).mode & 0o777;
-    assert.equal(mode, 0o600, `T-Auth1b: overwrite must enforce 0o600 on secrets.json; got ${mode.toString(8)}`);
-    console.log("T-Auth1b: overwrite defensive chmodSync 0o600 ✓");
-  } finally {
-    cleanupTmpDir(dir);
-  }
+      // writeAuth must upgrade secrets.json to 0o600.
+      writeAuth({ providers: { openai: { key: "sk-openai-overwrite" } } }, authPath);
+      const mode = statSync(secretsPath).mode & 0o777;
+      assert.equal(mode, 0o600, `T-Auth1b: overwrite must enforce 0o600 on secrets.json; got ${mode.toString(8)}`);
+      console.log("T-Auth1b: overwrite defensive chmodSync 0o600 ✓");
+    } finally {
+      cleanupTmpDir(dir);
+    }
   },
 );
 
@@ -163,7 +163,7 @@ test("T-Auth3: maskKey preserves last 4 chars; sk-ant- prefix kept; sk-*** middl
 
 // ─── T-Auth4 — remove deletes provider ───────────────────────────────────────
 
-test("T-Auth4: writeAuth set then manual provider remove leaves provider absent in auth.json (re-pointed from runAuthSubcommand)", () => {
+test("T-Auth4: writeAuth set then manual provider remove leaves provider absent in current secrets", () => {
   // P-APP-11 stage (b1): runAuthSubcommand("set"/"remove") removed; re-pointed to direct writeAuth
   // + manual provider deletion. The persistence subject (writeAuth stores + delete removes) unchanged.
   const { dir, authPath } = tmpAuthPath();
@@ -193,7 +193,7 @@ test("T-Auth4: writeAuth set then manual provider remove leaves provider absent 
 
 // ─── T-Auth5 — default field written ─────────────────────────────────────────
 
-test("T-Auth5: writeAuth default field stores model spec in auth.json (re-pointed from runAuthSubcommand)", () => {
+test("T-Auth5: writeAuth default field stores model spec in current secrets", () => {
   // P-APP-11 stage (b1): runAuthSubcommand("default") removed; re-pointed to direct writeAuth.
   const { dir, authPath } = tmpAuthPath();
   try {
@@ -216,7 +216,7 @@ test("T-Auth6: writeAuth with incomplete provider fields + readAuth: persistence
     // Write a minimal record (only providers key, no default)
     writeAuth({ providers: {} }, authPath);
     const auth = readAuth(authPath);
-    assert.ok(auth !== null, "T-Auth6: readAuth must return non-null for valid (empty) auth.json");
+    assert.ok(auth !== null, "T-Auth6: readAuth must return non-null for valid empty current secrets");
     assert.deepEqual(auth?.providers ?? {}, {}, "T-Auth6: empty providers must round-trip");
     assert.equal(auth?.default, undefined, "T-Auth6: default must be undefined when not written");
     console.log("T-Auth6: persistence resilience with empty data ✓");
@@ -232,7 +232,7 @@ test("T-MR1: readAuthJsonKey returns key when present; undefined when absent or 
   try {
     // Missing file → undefined
     const missing = readAuthJsonKey("anthropic", authPath);
-    assert.equal(missing, undefined, "T-MR1: missing auth.json must return undefined");
+    assert.equal(missing, undefined, "T-MR1: missing current secrets must return undefined");
 
     // File present but provider absent → undefined
     writeAuth({ providers: { openai: { key: "sk-oai" } } }, authPath);
@@ -255,7 +255,7 @@ test("T-MR1: readAuthJsonKey returns key when present; undefined when absent or 
 test("T-Auth.4: writeAuth with visionModel field → readAuth returns visionModel; readAuthJsonVisionModel helper returns correct value; absent field → undefined", () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    // Given: auth.json data with visionModel: "openai:gpt-4o"
+    // Given: current secrets with visionModel: "openai:gpt-4o"
     // When:  writeAuth then readAuth
     // Then:  auth.visionModel === "openai:gpt-4o"; readAuthJsonVisionModel() returns "openai:gpt-4o"; writing without visionModel → undefined
 
@@ -282,10 +282,10 @@ test("T-Auth.4: writeAuth with visionModel field → readAuth returns visionMode
 
 // ─── T-Auth.6 — modelResolver reads stored deepseek baseUrl (P-15, G-P15.4) ───
 
-test("T-Auth.6: readAuth returns stored deepseek baseUrl from auth.json; DEEPSEEK_BASE_URL env wins when set", () => {
+test("T-Auth.6: readAuth returns stored deepseek baseUrl from current secrets; DEEPSEEK_BASE_URL env wins", () => {
   const { dir, authPath } = tmpAuthPath();
   try {
-    // Given: auth.json with providers.deepseek.baseUrl: "https://custom.deepseek.com"
+    // Given: current secrets with providers.deepseek.baseUrl: "https://custom.deepseek.com"
     // When:  readAuth(authPath)
     // Then:  auth.providers.deepseek.baseUrl === "https://custom.deepseek.com"; value can be read back correctly
 
@@ -387,12 +387,17 @@ describe("migrateProviderEntry — old-format provider entries get type + defaul
 
 describe("readAuth — migrateAuth called on read; old on-disk entries upgraded in-memory (G-P21.4)", () => {
   it("T-MIG.1b: when on-disk anthropic entry lacks type, readAuth returns entry with type=anthropic + default baseUrl", () => {
-    // Given: auth.json on disk has { providers: { anthropic: { key: "sk-ant-mig" } } } (no type, no baseUrl)
+    // Given: current secrets on disk has an anthropic entry with no type or baseUrl
     // When:  readAuth(path) is called
     // Then:  returned auth.providers.anthropic.type === "anthropic" AND baseUrl === DEFAULT_ANTHROPIC_BASE_URL
     const { dir, authPath } = tmpAuthPath();
     try {
-      writeFileSync(authPath, JSON.stringify({ providers: { anthropic: { key: "sk-ant-mig" } } }), "utf-8");
+      writeFileSync(
+        authPathToSecretsPath(authPath),
+        JSON.stringify({ schema_version: 1, providers: { anthropic: { key: "sk-ant-mig" } } }),
+        "utf-8",
+      );
+      const beforeBytes = readFileSync(authPathToSecretsPath(authPath));
       const auth = readAuth(authPath);
       assert.ok(auth, "T-MIG.1b: readAuth must return non-null for valid JSON");
       assert.equal(
@@ -409,6 +414,11 @@ describe("readAuth — migrateAuth called on read; old on-disk entries upgraded 
         auth?.providers?.anthropic?.key,
         "sk-ant-mig",
         "T-MIG.1b: key must be preserved during in-memory migration",
+      );
+      assert.deepEqual(
+        readFileSync(authPathToSecretsPath(authPath)),
+        beforeBytes,
+        "T-MIG.1b: in-memory normalization must not rewrite current secrets bytes",
       );
     } finally {
       cleanupTmpDir(dir);

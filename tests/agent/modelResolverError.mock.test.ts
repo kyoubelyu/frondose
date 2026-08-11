@@ -236,11 +236,11 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
 
   it(
     "T-FA.4: when spec equals readAuthJsonDefault() (and FRONDOSE_MODEL not set), " +
-      "buildModel error names 'the auth.json / secrets.json default' as the source",
+      "buildModel error names 'the secrets.json default' as the source",
     () => {
       // Given: FRONDOSE_MODEL unset; secrets.json default is the failing spec
       // When:  resolveModel({}) → resolveModelSpec picks up auth default → buildModel throws
-      // Then:  error message contains "auth.json / secrets.json default"
+      // Then:  error message contains "secrets.json default"
       const { tmpHome, cleanup } = setupTmpHome(
         {
           // No "openai" provider — spec will fail
@@ -266,8 +266,8 @@ describe("buildModel error — spec-source naming: auth/secrets default (G-P36.3
           (err: unknown) => {
             assert.ok(err instanceof Error, "T-FA.4: must throw an Error instance");
             assert.ok(
-              err.message.includes("auth.json / secrets.json default"),
-              `T-FA.4: error must name 'auth.json / secrets.json default' as the spec source; got: ${err.message}`,
+              err.message.includes("secrets.json default"),
+              `T-FA.4: error must name 'secrets.json default' as the spec source; got: ${err.message}`,
             );
             return true;
           },

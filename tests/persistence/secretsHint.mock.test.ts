@@ -33,17 +33,6 @@ describe("readSecrets — corrupt secrets.json emits expected-shape hint on stde
       const secretsPath = join(dir, "secrets.json");
       writeFileSync(secretsPath, JSON.stringify({ schema_version: 99 }), "utf-8");
 
-      // Point legacy paths to non-existent files to avoid reading operator's real config
-      // and to prevent the legacyMerged fallback from writing to the tmp path.
-      const savedEnv: Record<string, string | undefined> = {
-        MAI_LEGACY_AUTH_PATH: process.env.MAI_LEGACY_AUTH_PATH,
-        MAI_LEGACY_GITHUB_PATH: process.env.MAI_LEGACY_GITHUB_PATH,
-        MAI_LEGACY_SEARCH_PATH: process.env.MAI_LEGACY_SEARCH_PATH,
-      };
-      process.env.MAI_LEGACY_AUTH_PATH = join(dir, "no-auth.json");
-      process.env.MAI_LEGACY_GITHUB_PATH = join(dir, "no-github.json");
-      process.env.MAI_LEGACY_SEARCH_PATH = join(dir, "no-search.json");
-
       const cleanup = () => cleanupTmpDir(dir);
 
       const stderrChunks: string[] = [];
@@ -63,10 +52,6 @@ describe("readSecrets — corrupt secrets.json emits expected-shape hint on stde
       } finally {
         // biome-ignore lint/suspicious/noExplicitAny: restore
         (process.stderr as any).write = origWrite;
-        for (const [k, v] of Object.entries(savedEnv)) {
-          if (v === undefined) delete process.env[k];
-          else process.env[k] = v;
-        }
         cleanup();
       }
 

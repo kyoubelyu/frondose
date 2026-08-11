@@ -32,7 +32,7 @@ import { cleanupTmpDir } from "../../_helpers/tmp";
 const FIXTURE_PNG = join(process.cwd(), "tests", "fixtures", "test-screenshot.png");
 
 // P-Z3: the happy-path tests need a CONFIGURED vision provider. buildModel
-// (modelResolver.ts:162) throws "not configured" when no auth.json/secrets provider ENTRY
+// (modelResolver.ts:162) throws "not configured" when no current provider entry
 // exists — env API keys are consulted only AFTER the entry is found (resolveModelKey:145-156),
 // so the original env-key-only setup stopped resolving at P-21. Seed a CUSTOM-URL OpenAI-compatible
 // provider (the only provider type allowed post-P-57d) under an isolated HOME so the mocked OpenAI
@@ -41,13 +41,17 @@ const SEEDED_VISION_SPEC = "mockvision:vision-1";
 function withSeededVisionProvider(fn: () => Promise<void>): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "mai-p9-as-home-"));
   const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
   process.env.HOME = home;
+  process.env.FRONDOSE_HOME_BASE = home;
   writeAuth({
     providers: { mockvision: { key: "test-key", baseUrl: "https://vision.test/v1", type: "openai" } },
   });
   return withEnv("FRONDOSE_VISION_MODEL", SEEDED_VISION_SPEC, fn).finally(() => {
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
     cleanupTmpDir(home);
   });
 }
@@ -322,44 +326,42 @@ test("T-AnalyzeScreenshot.7: FRONDOSE_VISION_MODEL env override reflected in res
   );
 });
 
-// ─── T-Auth.5 — visionModel fallback from auth.json (P-15, G-P15.4) ────────────
+// ─── T-Auth.5 — visionModel from current secrets (P-15, G-P15.4) ─────────────
 
-test("T-Auth.5: when FRONDOSE_VISION_MODEL unset, visionModel from auth.json is used as fallback; env var wins", async () => {
-  // Given: auth.json with { visionModel: "deepseek:deepseek-chat" }; FRONDOSE_VISION_MODEL env var unset
-  // When:  readAuth returns visionModel; then env var set, env override wins
-  // Then:  auth.json fallback works; hermes precedence (env > file > default) holds
-
+test("T-Auth.5: when FRONDOSE_VISION_MODEL is unset, analyze_screenshot uses current visionModel", async () => {
+  // Given current vision settings and no env override, when the real tool executes, then it resolves and reports the stored model.
   const dir = mkdtempSync(join(tmpdir(), "mai-p15-auth5-"));
+  const savedHome = process.env.HOME;
+  const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+  const savedVision = process.env.FRONDOSE_VISION_MODEL;
   try {
-    const authPath = join(dir, "auth.json");
-    writeFileSync(authPath, JSON.stringify({ visionModel: "deepseek:deepseek-chat" }), "utf-8");
-
-    // Read back using standard node:fs
-    const { readFileSync } = await import("node:fs");
-    const raw = JSON.parse(readFileSync(authPath, "utf-8")) as { visionModel?: string };
-    assert.equal(raw.visionModel, "deepseek:deepseek-chat", "visionModel must be writable to auth.json");
-
-    // Simulate the precedence used by analyzeScreenshot.ts:
-    // process.env.FRONDOSE_VISION_MODEL ?? auth?.visionModel ?? DEFAULT_VISION_MODEL
-    const savedEnv = process.env.FRONDOSE_VISION_MODEL;
-
-    // Env set → env wins
-    process.env.FRONDOSE_VISION_MODEL = "anthropic:claude-sonnet-4-5";
-    const withEnv = process.env.FRONDOSE_VISION_MODEL ?? raw.visionModel ?? "default";
-    assert.equal(withEnv, "anthropic:claude-sonnet-4-5", "env var must win over auth.json visionModel");
-
-    // Env unset → auth.json value used
+    process.env.HOME = dir;
+    process.env.FRONDOSE_HOME_BASE = dir;
     delete process.env.FRONDOSE_VISION_MODEL;
-    const withoutEnv = process.env.FRONDOSE_VISION_MODEL ?? raw.visionModel ?? "default";
-    assert.equal(withoutEnv, "deepseek:deepseek-chat", "auth.json visionModel used when env unset");
-
-    // Both unset → default (simulate undefined ?? "default")
-    const bothUnset: string | undefined = undefined;
-    assert.equal(bothUnset ?? "default", "default", "default used when neither env nor file has value");
-
-    if (savedEnv !== undefined) process.env.FRONDOSE_VISION_MODEL = savedEnv;
-    else delete process.env.FRONDOSE_VISION_MODEL;
+    writeAuth({
+      visionModel: "currentvision:vision-1",
+      providers: {
+        currentvision: { key: "current-vision-key", baseUrl: "https://vision.test/v1", type: "openai" },
+      },
+    });
+    await withMockFetch(
+      async () => makeOpenAIResponse("Stored vision model response."),
+      async () => {
+        const result = (await makeAnalyzeScreenshotTool().execute?.(
+          { path: FIXTURE_PNG, prompt: "describe" },
+          FAKE_OPTS,
+        )) as { ok: boolean; data?: { visionModel: string } };
+        assert.equal(result.ok, true);
+        assert.equal(result.data?.visionModel, "currentvision:vision-1");
+      },
+    );
   } finally {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+    else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+    if (savedVision === undefined) delete process.env.FRONDOSE_VISION_MODEL;
+    else process.env.FRONDOSE_VISION_MODEL = savedVision;
     cleanupTmpDir(dir);
   }
 });
