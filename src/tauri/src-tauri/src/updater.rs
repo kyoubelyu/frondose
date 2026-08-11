@@ -53,8 +53,8 @@ pub(crate) fn read_update_server_url() -> Option<String> {
 }
 
 /// P-58d.3 — Periodic update-check interval in seconds. Reads
-/// `updateCheckIntervalSec` from ~/.frondose/agent/config.json, with the same
-/// first-launch fallback to ~/.mai/agent/config.json. Defaults to 3600 (1 hour)
+/// `updateCheckIntervalSec` from ~/.frondose/agent/config.json. Missing or
+/// unreadable current config defaults to 3600 (1 hour)
 /// — early-release operator directive 2026-06-09: "发布初期会经常更新".
 /// Floor of 60s (sanity guard against a config typo that hammers the server).
 /// Returning 0 disables periodic polling (operator opt-out without removing
@@ -64,11 +64,8 @@ pub(crate) fn read_update_check_interval_sec() -> u64 {
     let Some(home) = config_home_dir() else {
         return default_sec;
     };
-    let new_path = std::path::Path::new(&home).join(".frondose/agent/config.json");
-    let Ok(raw) = std::fs::read_to_string(&new_path).or_else(|_| {
-        let legacy = std::path::Path::new(&home).join(".mai/agent/config.json");
-        std::fs::read_to_string(legacy)
-    }) else {
+    let path = std::path::Path::new(&home).join(".frondose/agent/config.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
         return default_sec;
     };
     let Ok(v) = serde_json::from_str::<Value>(&raw) else {
@@ -393,6 +390,13 @@ pub(crate) async fn run_update_check(app: AppHandle) {
 }
 
 #[cfg(test)]
+static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+#[path = "updater/interval_tests.rs"]
+mod interval_tests;
+
+#[cfg(test)]
 mod tests {
     //! P-OPEN-SOURCE-SPLIT §13.1 (revised per
     //! `docs/phase-update-intranet-critics.md` CONCERN-MR-1): scaffolds for
@@ -402,23 +406,18 @@ mod tests {
     //! disabled/None; every other explicit string → trimmed override). Asserted
     //! by literal string value.
     use super::*;
-    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     const EXPECTED_DEFAULT_URL: &str = "https://github.com/kyoubelyu/frondose/releases/latest/download";
 
-    // Serializes HOME env-var mutation across these tests only — cargo test runs
-    // test fns in parallel threads by default and HOME is process-global. No new
-    // crate dep: a local Mutex is enough since no other test in this crate reads
-    // HOME (grep-verified at scaffold time).
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    /// RAII guard: points HOME at a fresh temp dir for the test's duration and
-    /// restores the previous HOME (or removes it) on drop, even on panic. Never
-    /// touches the real ~/.frondose.
+    /// RAII guard: points HOME at a fresh temp dir for the test's duration,
+    /// removes USERPROFILE, and restores both variables on drop, even on panic.
+    /// TEST_ENV_LOCK serializes this process-global mutation across both updater
+    /// test modules. Never touches the real ~/.frondose.
     struct TempHome {
         dir: std::path::PathBuf,
-        original: Option<String>,
+        original_home: Option<std::ffi::OsString>,
+        original_userprofile: Option<std::ffi::OsString>,
     }
 
     impl TempHome {
@@ -429,9 +428,15 @@ mod tests {
                 .as_nanos();
             let dir = std::env::temp_dir().join(format!("frondose-updater-test-{}-{}", tag, nanos));
             std::fs::create_dir_all(&dir).unwrap();
-            let original = std::env::var("HOME").ok();
+            let original_home = std::env::var_os("HOME");
+            let original_userprofile = std::env::var_os("USERPROFILE");
             std::env::set_var("HOME", &dir);
-            TempHome { dir, original }
+            std::env::remove_var("USERPROFILE");
+            TempHome {
+                dir,
+                original_home,
+                original_userprofile,
+            }
         }
 
         /// Writes ~/.frondose/agent/config.json with the given raw JSON body.
@@ -450,9 +455,13 @@ mod tests {
 
     impl Drop for TempHome {
         fn drop(&mut self) {
-            match &self.original {
+            match &self.original_home {
                 Some(v) => std::env::set_var("HOME", v),
                 None => std::env::remove_var("HOME"),
+            }
+            match &self.original_userprofile {
+                Some(v) => std::env::set_var("USERPROFILE", v),
+                None => std::env::remove_var("USERPROFILE"),
             }
             let _ = std::fs::remove_dir_all(&self.dir);
         }
@@ -463,7 +472,7 @@ mod tests {
     // covers the fresh-install auto-pull window (plan §6.A).
     #[test]
     fn t_updater_1_absent_config_returns_public_default() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _home = TempHome::new("absent");
         assert_eq!(
             read_update_server_url(),
@@ -479,7 +488,7 @@ mod tests {
     // preserved disable semantics rather than asserting the rejected behavior.
     #[test]
     fn t_updater_2_null_config_value_disables_update_check() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("null");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":null}"#);
         assert_eq!(read_update_server_url(), None);
@@ -497,7 +506,7 @@ mod tests {
     // own TS test at tests/tauri/updater-ui-p58d1.mock.test.ts:270-310).
     #[test]
     fn t_updater_2b_settings_clear_produced_null_disables_update_check() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("settings-clear");
         home.write_config(
             r#"{"schema_version":2,"server":{"url":null,"bind_address":null,"poll_interval_s":30,"web_port":8090,"ssh_user":null,"ssh_port":22,"rest_port":3031},"worker":{"id":null,"hostname":null,"label":null,"input_mode":"cdp"},"telegram":{"enabled":false,"boundUserId":null,"proxyUrl":null},"soul":{"override":null},"updateServerUrl":null,"language":"auto"}"#,
@@ -510,7 +519,7 @@ mod tests {
     // Already-green today (empty string already returns None) — regression pin.
     #[test]
     fn t_updater_3_explicit_empty_string_disables_update_check() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("empty");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":""}"#);
         assert_eq!(read_update_server_url(), None);
@@ -521,7 +530,7 @@ mod tests {
     // (plan §6.A). Already-green today (override already works) — regression pin.
     #[test]
     fn t_updater_4_explicit_override_url_wins() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("override");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":"http://other:9999"}"#);
         assert_eq!(
@@ -534,7 +543,7 @@ mod tests {
     // when read, then it remains the operator's selected override.
     #[test]
     fn t_nurm_2_legacy_baked_value_remains_operator_override() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("legacy-override");
         let legacy = format!("http://{}:4875", ["192","0","2","105"].join("."));
         let raw = format!(r#"{{"schema_version":2,"updateServerUrl":"{}"}}"#, legacy);
@@ -550,7 +559,7 @@ mod tests {
     // the compiled default remains the public endpoint.
     #[test]
     fn t_nurm_3_absent_key_returns_public_default() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("absent-key");
         home.write_config(r#"{"schema_version":2}"#);
         assert_eq!(
@@ -563,7 +572,7 @@ mod tests {
     // then the retired file is ignored and the public default wins.
     #[test]
     fn t_nurm_3b_absent_current_config_ignores_retired_config() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("retired-only");
         home.write_retired_config(r#"{"updateServerUrl":"https://retired.example.com"}"#);
         assert_eq!(
@@ -576,7 +585,7 @@ mod tests {
     // when read, then the retired file is ignored and the public default wins.
     #[test]
     fn t_nurm_3c_unreadable_current_config_ignores_retired_config() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("unreadable-current");
         std::fs::create_dir_all(home.dir.join(".frondose/agent/config.json")).unwrap();
         home.write_retired_config(r#"{"updateServerUrl":"https://retired.example.com"}"#);
@@ -590,7 +599,7 @@ mod tests {
     // then Rust trims it without imposing URL validation.
     #[test]
     fn t_nurm_3d_wrapped_opaque_override_is_trimmed() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("opaque");
         home.write_config(r#"{"schema_version":2,"updateServerUrl":"  operator-channel  "}"#);
         assert_eq!(read_update_server_url(), Some("operator-channel".to_string()));
