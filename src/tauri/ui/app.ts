@@ -25,7 +25,7 @@ import { createAssistantTurnRuntime } from "./app/assistantTurnRuntime.js";
 import { createAssistantAppDependencies } from "./app/assistantAppDependencies.js";
 import { createAssistantAppComposition } from "./app/assistantAppComposition.js";
 import type { LocalizableDocumentLike } from "./i18n.js";
-import { localizeDocument, t } from "./i18n.js";
+import { formatActionFailure, localizeDocument, t } from "./i18n.js";
 
 type InvokeFn = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Unlisten = () => void;
@@ -146,7 +146,7 @@ const scrollAreaEl = mustGet<ElementLike>("scroll-area");
 const conversationListEl = mustGet<ElementLike>("conversation-list");
 
 function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!windowRef.__TAURI__) throw new Error("__TAURI__ missing - not running inside Tauri shell");
+  if (!windowRef.__TAURI__) throw new Error(t("error.noTauri"));
   return windowRef.__TAURI__.core.invoke<T>(cmd, args);
 }
 
@@ -154,9 +154,8 @@ function invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promi
 // console, instead of failing silently. Silent catch{} on a user-clicked button is a
 // defect: a button that errors is diagnosable; a button that does nothing looks dead.
 function surfaceError(label: string, e: unknown): void {
-  const msg = e instanceof Error ? e.message : String(e);
   console.error(`[frondose] ${label} failed:`, e);
-  errorBannerEl.textContent = t("error.actionFailed", { label, msg });
+  errorBannerEl.textContent = formatActionFailure(label, e);
   errorBannerEl.classList.remove("hidden");
 }
 
@@ -263,7 +262,7 @@ async function applyMode(mode: AppMode): Promise<void> {
         { prompt, intervalMinutes: null },
       );
       if (!r.ok) {
-        surfaceError(t("action.setModeCron"), new Error(r.reason ?? "unknown"));
+        surfaceError(t("action.setModeCron"), new Error(r.reason ?? t("error.unknown")));
         syncModeUi(previousMode);
         return;
       }
@@ -361,7 +360,7 @@ const assistantAppDependencies = createAssistantAppDependencies({
     commandEl.value = text;
   },
   transition,
-  translate: t as (key: string, vars?: Record<string, string>) => string,
+  translate: t,
   surfaceFailure: surfaceError,
 });
 

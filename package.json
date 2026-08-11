@@ -1,6 +1,6 @@
 {
   "name": "@kyoube/frondose",
-  "version": "0.5.22",
+  "version": "0.5.23",
   "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). Internal-only package; the operator product is the compiled Frondose.app, not this npm package. The legacy CLI surface is retired (P-OPEN-SOURCE-SPLIT); the App sidecar is the boot entrypoint.",
   "type": "module",
   "license": "Apache-2.0",

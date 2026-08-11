@@ -5,6 +5,8 @@ mod resolve;
 mod sidecar;
 mod sse;
 mod state;
+#[cfg(all(target_os = "macos", feature = "ui-validation"))]
+mod ui_validation;
 mod update_notice;
 mod update_scheduler;
 mod updater;
@@ -240,6 +242,8 @@ async fn main() {
             // task has not yet reached notified().await when Ready fires.
             RunEvent::Ready => {
                 run_ready.notify_one();
+                #[cfg(all(target_os = "macos", feature = "ui-validation"))]
+                ui_validation::activate(app_handle.clone());
             }
             // D-RUN-1 (safety): macOS does NOT auto-exit when the last window closes
             // (NSApplication convention), so RunEvent::ExitRequested never fires on a

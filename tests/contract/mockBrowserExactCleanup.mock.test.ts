@@ -27,6 +27,7 @@ const DI_ONLY_FILES = new Set([
   "tests/cdp/launcher.mock.test.ts",
   "tests/linkedin/session.mock.test.ts",
   "tests/linkedin/sessionLaunchDelay.mock.test.ts",
+  "tests/linkedin/sentinel.mock.test.ts",
 ]);
 const HELPER_FILE = "tests/_helpers/ownedBrowser.ts";
 
@@ -507,7 +508,7 @@ describe("exact browser owner state machine", () => {
 
 describe("non-live chrome-launcher ownership inventory", () => {
   it("T-BrowserCleanup.9: repository imports and owner callsites match the exact closed inventory", () => {
-    // Given every non-live test source, when AST value-flow is classified, then only one helper and five DI restore imports exist and all three owners have one callsite.
+    // Given every non-live test source, when AST value-flow is classified, then only one helper and six DI restore imports exist and all three owners have one callsite.
     const chromeFiles: string[] = [];
     for (const path of allTestSources(TESTS)) {
       const source = readFileSync(join(ROOT, path), "utf8");

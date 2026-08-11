@@ -46,7 +46,7 @@ type AppDependenciesModule = {
     setRetryVisible: (visible: boolean) => void;
     setCommand: (text: string) => void;
     transition: (state: AppState) => void;
-    translate: (key: string, vars?: Record<string, string>) => string;
+    translate: (key: string, vars?: Record<string, string | number>) => string;
     surfaceFailure: (label: string, error: unknown) => void;
   }): AppDependencies;
 };
@@ -191,7 +191,12 @@ function fixture(module: AppDependenciesModule, invokeImpl?: (command: string) =
     setRetryVisible: (visible) => calls.push(`retry:${visible}`),
     setCommand: (text) => calls.push(`command:${text}`),
     transition: (state) => calls.push(`state:${state}`),
-    translate: (key, vars) => `${key}:${JSON.stringify(vars ?? {})}`,
+    translate: (key, vars) => {
+      if (key === "reason.aborted") return "aborted";
+      if (key === "action.turn") return "Run turn";
+      if (key === "action.pauseAbort") return "Pause/abort";
+      return `${key}:${JSON.stringify(vars ?? {})}`;
+    },
     surfaceFailure: (label, error) => calls.push(`failure:${label}:${String(error)}`),
   });
   return {
@@ -275,7 +280,7 @@ describe("shipped app dependencies preserve concrete lifecycle behavior", () => 
     f.calls.length = 0;
     const error = new Error("abort failed");
     f.dependencies.reportFailure(error);
-    assert.deepEqual(f.calls, ["failure:action.pauseAbort:Error: abort failed"]);
+    assert.deepEqual(f.calls, ["failure:Pause/abort:Error: abort failed"]);
   });
 
   it("T-AppDeps.3: replacement dispatch owns exact command, success state, and rejection surface", async () => {
@@ -301,7 +306,7 @@ describe("shipped app dependencies preserve concrete lifecycle behavior", () => 
     await assert.rejects(rejected.dependencies.startReplacement("next task"), /busy/);
     assert.deepEqual(rejected.calls, [
       'invoke:frondose_agent_turn:{"prompt":"next task"}',
-      "failure:action.turn:Error: busy",
+      "failure:Run turn:Error: busy",
     ]);
     assert.equal(rejected.getCurrent(), null);
   });
