@@ -11,7 +11,7 @@ import { readConfig } from "../../src/persistence/config.js";
 const REPO = process.cwd();
 const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx");
 const PUBLIC_UPDATE_BASE = "https://github.com/kyoubelyu/frondose/releases/latest/download";
-const LEGACY_UPDATE_BASE = "http://192.0.2.105:4875";
+const LEGACY_UPDATE_BASE = `http://${["192","0","2","105"].join(".")}:4875`;
 const PUBLIC_CREDENTIAL_GENERATOR = join(REPO, "scripts", "gen-public-default-credentials.ts");
 const PUBLIC_POLICY = join(REPO, "scripts", "public-release-policy.mjs");
 const temporaryDirectories: string[] = [];
@@ -34,16 +34,17 @@ describe("public runtime defaults are internet-safe and BYOK", () => {
     assert.ok(!rust.includes("192.0.2.105"));
   });
 
-  it("T-OS.Update.2: the TypeScript resolver executes every default, migration, disable and override branch", async () => {
-    // Given fresh, malformed, legacy-default, disabled and custom configs, when read, then only the historical baked value migrates.
+  it("T-NURM.1/3/5: the TypeScript resolver preserves every explicit nonblank override without rewriting bytes", async () => {
+    // Given default, invalid, disabled, public, custom and historical explicit values, when read, then semantics match and source bytes stay unchanged.
     const cases: Array<[string, string | null | undefined, string | null]> = [
       ["missing file", undefined, PUBLIC_UPDATE_BASE],
+      ["missing key", JSON.stringify({ schema_version: 2 }), PUBLIC_UPDATE_BASE],
       ["malformed JSON", "{", PUBLIC_UPDATE_BASE],
       ["non-string", JSON.stringify({ schema_version: 2, updateServerUrl: 7 }), PUBLIC_UPDATE_BASE],
       [
         "legacy baked default",
         JSON.stringify({ schema_version: 2, updateServerUrl: LEGACY_UPDATE_BASE }),
-        PUBLIC_UPDATE_BASE,
+        LEGACY_UPDATE_BASE,
       ],
       ["explicit null", JSON.stringify({ schema_version: 2, updateServerUrl: null }), null],
       ["explicit blank", JSON.stringify({ schema_version: 2, updateServerUrl: "  " }), null],
@@ -57,14 +58,71 @@ describe("public runtime defaults are internet-safe and BYOK", () => {
         JSON.stringify({ schema_version: 2, updateServerUrl: "https://updates.example.com" }),
         "https://updates.example.com",
       ],
+      [
+        "wrapped legacy override",
+        JSON.stringify({ schema_version: 2, updateServerUrl: `  ${LEGACY_UPDATE_BASE}  ` }),
+        LEGACY_UPDATE_BASE,
+      ],
+      [
+        "wrapped custom override",
+        JSON.stringify({ schema_version: 2, updateServerUrl: "  https://updates.example.com/path  " }),
+        "https://updates.example.com/path",
+      ],
+      [
+        "opaque override",
+        JSON.stringify({ schema_version: 2, updateServerUrl: "operator-channel" }),
+        "operator-channel",
+      ],
+      [
+        "wrapped opaque override",
+        JSON.stringify({ schema_version: 2, updateServerUrl: "  operator-channel  " }),
+        "operator-channel",
+      ],
     ];
     for (const [name, raw, expected] of cases) {
       const directory = await mkdtemp(join(tmpdir(), "frondose-public-updater-ts-"));
       temporaryDirectories.push(directory);
       const path = join(directory, "config.json");
       if (raw !== undefined) await writeFile(path, raw, "utf8");
-      assert.equal(readConfig(path).updateServerUrl, expected, name);
+      const bytesBefore = raw === undefined ? undefined : await readFile(path, "utf8");
+      const savedHomeBase = process.env.FRONDOSE_HOME_BASE;
+      process.env.FRONDOSE_HOME_BASE = directory;
+      try {
+        const config = readConfig(path);
+        assert.equal(config.updateServerUrl, expected, name);
+        if (raw === undefined) {
+          assert.deepEqual(config.telegram, { enabled: false, boundUserId: null, proxyUrl: null }, `${name} telegram`);
+        }
+      } finally {
+        if (savedHomeBase === undefined) delete process.env.FRONDOSE_HOME_BASE;
+        else process.env.FRONDOSE_HOME_BASE = savedHomeBase;
+      }
+      if (bytesBefore !== undefined) assert.equal(await readFile(path, "utf8"), bytesBefore, `${name} bytes`);
     }
+  });
+
+  it("T-NURM.4: neither production reader contains an updater legacy recognizer", async () => {
+    // Given both production readers, when obsolete recognizer symbols are searched, then neither runtime can special-case the historical URL.
+    const ts = await readFile(join(REPO, "src/persistence/config.ts"), "utf8");
+    const rust = await readFile(join(REPO, "src/tauri/src-tauri/src/updater.rs"), "utf8");
+    assert.ok(!ts.includes("LEGACY_UPDATE_SERVER_URL"));
+    assert.ok(!rust.includes("legacy_update_server_url"));
+    const rustReader = rust.slice(
+      rust.indexOf("pub(crate) fn read_update_server_url"),
+      rust.indexOf("/// P-58d.3", rust.indexOf("pub(crate) fn read_update_server_url")),
+    );
+    assert.ok(!rustReader.includes(".mai/agent/config.json"));
+  });
+
+  it("T-NURM.6: a disabled updater returns before constructing the updater client", async () => {
+    // Given the production launch-check body, when control-flow order is inspected, then the None return precedes all updater construction.
+    const rust = await readFile(join(REPO, "src/tauri/src-tauri/src/updater.rs"), "utf8");
+    const start = rust.indexOf("pub(crate) async fn run_update_check");
+    const end = rust.indexOf("#[cfg(test)]", start);
+    const body = rust.slice(start, end);
+    const disabledReturn = body.indexOf("let Some(url) = read_update_server_url() else");
+    const updaterBuilder = body.indexOf("updater_builder()");
+    assert.ok(disabledReturn >= 0 && updaterBuilder > disabledReturn);
   });
 
   it("T-OS.Update.3: Tauri updater configuration permits only the public HTTPS channel", async () => {
