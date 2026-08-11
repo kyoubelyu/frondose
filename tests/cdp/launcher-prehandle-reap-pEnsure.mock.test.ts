@@ -200,7 +200,7 @@ async function invokeEnsure(): Promise<Awaited<ReturnType<typeof ensureChrome>>>
       chromeFlags: ["--phase-prehandle-marker"],
     });
   } finally {
-    rmSync(profileDir, { recursive: true, force: true });
+    rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 

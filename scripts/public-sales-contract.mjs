@@ -56,6 +56,7 @@ const REVIEWED_DISPOSITIONS = new Map([
   ["tests/methodology/soul-band.mock.test.ts", "retain"],
   ["tests/sales/soul.test.ts", "retain"],
   ["tests/tauri/ui/app-split-slice11.mock.test.ts", "revise-with-stronger-carrier"],
+  ["tests/tauri/ui/i18n-pZhFeFull.mock.test.ts", "revise-with-stronger-carrier"],
   // Private live evidence
   ["tests/live/p-sp-b-live.smoke.ts", "private-excluded"],
   ["tests/live/p4-memory-identity.smoke.ts", "private-excluded"],
