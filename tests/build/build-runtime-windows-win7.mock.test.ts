@@ -33,6 +33,7 @@ type ExecCall = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   shell?: boolean;
+  stdio?: unknown;
 };
 
 const moduleExecFileSync = mock.fn((_file: string, _args?: readonly string[], _opts?: ExecOptions) => {
@@ -106,6 +107,7 @@ function makeExecFile(scenario: ExecScenario): ExecFile {
       cwd: opts.cwd,
       env: opts.env ? { ...opts.env } : undefined,
       shell: opts.shell,
+      stdio: opts.stdio,
     });
 
     if (file === "curl") return "";
@@ -380,18 +382,28 @@ describe("WIN-7 Windows runtime assembly uses bundled Node ABI", () => {
       const runtimeAbiIndex = scenario.calls.findIndex(
         (call) => call.file === runtimeNode && call.args[0] === "-p" && call.args[1] === "process.versions.modules",
       );
-      const loadabilityProgram =
-        "await import('better-sqlite3'); await import('ssh2'); " +
-        "await import('@modelcontextprotocol/sdk/client/streamableHttp.js')";
-      const loadabilityIndex = scenario.calls.findIndex(
-        (call) =>
-          call.file === runtimeNode &&
-          call.args[0] === "--input-type=module" &&
-          call.args[1] === "-e" &&
-          call.args[2] === loadabilityProgram,
-      );
+      const expectedLoadabilityCall = {
+        file: runtimeNode,
+        args: ["-e", "require('better-sqlite3');"],
+        cwd: join(root, "build", "runtime"),
+        stdio: ["ignore", "inherit", "inherit"],
+      };
+      const loadabilityCalls = scenario.calls
+        .filter(
+          (call) =>
+            call.file === runtimeNode && (call.args.includes("-e") || call.args.includes("--input-type=module")),
+        )
+        .map(({ file, args, cwd, stdio }) => ({ file, args, cwd, stdio }));
+      const assertExactLoadabilityCalls = (calls: typeof loadabilityCalls) => {
+        assert.deepEqual(
+          calls,
+          [expectedLoadabilityCall],
+          "T-WIN7.Runtime.4: exactly the current better-sqlite3 CommonJS probe may run under runtime node.exe",
+        );
+      };
       assert.ok(installIndex >= 0, "T-WIN7.Runtime.4: npm install must run before runtime loadability checks");
       assert.ok(runtimeAbiIndex > installIndex, "T-WIN7.Runtime.4: runtime ABI guard must run after npm install");
+      const loadabilityIndex = scenario.calls.findIndex((call) => call.file === runtimeNode && call.args[0] === "-e");
       assert.ok(
         loadabilityIndex > runtimeAbiIndex,
         "T-WIN7.Runtime.4: loadability check must run after runtime ABI guard",
@@ -403,18 +415,22 @@ describe("WIN-7 Windows runtime assembly uses bundled Node ABI", () => {
         runtimeAbiCheck,
         "T-WIN7.Runtime.4: ABI guard must read process.versions.modules from runtime node.exe",
       );
-      const loadabilityCheck = scenario.calls.find(
-        (call) =>
-          call.file === runtimeNode &&
-          call.args[0] === "--input-type=module" &&
-          call.args[1] === "-e" &&
-          call.args[2] === loadabilityProgram,
+      assertExactLoadabilityCalls(loadabilityCalls);
+      const retiredProbe = {
+        ...expectedLoadabilityCall,
+        args: [
+          "--input-type=module",
+          "-e",
+          "await import('better-sqlite3'); await import('ssh2'); await import('@modelcontextprotocol/sdk/client/streamableHttp.js')",
+        ],
+      };
+      assert.throws(
+        () => assertExactLoadabilityCalls([retiredProbe]),
+        /exactly the current better-sqlite3 CommonJS probe/,
       );
-      assert.ok(loadabilityCheck, "T-WIN7.Runtime.4: native dependency require check must run under runtime node.exe");
-      assert.equal(
-        loadabilityCheck.cwd,
-        join(root, "build", "runtime"),
-        "T-WIN7.Runtime.4: loadability check cwd must be build/runtime",
+      assert.throws(
+        () => assertExactLoadabilityCalls([expectedLoadabilityCall, retiredProbe]),
+        /exactly the current better-sqlite3 CommonJS probe/,
       );
       assert.equal(
         existsSync(runtimeNode),
