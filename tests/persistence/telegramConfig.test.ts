@@ -31,9 +31,9 @@ import { cleanupTmpDir } from "../_helpers/tmp";
 
 /**
  * Create an isolated temp dir for tests.
- * Writes a minimal `config.json` (schema_version:2, telegram defaults) so that
- * `readConfig(configPath)` returns defaults instead of falling through to
- * `migrateTelegramIntoConfig()` (which reads the operator's real telegram.json).
+ * Writes a minimal `config.json` (schema_version:2, telegram defaults) so the
+ * test owns the complete current config input while telegram.json remains
+ * separate runtime polling state.
  */
 function makeTmpDir(): { dir: string; cfgPath: string; configPath: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "mai-p11-tgcfg-"));

@@ -11,7 +11,7 @@ const qualifyProfileParams = z.object({
   industry: z.string().optional().describe("Company / industry from inspect snapshot."),
   region: z.string().optional().describe("Location / region from inspect snapshot."),
   companyName: z.string().optional().describe("Company name for companyNameKeywords matching."),
-  icp: icpSchema.optional().describe("ICP override. Defaults to operator's identity.json ICP if omitted."),
+  icp: icpSchema.optional().describe("ICP override. Defaults to the operator's current Settings identity if omitted."),
 });
 
 const QUALIFICATION_SCORE_MAP: Record<Qualification, number> = {
@@ -23,11 +23,11 @@ const QUALIFICATION_SCORE_MAP: Record<Qualification, number> = {
 };
 
 interface QualifyProfileOpts {
-  identityPath: string;
+  configPath: string;
 }
 
 /**
- * Build the qualify_profile Vercel tool. Reads operator's identity.json ICP
+ * Build the qualify_profile Vercel tool. Reads the operator's current config ICP
  * fresh on every invocation (P-FIX-ICP-STALE-CACHE: a process-lifetime cache here
  * meant a Settings save never took effect until sidecar restart — readIdentity is a
  * cheap sync fs read + Zod parse over a small local file, so there's no cost to
@@ -42,11 +42,11 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
       "Qualify a LinkedIn profile against the operator's ICP. Pass role/industry/region/companyName " +
       "extracted from the inspect snapshot. Returns qualification (qualified/partial_match/tracked/" +
       "unknown/disqualified), score 0..1, matched dimensions, missing dimensions, and rationale. " +
-      "Defaults to identity.json ICP when 'icp' arg is absent.",
+      "Defaults to the current Settings identity ICP when 'icp' arg is absent.",
     parameters: qualifyProfileParams,
     execute: async (params) => {
       try {
-        const identity = readIdentity(opts.identityPath);
+        const identity = readIdentity(opts.configPath);
         const evidence: IcpEvidence = {
           role: params.role ?? null,
           industry: params.industry ?? null,
@@ -87,7 +87,7 @@ export function makeQualifyProfileTool(opts: QualifyProfileOpts) {
             matched: [],
             missing: ["role", "industry", "region", "companyNameKeywords"],
             rationale:
-              "No ICP configured (identity.json has no .icp block, no override provided). Set your ICP in Frondose → Settings (identity).",
+              "No ICP configured (current identity has no .icp block, no override provided). Set your ICP in Frondose → Settings (identity).",
             detail: undefined,
           });
         }

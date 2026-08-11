@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import type { LinkedinSession } from "../../src/linkedin/types.js";
-import { configJsonSchema } from "../../src/persistence/config.js";
+import { configJsonSchemaV2 } from "../../src/persistence/config.js";
 import type { ControlSignals } from "../../src/tools/control/stop.js";
 import { makeAllTools } from "../../src/tools/index.js";
 import { cleanupTmpDir } from "../_helpers/tmp";
@@ -85,7 +85,7 @@ describe("makeAllTools tool counts — unchanged at P-30 (D-11, G-P30.17)", () =
     try {
       const persistence = {
         memoryDbPath: join(dir, "memory.sqlite"),
-        identityPath: join(dir, "identity.json"),
+        configPath: join(dir, "config.json"),
       };
       const tools = makeAllTools(mockSession, persistence, mockControl);
       const count = Object.keys(tools).length;
@@ -148,7 +148,7 @@ describe("config.server P-30 SSH defaults (G-P30.2)", () => {
     // When:  configJsonSchemaV2.parse({schema_version: 2})
     // Then:  server.ssh_user defaults to null; server.ssh_port defaults to 22
 
-    const cfg = configJsonSchema.parse({ schema_version: 2 });
+    const cfg = configJsonSchemaV2.parse({ schema_version: 2 });
     assert.equal(
       cfg.server.ssh_user,
       null,

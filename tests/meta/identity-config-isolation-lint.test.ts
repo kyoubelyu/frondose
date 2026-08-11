@@ -2,16 +2,16 @@
  * P-FIX-TEST-CONFIG-CLOBBER — identity/config isolation lint.
  *
  * THE BUG THIS GUARDS AGAINST (recurring — hit both win-build-host and the
- * operator Mac): `writeIdentity(record, identityPath)` WITHOUT the 3rd
- * `configPath` arg defaults to the REAL `DEFAULT_CONFIG_PATH()`
+ * operator Mac): an identity call without an explicit current `configPath`
+ * defaults to the REAL `DEFAULT_CONFIG_PATH()`
  * (src/persistence/identity.ts) — config.json.identity is AUTHORITATIVE, so a
  * test-suite run silently overwrites the operator's real
  * ~/.frondose/agent/config.json identity/ICP with the test fixture.
  * `readIdentity` prefers cfg.identity, so the test's own read-back masks it.
  *
  * THE RULE: inside `tests/**`, every direct call of
- *   - `writeIdentity` MUST pass 3 arguments (record, identityPath, configPath)
- *   - `readIdentity`  MUST pass 2 arguments (identityPath, configPath)
+ *   - `writeIdentity` MUST pass exactly 2 arguments (record, configPath)
+ *   - `readIdentity`  MUST pass exactly 1 argument (configPath)
  * so the authoritative config write/read is always explicitly isolated.
  *
  * Implementation (FM-1 critic CONCERN-MR resolution): TypeScript compiler AST,
@@ -39,8 +39,8 @@ const REPO_ROOT = join(import.meta.dirname, "../..");
 type GuardedFn = "writeIdentity" | "readIdentity";
 
 const REQUIRED_ARGS: Record<GuardedFn, number> = {
-  writeIdentity: 3,
-  readIdentity: 2,
+  writeIdentity: 2,
+  readIdentity: 1,
 };
 
 /** Module specifiers that resolve to the persistence identity shim. */
@@ -59,7 +59,7 @@ function isGuardedFn(name: string): name is GuardedFn {
 }
 
 /**
- * Parse one source text and return every under-arity call of
+ * Parse one source text and return every wrong-arity call of
  * writeIdentity/readIdentity imported (statically or dynamically) from
  * src/persistence/identity. Alias-aware; AST-based (comments/strings inert).
  */
@@ -133,7 +133,7 @@ export function findIdentityIsolationViolations(fileName: string, sourceText: st
       ) {
         canonical = expr.name.text;
       }
-      if (canonical && node.arguments.length < REQUIRED_ARGS[canonical]) {
+      if (canonical && node.arguments.length !== REQUIRED_ARGS[canonical]) {
         const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
         violations.push({
           file: fileName,
@@ -167,7 +167,7 @@ function formatViolations(violations: Violation[]): string {
   return violations
     .map(
       (v) =>
-        `${v.file}:${v.line} — ${v.fn} called with ${v.argCount} args (need ${REQUIRED_ARGS[v.fn]}): ${v.callText}`,
+        `${v.file}:${v.line} — ${v.fn} called with ${v.argCount} args (requires exactly ${REQUIRED_ARGS[v.fn]}): ${v.callText}`,
     )
     .join("\n");
 }
@@ -175,9 +175,9 @@ function formatViolations(violations: Violation[]): string {
 // ─── T-IdCfgLint.tree — the actual guard over the repo ──────────────────────
 
 describe("T-IdCfgLint.tree: every tests/** identity call is config-isolated (P-FIX-TEST-CONFIG-CLOBBER)", () => {
-  it("T-IdCfgLint.tree: given all tests/**/*.ts, when writeIdentity/readIdentity call arity is checked, then zero under-arity calls remain", () => {
+  it("T-IdCfgLint.tree: given all tests/**/*.ts, when current-only identity call arity is checked, then zero wrong-arity calls remain", () => {
     // Given: every .ts file under tests/ (mock tests, live smokes, helpers, fixtures)
-    // When:  each is AST-scanned for direct writeIdentity (<3 args) / readIdentity (<2 args) calls
+    // When:  each is AST-scanned for exactly writeIdentity(record, configPath) / readIdentity(configPath)
     // Then:  no violation exists — no test-suite write/read can land on the real config.json
     const violations: Violation[] = [];
     for (const abs of walkAllTestTreeTs()) {
@@ -198,39 +198,39 @@ describe("T-IdCfgLint.tree: every tests/** identity call is config-isolated (P-F
 describe("T-IdCfgLint.self: the AST checker itself detects every import/call shape", () => {
   const IMPORT = 'import { writeIdentity, readIdentity } from "../../src/persistence/identity.js";\n';
 
-  it("T-IdCfgLint.self.1: given a static import and a 2-arg writeIdentity call, when checked, then it is flagged with the right line", () => {
-    // Given/When/Then: the original bug shape must be caught
-    const v = findIdentityIsolationViolations("fixture.ts", `${IMPORT}writeIdentity(record, idPath);\n`);
+  it("T-IdCfgLint.self.1: given a static import and default-path writeIdentity call, when checked, then it is flagged with the right line", () => {
+    // Given/When/Then: an implicit operator-config write must be caught
+    const v = findIdentityIsolationViolations("fixture.ts", `${IMPORT}writeIdentity(record);\n`);
     assert.equal(v.length, 1);
     assert.equal(v[0].fn, "writeIdentity");
-    assert.equal(v[0].argCount, 2);
+    assert.equal(v[0].argCount, 1);
     assert.equal(v[0].line, 2);
   });
 
-  it("T-IdCfgLint.self.2: given 3-arg writeIdentity and 2-arg readIdentity calls, when checked, then nothing is flagged", () => {
+  it("T-IdCfgLint.self.2: given 2-arg writeIdentity and 1-arg readIdentity calls, when checked, then nothing is flagged", () => {
     // Given/When/Then: the fixed shape passes
-    const src = `${IMPORT}writeIdentity(record, idPath, cfgPath);\nconst x = readIdentity(idPath, cfgPath);\n`;
+    const src = `${IMPORT}writeIdentity(record, cfgPath);\nconst x = readIdentity(cfgPath);\n`;
     assert.deepEqual(findIdentityIsolationViolations("fixture.ts", src), []);
   });
 
-  it("T-IdCfgLint.self.3: given a 1-arg readIdentity call, when checked, then it is flagged", () => {
+  it("T-IdCfgLint.self.3: given a default-path readIdentity call, when checked, then it is flagged", () => {
     // Given/When/Then: the read-side leak shape (scenarios/setup.ts) must be caught
-    const v = findIdentityIsolationViolations("fixture.ts", `${IMPORT}const id = readIdentity(idPath);\n`);
+    const v = findIdentityIsolationViolations("fixture.ts", `${IMPORT}const id = readIdentity();\n`);
     assert.equal(v.length, 1);
     assert.equal(v[0].fn, "readIdentity");
   });
 
-  it("T-IdCfgLint.self.4: given a static import with 'as' renames, when a 2-arg aliased call appears, then it is flagged under the canonical name", () => {
+  it("T-IdCfgLint.self.4: given aliases, when an obsolete 3-arg write appears, then it is flagged under the canonical name", () => {
     // Given: import { writeIdentity as wr, readIdentity as rd } …
     const src =
       'import { writeIdentity as wr, readIdentity as rd } from "../../src/persistence/identity.js";\n' +
-      "wr(record, idPath);\nrd(idPath, cfgPath);\n";
+      "wr(record, idPath, cfgPath);\nrd(cfgPath);\n";
     const v = findIdentityIsolationViolations("fixture.ts", src);
     assert.equal(v.length, 1);
     assert.equal(v[0].fn, "writeIdentity");
   });
 
-  it("T-IdCfgLint.self.5: given the app-11b1 dynamic 'await import' destructure with ':' renames, when 2-arg calls appear, then they are flagged", () => {
+  it("T-IdCfgLint.self.5: given dynamic aliases, when implicit and obsolete calls appear, then they are flagged", () => {
     // Given: the EXACT shape that carried the original clobber (dynamic import + rename)
     const src = [
       "async function t() {",
@@ -238,9 +238,9 @@ describe("T-IdCfgLint.self: the AST checker itself detects every import/call sha
       "    readIdentity: readId,",
       "    writeIdentity: writeId,",
       '  } = await import("../../src/persistence/identity.js");',
-      "  writeId(initial, identityPath);",
-      "  writeId(merged, identityPath, configPath);",
-      "  const updated = readId(identityPath);",
+      "  writeId(initial);",
+      "  writeId(merged, configPath);",
+      "  const updated = readId();",
       "}",
     ].join("\n");
     const v = findIdentityIsolationViolations("fixture.ts", src);
@@ -249,13 +249,13 @@ describe("T-IdCfgLint.self: the AST checker itself detects every import/call sha
   });
 
   it("T-IdCfgLint.self.6: given a multiline static import and nested call arguments, when arity is counted, then nesting does not distort the count", () => {
-    // Given: a multiline import; a 2-arg call whose 2nd arg is itself a call with 2 args
+    // Given: a multiline import; a 1-arg bad call and valid nested config-path expression
     const src = [
       "import {",
       "  writeIdentity,",
       '} from "../../src/persistence/identity.js";',
-      "writeIdentity(record, join(base, name));", // 2 args → flag
-      "writeIdentity(record, join(base, name), cfg(a, b));", // 3 args → ok
+      "writeIdentity(record);", // 1 arg → flag
+      "writeIdentity(record, join(base, name));", // 2 args → ok
     ].join("\n");
     const v = findIdentityIsolationViolations("fixture.ts", src);
     assert.equal(v.length, 1);
@@ -273,20 +273,20 @@ describe("T-IdCfgLint.self: the AST checker itself detects every import/call sha
       // biome-ignore lint/suspicious/noTemplateCurlyInString: fixture string deliberately contains template syntax
       "const s3 = `readIdentity(${x})`;",
       'it("T: writeIdentity(record, path) is called", () => {});',
-      "writeIdentity(record, idPath, cfgPath);",
+      "writeIdentity(record, cfgPath);",
     ].join("\n");
     assert.deepEqual(findIdentityIsolationViolations("fixture.ts", src), []);
   });
 
-  it("T-IdCfgLint.self.8: given namespace and whole-module dynamic imports, when member calls are under-arity, then they are flagged", () => {
+  it("T-IdCfgLint.self.8: given namespace and whole-module dynamic imports, when member calls have obsolete arity, then they are flagged", () => {
     // Given: import * as idmod …  AND  const m = await import(…)
     const src = [
       'import * as idmod from "../../src/persistence/identity.js";',
-      "idmod.writeIdentity(record, idPath);", // flag
+      "idmod.writeIdentity(record, idPath, cfgPath);", // flag
       "async function t() {",
       '  const m = await import("../../src/persistence/identity.js");',
-      "  m.readIdentity(idPath);", // flag
-      "  m.readIdentity(idPath, cfgPath);", // ok
+      "  m.readIdentity(idPath, cfgPath);", // flag
+      "  m.readIdentity(cfgPath);", // ok
       "}",
     ].join("\n");
     const v = findIdentityIsolationViolations("fixture.ts", src);

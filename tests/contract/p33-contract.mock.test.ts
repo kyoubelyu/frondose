@@ -245,7 +245,7 @@ describe("makeAllTools worker mode (G-P33.5 + P-Y3 supersedes count)", () => {
       const session = makeFakeSession();
       const tools = makeAllTools(
         session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
+        { memoryDbPath: join(dir, "memory.sqlite"), configPath: join(dir, "config.json") },
         mockControl,
       );
 
@@ -572,7 +572,7 @@ describe("P-72: full per-tool param-schema map (worker power) is frozen (G-P72.1
       const session = makeFakeSession();
       const tools = makeAllTools(
         session,
-        { memoryDbPath: join(dir, "memory.sqlite"), identityPath: join(dir, "identity.json") },
+        { memoryDbPath: join(dir, "memory.sqlite"), configPath: join(dir, "config.json") },
         mockControl,
       );
 
