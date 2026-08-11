@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it, test } from "node:test";
@@ -37,16 +37,22 @@ function setIsolatedHome(home: string): void {
   process.env.FRONDOSE_HOME_BASE = home;
 }
 
+function seedSecrets(home: string, value: Record<string, unknown>): void {
+  const agentDir = join(home, ".frondose", "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(join(agentDir, "secrets.json"), JSON.stringify({ schema_version: 1, ...value }), "utf-8");
+}
+
 // ─── T-M1: factory precedence ─────────────────────────────────────────────────
 
-test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
+test("T-M1: factory takes precedence over cli/env/current-secrets/default", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm1-"));
   const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
   try {
     setIsolatedHome(tmpHome);
     process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ factory: "anthropic:claude-sonnet-4-5", cli: "openai:deepseek-chat" });
-    assert.equal(spec, "anthropic:claude-sonnet-4-5", "factory must beat cli/env/auth.json/default");
+    assert.equal(spec, "anthropic:claude-sonnet-4-5", "factory must beat cli/env/current-secrets/default");
   } finally {
     restoreEnv(saved);
     cleanupTmpDir(tmpHome);
@@ -55,14 +61,14 @@ test("T-M1: factory takes precedence over cli/env/auth.json/default", () => {
 
 // ─── T-M2: cli precedence ─────────────────────────────────────────────────────
 
-test("T-M2: cli takes precedence over env/auth.json/default when factory absent", () => {
+test("T-M2: cli takes precedence over env/current-secrets/default when factory absent", () => {
   const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm2-"));
   const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
   try {
     setIsolatedHome(tmpHome);
     process.env.FRONDOSE_MODEL = "openai:gpt-4o";
     const spec = resolveModelSpec({ cli: "openai:deepseek-chat" });
-    assert.equal(spec, "openai:deepseek-chat", "cli must beat env/auth.json/default");
+    assert.equal(spec, "openai:deepseek-chat", "cli must beat env/current-secrets/default");
   } finally {
     restoreEnv(saved);
     cleanupTmpDir(tmpHome);
@@ -76,7 +82,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
   const saved = saveEnv("HOME", "FRONDOSE_HOME_BASE", "FRONDOSE_MODEL");
 
   try {
-    // (a) factory wins over cli + env + auth.json + default
+    // (a) factory wins over cli + env + current secrets + default
     await t.test("(a) factory wins", () => {
       setIsolatedHome(tmpHome);
       process.env.FRONDOSE_MODEL = "openai:env-model";
@@ -84,7 +90,7 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
       assert.equal(result, "anthropic:factory-model");
     });
 
-    // (b) cli wins over env + auth.json + default (no factory)
+    // (b) cli wins over env + current secrets + default (no factory)
     await t.test("(b) cli wins when factory absent", () => {
       setIsolatedHome(tmpHome);
       process.env.FRONDOSE_MODEL = "openai:env-model";
@@ -92,35 +98,30 @@ test("T-M3: resolveModelSpec precedence chain — all 5 levels (CONCERN-MR-1)", 
       assert.equal(result, "openai:cli-model");
     });
 
-    // (c) env wins over auth.json + default (no factory, no cli)
+    // (c) env wins over the current secrets default (no factory, no cli)
     await t.test("(c) env wins when factory and cli absent", () => {
-      setIsolatedHome(tmpHome); // no auth.json in tmpHome
+      setIsolatedHome(tmpHome); // no secrets.json in tmpHome
       process.env.FRONDOSE_MODEL = "openai:env-model";
       const result = resolveModelSpec({});
       assert.equal(result, "openai:env-model");
     });
 
-    // (d) auth.json default wins when factory/cli/env absent
-    await t.test("(d) auth.json default wins when factory/cli/env absent", () => {
+    // (d) secrets.json default wins when factory/cli/env absent
+    await t.test("(d) secrets.json default wins when factory/cli/env absent", () => {
       setIsolatedHome(tmpHome);
       delete process.env.FRONDOSE_MODEL;
-      const maiDir = join(tmpHome, ".frondose");
-      mkdirSync(maiDir, { recursive: true });
-      writeFileSync(join(maiDir, "auth.json"), '{"default":"openai:auth-model"}', "utf-8");
+      const secretsPath = join(tmpHome, ".frondose", "agent", "secrets.json");
+      seedSecrets(tmpHome, { default: "openai:auth-model" });
       const result = resolveModelSpec({});
       assert.equal(result, "openai:auth-model");
-      // Remove auth.json so next sub-test (e) gets the hardcoded fallback.
-      // P-24 path-shift: readSecrets migrated auth.json → secrets.json on first read above;
-      // remove secrets.json too so sub-test (e) falls back to hardcoded DEFAULT_MODEL_SPEC.
-      rmSync(join(maiDir, "auth.json"));
-      const migratedSecretsPath = join(tmpHome, ".frondose", "agent", "secrets.json");
-      if (existsSync(migratedSecretsPath)) rmSync(migratedSecretsPath);
+      // Remove current secrets so next sub-test (e) gets the hardcoded fallback.
+      rmSync(secretsPath);
     });
 
     // (e) hardcoded fallback when all sources absent
     // P-71: default changed from anthropic:claude-sonnet-4-5 to deepseek:deepseek-v4-flash
     await t.test("(e) hardcoded fallback deepseek:deepseek-v4-flash when all unset", () => {
-      setIsolatedHome(tmpHome); // no auth.json (removed in (d))
+      setIsolatedHome(tmpHome); // no secrets.json (removed in (d))
       delete process.env.FRONDOSE_MODEL;
       const result = resolveModelSpec({});
       assert.equal(result, DEFAULT_MODEL_SPEC);
@@ -173,7 +174,7 @@ test("T-M4: parseModelSpec rejects malformed specs; resolveModel throws on unkno
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-home-tm4-"));
     try {
       setIsolatedHome(tmpHome);
-      // P-21: error message changed from "Unknown provider" to "not configured in auth.json"
+      // P-21: error message changed from "Unknown provider" to "not configured".
       // P-36 F-A: message changed again to "is not configured (model spec came from …)"
       assert.throws(
         () => resolveModel({ factory: "groq:llama-3" }),
@@ -248,18 +249,14 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   });
 
   it("T-BUILD.1: P-71 — direct Anthropic provider is scope-disabled; resolveModel throws scope-disabled error", () => {
-    // Given: auth.json has providers.anthropic = { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" }
+    // Given current secrets contain a reserved Anthropic provider.
     // When:  resolveModel({ factory: "anthropic:claude-sonnet-4-5" }) is called
     // Then:  throws with "scope-disabled" in message (P-71 blocks direct Anthropic runtime)
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          anthropic: { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        anthropic: { key: "sk-ant-xxx", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
+      },
+    });
     assert.throws(
       () => resolveModel({ factory: "anthropic:claude-sonnet-4-5" }),
       (err: Error) =>
@@ -268,19 +265,15 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     );
   });
 
-  it("T-BUILD.2: when auth.json has type=openai for non-standard provider, resolveModel → openai dispatch path", () => {
-    // Given: auth.json has providers.together = { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" }
+  it("T-BUILD.2: when current secrets use type=openai for a non-standard provider, resolveModel uses openai dispatch", () => {
+    // Given current secrets contain a custom OpenAI-compatible provider.
     // When:  resolveModel({ factory: "together:meta-llama/Llama-4" }) is called
     // Then:  returned model.provider does NOT contain "anthropic"; createOpenAI path taken with name="together"
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
+      },
+    });
     const model = resolveModel({ factory: "together:meta-llama/Llama-4" });
     // createOpenAI with name="together" yields model.provider === "together.chat"
     assert.ok(
@@ -293,12 +286,12 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     );
   });
 
-  it("T-BUILD.3: when provider is absent from auth.json, resolveModel throws with 'not configured' message", () => {
-    // Given: auth.json has no provider "unknown-prov"
+  it("T-BUILD.3: when provider is absent from current secrets, resolveModel throws with 'not configured' message", () => {
+    // Given current secrets have no provider "unknown-prov".
     // When:  resolveModel({ factory: "unknown-prov:some-model" }) is called
     // Then:  throws Error whose message contains "Provider 'unknown-prov' not configured" and Frondose Settings guidance
     // P-APP-11 b1: error guidance changed from "mai auth set" to "Frondose → Settings"
-    writeFileSync(join(tmpHome, ".frondose", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
+    seedSecrets(tmpHome, { providers: {} });
     assert.throws(
       () => resolveModel({ factory: "unknown-prov:some-model" }),
       (err: Error) => {
@@ -310,19 +303,15 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   });
 
   it("T-BUILD.4: P-71 — ANTHROPIC_API_KEY env var is ignored; direct Anthropic provider throws scope-disabled", async () => {
-    // Given: ANTHROPIC_API_KEY set; auth.json has providers.anthropic = { key: "sk-ant-file", type: "anthropic" }
+    // Given ANTHROPIC_API_KEY and a reserved provider in current secrets.
     // When:  resolveModel({ factory: "anthropic:claude-sonnet-4-5" }) is called
     // Then:  throws scope-disabled (P-71 blocks direct Anthropic — env key is irrelevant)
     process.env.ANTHROPIC_API_KEY = "sk-ant-env-test";
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          anthropic: { key: "sk-ant-file", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        anthropic: { key: "sk-ant-file", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
+      },
+    });
     assert.throws(
       () => resolveModel({ factory: "anthropic:claude-sonnet-4-5" }),
       (err: Error) =>
@@ -332,19 +321,15 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   });
 
   it("T-BUILD.5: P-71 — OPENAI_API_KEY env var is ignored; reserved 'openai' provider name throws scope-disabled", async () => {
-    // Given: OPENAI_API_KEY set; auth.json has providers.openai = { key: "sk-file", type: "openai" }
+    // Given OPENAI_API_KEY and a reserved provider in current secrets.
     // When:  resolveModel({ factory: "openai:gpt-4o" }) is called
     // Then:  throws scope-disabled (P-71 — 'openai' is a reserved direct-provider name)
     process.env.OPENAI_API_KEY = "sk-env-test";
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          openai: { key: "sk-file", baseUrl: "https://api.openai.com/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        openai: { key: "sk-file", baseUrl: "https://api.openai.com/v1", type: "openai" },
+      },
+    });
     assert.throws(
       () => resolveModel({ factory: "openai:gpt-4o" }),
       (err: Error) =>
@@ -354,19 +339,15 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   });
 
   it("T-BUILD.6: when DEEPSEEK_BASE_URL is set without /v1, createOpenAI is called with /v1 appended", async () => {
-    // Given: process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com" (no /v1); auth.json has providers.deepseek with type=openai
+    // Given DEEPSEEK_BASE_URL without /v1 and a current DeepSeek provider.
     // When:  resolveModel({ factory: "deepseek:deepseek-chat" }) is called
     // Then:  the actual HTTP request targets "https://api.deepseek.com/v1/chat/completions" (env normalized, /v1 added)
     process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+      },
+    });
     const model = resolveModel({ factory: "deepseek:deepseek-chat" });
     // Intercept fetch to capture the URL after normalization
     let capturedUrl: string | undefined;
@@ -398,15 +379,11 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     // When:  resolveModel({ factory: "deepseek:deepseek-chat" }) is called
     // Then:  request URL is "https://proxy.example.com/v1/chat/completions" (idempotent — no /v1/v1)
     process.env.DEEPSEEK_BASE_URL = "https://proxy.example.com/v1";
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        deepseek: { key: "sk-deepseek", baseUrl: "https://api.deepseek.com/v1", type: "openai" },
+      },
+    });
     const model = resolveModel({ factory: "deepseek:deepseek-chat" });
     let capturedUrl: string | undefined;
     const origFetch = globalThis.fetch;
@@ -436,19 +413,15 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
   });
 
   it("T-BUILD.8: when DEEPSEEK_BASE_URL is set but provider is NOT 'deepseek', env var is ignored", async () => {
-    // Given: process.env.DEEPSEEK_BASE_URL = "https://proxy.example.com"; auth.json has providers.together with type=openai
+    // Given DEEPSEEK_BASE_URL and a different current custom provider.
     // When:  resolveModel({ factory: "together:foo" }) is called
     // Then:  request URL starts with "https://api.together.xyz/v1/" (DEEPSEEK_BASE_URL env var ignored for non-deepseek providers)
     process.env.DEEPSEEK_BASE_URL = "https://proxy.example.com";
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: {
-          together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
-        },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: {
+        together: { key: "tapi-xxx", baseUrl: "https://api.together.xyz/v1", type: "openai" },
+      },
+    });
     const model = resolveModel({ factory: "together:foo" });
     let capturedUrl: string | undefined;
     const origFetch = globalThis.fetch;
@@ -469,7 +442,7 @@ describe("buildModel — type-based dispatch via resolveModel (G-P21.3, G-P21.5)
     }
     assert.ok(
       capturedUrl?.startsWith("https://api.together.xyz/v1/"),
-      `T-BUILD.8: request URL must use together's baseUrl from auth.json; got "${capturedUrl}"`,
+      `T-BUILD.8: request URL must use together's baseUrl from current secrets; got "${capturedUrl}"`,
     );
     assert.ok(
       !capturedUrl?.includes("proxy.example.com"),
@@ -505,30 +478,26 @@ describe("detectAnyModelKey — iterates all configured providers, not just 3 ha
     cleanupTmpDir(tmpHome);
   });
 
-  it("T-DETECT.1: when auth.json has only a non-standard provider key, detectAnyModelKey returns true", () => {
-    // Given: auth.json has providers.together = { key: "tapi-xxx", type: "openai" }; no env vars set
+  it("T-DETECT.1: when current secrets have only a non-standard provider key, detectAnyModelKey returns true", () => {
+    // Given current secrets have a Together provider and no env keys.
     // When:  detectAnyModelKey() is called
     // Then:  returns true (iterates ALL providers — finds "together" key; NOT just 3 hardcoded names)
-    writeFileSync(
-      join(tmpHome, ".frondose", "auth.json"),
-      JSON.stringify({
-        providers: { together: { key: "tapi-xxx", type: "openai", baseUrl: "https://api.together.xyz/v1" } },
-      }),
-      "utf-8",
-    );
+    seedSecrets(tmpHome, {
+      providers: { together: { key: "tapi-xxx", type: "openai", baseUrl: "https://api.together.xyz/v1" } },
+    });
     const result = detectAnyModelKey();
     assert.equal(
       result,
       true,
-      "T-DETECT.1: detectAnyModelKey must return true when a non-standard provider key exists in auth.json",
+      "T-DETECT.1: detectAnyModelKey must return true when a non-standard provider key exists in current secrets",
     );
   });
 
   it("T-DETECT.2: when no providers configured and no env vars, detectAnyModelKey returns false", () => {
-    // Given: auth.json has empty providers {}; ANTHROPIC/OPENAI/DEEPSEEK_API_KEY all unset
+    // Given current secrets have no providers and all direct vendor env keys are unset.
     // When:  detectAnyModelKey() is called
     // Then:  returns false
-    writeFileSync(join(tmpHome, ".frondose", "auth.json"), JSON.stringify({ providers: {} }), "utf-8");
+    seedSecrets(tmpHome, { providers: {} });
     const result = detectAnyModelKey();
     assert.equal(
       result,

@@ -8,7 +8,7 @@
  * T-Search.3 — Missing file → DEFAULT_SEARCH_CONFIG without throw
  * T-Search.4 — Corrupt file → DEFAULT_SEARCH_CONFIG without throw; stderr receives message
  *
- * Gate coverage: G-P15.2 (search.json persistence)
+ * Gate coverage: G-P15.2 (search fields in consolidated secrets persistence)
  *
  * NOTE: search.ts does NOT exist until builder Step 4b.
  * These scaffolds will fail to compile until then.
@@ -69,7 +69,7 @@ function restoreHome(home: string | undefined, homeBase: string | undefined): vo
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("search.json persistence (G-P15.2)", () => {
+describe("search fields in consolidated secrets persistence (G-P15.2)", () => {
   it("T-Search.1: searchConfigSchema validates valid config; both keys optional", () => {
     // Given: searchConfigSchema
     // When:  safeParse called with both keys, empty object, single key
@@ -90,8 +90,6 @@ describe("search.json persistence (G-P15.2)", () => {
     // When:  writeSearchConfig({ braveApiKey: "bsa-xxx" }, path) then readSearchConfig(path)
     // Then:  returns { braveApiKey: "bsa-xxx" }; secrets.json stat mode & 0o777 === 0o600
 
-    // HOME override: prevents legacyMerged from reading the real operator auth.json
-    // (which would trigger a secrets.json write attempt against a wrong path).
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
     const origHomeBase = process.env.FRONDOSE_HOME_BASE;
@@ -121,8 +119,6 @@ describe("search.json persistence (G-P15.2)", () => {
     // When:  readSearchConfig("/nonexistent/path.json")
     // Then:  returns DEFAULT_SEARCH_CONFIG ({}); no throw
 
-    // HOME override: without this, legacyMerged reads real auth.json → tries to write
-    // secrets.json to /nonexistent/ → mkdirSync("/nonexistent") → EACCES.
     const tmpHome = mkdtempSync(join(tmpdir(), "mai-p44-home-"));
     const origHome = process.env.HOME;
     const origHomeBase = process.env.FRONDOSE_HOME_BASE;
@@ -138,13 +134,14 @@ describe("search.json persistence (G-P15.2)", () => {
   });
 
   it("T-Search.4: readSearchConfig returns DEFAULT_SEARCH_CONFIG for corrupt file; stderr has path", () => {
-    // Given: file with invalid JSON content
+    // Given: the co-located current secrets file contains invalid JSON
     // When:  readSearchConfig(corruptPath)
     // Then:  returns DEFAULT_SEARCH_CONFIG; stderr contains file path; no throw
 
     const { path, cleanup } = makeTmpDir();
     try {
-      writeFileSync(path, "{not valid json", "utf-8");
+      const secretsPath = join(dirname(path), "secrets.json");
+      writeFileSync(secretsPath, "{not valid json", "utf-8");
       let result: ReturnType<typeof readSearchConfig> | undefined;
       let stderr = "";
       assert.doesNotThrow(() => {
@@ -155,7 +152,7 @@ describe("search.json persistence (G-P15.2)", () => {
       assert.ok(result, "result must be defined");
       assert.deepEqual(result, DEFAULT_SEARCH_CONFIG, "corrupt file must return DEFAULT_SEARCH_CONFIG");
       assert.ok(
-        stderr.includes(path) || stderr.includes("search.json"),
+        stderr.includes(secretsPath) || stderr.includes("secrets.json"),
         `stderr must contain file reference; got: "${stderr}"`,
       );
     } finally {
