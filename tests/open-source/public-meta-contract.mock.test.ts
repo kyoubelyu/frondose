@@ -72,19 +72,21 @@ describe("public repository metadata, CI and release gates are complete", () => 
   });
 
   it("T-OS.Dep.1: directly actionable production dependency versions clear every current high advisory", async () => {
-    // Given the lockfile, when fixed minimums are checked, then current high/MCP advisories are no longer present in the resolved graph.
+    // Given the lockfile, when fixed minimums are checked, then current high advisories are no longer present in the resolved graph.
+    // P-EXT-SEARCH realign (2026-08-12): the MCP SDK is fully retired (no direct dep, no resolved entry) —
+    // it was an optional peer of @google/genai and npm pruned it; the search path is now the direct Brave API.
     const lock = JSON.parse(await text("package-lock.json"));
     const packages = lock.packages as Record<string, { version?: string }>;
     const expected: Array<[string, [number, number, number]]> = [
       ["node_modules/undici", [6, 27, 0]],
       ["node_modules/ws", [8, 21, 0]],
       ["node_modules/fast-uri", [3, 1, 4]],
-      ["node_modules/@modelcontextprotocol/sdk", [1, 30, 0]],
     ];
     for (const [path, minimum] of expected) {
       const version = packages[path]?.version;
       assert.ok(version, `missing resolved package: ${path}`);
       assert.ok(atLeast(version, minimum), `${path} ${version} is below ${minimum.join(".")}`);
     }
+    assert.equal(packages["node_modules/@modelcontextprotocol/sdk"]?.version, undefined, "MCP SDK resolved entry must be absent (P-EXT-SEARCH)");
   });
 });

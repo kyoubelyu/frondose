@@ -22,6 +22,7 @@ import { DEFAULT_CONFIG_PATH, readConfig, writeConfig } from "../../persistence/
 import { applyIdentityPatch, readIdentity } from "../../persistence/identity.js";
 import { type IdentityPatch, identityPatchSchema } from "../../persistence/identitySchema.js";
 import { readMode } from "../../persistence/mode.js";
+import { readSearchConfig, writeSearchConfig } from "../../persistence/search.js";
 import type { AppMode } from "../../tauri/ui/mode.js";
 import type { ServeDeps } from "./context.js";
 
@@ -38,6 +39,7 @@ export interface SettingsView {
   soul: { override: string | null };
   updateServerUrl: string | null; // P-58d.1: plaintext, NOT masked (contrast llm.maskedKey)
   language: "auto" | "en" | "zh"; // P-ZH-1
+  search: { brave: { hasKey: boolean; maskedKey: string | null } }; // P-EXT-SEARCH: masked Brave key view only
 }
 
 // Step-3b CONCERN-MR — validate-before-write. The write helpers are atomic but do NOT validate SHAPE;
@@ -69,6 +71,7 @@ const settingsPatchSchema = z.object({
   soul: z.object({ override: z.string().max(3000).nullable() }).optional(), // EXISTING ≤3000 constraint
   updateServerUrl: z.string().url().nullable().optional(), // P-58d.1: omit=unchanged, null=clear, url=set
   language: z.enum(["auto", "en", "zh"]).optional(), // P-ZH-1: omit=unchanged
+  search: z.object({ brave: z.object({ key: z.string().optional() }).optional() }).optional(), // P-EXT-SEARCH: write-only Brave key
 });
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
@@ -102,6 +105,7 @@ export function readSettings(): SettingsView {
   const key = entry?.key;
   const { updatedAt, ...identity } = cfg.identity ?? ({} as Record<string, unknown>);
   void updatedAt; // intentionally stripped from the view (no updatedAt leak)
+  const searchKey = readSearchConfig().braveApiKey;
   return {
     llm: {
       provider,
@@ -115,6 +119,7 @@ export function readSettings(): SettingsView {
     soul: { override: cfg.soul.override },
     updateServerUrl: cfg.updateServerUrl, // P-58d.1: plaintext
     language: cfg.language, // P-ZH-1
+    search: { brave: { hasKey: Boolean(searchKey), maskedKey: searchKey ? maskKey(searchKey) : null } }, // P-EXT-SEARCH
   };
 }
 
@@ -149,6 +154,16 @@ export function applySettings(patch: SettingsPatch): void {
         visionModel: auth.visionModel,
         providers: { ...(auth.providers ?? {}), [provider]: { key, baseUrl, type: "openai" } }, // P-57d
       });
+    }
+  }
+  if (patch.search?.brave) {
+    // P-EXT-SEARCH: write-only Brave Search API key. Trim before freshness evaluation; the backend
+    // isFreshKey gate is the authority (mask echo / empty / whitespace / mask-shaped → no-op —
+    // audit MR: a no-op must NOT rewrite secrets.json, so write only on a fresh key).
+    const existing = readSearchConfig();
+    const submitted = patch.search.brave.key?.trim();
+    if (submitted && isFreshKey(submitted, existing.braveApiKey)) {
+      writeSearchConfig({ ...existing, braveApiKey: submitted });
     }
   }
   if (patch.identity || patch.soul || patch.updateServerUrl !== undefined || patch.language !== undefined) {

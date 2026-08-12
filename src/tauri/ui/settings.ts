@@ -37,6 +37,7 @@ interface SettingsResp {
   ok: boolean;
   restartRequired?: boolean;
   llm: { baseUrl: string | null; model: string | null; hasKey: boolean; maskedKey: string | null; provider: string | null };
+  search?: { brave?: { hasKey: boolean; maskedKey: string | null } }; // P-EXT-SEARCH: masked Brave key view only
   identity: Record<string, unknown>;
   soul: { override: string | null };
   updateServerUrl: string | null; // P-58d.1-UI: plaintext, not masked
@@ -95,6 +96,11 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
       keyEl.value = ""; // never populate the raw key — only the mask as a placeholder
       keyEl.placeholder = r.llm.maskedKey ?? t("settings.noKeySet");
     }
+    const braveKeyEl = $("settings-brave-key");
+    if (braveKeyEl) {
+      braveKeyEl.value = ""; // never populate the raw key — only the mask as a placeholder
+      braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? t("settings.noKeySet");
+    }
     for (const f of ["fullName", "company", "role", "headline", "profileUrl", "persona", "style", "contact"]) {
       const el = $(`settings-${f.toLowerCase()}`);
       if (el) el.value = String(r.identity[f] ?? "");
@@ -138,6 +144,8 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
     const region = csv("settings-icp-region");
     const companyNameKeywords = csv("settings-icp-keywords");
     const key = v("settings-key"); // sent ONLY if the operator typed one
+    const braveKey = v("settings-brave-key");
+    const freshBraveKey = braveKey && !/[*•]{2,}/.test(braveKey) ? braveKey : undefined; // P-EXT-SEARCH: never echo a mask back
     const baseUrl = v("settings-baseurl");
     const model = v("settings-model");
     const fullName = v("settings-fullname");
@@ -154,6 +162,7 @@ export function createSettingsPanel(deps: SettingsDeps): { open(): Promise<void>
         ...(model ? { model } : {}),
         ...(key ? { key } : {}),
       },
+      ...(freshBraveKey ? { search: { brave: { key: freshBraveKey } } } : {}),
       identity: {
         ...(fullName ? { fullName } : {}),
         ...(company ? { company } : {}),

@@ -28,7 +28,10 @@ const ALLOWED_DYNAMIC_BY_FILE: Record<string, readonly string[]> = {
   "app/workflowSteps.ts": ["title"],
   "assistantTurnController.ts": ["frame.text"],
   "toast.ts": ["message"],
-  "settings.ts": ['r.llm.maskedKey ?? t("settings.noKeySet")'],
+  "settings.ts": [
+    'r.llm.maskedKey ?? t("settings.noKeySet")',
+    'r.search?.brave?.maskedKey ?? t("settings.noKeySet")', // P-EXT-SEARCH: masked Brave key placeholder
+  ],
   "app/assistantAppDependencies.ts": ["result.reason", "frame.finishReason", "reason"],
   "render/dom.ts": ["text"],
   "render/iwf.ts": [
