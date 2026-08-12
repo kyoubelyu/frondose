@@ -37,22 +37,10 @@ writeFileSync(receipt, `${JSON.stringify(event)}\n`, { flag: "a" });
 
 const failure =
   (scenario === "codesign-failure" && command === "codesign") ||
-  (scenario === "spctl-failure" && command === "spctl") ||
-  (scenario === "stapler-failure" && command === "xcrun" && args[0] === "stapler") ||
-  (scenario === "build-failure" && command === "npx");
+  (scenario === "build-failure" && command === "npx") ||
+  (scenario === "verifier-failure" && command === "verify-updater-signature");
 if (failure) process.exit(1);
 
-if (command === "security") {
-  if (args[0] === "create-keychain") writeFileSync(args.at(-1), "temporary keychain\n");
-  if (args[0] === "find-identity") {
-    const identity =
-      scenario === "wrong-identity"
-        ? "Developer ID Application: Other (OTHERTEAM)"
-        : "Developer ID Application: Fixture (TEAMID)";
-    process.stdout.write(`  1) ABCDEF0123456789 "${identity}"\n     1 valid identities found\n`);
-  }
-  if (args[0] === "delete-keychain") rmSync(args.at(-1), { force: true });
-}
 
 if (command === "npx") {
   const target = process.env.CARGO_TARGET_DIR;
