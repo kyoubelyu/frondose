@@ -69,14 +69,6 @@ function cargo {
   if ($Scenario -eq "updater-verification-failure") { throw "injected updater verification failure" }
 }
 
-function Get-AuthenticodeSignature {
-  param([string]$FilePath)
-  $events.commands += "Get-AuthenticodeSignature $FilePath"
-  $events.authenticodePaths += $FilePath
-  if ($Scenario -eq "verification-failure") { throw "injected verification command failure" }
-  return [pscustomobject]@{ Status = $events.authenticodeStatus }
-}
-
 function Copy-Item {
   param([string]$LiteralPath, [string]$Destination, [switch]$Force)
   $events.commands += "Copy-Item $LiteralPath $Destination"
@@ -94,10 +86,10 @@ function Remove-Item {
   }
 }
 
-$env:WINDOWS_CERTIFICATE = if ($Scenario -eq "missing-pfx") { "" } else { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("fixture-pfx-secret")) }
-$env:WINDOWS_CERTIFICATE_PASSWORD = if ($Scenario -eq "missing-password") { "" } else { "fixture-password-secret" }
 $env:TAURI_SIGNING_PRIVATE_KEY = if ($Scenario -eq "missing-updater-key") { "" } else { "fixture-updater-secret" }
-$env:WINDOWS_TIMESTAMP_URL = if ($Scenario -eq "missing-timestamp") { "" } else { "https://timestamp.digicert.com" }
+$env:WINDOWS_CERTIFICATE = ""
+$env:WINDOWS_CERTIFICATE_PASSWORD = ""
+$env:WINDOWS_TIMESTAMP_URL = ""
 $env:CARGO_TARGET_DIR = $targetRoot
 $env:FRONDOSE_PUBLIC_OUTPUT_DIR = $outputRoot
 

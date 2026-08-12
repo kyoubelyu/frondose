@@ -31,12 +31,6 @@ jobs:
       - name: Build and verify native candidate
         run: bash scripts/build-public-macos.sh
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           FRONDOSE_PUBLIC_OUTPUT_DIR: build/public-macos
@@ -72,15 +66,12 @@ jobs:
           node --version
           npx.cmd --no-install tauri --version
           npm.cmd exec --offline -- cyclonedx-npm --version
-          Get-Command Import-PfxCertificate, Get-AuthenticodeSignature, Get-FileHash | Out-Null
+          Get-Command Get-FileHash | Out-Null
           7z --help | Out-Null
       - name: Build and verify native candidate
         shell: pwsh
         run: ./scripts/build-public-windows.ps1
         env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          WINDOWS_TIMESTAMP_URL: https://timestamp.digicert.com
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           FRONDOSE_PUBLIC_OUTPUT_DIR: build/public-windows
