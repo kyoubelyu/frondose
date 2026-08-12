@@ -2,10 +2,10 @@
  * P-57d Step 5 — T-Boundary.1, T-Boundary.2 — FILLED
  * (G-P57d.2 + G-P57d.4 [via single paragraph]; G-P57d.7 Soul UNCHANGED)
  *
- * P-WEB-SEARCH-MCP-SCOPE update:
+ * P-WEB-SEARCH-MCP-SCOPE → P-EXT-SEARCH realign (2026-08-12):
  *   - Boundary still has one Tool-preference paragraph with both vision + search
  *     keywords (analyze_screenshot + inspect + vision_unavailable + web_search).
- *   - Search guidance now says operator-configured MCP and scope_disabled/mcp_error fallback.
+ *   - Search guidance now says Brave Search API with missing_config/search_error fallback.
  *   - soul.ts exports SOUL constant without any P-57d keywords (verified absent).
  *
  * Run (mock):
@@ -22,10 +22,10 @@ import { composeSoulBand } from "../../../src/agent/systemPrompt/soul.js";
 // the canonical placeholder soul band string (template + methodology distillation).
 const SOUL = composeSoulBand(null);
 
-// ─── T-Boundary.1 — Single paragraph; both vision + approved MCP search directives ──
+// ─── T-Boundary.1 — Single paragraph; both vision + Brave Search directives ──
 
-describe("BOUNDARY constant — tool-preference paragraph covering vision + approved MCP search", () => {
-  it("T-Boundary.1: tool-preference guidance carries vision plus MCP web_search and visible failure fallback", () => {
+describe("BOUNDARY constant — tool-preference paragraph covering vision + Brave Search", () => {
+  it("T-Boundary.1: tool-preference guidance carries vision plus Brave web_search and visible failure fallback", () => {
     // Given: import { BOUNDARY }
     assert.ok(typeof BOUNDARY === "string" && BOUNDARY.length > 0, "BOUNDARY must be non-empty exported string");
 
@@ -42,11 +42,11 @@ describe("BOUNDARY constant — tool-preference paragraph covering vision + appr
     assert.ok(remaining.includes("analyze_screenshot"), "tool-preference paragraph must contain 'analyze_screenshot'");
     assert.ok(remaining.includes("inspect"), "tool-preference paragraph must contain 'inspect'");
     assert.ok(remaining.includes("web_search"), "tool-preference paragraph must contain 'web_search'");
-    assert.match(remaining, /operator-configured MCP server|MCP_SEARCH_URL/);
-    assert.ok(remaining.includes("scope_disabled"), "tool-preference paragraph must mention scope_disabled fallback");
-    assert.ok(remaining.includes("mcp_error"), "tool-preference paragraph must mention mcp_error fallback");
+    assert.match(remaining, /Brave Search API/i);
+    assert.ok(remaining.includes("missing_config"), "tool-preference paragraph must mention missing_config fallback");
+    assert.ok(remaining.includes("search_error"), "tool-preference paragraph must mention search_error fallback");
     assert.ok(remaining.includes("vision_unavailable"), "tool-preference paragraph must contain 'vision_unavailable'");
-    assert.doesNotMatch(remaining, /Brave Search|Tavily/i);
+    assert.doesNotMatch(remaining, /operator-configured MCP server|MCP_SEARCH_URL|mcp_error|Tavily/i);
   });
 });
 
