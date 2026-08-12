@@ -2,7 +2,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, ...options });
@@ -35,17 +36,25 @@ function treeDigests(root) {
   return new Map(walkFiles(root).map((path) => [relative(root, path).replaceAll("\\", "/"), sha256File(path)]));
 }
 
-/** Actual native signature verification of a supplied signed candidate (Step 5). */
+/** Actual platform verification of a supplied candidate (Step 5) under the P-RELEASE-SIGN-ADHOC contract:
+ *  ad-hoc codesign --verify + mounted-App tree equality + Tauri-updater minisign pairs (the load-bearing
+ *  update-integrity check). Gatekeeper/stapler/Authenticode are intentionally NOT required. */
 export async function inspectPlatformSignatures(root, tools = {}) {
   const findings = [];
   const app = join(root, "Frondose.app");
   const dmg = join(root, "Frondose.dmg");
   const exe = join(root, "Frondose.nsis.exe");
-  if (![app, dmg, exe].every(existsSync)) {
+  const archive = join(root, "Frondose.app.tar.gz");
+  const archiveSig = join(root, "Frondose.app.tar.gz.sig");
+  const exeSig = join(root, "Frondose.nsis.exe.sig");
+  if (![app, dmg, exe, archive, archiveSig, exeSig].every(existsSync)) {
     return {
       ok: false,
       findings: [
-        { kind: "signed_candidate", message: "candidate requires Frondose.app, Frondose.dmg and Frondose.nsis.exe" },
+        {
+          kind: "signed_candidate",
+          message: "candidate requires Frondose.app, Frondose.dmg, Frondose.nsis.exe and the updater pairs (.tar.gz(+.sig), .nsis.exe.sig)",
+        },
       ],
     };
   }
@@ -60,17 +69,6 @@ export async function inspectPlatformSignatures(root, tools = {}) {
   if (!(await execute("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app]))) {
     return { ok: false, findings };
   }
-  if (
-    !(await execute(
-      "spctl",
-      ["-a", "-vv", "--type", "open", "--context", "context:primary-signature", dmg],
-      "gatekeeper",
-    ))
-  ) {
-    return { ok: false, findings };
-  }
-  if (!(await execute("xcrun", ["stapler", "validate", app], "stapler"))) return { ok: false, findings };
-  if (!(await execute("xcrun", ["stapler", "validate", dmg], "stapler"))) return { ok: false, findings };
   const mountPoint = mkdtempSync(join(tmpdir(), "frondose-native-mount-"));
   try {
     if (!(await execute("hdiutil", ["attach", "-quiet", "-readonly", "-nobrowse", "-mountpoint", mountPoint, dmg]))) {
@@ -85,8 +83,20 @@ export async function inspectPlatformSignatures(root, tools = {}) {
     await execute("hdiutil", ["detach", "-quiet", mountPoint]);
     rmSync(mountPoint, { recursive: true, force: true });
   }
-  await execute("osslsigncode", ["verify", "-in", exe], "authenticode");
+  // Updater minisign pairs: the checked-in Tauri updater public key verifies both archives.
+  const updater = await verifyUpdaterSignatures(root, updaterPublicKey(), tools);
+  if (updater.findings.length > 0) findings.push(...updater.findings);
   return { ok: findings.length === 0, findings };
+}
+
+/** Decode the checked-in Tauri updater public key (same source as build-public-macos.sh). */
+function updaterPublicKey() {
+  const conf = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "tauri", "src-tauri", "tauri.conf.json"), "utf8"),
+  );
+  const base64 = conf.plugins?.updater?.pubkey ?? "";
+  const lines = Buffer.from(base64, "base64").toString("utf8").trim().split(/\r?\n/);
+  return lines[lines.length - 1] ?? "";
 }
 
 /** npm-pack surface control: an exact public file set, never a private leak. */
@@ -329,12 +339,10 @@ export function validatePublicReleaseGraph(input) {
   if (workflow.includes("env:\n  ") && workflow.slice(0, workflow.indexOf("jobs:")).includes("secrets.")) {
     findings.push({ kind: "public_release_graph", message: "workflow-global signing secret" });
   }
-  const inspectBlock = semanticWorkflow.slice(
-    semanticWorkflow.indexOf("inspect:"),
-    semanticWorkflow.indexOf("attest:"),
-  );
-  const draftBlock = semanticWorkflow.slice(semanticWorkflow.indexOf("draft:"));
-  if (/APPLE_CERTIFICATE|WINDOWS_CERTIFICATE/.test(`${inspectBlock}\n${draftBlock}`)) {
+  // Audit BLOCKER-adjacent (M3): the signing secret must not escape the producer jobs into ANY of
+  // the downstream inspect / attest / draft jobs — the full post-producer span is covered.
+  const postProducerBlock = semanticWorkflow.slice(semanticWorkflow.indexOf("inspect:"));
+  if (/TAURI_SIGNING_PRIVATE_KEY/.test(postProducerBlock)) {
     findings.push({ kind: "public_release_graph", message: "signing secret escaped producer jobs" });
   }
   if (publicConfig.build?.beforeBuildCommand !== "npm run build:tauri:public") {
@@ -378,10 +386,13 @@ export function validatePublicReleaseGraph(input) {
     if (!input.exportedPaths.includes(path))
       findings.push({ kind: "public_release_graph", path, message: "public release path omitted from export" });
   }
-  for (const marker of ["hardenedRuntime", "notarytool submit", "stapler validate", "codesign --verify", "spctl -a"]) {
+  // P-RELEASE-SIGN-ADHOC: public signing is ad-hoc codesign + Tauri-updater minisign pairs.
+  // Apple notarization/Authenticode markers are no longer required; the minisign updater-key and
+  // verifier markers are the load-bearing update-integrity contract.
+  for (const marker of ["codesign --verify --deep --strict", "TAURI_SIGNING_PRIVATE_KEY", "frondose-updater-verifier"]) {
     requireText(findings, `${tauriConfig}\n${macScript}`, marker);
   }
-  for (const marker of ["certificateThumbprint", "digestAlgorithm", "timestampUrl", "Get-AuthenticodeSignature"]) {
+  for (const marker of ["TAURI_SIGNING_PRIVATE_KEY", "frondose-updater-verifier"]) {
     requireText(findings, windowsScript, marker);
   }
   requireText(findings, assembler, "Frondose.nsis.exe.sig");

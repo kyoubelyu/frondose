@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, it, mock } from "node:test";
@@ -553,17 +553,59 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
   );
 
   it(
-    "T-OS.Release.4: only actual platform verification of a supplied signed candidate can pass",
+    "T-OS.Release.4: an ad-hoc + minisign candidate passes platform verification; missing updater pairs fail",
     { skip: missingGateInputs("FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR") },
     async () => {
-      // Given the Step-5 signed-candidate directory, when native verification runs, then no asserted boolean or updater sidecar can substitute.
+      // Given the Step-5 candidate directory (real release.sh artifacts — ad-hoc codesign + Tauri-updater
+      // minisign pairs; P-RELEASE-SIGN-ADHOC contract), when native verification runs, then only actual
+      // verification can pass: codesign --verify, mounted-App tree equality, and minisign updater pairs.
       const { inspectPlatformSignatures } = await loadPolicy();
       const signedRoot = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
       assert.ok(
         signedRoot,
-        "Step 2 stays RED until Step 5 supplies actual Developer-ID/notarized and Authenticode artifacts",
+        "Step 2 stays RED until Step 5 supplies the real ad-hoc + minisign artifact fixture",
       );
       assert.deepEqual(await inspectPlatformSignatures(signedRoot), { ok: true, findings: [] });
+    },
+  );
+
+  it(
+    "T-OS.Release.4-negative: a candidate missing or corrupting its minisign updater pairs fails platform verification",
+    { skip: missingGateInputs("FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR") },
+    async () => {
+      // Given the real fixture CLONED and mutated (critic MR-1: the integration seam is
+      // inspectPlatformSignatures itself, not a separate call on an empty directory).
+      const { inspectPlatformSignatures } = await loadPolicy();
+      const signedRoot = process.env.FRONDOSE_PUBLIC_SIGNED_FIXTURE_DIR;
+      assert.ok(signedRoot, "fixture dir required");
+      assert.deepEqual(await inspectPlatformSignatures(signedRoot), { ok: true, findings: [] });
+      const updaterMembers = [
+        "Frondose.app.tar.gz.sig",
+        "Frondose.nsis.exe.sig",
+        "Frondose.app.tar.gz",
+        "Frondose.nsis.exe",
+      ];
+      for (const removal of updaterMembers) {
+        const clone = await temporaryDirectory("frondose-release4-negative-");
+        await cp(signedRoot, clone, { recursive: true });
+        await rm(join(clone, removal));
+        const result = await inspectPlatformSignatures(clone);
+        assert.equal(result.ok, false, `${removal} must fail platform verification`);
+        assert.ok(
+          result.findings.some((f) => f.kind === "updater_signature" || f.kind === "signed_candidate"),
+          `${removal} must yield an updater/signed_candidate finding: ${JSON.stringify(result.findings)}`,
+        );
+      }
+      // Corrupt-sidecar mutation: the .sig exists but is garbage — the verifier must reject it.
+      const corrupt = await temporaryDirectory("frondose-release4-corrupt-");
+      await cp(signedRoot, corrupt, { recursive: true });
+      await writeFile(join(corrupt, "Frondose.app.tar.gz.sig"), "tampered signature bytes\n");
+      const corruptResult = await inspectPlatformSignatures(corrupt);
+      assert.equal(corruptResult.ok, false, "a corrupt updater signature must fail platform verification");
+      assert.ok(
+        corruptResult.findings.some((f) => f.kind === "updater_signature"),
+        `corrupt sig must yield an updater_signature finding: ${JSON.stringify(corruptResult.findings)}`,
+      );
     },
   );
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -22,6 +23,21 @@ type ReleasePolicyModule = {
 
 const REPO = process.cwd();
 const POLICY = join(REPO, "scripts", "public-release-policy.mjs");
+
+/** Decode the checked-in Tauri updater public key (critic round-2 B2: exact operand, no wildcard). */
+function decodeUpdaterPublicKey(): string {
+  const conf = JSON.parse(readFileSync(join(REPO, "src", "tauri", "src-tauri", "tauri.conf.json"), "utf8")) as {
+    plugins?: { updater?: { pubkey?: string } };
+  };
+  const base64 = conf.plugins?.updater?.pubkey ?? "";
+  const lines = Buffer.from(base64, "base64").toString("utf8").trim().split(/\r?\n/);
+  return lines[lines.length - 1] ?? "";
+}
+
+async function loadRepoContext(): Promise<{ tauriConf: { publicKey: string } }> {
+  return { tauriConf: { publicKey: decodeUpdaterPublicKey() } };
+}
+
 const temporaryDirectories: string[] = [];
 
 function missingGateInputs(...names: string[]): false | string {
@@ -127,7 +143,7 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
     }
   });
 
-  it("T-OS.Release.4b: empty, partial, unstapled or non-Authenticode candidates fail native verification", async () => {
+  it("T-OS.Release.4b: empty, partial, unsigned-updater or tree-mismatched candidates fail native verification", async () => {
     // Given exact native candidates and observable platform commands, when one native operation fails, then its own finding blocks promotion.
     const policy = (await import(`${pathToFileURL(POLICY).href}?native-verifier`)) as ReleasePolicyModule;
     for (const partial of ["empty", "app-only", "dmg-only", "exe-only"] as const) {
@@ -149,13 +165,21 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
       );
       assert.deepEqual(commands, [], `${partial} must fail before native commands`);
     }
-    for (const mutation of ["codesign", "gatekeeper", "stapler", "mounted-app", "authenticode"] as const) {
+    for (const mutation of ["codesign", "mounted-app", "minisign", "updater-pair"] as const) {
       const root = await temporaryDirectory(`frondose-native-operation-${mutation}-`);
       const app = join(root, "Frondose.app");
       await mkdir(join(app, "Contents", "Resources"), { recursive: true });
       await writeFile(join(app, "Contents", "Resources", "payload.txt"), "verified app bytes\n");
       await writeFile(join(root, "Frondose.dmg"), "fixture dmg bytes\n");
       await writeFile(join(root, "Frondose.nsis.exe"), "fixture exe bytes\n");
+      // Updater pairs are REQUIRED members under the ad-hoc + minisign contract (critic BLOCKER-1):
+      // ordinary mutations carry complete pairs; only the "updater-pair" mutation removes one member.
+      await writeFile(join(root, "Frondose.app.tar.gz"), "fixture updater archive\n");
+      await writeFile(join(root, "Frondose.app.tar.gz.sig"), "fixture updater signature\n");
+      await writeFile(join(root, "Frondose.nsis.exe.sig"), "fixture exe signature\n");
+      if (mutation === "updater-pair") {
+        await rm(join(root, "Frondose.app.tar.gz.sig"));
+      }
       const commands: string[] = [];
       const result = await policy.inspectPlatformSignatures(root, {
         async run(command, args) {
@@ -171,29 +195,55 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
           }
           const fails =
             (mutation === "codesign" && command === "codesign") ||
-            (mutation === "gatekeeper" && command === "spctl") ||
-            (mutation === "stapler" && command === "xcrun" && args[0] === "stapler") ||
-            (mutation === "authenticode" && command === "osslsigncode");
+            (mutation === "minisign" && command === "verify-updater-signature");
+          if (command === "verify-updater-signature" && mutation === "updater-pair") {
+            throw new Error("updater-pair mutation must fail before the verifier runs");
+          }
           return { status: fails ? 1 : 0, stdout: "", stderr: fails ? `injected ${mutation} failure` : "" };
         },
       });
       assert.equal(result.ok, false, mutation);
-      const findingNeedle = mutation === "mounted-app" ? "mounted app" : mutation;
+      const findingNeedle =
+        mutation === "mounted-app"
+          ? "mounted app"
+          : mutation === "updater-pair"
+            ? "updater"
+            : mutation === "minisign"
+              ? "updater signature"
+              : mutation;
       assert.ok(
         result.findings.some((finding) => finding.message.toLowerCase().includes(findingNeedle)),
         mutation,
       );
       const requiredCommand = {
         codesign: "codesign --verify --deep --strict",
-        gatekeeper: "spctl -a -vv --type open",
-        stapler: "xcrun stapler validate",
         "mounted-app": "hdiutil attach",
-        authenticode: "osslsigncode verify -in",
+        minisign: "verify-updater-signature",
+        "updater-pair": "verify-updater-signature",
       }[mutation];
-      assert.ok(
-        commands.some((command) => command.includes(requiredCommand)),
-        mutation,
-      );
+      if (mutation === "minisign") {
+        const invocation = commands.find((command) => command.startsWith("verify-updater-signature"));
+        assert.ok(invocation, `${mutation} must invoke the updater verifier`);
+        // Exact ordered operands: decoded checked-in public key, archive path, signature path
+        // (critic round-2 B2: no wildcard key, absolute paths accepted).
+        const { tauriConf } = await loadRepoContext();
+        const archivePath = join(root, "Frondose.app.tar.gz");
+        const sigPath = join(root, "Frondose.app.tar.gz.sig");
+        const expected = `verify-updater-signature ${tauriConf.publicKey} ${archivePath} ${sigPath}`;
+        assert.equal(invocation, expected, "verifier operands must be EXACT: decoded key + absolute archive + absolute sig");
+      }
+      if (mutation === "updater-pair") {
+        assert.ok(
+          !commands.some((command) => command.startsWith("verify-updater-signature")),
+          "updater-pair mutation must fail the required-member check BEFORE the verifier runs",
+        );
+      }
+      if (mutation !== "updater-pair") {
+        assert.ok(
+          commands.some((command) => command.includes(requiredCommand)),
+          mutation,
+        );
+      }
       if (commands.some((command) => command.includes("hdiutil attach"))) {
         assert.ok(
           commands.some((command) => command.includes("hdiutil detach")),
