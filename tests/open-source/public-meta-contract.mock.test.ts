@@ -65,7 +65,9 @@ describe("public repository metadata, CI and release gates are complete", () => 
   it("T-OS.Release.1: release workflow builds a draft with updater metadata, checksums, SBOM, signatures and provenance", async () => {
     // Given the tag workflow, when release outputs are inspected, then the complete fail-closed artifact family is required before promotion.
     const workflow = (await text(".github/workflows/release.yml")).toLowerCase();
-    for (const marker of ["draft", "latest.json", "sha256", "sbom", "signature", "provenance", "environment:"]) {
+    // P-RELEASE-SIGN-ADHOC: updater signatures are the .sig pairs (minisign); "signature" text
+    // from the retired Authenticode machinery is gone.
+    for (const marker of ["draft", "latest.json", "sha256", "sbom", ".sig", "provenance", "environment:"]) {
       assert.ok(workflow.includes(marker), `release workflow missing marker: ${marker}`);
     }
     assert.ok(!workflow.includes("install.sh\n"), "release must not be an install.sh-only artifact upload");

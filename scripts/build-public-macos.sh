@@ -3,8 +3,9 @@ set -euo pipefail
 
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 
-required_env=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY)
-required_tools=(security codesign xcrun spctl hdiutil npm npx cargo rustup node)
+# P-RELEASE-SIGN-ADHOC: ad-hoc codesign + Tauri-updater minisign only — no Apple identity required.
+required_env=(TAURI_SIGNING_PRIVATE_KEY)
+required_tools=(codesign hdiutil npm npx cargo rustup node)
 for name in "${required_env[@]}"; do
   if [[ -z "${!name:-}" ]]; then
     echo "[public-macos] required environment variable is missing: ${name}" >&2
@@ -22,48 +23,16 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 target_root="${CARGO_TARGET_DIR:-${repo_root}/src/tauri/src-tauri/target}"
 output_root="${FRONDOSE_PUBLIC_OUTPUT_DIR:-${repo_root}/build/public-macos}"
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/frondose-public-macos.XXXXXX")"
-keychain="${temporary_root}/signing.keychain-db"
-p12="${temporary_root}/signing.p12"
-config="${temporary_root}/tauri.public.native.json"
+config="$repo_root/src/tauri/src-tauri/tauri.public.conf.json"
 mount_point="${temporary_root}/mounted"
-original_search_list=""
 
 cleanup() {
   if [[ "${mounted:-0}" == "1" ]]; then
     hdiutil detach -quiet "$mount_point" >/dev/null 2>&1 || true
   fi
-  if [[ -n "$original_search_list" ]]; then
-    # shellcheck disable=SC2086
-    security list-keychains -d user -s $original_search_list >/dev/null 2>&1 || true
-  fi
-  security delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf "$temporary_root"
 }
 trap cleanup EXIT
-
-original_search_list="$(security list-keychains -d user | tr -d '"')"
-printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$p12"
-[[ -s "$p12" ]] || { echo "[public-macos] decoded certificate is empty" >&2; exit 65; }
-security create-keychain -p "$APPLE_CERTIFICATE_PASSWORD" "$keychain"
-security unlock-keychain -p "$APPLE_CERTIFICATE_PASSWORD" "$keychain"
-security set-keychain-settings -lut 21600 "$keychain"
-security import "$p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-security set-key-partition-list -S apple-tool:,apple: -s -k "$APPLE_CERTIFICATE_PASSWORD" "$keychain"
-security list-keychains -d user -s "$keychain"
-identity_output="$(security find-identity -v -p codesigning "$keychain")"
-grep -Fq "\"${APPLE_SIGNING_IDENTITY}\"" <<<"$identity_output" || {
-  echo "[public-macos] requested Developer ID identity was not imported" >&2
-  exit 65
-}
-rm -f "$p12"
-
-node - "$repo_root/src/tauri/src-tauri/tauri.public.conf.json" "$config" "$APPLE_SIGNING_IDENTITY" <<'NODE'
-import fs from "node:fs";
-const [source, output, identity] = process.argv.slice(2);
-const config = JSON.parse(fs.readFileSync(source, "utf8"));
-config.bundle.macOS.signingIdentity = identity;
-fs.writeFileSync(output, `${JSON.stringify(config, null, 2)}\n`);
-NODE
 
 cd "$repo_root"
 npm run build:runtime:public:macos
@@ -93,13 +62,8 @@ done
 updater_public_key="$(node -e 'const c=require(process.argv[1]); process.stdout.write(Buffer.from(c.plugins.updater.pubkey,"base64").toString("utf8").trim().split(/\r?\n/)[1])' "$repo_root/src/tauri/src-tauri/tauri.conf.json")"
 "$verifier_target/release/frondose-updater-verifier" "$updater_public_key" "$archive" "$signature"
 
+# P-RELEASE-SIGN-ADHOC: ad-hoc codesign verification only (no notarization/stapler/Gatekeeper requirements).
 codesign --verify --deep --strict --verbose=2 "$app"
-xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-xcrun stapler staple "$dmg"
-xcrun stapler validate "$app"
-xcrun stapler validate "$dmg"
-spctl -a -vv --type exec "$app"
-spctl -a -vv --type open --context context:primary-signature "$dmg"
 
 mkdir -p "$mount_point"
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_point" "$dmg"

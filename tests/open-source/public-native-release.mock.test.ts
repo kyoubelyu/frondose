@@ -157,35 +157,53 @@ describe("the exported public repository owns one reachable native release graph
         ],
         [
           "global secret",
-          (value) => ({ ...value, workflow: `env:\n  LEAK: \${{ secrets.APPLE_CERTIFICATE }}\n${value.workflow}` }),
+          (value) => ({
+            ...value,
+            workflow: `env:\n  LEAK: \${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}\n${value.workflow}`,
+          }),
         ],
         [
-          "Apple secret moved to inspect",
+          "updater key moved to inspect",
           (value) => ({
             ...value,
             workflow: replaceRequired(
               replaceRequired(
                 value.workflow,
-                `APPLE_CERTIFICATE: ${secretReference("APPLE_CERTIFICATE")}`,
-                "APPLE_CERTIFICATE: removed",
+                `TAURI_SIGNING_PRIVATE_KEY: ${secretReference("TAURI_SIGNING_PRIVATE_KEY")}`,
+                "TAURI_SIGNING_PRIVATE_KEY: removed",
               ),
               "inspect:",
-              `inspect:\n    env:\n      APPLE_CERTIFICATE: ${secretReference("APPLE_CERTIFICATE")}`,
+              `inspect:\n    env:\n      TAURI_SIGNING_PRIVATE_KEY: ${secretReference("TAURI_SIGNING_PRIVATE_KEY")}`,
             ),
           }),
         ],
         [
-          "Windows secret moved to draft",
+          "updater key moved to attest",
           (value) => ({
             ...value,
             workflow: replaceRequired(
               replaceRequired(
                 value.workflow,
-                `WINDOWS_CERTIFICATE: ${secretReference("WINDOWS_CERTIFICATE")}`,
-                "WINDOWS_CERTIFICATE: removed",
+                `TAURI_SIGNING_PRIVATE_KEY: ${secretReference("TAURI_SIGNING_PRIVATE_KEY")}`,
+                "TAURI_SIGNING_PRIVATE_KEY: removed",
+              ),
+              "attest:",
+              `attest:\n    env:\n      TAURI_SIGNING_PRIVATE_KEY: ${secretReference("TAURI_SIGNING_PRIVATE_KEY")}`,
+            ),
+          }),
+        ],
+        [
+          "updater key password moved to draft",
+          (value) => ({
+            ...value,
+            workflow: replaceRequired(
+              replaceRequired(
+                value.workflow,
+                `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${secretReference("TAURI_SIGNING_PRIVATE_KEY_PASSWORD")}`,
+                "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: removed",
               ),
               "draft:",
-              `draft:\n    env:\n      WINDOWS_CERTIFICATE: ${secretReference("WINDOWS_CERTIFICATE")}`,
+              `draft:\n    env:\n      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${secretReference("TAURI_SIGNING_PRIVATE_KEY_PASSWORD")}`,
             ),
           }),
         ],
@@ -194,6 +212,34 @@ describe("the exported public repository owns one reachable native release graph
           (value) => ({
             ...value,
             workflow: replaceRequired(value.workflow, "inspect:", "inspect:\n    environment: public-release"),
+          }),
+        ],
+        [
+          "updater-key marker removed",
+          (value) => ({
+            ...value,
+            macScript: value.macScript.replaceAll("TAURI_SIGNING_PRIVATE_KEY", "REMOVED_UPDATER_KEY"),
+          }),
+        ],
+        [
+          "updater-key marker removed from windows script",
+          (value) => ({
+            ...value,
+            windowsScript: value.windowsScript.replaceAll("TAURI_SIGNING_PRIVATE_KEY", "REMOVED_UPDATER_KEY"),
+          }),
+        ],
+        [
+          "verifier invocation marker removed",
+          (value) => ({
+            ...value,
+            macScript: value.macScript.replaceAll("frondose-updater-verifier", "REMOVED_VERIFIER"),
+          }),
+        ],
+        [
+          "codesign verify marker removed",
+          (value) => ({
+            ...value,
+            macScript: value.macScript.replaceAll("codesign --verify --deep --strict", "codesign --verify --deep"),
           }),
         ],
         [
@@ -424,7 +470,7 @@ describe("native platform scripts execute signing and cleanup before promotion",
   });
 
   it(
-    "T-WIN5.PS1.2a/2b: PowerShell receipts bind the imported PFX to exact Tauri and Authenticode operations",
+    "T-WIN5.PS1.2a/2b: PowerShell receipts bind the minisign updater key to exact Tauri operations (no Authenticode dependency)",
     { skip: missingGateInputs("FRONDOSE_TEST_POWERSHELL") },
     async () => {
       // Given mocked Windows signing commands, when every credential and failure scenario runs, then only a Valid exact installer is normalized and cleanup is unconditional.
@@ -433,19 +479,12 @@ describe("native platform scripts execute signing and cleanup before promotion",
       const harness = join(REPO, "tests", "fixtures", "public-release", "public-windows-harness.ps1");
       for (const scenario of [
         "green",
-        "missing-pfx",
-        "missing-password",
         "missing-updater-key",
-        "missing-timestamp",
         "missing-tool-node",
         "missing-tool-npm",
         "missing-tool-npx",
         "missing-tool-7z",
-        "wrong-eku",
-        "no-private-key",
-        "non-valid",
         "build-failure",
-        "verification-failure",
         "updater-verification-failure",
         "upload-failure",
       ]) {
@@ -474,45 +513,24 @@ describe("native platform scripts execute signing and cleanup before promotion",
           false,
           scenario,
         );
-        for (const secret of ["fixture-pfx-secret", "fixture-password-secret", "fixture-updater-secret"]) {
+        for (const secret of ["fixture-updater-secret"]) {
           const leak = run("rg", ["-a", "-l", "--fixed-strings", secret, root]);
           assert.equal(leak.status, 1, `${scenario} leaked ${secret}: ${leak.stdout}`);
           assert.equal(`${result.stdout}${result.stderr}`.includes(secret), false, scenario);
         }
-        const reachedImport = observed.import !== null;
-        if (reachedImport) {
-          assert.equal(observed.import.fileExisted, true, scenario);
-          assert.equal(observed.import.store, "Cert:\\CurrentUser\\My");
-          assert.ok(observed.removals.includes(observed.import.filePath), `${scenario} must remove decoded PFX`);
-          assert.ok(
-            observed.removals.some((path: string) => path === `Cert:\\CurrentUser\\My\\${observed.importedThumbprint}`),
-            `${scenario} must remove the exact imported certificate`,
-          );
-        }
+        assert.equal(observed.import, null, `${scenario} must not import any PFX certificate (no Authenticode posture)`);
         if (scenario === "green") {
           assert.deepEqual(observed.tauriArgs.slice(0, 2), ["tauri", "build"]);
           assert.ok(observed.tauriArgs.includes("--config"));
-          assert.equal(observed.tauriConfig.bundle.windows.certificateThumbprint, observed.importedThumbprint);
-          assert.equal(observed.tauriConfig.bundle.windows.digestAlgorithm, "sha256");
-          assert.equal(observed.tauriConfig.bundle.windows.timestampUrl, "https://timestamp.digicert.com");
           assert.equal(observed.tauriConfig.build.beforeBuildCommand, "npm run build:tauri:public");
-          assert.equal(observed.authenticodeStatus, "Valid");
-          assert.ok(observed.commands.some((command: string) => command.startsWith("cargo run --quiet --release")));
+          assert.ok(
+            observed.commands.some((command: string) => command.startsWith("cargo run --quiet --release")),
+            "updater verifier must run",
+          );
           assert.deepEqual(normalizedFiles.map((path: string) => path.slice(normalizedRoot.length + 1)).sort(), [
             "Frondose.nsis.exe",
             "Frondose.nsis.exe.sig",
             "verified-producer-manifest.json",
-          ]);
-          assert.deepEqual(observed.authenticodePaths, [
-            join(
-              root,
-              "target",
-              "x86_64-pc-windows-msvc",
-              "release",
-              "bundle",
-              "nsis",
-              "Frondose_0.5.19_x64-setup.exe",
-            ),
           ]);
         } else {
           assert.deepEqual(normalizedFiles, []);
@@ -521,30 +539,20 @@ describe("native platform scripts execute signing and cleanup before promotion",
     },
   );
 
-  it("T-OS.Mac.1: shell receipts require hardened Developer ID, notarization, stapling and mounted-App equality", async () => {
+  it("T-OS.Mac.1: shell receipts require ad-hoc codesign + minisign updater pairs and mounted-App equality (no Apple identity required)", async () => {
     // Given command shims for the macOS signing surface, when each failure is injected, then no artifact promotes and the temporary identity is erased.
     for (const scenario of [
       "green",
-      "missing-p12",
-      "missing-p12-password",
       "missing-updater-key",
-      "missing-apple-id",
-      "missing-apple-password",
-      "missing-team-id",
-      "missing-tool-security",
       "missing-tool-codesign",
-      "missing-tool-xcrun",
-      "missing-tool-spctl",
       "missing-tool-hdiutil",
       "missing-tool-npm",
       "missing-tool-npx",
       "missing-tool-cargo",
       "missing-tool-rustup",
-      "wrong-identity",
       "build-failure",
       "codesign-failure",
-      "spctl-failure",
-      "stapler-failure",
+      "verifier-failure",
       "mounted-app-mismatch",
       "upload-failure",
     ]) {
@@ -553,20 +561,42 @@ describe("native platform scripts execute signing and cleanup before promotion",
       await mkdir(bin);
       const receipt = join(root, "receipt.jsonl");
       const commandShim = join(REPO, "tests", "fixtures", "public-release", "public-macos-command-shim.mjs");
-      for (const command of ["security", "codesign", "xcrun", "spctl", "hdiutil", "npm", "npx", "cargo", "rustup"]) {
+      // Critic round-3 MAJOR: every tool the script may invoke gets a shim that forwards to its real
+      // binary (or the command shim), EXCEPT the scenario's named missing tool. PATH keeps the real
+      // path AFTER bin, so bash/script startup works while the missing tool is genuinely absent.
+      const shimTools = [
+        "bash",
+        "mktemp",
+        "base64",
+        "rm",
+        "mkdir",
+        "cp",
+        "shasum",
+        "find",
+        "sort",
+        "diff",
+        "node",
+        "codesign",
+        "hdiutil",
+        "npm",
+        "npx",
+        "cargo",
+        "rustup",
+      ];
+      for (const command of shimTools) {
         if (scenario === `missing-tool-${command}`) continue;
+        const resolved = run("which", [command]).stdout.trim();
         const shim = join(bin, command);
-        await writeFile(shim, `#!/bin/sh\nexec "${process.execPath}" "${commandShim}" "${command}" "$@"\n`);
+        // rustup may be absent on dev machines; the script only calls `rustup target add`,
+        // which the shim no-ops (target slices are pre-installed on release hosts).
+        const target =
+          command === "rustup"
+            ? "true"
+            : ["codesign", "hdiutil", "npm", "npx", "cargo"].includes(command)
+              ? `${process.execPath} "${commandShim}" "${command}"`
+              : `"${resolved}"`;
+        await writeFile(shim, `#!/bin/sh\nexec ${target} "$@"\n`);
         await chmod(shim, 0o755);
-      }
-      if (scenario.startsWith("missing-tool-")) {
-        for (const command of ["mktemp", "base64", "rm", "mkdir", "cp", "shasum", "find", "sort", "diff"]) {
-          const resolved = run("which", [command]).stdout.trim();
-          assert.ok(resolved, `fixture requires ${command}`);
-          const shim = join(bin, command);
-          await writeFile(shim, `#!/bin/sh\nexec "${resolved}" "$@"\n`);
-          await chmod(shim, 0o755);
-        }
       }
       const outputRoot = join(root, "output");
       if (scenario === "upload-failure") await writeFile(outputRoot, "not a directory\n");
@@ -574,18 +604,22 @@ describe("native platform scripts execute signing and cleanup before promotion",
         cwd: REPO,
         env: {
           ...process.env,
+          // Critic MR-3: the retired Apple variables must be explicitly cleared — a correct
+          // implementation must succeed without them, not merely tolerate their absence.
+          APPLE_CERTIFICATE: "",
+          APPLE_CERTIFICATE_PASSWORD: "",
+          APPLE_SIGNING_IDENTITY: "",
+          APPLE_ID: "",
+          APPLE_PASSWORD: "",
+          APPLE_TEAM_ID: "",
+          // missing-tool scenarios: PATH is bin-only so the absent tool cannot leak in from the
+          // real PATH (critic round-3 MAJOR); bin carries shims for every other tool incl. bash.
           PATH: scenario.startsWith("missing-tool-") ? bin : `${bin}${delimiter}${process.env.PATH}`,
           FRONDOSE_TEST_RECEIPT: receipt,
           FRONDOSE_TEST_SCENARIO: scenario,
           CARGO_TARGET_DIR: join(root, "target"),
           CARGO_HOME: join(root, "cargo-home"),
           FRONDOSE_PUBLIC_OUTPUT_DIR: outputRoot,
-          APPLE_CERTIFICATE: scenario === "missing-p12" ? "" : Buffer.from("fixture-p12-secret").toString("base64"),
-          APPLE_CERTIFICATE_PASSWORD: scenario === "missing-p12-password" ? "" : "fixture-p12-password-secret",
-          APPLE_SIGNING_IDENTITY: "Developer ID Application: Fixture (TEAMID)",
-          APPLE_ID: scenario === "missing-apple-id" ? "" : "fixture@example.invalid",
-          APPLE_PASSWORD: scenario === "missing-apple-password" ? "" : "fixture-apple-password-secret",
-          APPLE_TEAM_ID: scenario === "missing-team-id" ? "" : "TEAMID",
           TAURI_SIGNING_PRIVATE_KEY: scenario === "missing-updater-key" ? "" : "fixture-updater-key-secret",
         },
       });
@@ -597,30 +631,7 @@ describe("native platform scripts execute signing and cleanup before promotion",
       assert.equal(result.status === 0, scenario === "green", `${scenario}: ${result.stdout}\n${result.stderr}`);
       const reachedBuild = events.some((event) => event.command === "npx");
       if (scenario.startsWith("missing-")) assert.equal(reachedBuild, false, `${scenario} must fail before build`);
-      const createKeychain = events.find(
-        (event) => event.command === "security" && event.args[0] === "create-keychain",
-      );
-      if (createKeychain) {
-        const keychain = createKeychain.args.at(-1);
-        assert.equal(
-          events.some(
-            (event) =>
-              event.command === "security" && event.args[0] === "delete-keychain" && event.args.at(-1) === keychain,
-          ),
-          true,
-          scenario,
-        );
-        assert.equal((await readOrEmpty(keychain)).length, 0, scenario);
-        const imported = events.find((event) => event.command === "security" && event.args[0] === "import");
-        if (imported)
-          assert.equal((await readOrEmpty(imported.args[1])).length, 0, `${scenario} must delete decoded P12`);
-      }
-      for (const secret of [
-        "fixture-p12-secret",
-        "fixture-p12-password-secret",
-        "fixture-apple-password-secret",
-        "fixture-updater-key-secret",
-      ]) {
+      for (const secret of ["fixture-updater-key-secret"]) {
         const leak = run("rg", ["-a", "-l", "--fixed-strings", secret, root]);
         assert.equal(leak.status, 1, `${scenario} leaked ${secret}: ${leak.stdout}`);
         assert.equal(`${result.stdout}${result.stderr}`.includes(secret), false, scenario);
@@ -630,20 +641,24 @@ describe("native platform scripts execute signing and cleanup before promotion",
       if (scenario === "green") {
         const tauri = events.find((event) => event.command === "npx");
         assert.deepEqual(tauri.args.slice(0, 2), ["tauri", "build"]);
-        assert.equal(tauri.config.bundle.macOS.signingIdentity, "Developer ID Application: Fixture (TEAMID)");
-        assert.equal(tauri.config.bundle.macOS.hardenedRuntime, true);
+        assert.equal(tauri.config.bundle.macOS.signingIdentity, "-");
+        assert.equal(tauri.config.bundle.macOS.hardenedRuntime, false);
         assert.equal(tauri.config.build.beforeBuildCommand, "npm run build:tauri:public");
-        assert.ok(events.some((event) => event.command === "security" && event.args[0] === "import"));
-        assert.ok(events.some((event) => event.command === "security" && event.args[0] === "list-keychains"));
         assert.ok(
-          events.some(
-            (event) =>
-              event.command === "xcrun" &&
-              event.args[0] === "notarytool" &&
-              event.args.includes("--apple-id") &&
-              event.args.includes("--team-id") &&
-              event.args.includes("--wait"),
-          ),
+          !events.some((event) => event.command === "security" && event.args[0] === "import"),
+          "no certificate import may occur (ad-hoc posture)",
+        );
+        assert.ok(
+          !events.some((event) => event.command === "xcrun" && event.args[0] === "notarytool"),
+          "no notarization may occur (ad-hoc posture)",
+        );
+        assert.ok(
+          !events.some((event) => event.command === "spctl" && event.args.join(" ").includes("-a -vv")),
+          "no Gatekeeper assertion may be required",
+        );
+        assert.ok(
+          !events.some((event) => event.command === "xcrun" && event.args.join(" ").includes("stapler validate")),
+          "no stapler assertion may be required",
         );
         assert.ok(
           events.some(
@@ -657,12 +672,6 @@ describe("native platform scripts execute signing and cleanup before promotion",
           events.some(
             (event) => event.command === "codesign" && event.args.join(" ").includes("--verify --deep --strict"),
           ),
-        );
-        assert.ok(
-          events.some((event) => event.command === "spctl" && event.args.join(" ").includes("-a -vv --type open")),
-        );
-        assert.ok(
-          events.some((event) => event.command === "xcrun" && event.args.join(" ").includes("stapler validate")),
         );
         assert.deepEqual(normalizedFiles.map((path) => path.slice(outputRoot.length + 1)).sort(), [
           "Frondose.app.tar.gz",
