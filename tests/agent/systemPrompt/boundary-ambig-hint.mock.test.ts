@@ -16,7 +16,7 @@ const THIRD_ATTEMPT_START = "(3) THIRD attempt";
 const DYNAMIC_FALLBACK_MARKER = "dynamic overlay/listbox/typeahead";
 
 const EXPECTED_SECOND_ATTEMPT =
-  '(2) SECOND attempt (if primary fails with a non-transient error — NOT a network blip or single 5xx): try the FALLBACK suggested by the tool-preference hints above. Examples: `analyze_screenshot` returns `vision_unavailable` → use `inspect` accessibility-tree; `web_search` returns `scope_disabled` or `mcp_error` → use LinkedIn navigation (`navigate_to_url` + `inspect` + `click`) or `web_fetch` to known URLs; `click {label}` returns `ambiguous_target` → on a dynamic overlay/listbox/typeahead, IGNORE any generic tool-result suggestion to "use ref directly" or use an "exact ref": those candidate refs can already be stale after a re-render. Do NOT reuse any ref from the error, do NOT reuse an older ref, and do NOT press Enter to guess. Run `inspect` again and retry `click` with the full, unique visible candidate label reproduced with whitespace normalized to ordinary spaces (a more specific label). Use `ref` only when that fresh inspect proves a static surface and the chosen ref is current; `inspect` returns empty / missing target → `screenshot` + `scroll` + re-inspect; connect button not found at expected position → check `More` menu for `Connect`.';
+  '(2) SECOND attempt (if primary fails with a non-transient error — NOT a network blip or single 5xx): try the FALLBACK suggested by the tool-preference hints above. Examples: `analyze_screenshot` returns `vision_unavailable` → use `inspect` accessibility-tree; `web_search` returns `missing_config` or `search_error` → use LinkedIn navigation (`navigate_to_url` + `inspect` + `click`) or `web_fetch` to known URLs; `click {label}` returns `ambiguous_target` → on a dynamic overlay/listbox/typeahead, IGNORE any generic tool-result suggestion to "use ref directly" or use an "exact ref": those candidate refs can already be stale after a re-render. Do NOT reuse any ref from the error, do NOT reuse an older ref, and do NOT press Enter to guess. Run `inspect` again and retry `click` with the full, unique visible candidate label reproduced with whitespace normalized to ordinary spaces (a more specific label). Use `ref` only when that fresh inspect proves a static surface and the chosen ref is current; `inspect` returns empty / missing target → `screenshot` + `scroll` + re-inspect; connect button not found at expected position → check `More` menu for `Connect`.';
 
 function extractSecondAttempt(boundary: string): string {
   const start = boundary.indexOf(SECOND_ATTEMPT_START);
@@ -66,7 +66,8 @@ describe("Boundary ambiguous-target recovery", () => {
       "runtime_error",
       "vision_unavailable",
       "scope_disabled",
-      "mcp_error",
+      "missing_config",
+      "search_error",
       "ambiguous_target",
       "invalid_input",
       "not_found",

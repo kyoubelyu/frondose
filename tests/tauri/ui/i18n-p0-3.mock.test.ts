@@ -42,20 +42,24 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("P-WEB-SEARCH-MCP-SCOPE generated i18n artifacts", () => {
-  // Given source and tracked generated i18n surfaces, when scanned, then retired search-provider labels are absent everywhere.
-  it("T-MCP-SCOPE.7e-i18n: source, compiled UI, and overlay bundle contain no retired search labels", () => {
+describe("P-EXT-SEARCH generated i18n artifacts", () => {
+  // Given source and tracked generated i18n surfaces, when scanned, then the Brave Search API key label exists in the Settings i18n tables.
+  it("T-PExtSearch.7e-i18n: i18n tables carry the settings.braveKey label; the overlay bundle stays free of Settings search labels", () => {
     for (const [label, source] of [
       ["i18n.ts", I18N_TS],
       ["i18n.js", I18N_JS],
-      ["sharedRenderBundle.generated.ts", OVERLAY_BUNDLE],
     ]) {
-      assert.doesNotMatch(
+      assert.match(
         source,
-        /settings\.braveKey|settings\.groupSearch|Brave Search API key/i,
-        `${label} must be regenerated without retired search labels`,
+        /settings\.braveKey|Brave Search API key/i,
+        `${label} must carry the Brave Search API key label (P-EXT-SEARCH)`,
       );
     }
+    assert.doesNotMatch(
+      OVERLAY_BUNDLE,
+      /settings-brave-key|id=\"settings-brave|getElementById\(\"settings-brave/,
+      "overlay bundle must not carry Settings search DOM controls",
+    );
   });
 });
 

@@ -10,7 +10,6 @@ const SETTINGS_TS = readFileSync(join(REPO, "src", "tauri", "ui", "settings.ts")
 const SETTINGS_JS = readFileSync(join(REPO, "src", "tauri", "ui", "settings.js"), "utf8");
 const I18N_TS = readFileSync(join(REPO, "src", "tauri", "ui", "i18n.ts"), "utf8");
 const I18N_JS = readFileSync(join(REPO, "src", "tauri", "ui", "i18n.js"), "utf8");
-const OVERLAY_BUNDLE = readFileSync(join(REPO, "src", "overlay", "sharedRenderBundle.generated.ts"), "utf8");
 
 type SettingsPanelFactory = (deps: {
   invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
@@ -40,6 +39,7 @@ function installDomStub(): Record<string, FakeEl> {
     "settings-baseurl",
     "settings-model",
     "settings-key",
+    "settings-brave-key",
     "settings-fullname",
     "settings-company",
     "settings-role",
@@ -71,27 +71,27 @@ function installDomStub(): Record<string, FakeEl> {
 
 const tick = (): Promise<void> => new Promise((resolveTick) => setTimeout(resolveTick, 0));
 
-describe("P-WEB-SEARCH-MCP-SCOPE Tauri Settings UI", () => {
-  // Given shipped Settings markup/source, when scanned, then neither Brave nor Tavily controls or patch keys exist.
-  it("T-MCP-SCOPE.7e: Settings has no search-provider control", () => {
+describe("P-EXT-SEARCH Tauri Settings UI", () => {
+  // Given shipped Settings markup/source, when scanned, then a masked Brave Search API key control exists and Tavily does not.
+  it("T-PExtSearch.UI.7e: Settings carries a Brave Search API key control and no Tavily control", () => {
     for (const [label, source] of [
       ["index.html", INDEX_HTML],
       ["settings.ts", SETTINGS_TS],
       ["settings.js", SETTINGS_JS],
       ["i18n.ts", I18N_TS],
       ["i18n.js", I18N_JS],
-      ["sharedRenderBundle.generated.ts", OVERLAY_BUNDLE],
     ]) {
-      assert.doesNotMatch(
+      assert.match(
         source,
-        /settings-brave-key|settings-tavily|settings\.braveKey|settings\.groupSearch|Brave Search API key|braveApiKey|tavilyApiKey/i,
-        `${label} must not retain a generated or source search-provider control`,
+        /settings-brave-key|settings\.brave|Brave Search API key|braveApiKey/i,
+        `${label} must carry the Brave Search API key control`,
       );
+      assert.doesNotMatch(source, /settings-tavily|tavilyApiKey|Tavily Search API key/i, `${label} must not carry a Tavily control`);
     }
   });
 
-  // Given a backend response containing no search state, when Settings opens and saves, then the emitted patch has no search field.
-  it("T-MCP-SCOPE.7f: open/save emits no search patch", async () => {
+  // Given a backend response carrying masked search state, when Settings opens and saves a fresh key, then the emitted patch carries search.brave.key.
+  it("T-PExtSearch.UI.7f: open echoes the masked key; saving a fresh key emits search.brave.key; masked echo saves nothing", async () => {
     assert.ok(createSettingsPanel);
     const elements = installDomStub();
     const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
@@ -111,16 +111,30 @@ describe("P-WEB-SEARCH-MCP-SCOPE Tauri Settings UI", () => {
               identity: {},
               soul: { override: null },
               updateServerUrl: null,
+              search: { brave: { hasKey: true, maskedKey: "bsa-***4567" } },
             }
           : { ok: true }
       ) as T;
     };
     await createSettingsPanel({ invoke, surfaceError: () => {} }).open();
+    // Then: the Brave field placeholder echoes the masked key (no raw key leak in UI).
+    assert.equal(elements["settings-brave-key"].placeholder, "bsa-***4567");
+    assert.equal(elements["settings-brave-key"].value, "");
+    // When: the operator types a fresh key and saves.
     calls.length = 0;
+    elements["settings-brave-key"].value = "bsa_live_fresh_ui_key_000";
     elements["settings-save"].listeners.click();
     await tick();
     const saved = calls.find((call) => call.cmd === "frondose_set_settings");
     const settings = (saved?.args?.settings ?? {}) as Record<string, unknown>;
-    assert.ok(!("search" in settings));
+    assert.deepEqual(settings.search, { brave: { key: "bsa_live_fresh_ui_key_000" } });
+    // When: the field holds only the masked echo and the operator saves again.
+    calls.length = 0;
+    elements["settings-brave-key"].value = "bsa-***4567";
+    elements["settings-save"].listeners.click();
+    await tick();
+    const saved2 = calls.find((call) => call.cmd === "frondose_set_settings");
+    const settings2 = (saved2?.args?.settings ?? {}) as Record<string, unknown>;
+    assert.ok(!("search" in settings2), "masked echo must not emit a search patch");
   });
 });
