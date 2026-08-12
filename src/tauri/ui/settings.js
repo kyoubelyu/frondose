@@ -56,6 +56,11 @@ export function createSettingsPanel(deps) {
             keyEl.value = ""; // never populate the raw key — only the mask as a placeholder
             keyEl.placeholder = r.llm.maskedKey ?? t("settings.noKeySet");
         }
+        const braveKeyEl = $("settings-brave-key");
+        if (braveKeyEl) {
+            braveKeyEl.value = ""; // never populate the raw key — only the mask as a placeholder
+            braveKeyEl.placeholder = r.search?.brave?.maskedKey ?? t("settings.noKeySet");
+        }
         for (const f of ["fullName", "company", "role", "headline", "profileUrl", "persona", "style", "contact"]) {
             const el = $(`settings-${f.toLowerCase()}`);
             if (el)
@@ -109,6 +114,8 @@ export function createSettingsPanel(deps) {
         const region = csv("settings-icp-region");
         const companyNameKeywords = csv("settings-icp-keywords");
         const key = v("settings-key"); // sent ONLY if the operator typed one
+        const braveKey = v("settings-brave-key");
+        const freshBraveKey = braveKey && !/[*•]{2,}/.test(braveKey) ? braveKey : undefined; // P-EXT-SEARCH: never echo a mask back
         const baseUrl = v("settings-baseurl");
         const model = v("settings-model");
         const fullName = v("settings-fullname");
@@ -125,6 +132,7 @@ export function createSettingsPanel(deps) {
                 ...(model ? { model } : {}),
                 ...(key ? { key } : {}),
             },
+            ...(freshBraveKey ? { search: { brave: { key: freshBraveKey } } } : {}),
             identity: {
                 ...(fullName ? { fullName } : {}),
                 ...(company ? { company } : {}),
