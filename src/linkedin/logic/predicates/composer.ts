@@ -224,7 +224,7 @@ export function isComposerEmojiEntry(entry: SnapshotEntry): boolean {
     return true;
   }
 
-  return entry.role === "button" && /[^\x00-\x7F]/.test(entry.name) && entry.name.length <= 4;
+  return entry.role === "button" && /[\u0080-\uFFFF]/.test(entry.name) && entry.name.length <= 4;
 }
 
 export function isComposerAudienceModalEntry(entry: SnapshotEntry): boolean {
