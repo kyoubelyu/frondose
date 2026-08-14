@@ -89,3 +89,4 @@ tests/open-source/project-split-retirement.mock.test.ts
 tests/scripts/releaseSh.mock.test.ts
 tests/build/issueServer.test.ts
 tests/build/staticUpdateServer-retirement.mock.test.ts
+scripts/verify-oss-candidate.mjs
