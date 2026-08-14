@@ -20,6 +20,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run lint
+      # T-WIN2.2b runs the real chmod-dist script against the built dist/ tree —
+      # the mock suite contract requires a prior build (P-OSS-SINGLE-REPO).
+      - run: npm run build
       - run: npm run test:fast
 
   macos:
