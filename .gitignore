@@ -92,3 +92,4 @@ tests/build/staticUpdateServer-retirement.mock.test.ts
 scripts/verify-oss-candidate.mjs
 tests/tauri/ui/render-split-slice12.mock.test.ts
 tests/tauri/ch3-module-split.mock.test.ts
+tests/tauri/appOwnedSidecar-papp4.mock.test.ts

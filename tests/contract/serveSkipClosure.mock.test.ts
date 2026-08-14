@@ -9,13 +9,12 @@ import ts from "typescript";
 // the CLI vertical; the skip-closure contract now covers the 60 ledger-pinned
 // publication carriers (derived from the disposition ledger at build time;
 // inlined so the exported App root — which excludes docs/** — can run it
-// standalone). The 61st rehome-test row is this file itself.
+// standalone). The 59th rehome-test row is this file itself.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FILES = [
   "tests/agent/pi/loopTimeout-pAutoL3fix.mock.test.ts",
   "tests/agent/promptFixes.mock.test.ts",
   "tests/agent/systemResume.mock.test.ts",
-  "tests/agent/workflow/controller-split-shape.mock.test.ts",
   "tests/app/finalBackend-ownership.mock.test.ts",
   "tests/app/sidecarImportGraph.mock.test.ts",
   "tests/app/sidecarMain.mock.test.ts",
@@ -31,7 +30,6 @@ const FILES = [
   "tests/cli/subcommands/serve/cronAutoIsolate-pAutoIsolate.mock.test.ts",
   "tests/cli/subcommands/serve/cronProgress.mock.test.ts",
   "tests/cli/subcommands/serve/ipc-contract.mock.test.ts",
-  "tests/cli/subcommands/serve/p-app-8.boot-tolerant.mock.test.ts",
   "tests/cli/subcommands/serve/per-turn-mode-fragment.mock.test.ts",
   "tests/cli/subcommands/serve/reapKillCappedRun-pAutoL3fix7.mock.test.ts",
   "tests/cli/subcommands/serve/reapOrphanIfIdle-pAutoL3fix5.mock.test.ts",
