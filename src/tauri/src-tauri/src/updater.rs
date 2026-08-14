@@ -545,7 +545,7 @@ mod tests {
     fn t_nurm_2_legacy_baked_value_remains_operator_override() {
         let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = TempHome::new("legacy-override");
-        let legacy = format!("http://{}:4875", ["192","0","2","105"].join("."));
+        let legacy = format!("http://{}:4875", ["192", "0", "2", "105"].join("."));
         let raw = format!(r#"{{"schema_version":2,"updateServerUrl":"{}"}}"#, legacy);
         home.write_config(raw.as_str());
         assert_eq!(read_update_server_url(), Some(legacy));

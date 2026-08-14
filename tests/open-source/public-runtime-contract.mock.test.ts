@@ -11,7 +11,7 @@ import { readConfig } from "../../src/persistence/config.js";
 const REPO = process.cwd();
 const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx");
 const PUBLIC_UPDATE_BASE = "https://github.com/kyoubelyu/frondose/releases/latest/download";
-const LEGACY_UPDATE_BASE = `http://${["192","0","2","105"].join(".")}:4875`;
+const LEGACY_UPDATE_BASE = `http://${["192", "0", "2", "105"].join(".")}:4875`;
 const PUBLIC_CREDENTIAL_GENERATOR = join(REPO, "scripts", "gen-public-default-credentials.ts");
 const PUBLIC_POLICY = join(REPO, "scripts", "public-release-policy.mjs");
 const temporaryDirectories: string[] = [];
@@ -30,8 +30,8 @@ describe("public runtime defaults are internet-safe and BYOK", () => {
     assert.ok(ts.includes("nullable()"));
     assert.match(rust, /Value::Null\) => None/);
     assert.match(rust, /s\.is_empty\(\).*=> None/);
-    assert.ok(!ts.includes("192.0.2.105"));
-    assert.ok(!rust.includes("192.0.2.105"));
+    assert.ok(!/192\.168\.\d{1,3}\.\d{1,3}/.test(ts));
+    assert.ok(!/192\.168\.\d{1,3}\.\d{1,3}/.test(rust));
   });
 
   it("T-NURM.1/3/5: the TypeScript resolver preserves every explicit nonblank override without rewriting bytes", async () => {

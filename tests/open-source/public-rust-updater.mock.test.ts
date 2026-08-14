@@ -41,7 +41,7 @@ mod tests {
     use std::fs;
 
     const PUBLIC: &str = "https://github.com/kyoubelyu/frondose/releases/latest/download";
-    fn legacy() -> String { format!("http://{}:4875", ["192","0","2","105"].join(".")) }
+    fn legacy() -> String { format!("http://{}:4875", ["192", "0", "2", "105"].join(".")) }
 
     fn write_case(name: &str, raw: Option<&str>) -> std::path::PathBuf {
         let home = std::env::temp_dir().join(format!("frondose-updater-{}-{}", name, std::process::id()));
