@@ -1,75 +1,92 @@
 # Frondose
 
-App-only LinkedIn-primary autonomous agent. Frondose uses the Vercel AI SDK, embedded CDP, Chrome stealth, and SQLite memory, delivered through the compiled Tauri app bundle (`Frondose.app`).
+Frondose is an app-only, LinkedIn-primary autonomous sales agent delivered as a
+Tauri desktop application (`Frondose.app` / `Frondose.exe`). It drives a real
+Chrome browser through an in-process CDP layer, uses the Vercel AI SDK for its
+agent loop, and keeps memory in SQLite — with an approval-gated safety model
+(Manual / Magical / Auto modes).
 
-> Migration note (2026-05-27): the product contract is now the app. Historical `mai` CLI entrypoints, `dist/cli/main.js`, and package exports are transitional internal/dev/sidecar surfaces scheduled for staged retirement; new product behavior should land in the app.
+- **Bring your own LLM.** Frondose speaks to exactly one custom
+  OpenAI-compatible endpoint (e.g. a DeepSeek-style custom URL). No official
+  vendor SDK or direct Anthropic/OpenAI call exists in the runtime.
+- **Real browser, real pages.** An embedded CDP + Chrome stealth layer drives
+  your own Chrome profile against your own account. Browser tools work on any
+  HTTPS page.
+- **Fail-closed tool layer.** The agent tool surface performs no shell
+  execution and no arbitrary file I/O; every external capability is explicitly
+  allowlisted.
+- **Local data.** Identity, memory, audit trail, and configuration live in
+  your own user directory (`~/.frondose`), never in a cloud.
 
 ## Install
 
-Frondose currently installs from GitHub Releases via `install.sh` while the app-native installer/update path is being completed. The package is private and **not** on npm. Requirements: **macOS · Homebrew · the `gh` CLI authenticated with `gh auth login` · Google Chrome**.
+Download the latest installer from
+[GitHub Releases](https://github.com/kyoubelyu/frondose/releases/latest):
 
-`install.sh` is transitional release infrastructure: it provisions the runtime needed by the current app sidecar, downloads the selected Release, builds it, and installs the app assets. The operator-facing product runtime is `Frondose.app`, not the CLI it may still install internally.
+- macOS: `Frondose-universal.dmg`
+- Windows: `Frondose-windows-x86_64-setup.exe`
+
+The app updates itself through the built-in updater, signed with the Tauri
+updater's minisign key. macOS binaries are ad-hoc codesigned; on first launch,
+Gatekeeper or SmartScreen may ask you to allow the app explicitly
+(System Settings → Privacy & Security → Open Anyway, or `xattr -cr` on the
+downloaded bundle).
+
+## Configuration
+
+On first launch, configure in the app's Settings:
+
+1. The custom LLM provider URL, model, and API key (BYOK).
+2. Your identity and soul context (the agent's sales worldview).
+3. Optional extras: Brave Search API key (web search), Telegram channel
+   (`telegram_notify`), and GitHub issue output (`gh_issue`).
+
+Unconfigured capabilities degrade gracefully — web search returns
+`missing_config`, output tools stay silent — and never block the core agent.
+
+## Usage modes
+
+- **Manual** — you approve every outbound action.
+- **Magical** — read-only observation with durable local state, no outbound.
+- **Auto** — bounded autonomous runs with per-run outbound approval gates and
+  a persisted ledger of every action.
+
+## Building from source
+
+Requirements: Node ≥ 20, Rust toolchain, Tauri v2 prerequisites
+(https://tauri.app), and the pinned npm dependencies.
 
 ```bash
-# Latest stable
-bash <(gh release download --repo kyoubelyu/frondose --pattern install.sh --output - )
-# ...or clone + run:
-gh repo clone kyoubelyu/frondose && bash frondose/install.sh
-
-# Latest Frondose alpha (v0.5 prerelease line):
-bash install.sh --prerelease
-
-# A specific release:
-bash install.sh --version v0.5.0-alpha.26
+npm ci
+npm run check          # typecheck
+npm run lint           # biome
+npm run test:fast      # mock test suite
+npm run build:tauri    # compile TS + Tauri UI assets
+cd src/tauri && npx tauri build
 ```
 
-### Opening the unsigned Frondose app (Gatekeeper)
+The native hardware-input addon (`native/`) is optional; the build falls back
+to CDP-only input when the toolchain is unavailable.
 
-The `.app`/`.dmg` is **unsigned** (signing/notarization arrive in a later release).
-Installs via `install.sh` / `gh` are **not quarantined** and launch normally. If you
-download the `.app` or `.dmg` with a **browser**, macOS quarantines it; on Sequoia
-(15.x) the old right-click -> Open is gone — instead:
-
-- **System Settings -> Privacy & Security ->** scroll to Security -> **"Open Anyway"** -> authenticate. One-time per app. **or**
-- Terminal: `xattr -cr /Applications/Frondose.app` (or `xattr -dr com.apple.quarantine /Applications/Frondose.app`), then open normally.
-
-## Quick start
-
-1. Install the selected release with `install.sh`.
-2. Open `Frondose.app`.
-3. Configure the model, API key, identity, and soul context in the app settings.
-4. Use the app's Manual, Magical, and Auto modes as the daily runtime.
-
-Do not treat `mai`, `dist/cli/main.js`, or `./dist/index.js` as user-facing product entrypoints. They remain only as temporary implementation and build surfaces while P-APP migration removes or internalizes them.
-
-## Architecture
+## Repository layout
 
 ```
-Frondose.app (Tauri)
-  ├── app UI: chat, settings, diagnostics, Manual/Magical/Auto controls
-  ├── app-owned sidecar protocol (temporary Node/CLI-backed implementation)
-  │     └── Vercel AI SDK agent loop (streamText)
-  │           └── tiered in-process tools
-  │           └── Embedded CDP + Chrome Stealth
-  │           └── SQLite memory + JSONL audit + JSON config/secrets
-  └── in-page Frondose overlay on LinkedIn via CDP injection
+src/                    app-owned backend + agent/tools/persistence (TypeScript)
+src/tauri/src-tauri/    Tauri backend (Rust)
+src/tauri/ui/           app UI (React/TS)
+projects/web/           public landing/download site (standalone static page)
+scripts/                build, test, and public-release verification tooling
+tests/                  mock/contract test suites (BDD-light)
+native/                 optional hardware-input native addon (C source)
 ```
 
-## Internal Transitional Surfaces
+## Contributing
 
-Some internal/admin commands still exist during the migration, including the app sidecar path, update-server tooling, and historical server/fleet commands. They are not app product UX and should not receive new user-facing features. P-APP-11 removes or internalizes the remaining public CLI/package promises after app-owned replacements are validated.
-
-The historical `mai server` web UI, when used internally, serves plain HTTP on `bind_address` and ships **zero TLS code**. For any exposed internal deployment, front it with a reverse proxy that terminates TLS and forwards both HTTP and WebSocket upgrades to `localhost:8090`:
-
-- **Caddy** — `reverse_proxy localhost:8090` (handles WebSocket upgrades automatically).
-- **nginx** — `proxy_pass http://localhost:8090;` plus `proxy_set_header Upgrade $http_upgrade;`
-  and `proxy_set_header Connection "upgrade";`.
-- **Tailscale** — `tailscale serve 8090`.
-
-The reverse proxy should not log the `Authorization` request header — the web UI's
-Basic-Auth credential (`mai server web-token`) rides in it, and credentials do not belong
-in access logs.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Tool names and parameter schemas are
+product contract; security boundaries (no shell at the tool layer, allowlisted
+capabilities) are non-negotiable. Report vulnerabilities privately per
+[SECURITY.md](SECURITY.md).
 
 ## License
 
-UNLICENSED — proprietary. © Kyoube. Not for redistribution.
+Apache-2.0. See [LICENSE](LICENSE).
