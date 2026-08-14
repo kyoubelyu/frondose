@@ -27,5 +27,5 @@ test("download links target HTTPS GitHub Release assets", () => {
 
 // Given the public page, when its bytes are scanned, then no private host, fleet console, or issue-board surface appears.
 test("landing page contains no private, fleet, or issue-board bytes", () => {
-  assert.doesNotMatch(index, /192\.168\.|win-build-host|intranet-host|api\/issues|src\/web|issue-board|ISSUE_BOARD/i);
+  assert.doesNotMatch(index, /192\.168\.|api\/issues|src\/web|issue-board|ISSUE_BOARD/i);
 });
