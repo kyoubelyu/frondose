@@ -436,3 +436,7 @@ tests/tools/browser/connectSurfaceIntegrity-pAuto6.mock.test.ts	rehome-test
 tests/tools/methodology/qualifyProfile-staleCache.mock.test.ts	rehome-test
 tests/tools/sales/pAuto7-reaper.mock.test.ts	rehome-test
 tests/tsconfig.p-ui-think-compact.json	rewrite
+scripts/oss-history-strip.txt	retain
+scripts/phase-P-OPEN-SOURCE-SPLIT-path-dispositions.tsv	retain
+scripts/oss-private-manifest.txt	retain
+scripts/phase-P-OPEN-SOURCE-SPLIT-frozen-manifest.tsv	retain
