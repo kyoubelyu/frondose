@@ -99,8 +99,8 @@ describe("public release export is an explicit, fail-closed source boundary", ()
     // Given representative dangerous and safe strings, when scanned, then dangerous values fail and reserved examples remain clean.
     const { scanProjectText } = await loadExporter();
     const dangerous = [
-      "http://192.0.2.105:4875",
-      "ssh win-build-host",
+      "http://192.168.77.77:4875",
+      "ssh intranet-host",
       "/Users/operator/private/file",
       "-----BEGIN PRIVATE KEY-----",
       "ghp_abcdefghijklmnopqrstuvwxyz1234567890",
