@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type Options as ChromeOptions, Launcher } from "chrome-launcher";
 
@@ -273,6 +274,7 @@ export async function acquireChrome(
   // Windows-style profile path with undefined drive/user on WSL, creating a
   // literal `undefined:/Users/undefined/...` directory under the repo root.
   const userDataDir = options.userDataDir ?? join(tmpdir(), `frondose-test-chrome-${process.pid}`);
+  mkdirSync(userDataDir, { recursive: true });
   const launcher = new Launcher({ ...options, userDataDir, handleSIGINT: false });
   let settled = false;
   const outcome = launcher.launch().then(

@@ -384,7 +384,7 @@ describe("P-ZH compiled-App WKWebView self-capture ownership", () => {
     assert.doesNotMatch(source, /frondose_set_settings|config\.json/);
   });
 
-  it("T-ZHFull.WK.3: Rust hostile tests execute shared reducer, writer, activation, and PNG contracts", () => {
+  it("T-ZHFull.WK.3: Rust hostile tests execute shared reducer, writer, activation, and PNG contracts", { skip: process.platform !== "darwin" }, () => {
     // Given the feature-gated native module, when its Rust unit suite runs, then executable hostile contracts pass rather than source tokens being counted.
     const result = cargo(["test", "--features", "ui-validation", "ui_validation::tests::", "--", "--nocapture"]);
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
