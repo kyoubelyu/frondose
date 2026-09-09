@@ -44,7 +44,7 @@
     "@ai-sdk/openai": "^1.0.0",
     "@earendil-works/pi-agent-core": "^0.78.1",
     "@earendil-works/pi-ai": "^0.78.1",
-    "ai": "^4.0.0",
+    "ai": "^7.0.93",
     "better-sqlite3": "^12.4.1",
     "chrome-launcher": "^1.1.2",
     "chrome-remote-interface": "0.34.0",
