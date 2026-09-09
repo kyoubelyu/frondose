@@ -167,7 +167,20 @@ describe("P-EXT-SEARCH Brave client — fetch behavior", () => {
     const { deps } = makeDeps(clock, async (_input, init) => {
       capturedSignal = init?.signal as AbortSignal;
       await new Promise<void>((resolve) => {
-        capturedSignal.addEventListener("abort", () => resolve(), { once: true });
+        // AbortSignal.timeout() timers are unref'd on modern Node: they fire while the
+        // process lives but do NOT keep the event loop alive, so a fake-clock test whose
+        // only pending work is that timer is cancelled by node:test ("Promise resolution
+        // is still pending..."). Hold a ref'd safety timer so the loop stays alive until
+        // the signal aborts; the injected timeout (40ms) always wins the race.
+        const safety = setTimeout(() => resolve(), 1000);
+        capturedSignal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(safety);
+            resolve();
+          },
+          { once: true },
+        );
       });
       signalAbortedAt = Date.now();
       throw new Error(`aborted: ${String(capturedSignal.reason)}`);
@@ -194,7 +207,20 @@ describe("P-EXT-SEARCH Brave client — fetch behavior", () => {
     const { deps } = makeDeps(clock, async (_input, init) => {
       capturedSignal = init?.signal as AbortSignal;
       await new Promise<void>((resolve) => {
-        capturedSignal.addEventListener("abort", () => resolve(), { once: true });
+        // AbortSignal.timeout() timers are unref'd on modern Node: they fire while the
+        // process lives but do NOT keep the event loop alive, so a fake-clock test whose
+        // only pending work is that timer is cancelled by node:test ("Promise resolution
+        // is still pending..."). Hold a ref'd safety timer so the loop stays alive until
+        // the signal aborts; the injected timeout (40ms) always wins the race.
+        const safety = setTimeout(() => resolve(), 1000);
+        capturedSignal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(safety);
+            resolve();
+          },
+          { once: true },
+        );
       });
       throw new Error(`aborted: ${String(capturedSignal.reason)}`);
     });

@@ -69,7 +69,12 @@ describe("the public exporter treats the complete Git tree as a hostile publicat
     const objects = git(repository, ["cat-file", "--batch-check", "--batch-all-objects"]).split("\n");
     assert.equal(objects.length, 3, `one commit + one tree + one blob expected, got ${objects.join(" | ")}`);
     assert.equal(
-      git(repository, ["show", "-s", "--format=%an%n%cn%n%ae%n%ce%n%s%n%aI%n%cI"]),
+      // Modern git renders strict-ISO UTC as a trailing 'Z' instead of '+00:00' —
+      // normalize before comparing.
+      git(repository, ["show", "-s", "--format=%an%n%cn%n%ae%n%ce%n%s%n%aI%n%cI"]).replaceAll(
+        "2000-01-01T00:00:00Z",
+        "2000-01-01T00:00:00+00:00",
+      ),
       [
         "Frondose Open Source",
         "Frondose Open Source",
