@@ -6,8 +6,12 @@ Only the latest published release of Frondose receives security updates.
 
 ## Reporting a vulnerability
 
-Please report security vulnerabilities privately. Do not post exploit details
-in public issues. Include:
+Please report security vulnerabilities privately via GitHub's private
+vulnerability reporting:
+
+**https://github.com/kyoubelyu/frondose/security/advisories/new**
+
+Do not post exploit details in public issues. Include:
 
 - the affected version and platform;
 - a minimal reproduction;

@@ -256,9 +256,9 @@ export function validateWorkflowDocument(document, actionsLock) {
 
 const RELEASE_ROOT_ALLOWLIST = new Set([
   "Frondose.app",
-  "Frondose.dmg",
-  "Frondose.nsis.exe",
-  "Frondose.nsis.exe.sig",
+  "Frondose-universal.dmg",
+  "Frondose-windows-x86_64-setup.exe",
+  "Frondose-windows-x86_64-setup.exe.sig",
   "Frondose.app.tar.gz",
   "SHA256SUMS",
   "provenance.json",
@@ -404,9 +404,9 @@ export async function inspectReleaseCandidate(root, canaries) {
     }
   }
   const required = [
-    "Frondose.dmg",
-    "Frondose.nsis.exe",
-    "Frondose.nsis.exe.sig",
+    "Frondose-universal.dmg",
+    "Frondose-windows-x86_64-setup.exe",
+    "Frondose-windows-x86_64-setup.exe.sig",
     "Frondose.app.tar.gz",
     "Frondose.app.tar.gz.sig",
     "SHA256SUMS",
@@ -454,7 +454,7 @@ export async function inspectReleaseCandidate(root, canaries) {
       if (!Array.isArray(sbom.components))
         findings.push({ kind: "metadata", path: "sbom.cdx.json", message: "SBOM components missing" });
       for (const [platform, meta] of Object.entries(latest.platforms ?? {})) {
-        const sigFile = meta.url?.endsWith(".tar.gz") ? "Frondose.app.tar.gz.sig" : "Frondose.nsis.exe.sig";
+        const sigFile = meta.url?.endsWith(".tar.gz") ? "Frondose.app.tar.gz.sig" : "Frondose-windows-x86_64-setup.exe.sig";
         const sigPath = join(rootDir, sigFile);
         if (existsSync(sigPath) && meta.signature !== readFileSync(sigPath, "utf8").trim()) {
           findings.push({ kind: "integrity", path: "latest.json", message: `platform ${platform} signature mismatch` });
@@ -469,7 +469,7 @@ export async function inspectReleaseCandidate(root, canaries) {
   const membersByContainer = {};
   for (const [container, extract] of [
     ["Frondose.app.tar.gz", extractTarMembers],
-    ["Frondose.nsis.exe", extractNsisMembers],
+    ["Frondose-windows-x86_64-setup.exe", extractNsisMembers],
   ]) {
     const extraction = extract(join(rootDir, container));
     if (!extraction.ok) {
@@ -497,20 +497,20 @@ export async function inspectReleaseCandidate(root, canaries) {
   // Canary scans over the unpacked tree, container members, and platform payloads.
   for (const file of walkFiles(rootDir)) {
     const name = relative(rootDir, file).replaceAll("\\", "/");
-    if (name === "Frondose.dmg" || name === "Frondose.nsis.exe" || name === "Frondose.app.tar.gz") {
+    if (name === "Frondose-universal.dmg" || name === "Frondose-windows-x86_64-setup.exe" || name === "Frondose.app.tar.gz") {
       continue;
     }
     for (const finding of scanTextForCanaries(readFileSync(file, "utf8"), canaries)) {
       findings.push({ ...finding, path: name });
     }
   }
-  for (const container of ["Frondose.app.tar.gz", "Frondose.nsis.exe"]) {
+  for (const container of ["Frondose.app.tar.gz", "Frondose-windows-x86_64-setup.exe"]) {
     if (membersByContainer[container]) {
       findings.push(...scanMembersForCanaries(container, membersByContainer[container], canaries));
     }
   }
   if (canaries.length > 0) {
-    for (const container of ["Frondose.dmg"]) {
+    for (const container of ["Frondose-universal.dmg"]) {
       if (existsSync(join(rootDir, container))) {
         findings.push(...(await scanPlatformContainer(join(rootDir, container), container, canaries)));
       }

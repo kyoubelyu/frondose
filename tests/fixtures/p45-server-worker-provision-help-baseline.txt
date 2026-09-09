@@ -1,9 +1,0 @@
-Usage: mai server worker provision [options] <persona_id>
-
-Provision a new worker over SSH (installs + configures mai on the host)
-
-Options:
-  --hostname <h>    worker SSH-reachable hostname (required for SSH
-                    provisioning)
-  --worker-id <id>  explicit worker id (default: random 8-hex)
-  -h, --help        display help for command

@@ -1,6 +1,32 @@
 # Changelog
 
-All notable changes to mai-agent.
+All notable changes to Frondose.
+
+> **Reading this file:** Frondose v0.5.x ships as a Tauri desktop application
+> (`Frondose.app` / `Frondose.exe`). Entries below v0.5.0 describe the
+> predecessor CLI product **mai-agent** (the `mai` command, config under
+> `~/.mai`); those commands and paths are historical and do not exist in the
+> desktop app.
+
+## v0.5.x — Frondose desktop era (summary)
+
+The 0.5 series rebuilt the product as a desktop app around the same agent
+core (BYOK single OpenAI-compatible endpoint, CDP-driven real Chrome,
+SQLite local-first storage, Manual / Magical / Auto approval modes).
+Highlights across the series:
+
+- Tauri desktop shell with a bundled Node sidecar backend, tray, and
+  bilingual (en/zh) Settings UI.
+- Windows builds alongside macOS; self-updates through the Tauri updater
+  channel (ad-hoc codesign + minisign), installers published as GitHub
+  Releases.
+- Direct Brave Search API integration for `web_search` with in-app key
+  management, 3-second request pacing, and graceful `missing_config`
+  degradation when unconfigured.
+- Telegram channel, cron/passive scheduling, and workflow approval gates
+  on top of the sidecar backend.
+- Local data lives under `~/.frondose`.
+- Per-release details: see the git history and each GitHub Release.
 
 ## v0.4.15 (2026-05-14)
 

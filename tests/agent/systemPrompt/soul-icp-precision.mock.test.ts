@@ -127,7 +127,7 @@ describe("composeSystemPrompt — Boundary → Soul → Checkpoint composition o
     const composed = composeSystemPrompt({ boundary: BOUNDARY, soul, checkpoint: CHECKPOINT });
 
     // A stable substring unique to each band (independent of this phase's edits).
-    const boundaryMarker = "running on a single Mac driving a single Chrome browser";
+    const boundaryMarker = "running on the operator's machine driving a single Chrome browser";
     const soulMarker = "Your mission on LinkedIn";
     const checkpointMarker = "CHECKPOINT DISCIPLINE";
 

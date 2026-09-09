@@ -550,7 +550,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
   });
 
   const shutdown = async (signal: string) => {
-    process.stdout.write(`[mai serve] ${signal} - shutting down\n`);
+    process.stdout.write(`[frondose serve] ${signal} - shutting down\n`);
     if (state.currentTurn) state.currentTurn.abortController.abort();
     // [P-OPEN-SOURCE-SPLIT §9.4] Sidecar shutdown aborts and awaits the in-flight
     // Telegram poll/media/turn/reply before releasing resources.
@@ -595,7 +595,7 @@ export async function runServeSubcommand(opts: ServeOpts): Promise<void> {
       const tmp = `${opts.portFile}.tmp`;
       writeFileSync(tmp, String(port), "utf-8");
       renameSync(tmp, opts.portFile);
-      process.stdout.write(`[mai serve] listening on 127.0.0.1:${port}\n`);
+      process.stdout.write(`[frondose serve] listening on 127.0.0.1:${port}\n`);
       resolve();
     });
   });

@@ -528,8 +528,8 @@ describe("native platform scripts execute signing and cleanup before promotion",
             "updater verifier must run",
           );
           assert.deepEqual(normalizedFiles.map((path: string) => path.slice(normalizedRoot.length + 1)).sort(), [
-            "Frondose.nsis.exe",
-            "Frondose.nsis.exe.sig",
+            "Frondose-windows-x86_64-setup.exe",
+            "Frondose-windows-x86_64-setup.exe.sig",
             "verified-producer-manifest.json",
           ]);
         } else {
@@ -674,9 +674,9 @@ describe("native platform scripts execute signing and cleanup before promotion",
           ),
         );
         assert.deepEqual(normalizedFiles.map((path) => path.slice(outputRoot.length + 1)).sort(), [
+          "Frondose-universal.dmg",
           "Frondose.app.tar.gz",
           "Frondose.app.tar.gz.sig",
-          "Frondose.dmg",
           "verified-producer-manifest.json",
         ]);
       } else if (scenario !== "upload-failure") {

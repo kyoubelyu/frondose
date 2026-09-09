@@ -28,7 +28,7 @@ export function makeScreenshotTool(session: LinkedinSession) {
           // best-effort per cli-primitives.md §screenshot: if read fails, field is omitted
         }
         const base64 = await client.screenshot({ format: "png" });
-        const outPath = out ?? path.join(os.tmpdir(), `mai-shot-${Date.now()}.png`);
+        const outPath = out ?? path.join(os.tmpdir(), `frondose-shot-${Date.now()}.png`);
         writeFileSync(outPath, Buffer.from(base64, "base64"));
         return ok("screenshot", { path: outPath, ...(pageUrl && { pageUrl }) });
       } catch (e) {

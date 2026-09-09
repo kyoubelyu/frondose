@@ -60,11 +60,11 @@ async function sha256(path: string): Promise<string> {
 
 async function refreshIntegrityMetadata(root: string): Promise<void> {
   const artifacts = [
-    "Frondose.dmg",
+    "Frondose-universal.dmg",
     "Frondose.app.tar.gz",
     "Frondose.app.tar.gz.sig",
-    "Frondose.nsis.exe",
-    "Frondose.nsis.exe.sig",
+    "Frondose-windows-x86_64-setup.exe",
+    "Frondose-windows-x86_64-setup.exe.sig",
   ];
   const hashes = await Promise.all(artifacts.map(async (name) => [name, await sha256(join(root, name))] as const));
   await writeFile(join(root, "SHA256SUMS"), `${hashes.map(([name, hash]) => `${hash}  ${name}`).join("\n")}\n`, "utf8");
@@ -97,7 +97,7 @@ async function buildNsisFixture(
     script,
     [
       'Name "Frondose dependency boundary fixture"',
-      `OutFile "${join(root, "Frondose.nsis.exe")}"`,
+      `OutFile "${join(root, "Frondose-windows-x86_64-setup.exe")}"`,
       'Section "Install"',
       'SetOutPath "$INSTDIR\\Frondose.app\\Contents\\Resources"',
       ...(includeCredentials ? [`File /oname=defaultCredentials.generated.json "${credentials}"`] : []),
@@ -122,9 +122,9 @@ async function createDependencyBoundaryFixture(): Promise<string> {
   await writeFile(join(resources, "app.txt"), "credential-free app payload\n", "utf8");
   run("tar", ["-czf", join(root, "Frondose.app.tar.gz"), "Frondose.app"], root);
   await buildNsisFixture(root, "credential-free app payload\n");
-  await writeFile(join(root, "Frondose.dmg"), "not inspected by this dependency-only carrier\n");
+  await writeFile(join(root, "Frondose-universal.dmg"), "not inspected by this dependency-only carrier\n");
   await writeFile(join(root, "Frondose.app.tar.gz.sig"), "updater-signature-macos\n");
-  await writeFile(join(root, "Frondose.nsis.exe.sig"), "updater-signature-windows\n");
+  await writeFile(join(root, "Frondose-windows-x86_64-setup.exe.sig"), "updater-signature-windows\n");
   await writeFile(
     join(root, "latest.json"),
     JSON.stringify({
@@ -135,7 +135,7 @@ async function createDependencyBoundaryFixture(): Promise<string> {
           signature: "updater-signature-macos",
         },
         "windows-x86_64": {
-          url: "https://example.invalid/Frondose.nsis.exe",
+          url: "https://example.invalid/Frondose-windows-x86_64-setup.exe",
           signature: "updater-signature-windows",
         },
       },
@@ -230,10 +230,10 @@ async function createReleaseFixture(): Promise<string> {
   const realNsis = process.env.FRONDOSE_TEST_REAL_NSIS;
   assert.ok(realDmg, "set FRONDOSE_TEST_REAL_DMG to an explicit Tauri-produced DMG fixture");
   assert.ok(realNsis, "set FRONDOSE_TEST_REAL_NSIS to an explicit Tauri-produced NSIS fixture");
-  await cp(realDmg, join(root, "Frondose.dmg"));
-  await cp(realNsis, join(root, "Frondose.nsis.exe"));
+  await cp(realDmg, join(root, "Frondose-universal.dmg"));
+  await cp(realNsis, join(root, "Frondose-windows-x86_64-setup.exe"));
   await writeFile(join(root, "Frondose.app.tar.gz.sig"), "synthetic-updater-signature-mac\n", "utf8");
-  await writeFile(join(root, "Frondose.nsis.exe.sig"), "synthetic-updater-signature-windows\n", "utf8");
+  await writeFile(join(root, "Frondose-windows-x86_64-setup.exe.sig"), "synthetic-updater-signature-windows\n", "utf8");
   await refreshIntegrityMetadata(root);
   await writeFile(
     join(root, "latest.json"),
@@ -249,7 +249,7 @@ async function createReleaseFixture(): Promise<string> {
           signature: "synthetic-updater-signature-mac",
         },
         "windows-x86_64": {
-          url: "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose.nsis.exe",
+          url: "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose-windows-x86_64-setup.exe",
           signature: "synthetic-updater-signature-windows",
         },
       },
@@ -378,21 +378,21 @@ describe("public CI and release policy is structural, provenance-bound and fail 
         ],
         [
           "nsis-extraction",
-          async (root: string) => writeFile(join(root, "Frondose.nsis.exe"), "not an NSIS installer"),
+          async (root: string) => writeFile(join(root, "Frondose-windows-x86_64-setup.exe"), "not an NSIS installer"),
           "extraction_unavailable",
-          "Frondose.nsis.exe",
+          "Frondose-windows-x86_64-setup.exe",
         ],
         [
           "nsis-credentials",
           async (root: string) => buildNsisFixture(root, "credential-free app payload\n", { credentials: false }),
           "missing_payload_member",
-          "Frondose.nsis.exe",
+          "Frondose-windows-x86_64-setup.exe",
         ],
         [
           "nsis-payload",
           async (root: string) => buildNsisFixture(root, "", { payload: false }),
           "missing_payload_member",
-          "Frondose.nsis.exe",
+          "Frondose-windows-x86_64-setup.exe",
         ],
       ] as const) {
         const root = await createDependencyBoundaryFixture();
@@ -442,8 +442,8 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
     async () => {
       // Given the local fixture builder, when run, then each claimed artifact has its real container format before policy code loads.
       const root = await createReleaseFixture();
-      assert.match(run("hdiutil", ["imageinfo", "-plist", join(root, "Frondose.dmg")]), /CUDIFDiskImage/);
-      assert.match(run("file", [join(root, "Frondose.nsis.exe")]), /PE32|MS-DOS executable/i);
+      assert.match(run("hdiutil", ["imageinfo", "-plist", join(root, "Frondose-universal.dmg")]), /CUDIFDiskImage/);
+      assert.match(run("file", [join(root, "Frondose-windows-x86_64-setup.exe")]), /PE32|MS-DOS executable/i);
       assert.match(
         run("tar", ["-tzf", join(root, "Frondose.app.tar.gz")]),
         /Frondose\.app\/Contents\/Resources\/app\.txt/,
@@ -498,7 +498,7 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
           },
         },
       });
-      for (const channel of ["Frondose.app.tar.gz", "Frondose.nsis.exe"] as const) {
+      for (const channel of ["Frondose.app.tar.gz", "Frondose-windows-x86_64-setup.exe"] as const) {
         const root = await createDependencyBoundaryFixture();
         const member = "Frondose.app/Contents/Resources/app.txt";
         if (channel === "Frondose.app.tar.gz") {
@@ -524,7 +524,7 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
           "fresh tar extraction must contribute dependency artifacts",
         );
         assert.ok(
-          actualArtifacts.some((artifact) => artifact.path.startsWith("Frondose.nsis.exe::")),
+          actualArtifacts.some((artifact) => artifact.path.startsWith("Frondose-windows-x86_64-setup.exe::")),
           "fresh NSIS extraction must contribute dependency artifacts",
         );
         assert.ok(
@@ -581,9 +581,9 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
       assert.deepEqual(await inspectPlatformSignatures(signedRoot), { ok: true, findings: [] });
       const updaterMembers = [
         "Frondose.app.tar.gz.sig",
-        "Frondose.nsis.exe.sig",
+        "Frondose-windows-x86_64-setup.exe.sig",
         "Frondose.app.tar.gz",
-        "Frondose.nsis.exe",
+        "Frondose-windows-x86_64-setup.exe",
       ];
       for (const removal of updaterMembers) {
         const clone = await temporaryDirectory("frondose-release4-negative-");
@@ -669,17 +669,17 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
           },
         ],
         [
-          "Frondose.dmg",
+          "Frondose-universal.dmg",
           async (root) => {
-            await cp(platformCanaries.dmg.fixture, join(root, "Frondose.dmg"));
+            await cp(platformCanaries.dmg.fixture, join(root, "Frondose-universal.dmg"));
             await refreshIntegrityMetadata(root);
             return platformCanaries.dmg.member;
           },
         ],
         [
-          "Frondose.nsis.exe",
+          "Frondose-windows-x86_64-setup.exe",
           async (root) => {
-            await cp(platformCanaries.nsis.fixture, join(root, "Frondose.nsis.exe"));
+            await cp(platformCanaries.nsis.fixture, join(root, "Frondose-windows-x86_64-setup.exe"));
             await refreshIntegrityMetadata(root);
             return platformCanaries.nsis.member;
           },
@@ -698,7 +698,7 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
           result.findings.some((finding) => finding.path?.includes(name.split("/")[0] ?? name)),
           `${name} was not inspected`,
         );
-        if (name === "Frondose.dmg" || name === "Frondose.nsis.exe") {
+        if (name === "Frondose-universal.dmg" || name === "Frondose-windows-x86_64-setup.exe") {
           assert.ok(
             result.findings.some(
               (finding) =>
@@ -729,8 +729,8 @@ describe("release inspection reads packaged bytes and controls promotion", () =>
           "hash-mismatch",
           async (root) =>
             writeFile(
-              join(root, "Frondose.dmg"),
-              Buffer.concat([await readFile(join(root, "Frondose.dmg")), Buffer.from("tamper")]),
+              join(root, "Frondose-universal.dmg"),
+              Buffer.concat([await readFile(join(root, "Frondose-universal.dmg")), Buffer.from("tamper")]),
             ),
         ],
         [

@@ -17,7 +17,7 @@ jobs:
       app-tar-sha256: ${{ steps.verified.outputs.app-tar-sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
           cache: npm
@@ -55,7 +55,7 @@ jobs:
       windows-exe-sha256: ${{ steps.verified.outputs.windows-exe-sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
           cache: npm
@@ -96,7 +96,7 @@ jobs:
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-node@1d0ff469b7ec7bdd22bd0b111c95a533f7f4f8fc
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
           cache: npm
@@ -132,7 +132,7 @@ jobs:
           cargo build --release --manifest-path scripts/updater-verifier/Cargo.toml
           key="$(node -e 'const c=require("./src/tauri/src-tauri/tauri.conf.json"); process.stdout.write(Buffer.from(c.plugins.updater.pubkey,"base64").toString("utf8").trim().split(/\r?\n/)[1])')"
           scripts/updater-verifier/target/release/frondose-updater-verifier "$key" build/public-release/Frondose.app.tar.gz build/public-release/Frondose.app.tar.gz.sig
-          scripts/updater-verifier/target/release/frondose-updater-verifier "$key" build/public-release/Frondose.nsis.exe build/public-release/Frondose.nsis.exe.sig
+          scripts/updater-verifier/target/release/frondose-updater-verifier "$key" build/public-release/Frondose-windows-x86_64-setup.exe build/public-release/Frondose-windows-x86_64-setup.exe.sig
           node scripts/public-release-policy.mjs inspect
         env:
           FRONDOSE_RELEASE_DIR: build/public-release
@@ -160,11 +160,11 @@ jobs:
       - uses: actions/attest-build-provenance@520d128c1650ba5e8d51c3d2e39e6b4e5f1e4c4f
         with:
           subject-path: |
-            release/Frondose.dmg
+            release/Frondose-universal.dmg
             release/Frondose.app.tar.gz
             release/Frondose.app.tar.gz.sig
-            release/Frondose.nsis.exe
-            release/Frondose.nsis.exe.sig
+            release/Frondose-windows-x86_64-setup.exe
+            release/Frondose-windows-x86_64-setup.exe.sig
             release/latest.json
             release/SHA256SUMS
             release/sbom.cdx.json

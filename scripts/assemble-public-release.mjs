@@ -6,11 +6,11 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const CANONICAL_FILES = [
-  "Frondose.dmg",
+  "Frondose-universal.dmg",
   "Frondose.app.tar.gz",
   "Frondose.app.tar.gz.sig",
-  "Frondose.nsis.exe",
-  "Frondose.nsis.exe.sig",
+  "Frondose-windows-x86_64-setup.exe",
+  "Frondose-windows-x86_64-setup.exe.sig",
   "latest.json",
   "SHA256SUMS",
   "sbom.cdx.json",
@@ -44,16 +44,16 @@ export async function assemblePublicRelease({
   verifiedSourceSha256,
 }) {
   version = version.replace(/^v/, "");
-  const macDmg = existsSync(join(macosRoot, "Frondose.dmg"))
-    ? exactFile(macosRoot, "Frondose.dmg", /^Frondose\.dmg$/)
+  const macDmg = existsSync(join(macosRoot, "Frondose-universal.dmg"))
+    ? exactFile(macosRoot, "Frondose-universal.dmg", /^Frondose-universal\.dmg$/)
     : exactFile(macosRoot, `Frondose_${version}_universal.dmg`, /^Frondose_.*\.dmg$/);
   const macArchive = exactFile(macosRoot, "Frondose.app.tar.gz", /^Frondose.*\.tar\.gz$/);
   const macSignature = exactFile(macosRoot, "Frondose.app.tar.gz.sig", /^Frondose.*\.tar\.gz\.sig$/);
-  const windowsExe = existsSync(join(windowsRoot, "Frondose.nsis.exe"))
-    ? exactFile(windowsRoot, "Frondose.nsis.exe", /^Frondose\.nsis\.exe$/)
+  const windowsExe = existsSync(join(windowsRoot, "Frondose-windows-x86_64-setup.exe"))
+    ? exactFile(windowsRoot, "Frondose-windows-x86_64-setup.exe", /^Frondose-windows-x86_64-setup\.exe$/)
     : exactFile(windowsRoot, `Frondose_${version}_x64-setup.exe`, /^Frondose_.*\.exe$/);
-  const windowsSignature = existsSync(join(windowsRoot, "Frondose.nsis.exe.sig"))
-    ? exactFile(windowsRoot, "Frondose.nsis.exe.sig", /^Frondose\.nsis\.exe\.sig$/)
+  const windowsSignature = existsSync(join(windowsRoot, "Frondose-windows-x86_64-setup.exe.sig"))
+    ? exactFile(windowsRoot, "Frondose-windows-x86_64-setup.exe.sig", /^Frondose-windows-x86_64-setup\.exe\.sig$/)
     : exactFile(windowsRoot, `Frondose_${version}_x64-setup.exe.sig`, /^Frondose_.*_x64-setup\.exe\.sig$/);
   assertDigest(macDmg, verifiedSourceSha256?.dmg, "macOS DMG");
   assertDigest(macArchive, verifiedSourceSha256?.appTar, "macOS updater archive");
@@ -64,17 +64,17 @@ export async function assemblePublicRelease({
   mkdirSync(staging, { recursive: true });
   try {
     for (const [source, name] of [
-      [macDmg, "Frondose.dmg"],
+      [macDmg, "Frondose-universal.dmg"],
       [macArchive, "Frondose.app.tar.gz"],
       [macSignature, "Frondose.app.tar.gz.sig"],
-      [windowsExe, "Frondose.nsis.exe"],
-      [windowsSignature, "Frondose.nsis.exe.sig"],
+      [windowsExe, "Frondose-windows-x86_64-setup.exe"],
+      [windowsSignature, "Frondose-windows-x86_64-setup.exe.sig"],
     ]) {
       cpSync(source, join(staging, name));
     }
     const baseUrl = `https://github.com/${repository}/releases/latest/download`;
     const macUpdaterSignature = readFileSync(join(staging, "Frondose.app.tar.gz.sig"), "utf8").trim();
-    const windowsUpdaterSignature = readFileSync(join(staging, "Frondose.nsis.exe.sig"), "utf8").trim();
+    const windowsUpdaterSignature = readFileSync(join(staging, "Frondose-windows-x86_64-setup.exe.sig"), "utf8").trim();
     const latest = {
       version,
       notes: `Frondose ${version}`,
@@ -82,7 +82,7 @@ export async function assemblePublicRelease({
       platforms: {
         "darwin-x86_64": { url: `${baseUrl}/Frondose.app.tar.gz`, signature: macUpdaterSignature },
         "darwin-aarch64": { url: `${baseUrl}/Frondose.app.tar.gz`, signature: macUpdaterSignature },
-        "windows-x86_64": { url: `${baseUrl}/Frondose.nsis.exe`, signature: windowsUpdaterSignature },
+        "windows-x86_64": { url: `${baseUrl}/Frondose-windows-x86_64-setup.exe`, signature: windowsUpdaterSignature },
       },
     };
     writeFileSync(join(staging, "latest.json"), `${JSON.stringify(latest, null, 2)}\n`);

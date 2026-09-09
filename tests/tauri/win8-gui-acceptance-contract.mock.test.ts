@@ -218,7 +218,7 @@ function placeholderSidecarEvidence(): SidecarEvidence {
     guiPid: 57040,
     commandPath: PROGRAM_FILES_SIDECAR,
     ownerEnv: "frondose-app",
-    portFile: "C:\\Users\\lenovo\\AppData\\Local\\Temp\\frondose-com.kyoube.frondose-step2\\frondose.port",
+    portFile: "C:\\Users\\user\\AppData\\Local\\Temp\\frondose-com.kyoube.frondose-step2\\frondose.port",
     authenticatedProbeLabel: "true-bearer",
     wrongTokenProbeLabel: "wrong-bearer-placeholder",
     health: { status: 200, ok: true, pid: 57057 },
