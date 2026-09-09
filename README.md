@@ -60,10 +60,14 @@ Requirements: Node ≥ 20, Rust toolchain, Tauri v2 prerequisites
 npm ci
 npm run check          # typecheck
 npm run lint           # biome
+npm run build:tauri    # compile TS + Tauri UI assets (test:fast runs against the built dist/ tree)
 npm run test:fast      # mock test suite
-npm run build:tauri    # compile TS + Tauri UI assets
 cd src/tauri && npx tauri build
 ```
+
+A few tests additionally expect a locally installed Chrome and the Rust
+toolchain; without them those environment-dependent cases fail while the rest
+of the suite stays meaningful.
 
 The native hardware-input addon (`native/`) is optional; the build falls back
 to CDP-only input when the toolchain is unavailable.
@@ -85,7 +89,10 @@ native/                 optional hardware-input native addon (C source)
 See [CONTRIBUTING.md](CONTRIBUTING.md). Tool names and parameter schemas are
 product contract; security boundaries (no shell at the tool layer, allowlisted
 capabilities) are non-negotiable. Report vulnerabilities privately per
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Community expectations live in
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [GOVERNANCE.md](GOVERNANCE.md);
+support scope in [SUPPORT.md](SUPPORT.md); release history in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

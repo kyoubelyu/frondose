@@ -42,18 +42,18 @@ function treeDigests(root) {
 export async function inspectPlatformSignatures(root, tools = {}) {
   const findings = [];
   const app = join(root, "Frondose.app");
-  const dmg = join(root, "Frondose.dmg");
-  const exe = join(root, "Frondose.nsis.exe");
+  const dmg = join(root, "Frondose-universal.dmg");
+  const exe = join(root, "Frondose-windows-x86_64-setup.exe");
   const archive = join(root, "Frondose.app.tar.gz");
   const archiveSig = join(root, "Frondose.app.tar.gz.sig");
-  const exeSig = join(root, "Frondose.nsis.exe.sig");
+  const exeSig = join(root, "Frondose-windows-x86_64-setup.exe.sig");
   if (![app, dmg, exe, archive, archiveSig, exeSig].every(existsSync)) {
     return {
       ok: false,
       findings: [
         {
           kind: "signed_candidate",
-          message: "candidate requires Frondose.app, Frondose.dmg, Frondose.nsis.exe and the updater pairs (.tar.gz(+.sig), .nsis.exe.sig)",
+          message: "candidate requires Frondose.app, Frondose-universal.dmg, Frondose-windows-x86_64-setup.exe and the updater pairs (.tar.gz(+.sig), .nsis.exe.sig)",
         },
       ],
     };
@@ -246,11 +246,11 @@ export function validatePublicBuildGraph({ ci, release, packageJson }) {
 }
 
 const PUBLIC_RELEASE_FILES = [
-  "Frondose.dmg",
+  "Frondose-universal.dmg",
   "Frondose.app.tar.gz",
   "Frondose.app.tar.gz.sig",
-  "Frondose.nsis.exe",
-  "Frondose.nsis.exe.sig",
+  "Frondose-windows-x86_64-setup.exe",
+  "Frondose-windows-x86_64-setup.exe.sig",
   "latest.json",
   "SHA256SUMS",
   "sbom.cdx.json",
@@ -395,7 +395,7 @@ export function validatePublicReleaseGraph(input) {
   for (const marker of ["TAURI_SIGNING_PRIVATE_KEY", "frondose-updater-verifier"]) {
     requireText(findings, windowsScript, marker);
   }
-  requireText(findings, assembler, "Frondose.nsis.exe.sig");
+  requireText(findings, assembler, "Frondose-windows-x86_64-setup.exe.sig");
   return { ok: findings.length === 0, findings };
 }
 
@@ -405,7 +405,7 @@ export async function verifyUpdaterSignatures(root, publicKey, tools = {}) {
   const execute = tools.run ?? (async (command, args) => run(command, args));
   for (const [archive, signature] of [
     ["Frondose.app.tar.gz", "Frondose.app.tar.gz.sig"],
-    ["Frondose.nsis.exe", "Frondose.nsis.exe.sig"],
+    ["Frondose-windows-x86_64-setup.exe", "Frondose-windows-x86_64-setup.exe.sig"],
   ]) {
     const archivePath = join(root, archive);
     const signaturePath = join(root, signature);

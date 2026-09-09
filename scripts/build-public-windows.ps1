@@ -59,12 +59,12 @@ try {
 
   if (Test-Path $outputRoot) { Remove-Item -LiteralPath $outputRoot -Recurse -Force }
   New-Item -ItemType Directory -Force $outputRoot | Out-Null
-  Copy-Item -LiteralPath $installer -Destination (Join-Path $outputRoot "Frondose.nsis.exe") -Force
-  Copy-Item -LiteralPath $updaterSignature -Destination (Join-Path $outputRoot "Frondose.nsis.exe.sig") -Force
+  Copy-Item -LiteralPath $installer -Destination (Join-Path $outputRoot "Frondose-windows-x86_64-setup.exe") -Force
+  Copy-Item -LiteralPath $updaterSignature -Destination (Join-Path $outputRoot "Frondose-windows-x86_64-setup.exe.sig") -Force
   $manifest = [ordered]@{
     platform = "windows-x86_64"
-    files = @("Frondose.nsis.exe", "Frondose.nsis.exe.sig")
-    sha256 = [ordered]@{ windowsExe = (Get-FileHash -Algorithm SHA256 (Join-Path $outputRoot "Frondose.nsis.exe")).Hash.ToLowerInvariant() }
+    files = @("Frondose-windows-x86_64-setup.exe", "Frondose-windows-x86_64-setup.exe.sig")
+    sha256 = [ordered]@{ windowsExe = (Get-FileHash -Algorithm SHA256 (Join-Path $outputRoot "Frondose-windows-x86_64-setup.exe")).Hash.ToLowerInvariant() }
   }
   $manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 (Join-Path $outputRoot "verified-producer-manifest.json")
 } catch {

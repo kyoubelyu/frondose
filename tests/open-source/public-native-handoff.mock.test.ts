@@ -109,15 +109,15 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
       const root = await temporaryDirectory(`frondose-updater-crypto-${mutation}-`);
       await writeFile(join(root, "Frondose.app.tar.gz"), "mac archive bytes\n");
       await writeFile(join(root, "Frondose.app.tar.gz.sig"), "mac signature bytes\n");
-      await writeFile(join(root, "Frondose.nsis.exe"), "windows installer bytes\n");
-      await writeFile(join(root, "Frondose.nsis.exe.sig"), "windows signature bytes\n");
+      await writeFile(join(root, "Frondose-windows-x86_64-setup.exe"), "windows installer bytes\n");
+      await writeFile(join(root, "Frondose-windows-x86_64-setup.exe.sig"), "windows signature bytes\n");
       const publicKey = mutation === "changed-key" ? "changed-public-key" : "pinned-public-key";
       if (mutation === "mac-archive") await writeFile(join(root, "Frondose.app.tar.gz"), "changed mac bytes\n");
       if (mutation === "mac-signature")
         await writeFile(join(root, "Frondose.app.tar.gz.sig"), "foreign mac signature\n");
-      if (mutation === "windows-exe") await writeFile(join(root, "Frondose.nsis.exe"), "changed windows bytes\n");
+      if (mutation === "windows-exe") await writeFile(join(root, "Frondose-windows-x86_64-setup.exe"), "changed windows bytes\n");
       if (mutation === "windows-signature")
-        await writeFile(join(root, "Frondose.nsis.exe.sig"), "foreign windows signature\n");
+        await writeFile(join(root, "Frondose-windows-x86_64-setup.exe.sig"), "foreign windows signature\n");
       const commands: string[] = [];
       const result = await policy.verifyUpdaterSignatures(root, publicKey, {
         async run(command, args) {
@@ -136,7 +136,7 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
         `verify-updater-signature ${publicKey} ${join(root, "Frondose.app.tar.gz")} ${join(root, "Frondose.app.tar.gz.sig")}`,
         ...(["green", "windows-exe", "windows-signature"].includes(mutation)
           ? [
-              `verify-updater-signature ${publicKey} ${join(root, "Frondose.nsis.exe")} ${join(root, "Frondose.nsis.exe.sig")}`,
+              `verify-updater-signature ${publicKey} ${join(root, "Frondose-windows-x86_64-setup.exe")} ${join(root, "Frondose-windows-x86_64-setup.exe.sig")}`,
             ]
           : []),
       ]);
@@ -149,8 +149,8 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
     for (const partial of ["empty", "app-only", "dmg-only", "exe-only"] as const) {
       const root = await temporaryDirectory(`frondose-native-partial-${partial}-`);
       if (partial === "app-only") await mkdir(join(root, "Frondose.app", "Contents"), { recursive: true });
-      if (partial === "dmg-only") await writeFile(join(root, "Frondose.dmg"), "dmg");
-      if (partial === "exe-only") await writeFile(join(root, "Frondose.nsis.exe"), "exe");
+      if (partial === "dmg-only") await writeFile(join(root, "Frondose-universal.dmg"), "dmg");
+      if (partial === "exe-only") await writeFile(join(root, "Frondose-windows-x86_64-setup.exe"), "exe");
       const commands: string[] = [];
       const result = await policy.inspectPlatformSignatures(root, {
         async run(command, args) {
@@ -170,13 +170,13 @@ describe("one exact artifact set reaches inspection, attestation and draft", () 
       const app = join(root, "Frondose.app");
       await mkdir(join(app, "Contents", "Resources"), { recursive: true });
       await writeFile(join(app, "Contents", "Resources", "payload.txt"), "verified app bytes\n");
-      await writeFile(join(root, "Frondose.dmg"), "fixture dmg bytes\n");
-      await writeFile(join(root, "Frondose.nsis.exe"), "fixture exe bytes\n");
+      await writeFile(join(root, "Frondose-universal.dmg"), "fixture dmg bytes\n");
+      await writeFile(join(root, "Frondose-windows-x86_64-setup.exe"), "fixture exe bytes\n");
       // Updater pairs are REQUIRED members under the ad-hoc + minisign contract (critic BLOCKER-1):
       // ordinary mutations carry complete pairs; only the "updater-pair" mutation removes one member.
       await writeFile(join(root, "Frondose.app.tar.gz"), "fixture updater archive\n");
       await writeFile(join(root, "Frondose.app.tar.gz.sig"), "fixture updater signature\n");
-      await writeFile(join(root, "Frondose.nsis.exe.sig"), "fixture exe signature\n");
+      await writeFile(join(root, "Frondose-windows-x86_64-setup.exe.sig"), "fixture exe signature\n");
       if (mutation === "updater-pair") {
         await rm(join(root, "Frondose.app.tar.gz.sig"));
       }

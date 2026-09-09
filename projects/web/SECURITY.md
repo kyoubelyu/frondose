@@ -2,8 +2,10 @@
 
 ## Reporting a vulnerability
 
-Please report security vulnerabilities by opening a private issue or contacting
-the maintainers directly. Do not post exploit details in public issues.
+Please report security vulnerabilities privately via GitHub's private
+vulnerability reporting for the main repository
+(https://github.com/kyoubelyu/frondose/security/advisories/new).
+Do not post exploit details in public issues.
 
 ## Supported versions
 

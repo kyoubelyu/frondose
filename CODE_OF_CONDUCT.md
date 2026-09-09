@@ -36,8 +36,9 @@ Examples of unacceptable behavior:
 
 Community leaders are responsible for clarifying and enforcing our standards.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders. All complaints will be reviewed and
-investigated promptly and fairly.
+reported to the community leaders responsible for enforcement, via the
+maintainer's GitHub profile (https://github.com/kyoubelyu). All complaints
+will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 

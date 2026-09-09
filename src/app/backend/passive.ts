@@ -187,7 +187,7 @@ export function createPassiveHandlers(
     passiveMessages.push({ role: "user", content: prompt });
     const turnId = randomUUID();
     // P-57f (D-DOGFOOD-06): real-time ticker feedback — passive turns were silent.
-    passiveTicker(`mai · observing ${eventType}: ${passiveRefSummary(eventType, ctx)}…`);
+    passiveTicker(`frondose · observing ${eventType}: ${passiveRefSummary(eventType, ctx)}…`);
     try {
       // P-AUTO-8 (M1, F-2): passive analysis is ALWAYS Magical context. After the boot split
       // removed the mode fragment from `deps.system`, reading `deps.system` would drop the

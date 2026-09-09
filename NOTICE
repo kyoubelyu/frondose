@@ -6,7 +6,7 @@ licensed under their respective licenses:
 
 - The Vercel AI SDK (https://www.npmjs.com/package/ai) — Apache-2.0
 - The Pi AI agent runtime (@earendil-works/pi-ai) — its package license
-- The Model Context Protocol SDK (@modelcontextprotocol/sdk) — MIT
+- The Pi agent core (@earendil-works/pi-agent-core) — its package license
 - chrome-remote-interface — MIT
 - better-sqlite3 — MIT
 - Tauri (https://tauri.app) — Apache-2.0 / MIT

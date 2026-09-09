@@ -79,7 +79,7 @@ mounted=0
 
 [[ ! -e "$output_root" ]] || { echo "[public-macos] output path must not already exist" >&2; exit 68; }
 mkdir -p "$output_root"
-cp "$dmg" "$output_root/Frondose.dmg"
+cp "$dmg" "$output_root/Frondose-universal.dmg"
 cp "$archive" "$output_root/Frondose.app.tar.gz"
 cp "$signature" "$output_root/Frondose.app.tar.gz.sig"
 node - "$output_root" <<'NODE'
@@ -90,7 +90,7 @@ const root = process.argv[2];
 const digest = (name) => createHash("sha256").update(fs.readFileSync(path.join(root, name))).digest("hex");
 fs.writeFileSync(path.join(root, "verified-producer-manifest.json"), `${JSON.stringify({
   platform: "macos-universal",
-  files: ["Frondose.dmg", "Frondose.app.tar.gz", "Frondose.app.tar.gz.sig"],
-  sha256: { dmg: digest("Frondose.dmg"), appTar: digest("Frondose.app.tar.gz") },
+  files: ["Frondose-universal.dmg", "Frondose.app.tar.gz", "Frondose.app.tar.gz.sig"],
+  sha256: { dmg: digest("Frondose-universal.dmg"), appTar: digest("Frondose.app.tar.gz") },
 }, null, 2)}\n`);
 NODE

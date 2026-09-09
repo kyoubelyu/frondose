@@ -336,7 +336,7 @@ export async function runOneTurn(state: ServeState, deps: ServeDeps, args: TurnA
         const ctxId = state.overlayContextId;
         const client = deps.session.getClient();
         if (ctxId !== undefined && client) {
-          const text = JSON.stringify(`mai \xb7 ${toolName}\u2026`);
+          const text = JSON.stringify(`frondose \xb7 ${toolName}\u2026`);
           void callInOverlay(client.handle, ctxId, `function() { window.__frondoseUpdateTicker(${text}); }`);
         }
       },
