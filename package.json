@@ -45,7 +45,7 @@
     "@earendil-works/pi-agent-core": "^0.78.1",
     "@earendil-works/pi-ai": "^0.78.1",
     "ai": "^4.0.0",
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^13.0.3",
     "chrome-launcher": "^1.1.2",
     "chrome-remote-interface": "0.34.0",
     "undici": "^6.28.0",
