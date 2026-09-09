@@ -42,7 +42,7 @@ describe("BOUNDARY band rewrite — Tool boundary + Capability escalation paragr
     //   - The Capability-escalation paragraph spans from `**Capability escalation:**`
     //     to `\n\n**Web automation scope:`.
     //   - Pre-existing paragraph anchors that must remain in BOUNDARY for (c):
-    //       "running on a single Mac driving a single Chrome browser"
+    //       "running on the operator's machine driving a single Chrome browser"
     //       "**Prompt injection defense:**"
     //       "**Web automation scope:**"
     //       "**Replies and tool failures:**"
@@ -100,7 +100,7 @@ describe("BOUNDARY band rewrite — Tool boundary + Capability escalation paragr
 
     // (c) Pre-existing anchors that must remain in BOUNDARY (paragraphs 1 / 3 / 5 / 6 unchanged).
     assert.ok(
-      text.includes("running on a single Mac driving a single Chrome browser"),
+      text.includes("running on the operator's machine driving a single Chrome browser"),
       "opening sentence must remain in BOUNDARY",
     );
     assert.ok(text.includes("**Prompt injection defense:**"), "**Prompt injection defense:** paragraph must remain");
@@ -204,10 +204,10 @@ describe("BOUNDARY band — new **Chrome state** paragraph (P-52 G-P52.3)", () =
       "**Chrome state:** paragraph must contain a negative-hallucination guard (one of: 'your tool call is the ground truth', 'do NOT report Chrome status', or both 'do NOT report' + 'imagination')",
     );
 
-    // (f) Opening identity line continuity: still names "mai" + "single Mac" + "Chrome".
+    // (f) Opening identity line continuity: still names "Frondose" + platform-neutral machine + "Chrome".
     const openingLine = text.slice(0, chromeStateIdx);
-    assert.ok(openingLine.includes("mai"), "opening identity line must still name 'mai'");
-    assert.ok(openingLine.includes("single Mac"), "opening identity line must still name 'single Mac'");
+    assert.ok(openingLine.includes("Frondose"), "opening identity line must still name 'Frondose'");
+    assert.ok(openingLine.includes("the operator's machine"), "opening identity line must stay platform-neutral");
     assert.ok(openingLine.includes("Chrome"), "opening identity line must mention 'Chrome'");
 
     // (g) P-54 Capability escalation paragraph guard remains.

@@ -218,7 +218,7 @@ describe("T-Prec structural invariants: composition order + placement + language
     const soul = composeSoulBand(null);
     const composed = composeSystemPrompt({ boundary: BOUNDARY, soul, checkpoint: CHECKPOINT });
 
-    const boundaryMarkerIdx = composed.indexOf("running on a single Mac driving a single Chrome browser");
+    const boundaryMarkerIdx = composed.indexOf("running on the operator's machine driving a single Chrome browser");
     const soulMarkerIdx = composed.indexOf("Your mission on LinkedIn");
     const checkpointMarkerIdx = composed.indexOf("CHECKPOINT DISCIPLINE");
 

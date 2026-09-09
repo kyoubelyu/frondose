@@ -31,11 +31,11 @@ const REPO = process.cwd();
 const POLICY = join(REPO, "scripts", "public-release-policy.mjs");
 const ASSEMBLER = join(REPO, "scripts", "assemble-public-release.mjs");
 const CANONICAL_FILES = [
-  "Frondose.dmg",
+  "Frondose-universal.dmg",
   "Frondose.app.tar.gz",
   "Frondose.app.tar.gz.sig",
-  "Frondose.nsis.exe",
-  "Frondose.nsis.exe.sig",
+  "Frondose-windows-x86_64-setup.exe",
+  "Frondose-windows-x86_64-setup.exe.sig",
   "latest.json",
   "SHA256SUMS",
   "sbom.cdx.json",
@@ -114,7 +114,7 @@ describe("one exact artifact set is preserved by production assembly", () => {
       CANONICAL_FILES,
     );
     for (const file of CANONICAL_FILES) assert.equal(manifest.sha256[file], await sha256(join(outputRoot, file)), file);
-    assert.equal(await sha256(join(outputRoot, "Frondose.nsis.exe")), producer.verifiedSourceSha256.windowsExe);
+    assert.equal(await sha256(join(outputRoot, "Frondose-windows-x86_64-setup.exe")), producer.verifiedSourceSha256.windowsExe);
     const latest = JSON.parse(await readFile(join(outputRoot, "latest.json"), "utf8"));
     assert.deepEqual(Object.keys(latest.platforms), ["darwin-x86_64", "darwin-aarch64", "windows-x86_64"]);
     for (const platform of ["darwin-x86_64", "darwin-aarch64"]) {
@@ -129,24 +129,24 @@ describe("one exact artifact set is preserved by production assembly", () => {
     }
     assert.equal(
       latest.platforms["windows-x86_64"].url,
-      "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose.nsis.exe",
+      "https://github.com/kyoubelyu/frondose/releases/latest/download/Frondose-windows-x86_64-setup.exe",
     );
     assert.equal(
       latest.platforms["windows-x86_64"].signature,
-      (await readFile(join(outputRoot, "Frondose.nsis.exe.sig"), "utf8")).trim(),
+      (await readFile(join(outputRoot, "Frondose-windows-x86_64-setup.exe.sig"), "utf8")).trim(),
     );
     const policy = (await import(`${pathToFileURL(POLICY).href}?release-handoff`)) as ReleasePolicyModule;
     const workflow = await readFile(join(REPO, ".github", "workflows", "release.yml"), "utf8");
     assert.deepEqual(await policy.validatePublicReleaseHandoff(outputRoot, workflow), { ok: true, findings: [] });
     for (const list of ["attestation-subjects.txt", "draft-inputs.txt"] as const) {
       const original = await readFile(join(outputRoot, list), "utf8");
-      await writeFile(join(outputRoot, list), original.replace("Frondose.nsis.exe\n", ""));
+      await writeFile(join(outputRoot, list), original.replace("Frondose-windows-x86_64-setup.exe\n", ""));
       assert.equal((await policy.validatePublicReleaseHandoff(outputRoot, workflow)).ok, false, list);
       await writeFile(join(outputRoot, list), original);
     }
-    const originalExe = await readFile(join(outputRoot, "Frondose.nsis.exe"));
+    const originalExe = await readFile(join(outputRoot, "Frondose-windows-x86_64-setup.exe"));
     await writeFile(
-      join(outputRoot, "Frondose.nsis.exe"),
+      join(outputRoot, "Frondose-windows-x86_64-setup.exe"),
       Buffer.concat([originalExe, Buffer.from("post-inspection mutation")]),
     );
     assert.equal(
@@ -154,7 +154,7 @@ describe("one exact artifact set is preserved by production assembly", () => {
       false,
       "normalized byte substitution",
     );
-    await writeFile(join(outputRoot, "Frondose.nsis.exe"), originalExe);
+    await writeFile(join(outputRoot, "Frondose-windows-x86_64-setup.exe"), originalExe);
     for (const mutation of [
       "missing-exe",
       "stale-exe",

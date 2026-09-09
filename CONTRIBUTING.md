@@ -21,8 +21,9 @@ allowlisted.
 
 1. Open an issue describing the problem and the expected behavior.
 2. Branch from `main`, keep changes surgical.
-3. Run `npm run check`, `npm run lint`, and `npm run test:fast` before
-   submitting.
+3. Run `npm run check`, `npm run lint`, `npm run build:tauri`, and
+   `npm run test:fast` before submitting (`test:fast` expects the built
+   `dist/` tree).
 4. Open a pull request; maintainers review and merge.
 
 ## Security

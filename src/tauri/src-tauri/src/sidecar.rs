@@ -64,7 +64,7 @@ pub(crate) async fn spawn_frondose_serve(
     }
     let child = command
         .spawn()
-        .map_err(|e| format!("spawn mai sidecar: {}", e))?;
+        .map_err(|e| format!("spawn frondose sidecar: {}", e))?;
     Ok(child)
 }
 

@@ -1,4 +1,6 @@
 import type { ChildProcess } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Options as ChromeOptions, Launcher } from "chrome-launcher";
 
 export interface BrowserHandleLike {
@@ -267,7 +269,11 @@ export async function acquireChrome(
   options: ChromeOptions,
   onSpawn: (handle: BrowserHandleLike) => void,
 ): Promise<void> {
-  const launcher = new Launcher({ ...options, handleSIGINT: false });
+  // Explicit temp userDataDir: chrome-launcher's derived default resolves a
+  // Windows-style profile path with undefined drive/user on WSL, creating a
+  // literal `undefined:/Users/undefined/...` directory under the repo root.
+  const userDataDir = options.userDataDir ?? join(tmpdir(), `frondose-test-chrome-${process.pid}`);
+  const launcher = new Launcher({ ...options, userDataDir, handleSIGINT: false });
   let settled = false;
   const outcome = launcher.launch().then(
     () => ({ ok: true as const }),

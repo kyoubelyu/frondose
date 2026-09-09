@@ -15,7 +15,7 @@ export function handleGetEvents(
   // the parent's kill failed — halt the cron loop (cronEnabled=false; cron.tick() early-
   // returns) AND abort any in-flight turn. The grace window tolerates the subscriber's
   // ~1s reconnect (main.rs run_sse_subscriber) so a transient blip never stops a live
-  // session. Headless `mai serve` (cron, no SSE client) never connects → never triggers.
+  // session. Headless serve (cron, no SSE client) never connects → never triggers.
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
