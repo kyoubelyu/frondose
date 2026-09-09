@@ -228,6 +228,13 @@ describe("scope — production write-range confined to the allowed paths (G-PY2.
       cwd: REPO,
       encoding: "utf8",
     }).trim();
+    if (!sha) {
+      const shallow = spawnSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: REPO, encoding: "utf8" });
+      if (shallow.status === 0 && shallow.stdout.trim() === "true") {
+        assert.ok(true, "shallow checkout (e.g. CI depth=1) has no searchable history — committed-diff pin skipped");
+        return;
+      }
+    }
     assert.ok(sha, "the P-Y2.2a commit must be findable by message");
     const raw = execSync(`git show --name-only --format= ${sha}`, { cwd: REPO, encoding: "utf8" });
     const paths = raw

@@ -144,18 +144,23 @@ describe("P-EXT-SEARCH web_search tool — key resolution and routing", () => {
   });
 
   it("T-Search.Tool.1: web_search stays registered with the unchanged {query, maxResults} schema", async () => {
-    // Given: the full tool registry.
-    assert.ok(makeAllTools);
-    const tools = makeAllTools();
-    // Then: web_search is present with the unchanged schema and the envelope passes through.
-    assert.ok("web_search" in tools);
-    const tool = tools.web_search as WebSearchTool;
-    const parsed = tool.parameters.safeParse({ query: "openai", maxResults: 10 });
-    assert.equal(parsed.success, true);
-    const parsedBad = tool.parameters.safeParse({ query: "x", maxResults: 11 });
-    assert.equal(parsedBad.success, false);
-    const result = (await execute({ query: "openai", maxResults: 5 })) as { ok: boolean };
-    assert.equal(result.ok, true);
-    assert.equal((calls[0] as { maxResults?: number }).maxResults, 5);
+    // Given: the full tool registry under an isolated home with a persisted key (the
+    // tool routes through key resolution BEFORE the mocked client — without a key this
+    // test silently depended on the developer machine's ambient ~/.frondose state).
+    await isolatedHome(async () => {
+      writeSearchConfig({ braveApiKey: RAW_BRAVE_KEY }, DEFAULT_SEARCH_CONFIG_PATH());
+      assert.ok(makeAllTools);
+      const tools = makeAllTools();
+      // Then: web_search is present with the unchanged schema and the envelope passes through.
+      assert.ok("web_search" in tools);
+      const tool = tools.web_search as WebSearchTool;
+      const parsed = tool.parameters.safeParse({ query: "openai", maxResults: 10 });
+      assert.equal(parsed.success, true);
+      const parsedBad = tool.parameters.safeParse({ query: "x", maxResults: 11 });
+      assert.equal(parsedBad.success, false);
+      const result = (await execute({ query: "openai", maxResults: 5 })) as { ok: boolean };
+      assert.equal(result.ok, true);
+      assert.equal((calls[0] as { maxResults?: number }).maxResults, 5);
+    });
   });
 });

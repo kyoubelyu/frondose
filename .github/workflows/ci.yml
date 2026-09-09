@@ -11,8 +11,19 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      # The schedule/cron mock tests compute against the operator's local clock
+      # (UTC+8); pin the runner to the same zone so next-run math matches.
+      TZ: Asia/Shanghai
+      # ubuntu-latest ships Google Chrome at a fixed path; make it explicit for
+      # chrome-launcher in the browser-owning mock tests.
+      CHROME_PATH: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          # Full history: overlay/write-range contract tests pin committed diffs
+          # by commit message (a depth=1 checkout has no searchable history).
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -20,6 +31,12 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run lint
+      # Linux system deps for the Rust fixture tests (glib/gtk via pkg-config) and
+      # ripgrep for the release-policy scan tests.
+      - run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev ripgrep
+      # Prime the cargo registry cache (online) so the hermetic `cargo test
+      # --offline` fixtures (serde_json at the lockfile-pinned version) resolve.
+      - run: cargo fetch --locked --manifest-path src/tauri/src-tauri/Cargo.toml
       # T-WIN2.2b runs the real chmod-dist script against the built dist/ tree —
       # the mock suite contract requires a prior build (P-OSS-SINGLE-REPO).
       - run: npm run build
