@@ -1,99 +1,103 @@
 # Frondose
 
-Frondose is an app-only, LinkedIn-primary autonomous sales agent delivered as a
-Tauri desktop application (`Frondose.app` / `Frondose.exe`). It drives a real
-Chrome browser through an in-process CDP layer, uses the Vercel AI SDK for its
-agent loop, and keeps memory in SQLite — with an approval-gated safety model
-(Manual / Magical / Auto modes).
+Frondose is a desktop app that runs a sales agent against your own LinkedIn
+account. You bring an LLM API key and a description of how you sell. The agent
+reads pages through a real Chrome browser, remembers people and companies in a
+local database, and asks for approval before it sends anything on your behalf.
 
-- **Bring your own LLM.** Frondose speaks to exactly one custom
-  OpenAI-compatible endpoint (e.g. a DeepSeek-style custom URL). No official
-  vendor SDK or direct Anthropic/OpenAI call exists in the runtime.
-- **Real browser, real pages.** An embedded CDP + Chrome stealth layer drives
-  your own Chrome profile against your own account. Browser tools work on any
-  HTTPS page.
-- **Fail-closed tool layer.** The agent tool surface performs no shell
-  execution and no arbitrary file I/O; every external capability is explicitly
-  allowlisted.
-- **Local data.** Identity, memory, audit trail, and configuration live in
-  your own user directory (`~/.frondose`), never in a cloud.
+The compiled app is the product. This repository holds its source.
+
+## What it does
+
+- Watches the LinkedIn pages you browse and extracts people into a local
+  SQLite database.
+- Scores people against your positioning, drafts outreach, and keeps a ledger
+  of every action it took.
+- Runs on a schedule if you allow it, with rate caps and an approval gate
+  before any outbound action.
+- Works on macOS and Windows.
 
 ## Install
 
-Download the latest installer from
+Download an installer from
 [GitHub Releases](https://github.com/kyoubelyu/frondose/releases/latest):
 
 - macOS: `Frondose-universal.dmg`
 - Windows: `Frondose-windows-x86_64-setup.exe`
 
-The app updates itself through the built-in updater, signed with the Tauri
-updater's minisign key. macOS binaries are ad-hoc codesigned; on first launch,
-Gatekeeper or SmartScreen may ask you to allow the app explicitly
-(System Settings → Privacy & Security → Open Anyway, or `xattr -cr` on the
-downloaded bundle).
+The app updates itself through a signed update channel. macOS builds are
+ad-hoc codesigned, so Gatekeeper will ask you to approve the first launch
+(System Settings, Privacy & Security, Open Anyway, or `xattr -cr` on the
+downloaded file).
 
 ## Configuration
 
-On first launch, configure in the app's Settings:
+On first launch, Settings asks for:
 
-1. The custom LLM provider URL, model, and API key (BYOK).
-2. Your identity and soul context (the agent's sales worldview).
-3. Optional extras: Brave Search API key (web search), Telegram channel
-   (`telegram_notify`), and GitHub issue output (`gh_issue`).
+1. An OpenAI-compatible endpoint URL, model name, and API key. Frondose talks
+   to exactly one custom endpoint, such as a DeepSeek-compatible service. It
+   does not call Anthropic, OpenAI, or any other vendor directly.
+2. Your identity and sales context. The agent sells as you, so it needs to
+   know how you position yourself.
+3. Optional: a Brave Search API key, a Telegram bot token, and a GitHub token
+   for issue output.
 
-Unconfigured capabilities degrade gracefully — web search returns
-`missing_config`, output tools stay silent — and never block the core agent.
+Anything unconfigured degrades gracefully. Web search reports
+`missing_config`, output tools stay quiet, and the core agent keeps working.
+Your data lives under `~/.frondose` on your machine.
 
 ## Usage modes
 
-- **Manual** — you approve every outbound action.
-- **Magical** — read-only observation with durable local state, no outbound.
-- **Auto** — bounded autonomous runs with per-run outbound approval gates and
-  a persisted ledger of every action.
+- **Manual** approves every outbound action before it happens. Drafts wait,
+  you confirm, then it sends.
+- **Magical** only watches. It reads pages you visit and writes to its own
+  local database. No messages, no clicks that leave your machine.
+- **Auto** runs on a schedule within bounds you set: an approval gate for
+  outbound actions, per-run caps, and a persisted ledger of everything it
+  did.
 
 ## Building from source
 
-Requirements: Node ≥ 20, Rust toolchain, Tauri v2 prerequisites
-(https://tauri.app), and the pinned npm dependencies.
+Requirements: Node 20 or newer, the Rust toolchain, Tauri v2 prerequisites
+(https://tauri.app), and a local Chrome for a handful of tests.
 
 ```bash
 npm ci
 npm run check          # typecheck
 npm run lint           # biome
-npm run build:tauri    # compile TS + Tauri UI assets (test:fast runs against the built dist/ tree)
+npm run build:tauri    # compile TS + Tauri UI assets
 npm run test:fast      # mock test suite
 cd src/tauri && npx tauri build
 ```
 
-A few tests additionally expect a locally installed Chrome and the Rust
-toolchain; without them those environment-dependent cases fail while the rest
-of the suite stays meaningful.
-
-The native hardware-input addon (`native/`) is optional; the build falls back
-to CDP-only input when the toolchain is unavailable.
+`test:fast` expects the built `dist/` tree, and a few of its tests need
+Chrome and cargo. The native hardware-input addon (`native/`) is optional;
+without its toolchain the build falls back to CDP-only input.
 
 ## Repository layout
 
 ```
-src/                    app-owned backend + agent/tools/persistence (TypeScript)
+src/                    agent, tools, persistence, sidecar backend (TypeScript)
 src/tauri/src-tauri/    Tauri backend (Rust)
-src/tauri/ui/           app UI (React/TS)
-projects/web/           public landing/download site (standalone static page)
-scripts/                build, test, and public-release verification tooling
-tests/                  mock/contract test suites (BDD-light)
-native/                 optional hardware-input native addon (C source)
+src/tauri/ui/           app UI (React/TypeScript)
+projects/web/           landing page (standalone static site)
+scripts/                build, test, and release tooling
+tests/                  mock and contract test suites
+native/                 optional hardware-input addon (C)
 ```
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Tool names and parameter schemas are
-product contract; security boundaries (no shell at the tool layer, allowlisted
-capabilities) are non-negotiable. Report vulnerabilities privately per
-[SECURITY.md](SECURITY.md). Community expectations live in
+product contract. The security boundaries are not negotiable: the agent layer
+runs no shell commands and does no arbitrary file I/O. Report vulnerabilities
+privately per [SECURITY.md](SECURITY.md). Community expectations live in
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [GOVERNANCE.md](GOVERNANCE.md);
-support scope in [SUPPORT.md](SUPPORT.md); release history in
-[CHANGELOG.md](CHANGELOG.md).
+release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE). Use, study, change, and share this
+software for noncommercial purposes; commercial use requires the author's
+permission. Third-party packages keep their own licenses, listed in
+[NOTICE](NOTICE).

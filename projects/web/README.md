@@ -15,7 +15,7 @@ Release assets:
 ```text
 index.html          landing/download page (standalone)
 README.md           this file
-LICENSE             Apache-2.0
+LICENSE             PolyForm Noncommercial 1.0.0
 SECURITY.md         security policy
 tests/              focused landing/download-link tests
 ```

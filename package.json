@@ -3,7 +3,7 @@
   "version": "0.5.26",
   "description": "Frondose — LinkedIn-primary autonomous sales agent (Tauri desktop app). The operator product is the compiled Frondose.app, not this npm package; no npm publication.",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "files": [
     "dist",
