@@ -41,7 +41,7 @@ jobs:
           echo "dmg-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.dmg')" >> "$GITHUB_OUTPUT"
           echo "app-tar-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.appTar')" >> "$GITHUB_OUTPUT"
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: public-macos-producer
           path: build/public-macos
@@ -83,7 +83,7 @@ jobs:
           $manifest = Get-Content -Raw build/public-windows/verified-producer-manifest.json | ConvertFrom-Json
           "windows-exe-sha256=$($manifest.sha256.windowsExe)" >> $env:GITHUB_OUTPUT
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: public-windows-producer
           path: build/public-windows
@@ -137,7 +137,7 @@ jobs:
         env:
           FRONDOSE_RELEASE_DIR: build/public-release
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b7f698394829c2a0cc481feaf54
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: public-release-candidate
           path: build/public-release
@@ -157,7 +157,7 @@ jobs:
           path: release
       - name: Confirm attestation-subjects.txt is canonical
         run: test "$(wc -l < release/attestation-subjects.txt)" -eq 9
-      - uses: actions/attest-build-provenance@520d128c1650ba5e8d51c3d2e39e6b4e5f1e4c4f
+      - uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4
         with:
           subject-path: |
             release/Frondose-universal.dmg

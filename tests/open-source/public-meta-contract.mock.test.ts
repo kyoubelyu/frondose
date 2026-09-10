@@ -20,7 +20,7 @@ function atLeast(actual: string, minimum: [number, number, number]): boolean {
 }
 
 describe("public repository metadata, CI and release gates are complete", () => {
-  it("T-OS.Meta.1: license and community/security/governance files exist and package metadata is Apache-2.0", async () => {
+  it("T-OS.Meta.1: license and community/security/governance files exist and package metadata is PolyForm Noncommercial", async () => {
     // Given the publication candidate, when its root/community surface is inspected, then every required governance artifact exists.
     const required = [
       "LICENSE",
@@ -38,7 +38,10 @@ describe("public repository metadata, CI and release gates are complete", () => 
     ];
     await Promise.all(required.map((path) => stat(join(REPO, path))));
     const packageJson = JSON.parse(await text("package.json"));
-    assert.equal(packageJson.license, "Apache-2.0");
+    assert.equal(packageJson.license, "PolyForm-Noncommercial-1.0.0");
+    const licenseText = await text("LICENSE");
+    assert.match(licenseText, /PolyForm Noncommercial License 1\.0\.0/);
+    assert.match(licenseText, /Required Notice: Copyright 2026 Kyoube Lyu/);
     assert.equal(packageJson.private, true, "the app-only workspace must not be accidentally npm-publishable");
   });
 
