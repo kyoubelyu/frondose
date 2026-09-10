@@ -94,3 +94,6 @@ tests/tauri/ui/render-split-slice12.mock.test.ts
 tests/tauri/ch3-module-split.mock.test.ts
 tests/tauri/appOwnedSidecar-papp4.mock.test.ts
 tests/open-source/two-project-exporter.mock.test.ts
+
+# Local video-agent tooling artifacts
+.video_agent/

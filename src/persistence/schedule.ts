@@ -3,7 +3,7 @@
  *
  * Single global file at FRONDOSE_SCHEDULE_PATH (default ~/.frondose/agent/schedule.jsonl).
  * No per-cwd / per-session scoping (D-18). Concurrent multi-process writes
- * are out of scope (D-17 — operator runs 1 mai binary at a time).
+ * are out of scope (D-17 — the operator runs one Frondose binary at a time).
  *
  * Cron parser supports: `*`, `*\/N` (step), single integer. 5 fields.
  * Unsupported (rejected with clear error): ranges, lists, named tokens, L/W/?.

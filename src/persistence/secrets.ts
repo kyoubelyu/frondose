@@ -51,7 +51,7 @@ export const secretsJsonSchema = z.object({
   github: githubSubSchema.optional(),
   search: searchSubSchema.optional(),
   // Step-3b round-2 C-1: server.token lives here (chmod 600), NOT in config.json.
-  // P-24 leaves this undefined; P-25 `mai server set` populates via writeSecrets.
+  // P-24 leaves this undefined; the settings writer populates via writeSecrets.
   // P-29: webToken — Basic-Auth secret for the web dashboard (optional).
   server: z
     .object({
