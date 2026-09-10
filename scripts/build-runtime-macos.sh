@@ -71,4 +71,3 @@ node_abi="$("$runtime/node" -p 'process.versions.modules')"
   exit 65
 }
 (cd "$runtime" && ./node -e "require('better-sqlite3')")
-(cd "$runtime" && ./node --input-type=module -e "await import('@modelcontextprotocol/sdk/client/streamableHttp.js')")

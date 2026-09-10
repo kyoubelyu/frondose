@@ -110,7 +110,6 @@ fi
 ( cd "$RUNTIME" && ./node -e "require('better-sqlite3')" )
 (
   cd "$RUNTIME"
-  "$RUNTIME/node" --input-type=module -e "await import('@modelcontextprotocol/sdk/client/streamableHttp.js')"
 )
 
 echo "[build-release] Phase 0 OK: runtime assembled ($(du -sh "$RUNTIME" | cut -f1))"

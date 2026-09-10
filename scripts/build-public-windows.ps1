@@ -52,7 +52,7 @@ try {
   $publicKeyText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($tauriConfig.plugins.updater.pubkey))
   $updaterPublicKey = ($publicKeyText -split "`r?`n")[1]
   cargo run --quiet --release --manifest-path (Join-Path $repoRoot "scripts\updater-verifier\Cargo.toml")
-  $verifier = Join-Path $repoRoot "scripts\updater-verifier\target\release\frondose-updater-verifier"
+  $verifier = Join-Path $repoRoot "scripts\updater-verifier\target\release\frondose-updater-verifier.exe"
   if (-not (Test-Path $verifier)) { throw "[public-windows] updater verifier binary missing" }
   & $verifier $updaterPublicKey $installer $updaterSignature
   if ($LASTEXITCODE -ne 0) { throw "[public-windows] updater signature verification failed" }
