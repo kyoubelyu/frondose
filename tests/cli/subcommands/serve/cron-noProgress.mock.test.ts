@@ -144,9 +144,15 @@ function seedAutoRunAndState(db: AnyFn, state: MockRecord, turns = 0): string {
 }
 
 /** Seed a raw_candidate row, bumping last_seen_at. Returns the id. */
+// Monotonic fake clock for last_seen_at/observed_at: the Signal-D high-water mark is
+// MAX(last_seen_at), so ticks must strictly advance it — on a fast CI runner a dozen
+// ticks can land inside one real millisecond and the signal would stop advancing.
+let fakeClockMs = Date.now() - 3_600_000;
+
 function upsertRawCandidate(db: AnyFn, existingId?: string): string {
   const id = existingId ?? randomUUID();
-  const now = Date.now();
+  fakeClockMs += 1_000;
+  const now = fakeClockMs;
   (db as any)
     .prepare(`
     INSERT INTO raw_candidates (id, person_name, profile_url, account_id, source, observed_at, last_seen_at, status)
@@ -159,7 +165,8 @@ function upsertRawCandidate(db: AnyFn, existingId?: string): string {
 
 /** Insert a lead_timeline row (candidate_id is NOT NULL per schema; seed a raw_candidate first). */
 function insertTimelineEvent(db: AnyFn, eventType: string): void {
-  const now = Date.now();
+  fakeClockMs += 1_000;
+  const now = fakeClockMs;
   // Seed a raw_candidate to satisfy the NOT NULL FK on candidate_id
   const candidateId = randomUUID();
   (db as any)
