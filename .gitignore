@@ -70,8 +70,8 @@ scripts/com.kyoube.frondose.updateserver.plist
 scripts/oss-*
 scripts/issue-server.mjs
 scripts/com.kyoube.frondose.issueserver.plist
-src/tools/operatorOutput/reportIssue.ts
-tests/tools/operatorOutput/reportIssue.mock.test.ts
+src/tools/operatorOutput/report?ssue.ts
+tests/tools/operatorOutput/report?ssue.mock.test.ts
 tests/docs/
 tests/p57d-claude-md.mock.test.ts
 tests/branding/fren1-display-strings.mock.test.ts
