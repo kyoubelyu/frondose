@@ -224,7 +224,11 @@ async function settleAfterFakeTimeout(
       return error;
     },
   );
-  for (let turn = 0; turn < 30 && !settled && state.child.listenerCount("exit") === 0; turn++) {
+  // Generous bound: each turn is a pure macro-task handshake. A loaded CI
+  // runner needs more spins than a dev box for the pre-kill chain to reach
+  // its pending-timeout state; falling short left the operation pending
+  // forever after the fake ticks and cancelled the whole suite.
+  for (let turn = 0; turn < 1000 && !settled && state.child.listenerCount("exit") === 0; turn++) {
     await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
   }
   tc.mock.timers.tick(4_999);
