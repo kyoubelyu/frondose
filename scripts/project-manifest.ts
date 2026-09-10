@@ -101,6 +101,8 @@ const PUBLIC_SCRIPTS = new Set([
   "scripts/build-public-macos.sh",
   "scripts/build-public-windows.ps1",
   "scripts/assemble-public-release.mjs",
+  "scripts/assemble-release4-fixture.sh",
+  "scripts/assemble-dmg-canary-fixture.sh",
   "scripts/updater-verifier/Cargo.toml",
   "scripts/updater-verifier/Cargo.lock",
   "scripts/updater-verifier/src/main.rs",
