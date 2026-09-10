@@ -311,12 +311,21 @@ function extractNsisMembers(archive) {
     return { ok: false, error: `7-Zip NSIS extraction failed (${sevenZip})` };
   }
   try {
+    // Text members only, under a size cap: reading every extracted file (the
+    // bundled exe/dll payloads are tens of MB each) as utf8 strings exhausted
+    // the runner heap on the first real pipeline run.
     return {
       ok: true,
-      extracted: walkFiles(extractedRoot).map((file) => ({
-        member: relative(extractedRoot, file).replaceAll("\\", "/"),
-        text: readFileSync(file, "utf8"),
-      })),
+      extracted: walkFiles(extractedRoot)
+        .map((file) => ({
+          member: relative(extractedRoot, file).replaceAll("\\", "/"),
+          file,
+        }))
+        .filter(({ member, file }) => DEPENDENCY_TEXT_MEMBER.test(member) && statSync(file).size <= MAX_SCAN_BYTES)
+        .map(({ member, file }) => ({
+          member,
+          text: readFileSync(file, "utf8"),
+        })),
     };
   } finally {
     rmSync(extractedRoot, { recursive: true, force: true });
@@ -324,6 +333,7 @@ function extractNsisMembers(archive) {
 }
 
 const DEPENDENCY_TEXT_MEMBER = /(?:\.json|\.m?[jc]s|\.txt)$/i;
+const MAX_SCAN_BYTES = 8 * 1024 * 1024;
 
 function dependencyArtifacts(container, members) {
   return members
@@ -362,6 +372,7 @@ async function scanPlatformContainer(containerPath, containerName, canaries) {
     }
     try {
       for (const file of walkFiles(mountPoint)) {
+        if (statSync(file).size > MAX_SCAN_BYTES) continue;
         for (const finding of scanTextForCanaries(readFileSync(file, "utf8"), canaries)) {
           const member = relative(mountPoint, file).replaceAll("\\", "/");
           findings.push({ ...finding, path: `${containerName}::${member}`, message: member });
@@ -500,6 +511,7 @@ export async function inspectReleaseCandidate(root, canaries) {
     if (name === "Frondose-universal.dmg" || name === "Frondose-windows-x86_64-setup.exe" || name === "Frondose.app.tar.gz") {
       continue;
     }
+    if (statSync(file).size > MAX_SCAN_BYTES) continue;
     for (const finding of scanTextForCanaries(readFileSync(file, "utf8"), canaries)) {
       findings.push({ ...finding, path: name });
     }
