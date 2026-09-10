@@ -36,7 +36,7 @@ export {
 const PROJECT_MANIFEST_URL = pathToFileURL(join(process.cwd(), "scripts", "project-manifest.ts")).href;
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, ...options });
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: 15 * 60 * 1000, ...options });
   return result;
 }
 
@@ -311,33 +311,33 @@ function extractTarMembers(archive) {
 }
 
 function extractNsisMembers(archive) {
-  const extractedRoot = mkdtempSync(join(tmpdir(), "frondose-release-nsis-"));
+  // List-then-extract: full-archive extraction of the NSIS installer (it
+  // bundles the offline WebView2 payload) stalled the inspect job entirely.
+  // 7z -slt reads the archive index; only small text members are pulled out,
+  // one `e -so` call each.
   const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
-  const extraction = run(sevenZip, ["x", "-y", `-o${extractedRoot}`, archive]);
-  if (extraction.status !== 0) {
-    rmSync(extractedRoot, { recursive: true, force: true });
-    return { ok: false, error: `7-Zip NSIS extraction failed (${sevenZip})` };
+  const listing = run(sevenZip, ["l", "-slt", archive]);
+  if (listing.status !== 0) return { ok: false, error: `7-Zip NSIS listing failed (${sevenZip})` };
+  const entries = [];
+  let current = {};
+  for (const line of listing.stdout.split(/\r?\n/)) {
+    const field = /^(Path|Size)\s*=\s(.*)$/.exec(line);
+    if (field) current[field[1]] = field[2];
+    else if (line.trim() === "" && current.Path !== undefined) {
+      entries.push(current);
+      current = {};
+    }
   }
-  try {
-    // Text members only, under a size cap: reading every extracted file (the
-    // bundled exe/dll payloads are tens of MB each) as utf8 strings exhausted
-    // the runner heap on the first real pipeline run.
-    return {
-      ok: true,
-      extracted: walkFiles(extractedRoot)
-        .map((file) => ({
-          member: relative(extractedRoot, file).replaceAll("\\", "/"),
-          file,
-        }))
-        .filter(({ member, file }) => DEPENDENCY_TEXT_MEMBER.test(member) && statSync(file).size <= MAX_SCAN_BYTES)
-        .map(({ member, file }) => ({
-          member,
-          text: readFileSync(file, "utf8"),
-        })),
-    };
-  } finally {
-    rmSync(extractedRoot, { recursive: true, force: true });
+  if (current.Path !== undefined) entries.push(current);
+  const extracted = [];
+  for (const entry of entries) {
+    const size = Number(entry.Size);
+    if (!entry.Path || Number.isNaN(size) || size > MAX_SCAN_BYTES || !DEPENDENCY_TEXT_MEMBER.test(entry.Path)) continue;
+    const bytes = run(sevenZip, ["e", "-so", archive, entry.Path]);
+    if (bytes.status !== 0) return { ok: false, error: `7-Zip member extraction failed: ${entry.Path}` };
+    extracted.push({ member: entry.Path.replaceAll("\\", "/"), text: bytes.stdout });
   }
+  return { ok: true, extracted };
 }
 
 const DEPENDENCY_TEXT_MEMBER = /(?:\.json|\.m?[jc]s|\.txt)$/i;
