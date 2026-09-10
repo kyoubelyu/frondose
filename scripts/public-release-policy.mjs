@@ -311,33 +311,38 @@ function extractTarMembers(archive) {
 }
 
 function extractNsisMembers(archive) {
-  // List-then-extract: full-archive extraction of the NSIS installer (it
-  // bundles the offline WebView2 payload) stalled the inspect job entirely.
-  // 7z -slt reads the archive index; only small text members are pulled out,
-  // one `e -so` call each.
+  // One batched pass: solid-LZMA NSIS re-decompresses the whole stream per
+  // invocation, so per-member "e -so" extraction is O(members x archive)
+  // (17k members = hours). Extract every text member in a single 7z run
+  // (~7s on the real installer) and scan the small ones from disk.
   const sevenZip = process.platform === "darwin" ? "7zz" : "7z";
-  const listing = run(sevenZip, ["l", "-slt", archive]);
-  if (listing.status !== 0) return { ok: false, error: `7-Zip NSIS listing failed (${sevenZip})` };
-  const entries = [];
-  let current = {};
-  for (const line of listing.stdout.split(/\r?\n/)) {
-    const field = /^(Path|Size)\s*=\s(.*)$/.exec(line);
-    if (field) current[field[1]] = field[2];
-    else if (line.trim() === "" && current.Path !== undefined) {
-      entries.push(current);
-      current = {};
-    }
+  const extractedRoot = mkdtempSync(join(tmpdir(), "frondose-release-nsis-"));
+  const extraction = run(sevenZip, [
+    "x", "-y", `-o${extractedRoot}`,
+    "-ir!*.json", "-ir!*.js", "-ir!*.txt", "-ir!*.cjs", "-ir!*.mjs",
+    archive,
+  ]);
+  if (extraction.status !== 0) {
+    rmSync(extractedRoot, { recursive: true, force: true });
+    return { ok: false, error: `7-Zip NSIS text-member extraction failed (${sevenZip})` };
   }
-  if (current.Path !== undefined) entries.push(current);
-  const extracted = [];
-  for (const entry of entries) {
-    const size = Number(entry.Size);
-    if (!entry.Path || Number.isNaN(size) || size > MAX_SCAN_BYTES || !DEPENDENCY_TEXT_MEMBER.test(entry.Path)) continue;
-    const bytes = run(sevenZip, ["e", "-so", archive, entry.Path]);
-    if (bytes.status !== 0) return { ok: false, error: `7-Zip member extraction failed: ${entry.Path}` };
-    extracted.push({ member: entry.Path.replaceAll("\\", "/"), text: bytes.stdout });
+  try {
+    return {
+      ok: true,
+      extracted: walkFiles(extractedRoot)
+        .map((file) => ({
+          member: relative(extractedRoot, file).replaceAll("\\", "/"),
+          file,
+        }))
+        .filter(({ file }) => statSync(file).size <= MAX_SCAN_BYTES)
+        .map(({ member, file }) => ({
+          member,
+          text: readFileSync(file, "utf8"),
+        })),
+    };
+  } finally {
+    rmSync(extractedRoot, { recursive: true, force: true });
   }
-  return { ok: true, extracted };
 }
 
 const DEPENDENCY_TEXT_MEMBER = /(?:\.json|\.m?[jc]s|\.txt)$/i;
