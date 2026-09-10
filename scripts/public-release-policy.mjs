@@ -288,13 +288,21 @@ function scanTextForCanaries(text, canaries) {
 }
 
 function extractTarMembers(archive) {
-  const listing = run("tar", ["-tzf", archive]);
+  const listing = run("tar", ["-tvzf", archive]);
   if (listing.status !== 0) return { ok: false, error: listing.stderr };
   const extracted = [];
-  for (const member of listing.stdout
+  for (const line of listing.stdout
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)) {
+    // Long listing: <mode> <owner/group> <size> <date> <time> <path...>. Only
+    // small text members are extracted — pulling the multi-MB binary payloads
+    // through tar -xO into utf8 strings exhausted the runner heap.
+    const match = /^\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+(.+)$/.exec(line);
+    if (!match) continue;
+    const size = Number(match[1]);
+    const member = match[2];
+    if (!member || Number.isNaN(size) || size > MAX_SCAN_BYTES || !DEPENDENCY_TEXT_MEMBER.test(member)) continue;
     const bytes = run("tar", ["-xOzf", archive, member]);
     if (bytes.status !== 0) return { ok: false, error: bytes.stderr };
     extracted.push({ member, text: bytes.stdout });
