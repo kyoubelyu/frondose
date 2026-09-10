@@ -29,7 +29,7 @@ try {
   }
   Push-Location (Join-Path $repoRoot "src\tauri\src-tauri")
   try {
-    npx.cmd tauri build --config $configPath --target x86_64-pc-windows-msvc
+    npx.cmd tauri build --config $configPath --target x86_64-pc-windows-msvc --bundles nsis
   } finally {
     Pop-Location
   }

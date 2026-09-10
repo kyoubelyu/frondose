@@ -7,9 +7,13 @@ This product includes software developed by the following third parties,
 licensed under their respective licenses:
 
 - The Vercel AI SDK (https://www.npmjs.com/package/ai) — Apache-2.0
-- The Pi AI agent runtime (@earendil-works/pi-ai) — its package license
-- The Pi agent core (@earendil-works/pi-agent-core) — its package license
+- @ai-sdk/openai — Apache-2.0
+- The Pi AI agent runtime (@earendil-works/pi-ai) — MIT
+- The Pi agent core (@earendil-works/pi-agent-core) — MIT
 - chrome-remote-interface — MIT
+- chrome-launcher — Apache-2.0
+- undici — MIT
+- zod — MIT
 - better-sqlite3 — MIT
 - Tauri (https://tauri.app) — Apache-2.0 / MIT
 

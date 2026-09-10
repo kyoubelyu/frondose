@@ -39,8 +39,9 @@ On first launch, Settings asks for:
    does not call Anthropic, OpenAI, or any other vendor directly.
 2. Your identity and sales context. The agent sells as you, so it needs to
    know how you position yourself.
-3. Optional: a Brave Search API key, a Telegram bot token, and a GitHub token
-   for issue output.
+3. Optional: a Brave Search API key (in Settings), plus a Telegram bot token
+   and a GitHub token for issue output (both via configuration files rather
+   than the Settings UI).
 
 Anything unconfigured degrades gracefully. Web search reports
 `missing_config`, output tools stay quiet, and the core agent keeps working.
@@ -52,9 +53,10 @@ Your data lives under `~/.frondose` on your machine.
   you confirm, then it sends.
 - **Magical** only watches. It reads pages you visit and writes to its own
   local database. No messages, no clicks that leave your machine.
-- **Auto** runs on a schedule within bounds you set: an approval gate for
-  outbound actions, per-run caps, and a persisted ledger of everything it
-  did.
+- **Auto** runs on a schedule within bounds you set. Starting a run is the
+  approval: inside it the agent acts without per-step confirmation, held by
+  run caps, inter-outbound cooldowns, daily quotas, and a persisted ledger of
+  every action. When no run is active, Auto cannot send anything.
 
 ## Building from source
 
