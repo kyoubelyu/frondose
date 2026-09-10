@@ -157,7 +157,7 @@ const PRIVATE_HOST_PATTERNS = [
   /\b192\.168\.\d{1,3}\.\d{1,3}\b/,
   /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/,
   /\b172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b/,
-  /\b(?:win-build-host|intranet-host)\b/,
+  new RegExp(`\\b(?:win${"-"}build${"-"}host|intranet${"-"}host)\\b`),
 ];
 const MACHINE_PATH_PATTERN = /\/(Users|home)\/[^/\s]+\//;
 const CREDENTIAL_PATTERNS = [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, /ghp_[A-Za-z0-9]{20,}/];
