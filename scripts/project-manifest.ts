@@ -82,6 +82,8 @@ const PRIVATE_SCRIPTS = new Set([
   "scripts/gen-default-credentials.ts",
   "scripts/app-validation-preflight.ts",
   "scripts/integration-manifest.json",
+  "scripts/phase-P-OPEN-SOURCE-SPLIT-frozen-manifest.tsv",
+  "scripts/phase-P-OPEN-SOURCE-SPLIT-path-dispositions.tsv",
 ]);
 const PUBLIC_SCRIPTS = new Set([
   "scripts/project-manifest.ts",
