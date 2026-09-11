@@ -22,6 +22,13 @@ function main(): void {
   const outDir = resolve(ROOT, OUT_DIR);
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
   writeFileSync(resolve(outDir, OUT_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+  // tsc does not copy .json into dist/: dual-write so the packaged runtime
+  // carries the (all-null, BYOK) credentials skeleton the policy checks for.
+  const distDir = resolve(ROOT, "dist", OUT_DIR.replace(/^src\//, ""));
+  if (existsSync(resolve(ROOT, "dist"))) {
+    mkdirSync(distDir, { recursive: true });
+    writeFileSync(resolve(distDir, OUT_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+  }
 }
 
 main();

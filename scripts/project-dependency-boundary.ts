@@ -19,6 +19,12 @@ function containsDependencyToken(text: string, dependency: string): boolean {
   return new RegExp(`(^|[^A-Za-z0-9@/._-])${escaped}($|[^A-Za-z0-9@/._-])`).test(text);
 }
 
+/** True when the text actually references the package as a module (import/require), not merely mentions its name. */
+function referencesDependency(text: string, dependency: string): boolean {
+  const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:from|import|require)\\s*\\(?\\s*["']${escaped}(?:/|["'])`).test(text);
+}
+
 export function checkExportedDependencySurface(
   packageJsonBytes: Uint8Array | undefined,
   lockBytes: Uint8Array | undefined,
@@ -198,8 +204,11 @@ export function validatePublishedArtifactDependencyBoundary(input: {
 }): void {
   for (const artifact of input.artifacts) {
     for (const dependency of RETIRED_ROOT_DEPENDENCIES) {
-      if (containsDependencyToken(artifact.text, dependency)) {
-        throw new Error(`retired dependency ${dependency} present in published artifact ${artifact.path}`);
+      // Bundled artifacts may legitimately contain a retired package's name as
+      // a string literal (e.g. a LinkedIn action named "react"); require an
+      // actual module reference form before flagging.
+      if (referencesDependency(artifact.text, dependency)) {
+        throw new Error(`retired dependency ${dependency} referenced in published artifact ${artifact.path}`);
       }
     }
   }

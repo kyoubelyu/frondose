@@ -288,26 +288,31 @@ function scanTextForCanaries(text, canaries) {
 }
 
 function extractTarMembers(archive) {
-  const listing = run("tar", ["-tvzf", archive]);
-  if (listing.status !== 0) return { ok: false, error: listing.stderr };
-  const extracted = [];
-  for (const line of listing.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)) {
-    // Long listing: <mode> <owner/group> <size> <date> <time> <path...>. Only
-    // small text members are extracted — pulling the multi-MB binary payloads
-    // through tar -xO into utf8 strings exhausted the runner heap.
-    const match = /^\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+(.+)$/.exec(line);
-    if (!match) continue;
-    const size = Number(match[1]);
-    const member = match[2];
-    if (!member || Number.isNaN(size) || size > MAX_SCAN_BYTES || !DEPENDENCY_TEXT_MEMBER.test(member)) continue;
-    const bytes = run("tar", ["-xOzf", archive, member]);
-    if (bytes.status !== 0) return { ok: false, error: bytes.stderr };
-    extracted.push({ member, text: bytes.stdout });
+  // One full extraction pass: per-member "tar -xOzf" re-decompresses the whole
+  // stream per call, and the app payload carries hundreds of text members.
+  const extractedRoot = mkdtempSync(join(tmpdir(), "frondose-release-tar-"));
+  const extraction = run("tar", ["-xzf", archive, "-C", extractedRoot]);
+  if (extraction.status !== 0) {
+    rmSync(extractedRoot, { recursive: true, force: true });
+    return { ok: false, error: extraction.stderr };
   }
-  return { ok: true, extracted };
+  try {
+    return {
+      ok: true,
+      extracted: walkFiles(extractedRoot)
+        .map((file) => ({
+          member: relative(extractedRoot, file).replaceAll("\\", "/"),
+          file,
+        }))
+        .filter(({ member, file }) => DEPENDENCY_TEXT_MEMBER.test(member) && statSync(file).size <= MAX_SCAN_BYTES)
+        .map(({ member, file }) => ({
+          member,
+          text: readFileSync(file, "utf8"),
+        })),
+    };
+  } finally {
+    rmSync(extractedRoot, { recursive: true, force: true });
+  }
 }
 
 function extractNsisMembers(archive) {
