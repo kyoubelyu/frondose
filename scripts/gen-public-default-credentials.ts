@@ -24,11 +24,12 @@ function main(): void {
   writeFileSync(resolve(outDir, OUT_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
   // tsc does not copy .json into dist/: dual-write so the packaged runtime
   // carries the (all-null, BYOK) credentials skeleton the policy checks for.
+  // Unconditional — the generator runs BEFORE tsc on a fresh checkout where
+  // dist/ does not exist yet (an existsSync gate silently skipped the write
+  // on CI and the packaged runtime shipped without the member).
   const distDir = resolve(ROOT, "dist", OUT_DIR.replace(/^src\//, ""));
-  if (existsSync(resolve(ROOT, "dist"))) {
-    mkdirSync(distDir, { recursive: true });
-    writeFileSync(resolve(distDir, OUT_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
-  }
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(resolve(distDir, OUT_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
 }
 
 main();
