@@ -3,17 +3,30 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     ignore:
+      # Pi runtime bumps are contract-sensitive (agent-loop semantics); they
+      # land through a dedicated validation pass, never a dependabot merge.
       - dependency-name: "@earendil-works/pi-ai"
+      - dependency-name: "@earendil-works/pi-agent-core"
+      # Cross-major jumps of any dependency need a dedicated validation pass.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: cargo
     directory: "/src/tauri/src-tauri"
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    # Actions are pinned to commit SHAs; version bumps are applied by moving
+    # the pin manually, not by merging version-tag PRs.
