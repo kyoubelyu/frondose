@@ -157,7 +157,7 @@ jobs:
           path: release
       - name: Confirm attestation-subjects.txt is canonical
         run: test "$(wc -l < release/attestation-subjects.txt)" -eq 9
-      - uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: |
             release/Frondose-universal.dmg
