@@ -16,7 +16,7 @@ jobs:
       dmg-sha256: ${{ steps.verified.outputs.dmg-sha256 }}
       app-tar-sha256: ${{ steps.verified.outputs.app-tar-sha256 }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
@@ -41,7 +41,7 @@ jobs:
           echo "dmg-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.dmg')" >> "$GITHUB_OUTPUT"
           echo "app-tar-sha256=$(node -p 'require("./build/public-macos/verified-producer-manifest.json").sha256.appTar')" >> "$GITHUB_OUTPUT"
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: public-macos-producer
           path: build/public-macos
@@ -54,7 +54,7 @@ jobs:
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
       windows-exe-sha256: ${{ steps.verified.outputs.windows-exe-sha256 }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
@@ -83,7 +83,7 @@ jobs:
           $manifest = Get-Content -Raw build/public-windows/verified-producer-manifest.json | ConvertFrom-Json
           "windows-exe-sha256=$($manifest.sha256.windowsExe)" >> $env:GITHUB_OUTPUT
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: public-windows-producer
           path: build/public-windows
@@ -95,17 +95,17 @@ jobs:
     outputs:
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.0
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: public-macos-producer
           path: artifacts/macos
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: public-windows-producer
           path: artifacts/windows
@@ -137,7 +137,7 @@ jobs:
         env:
           FRONDOSE_RELEASE_DIR: build/public-release
       - id: upload
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: public-release-candidate
           path: build/public-release
@@ -151,13 +151,13 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: public-release-candidate
           path: release
       - name: Confirm attestation-subjects.txt is canonical
         run: test "$(wc -l < release/attestation-subjects.txt)" -eq 9
-      - uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: |
             release/Frondose-universal.dmg
@@ -176,7 +176,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: public-release-candidate
           path: release

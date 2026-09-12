@@ -19,7 +19,7 @@ jobs:
       # chrome-launcher in the browser-owning mock tests.
       CHROME_PATH: /usr/bin/google-chrome
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           # Full history: overlay/write-range contract tests pin committed diffs
           # by commit message (a depth=1 checkout has no searchable history).
@@ -46,7 +46,7 @@ jobs:
     runs-on: macos-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -58,7 +58,7 @@ jobs:
     runs-on: windows-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: npm ci
       - run: npx license-checker-rseidelsohn@5.0.1 --failOn 'AGPL;GPL;LGPL;UNLICENSED' --production --excludePackages '@kyoube/frondose'
 
@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: npm ci
       - run: npm audit --audit-level=high
 
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: npm ci
       - name: Scan exported production bytes
         run: node --import tsx scripts/public-scan.mjs
