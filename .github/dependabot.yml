@@ -28,5 +28,9 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
-    # Actions are pinned to commit SHAs; version bumps are applied by moving
-    # the pin manually, not by merging version-tag PRs.
+    ignore:
+      # Actions are pinned to commit SHAs (supply-chain policy); version-tag
+      # bumps are applied by moving the pin manually.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
