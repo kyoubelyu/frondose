@@ -31,7 +31,7 @@ tauri-plugin-updater = { version = "2", features = [] }  # P-58d.1: app-native s
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = { version = "=0.6.2", optional = true, default-features = false }
-objc2 = { version = "=0.6.4", optional = true, default-features = false }
+objc2 = { version = "=0.6.5", optional = true, default-features = false }
 objc2-app-kit = { version = "=0.3.2", optional = true, default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep"] }
 objc2-foundation = { version = "=0.3.2", optional = true, default-features = false, features = ["NSData", "NSDictionary", "NSError", "NSObject", "NSString"] }
 objc2-web-kit = { version = "=0.3.2", optional = true, default-features = false, features = ["WKContentWorld", "WKFrameInfo", "WKSnapshotConfiguration", "WKWebView", "block2", "objc2-app-kit"] }
